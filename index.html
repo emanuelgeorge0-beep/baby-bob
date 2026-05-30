@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="theme-color" content="#0a0a0f"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Baby BOB"/>
+<title>Baby BOB – Dein Handwerker-Finder</title>
+<link rel="manifest" href="manifest.json"/>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bob-yellow: #FFD93D;
+    --bob-orange: #FF6B35;
+    --bob-blue: #4ECDC4;
+    --bob-dark: #0a0a0f;
+    --bob-card: #13131a;
+    --bob-border: rgba(255,255,255,0.08);
+    --bob-text: #f0f0f5;
+    --bob-muted: rgba(240,240,245,0.5);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bob-dark);
+    color: var(--bob-text);
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; flex-direction: column; min-height: 100dvh; padding: 0; }
+  .screen.active { display: flex; }
+
+  /* ── HOME SCREEN ── */
+  #home {
+    background: radial-gradient(ellipse at 50% -10%, rgba(255,217,61,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 90% 90%, rgba(78,205,196,0.1) 0%, transparent 50%),
+                var(--bob-dark);
+    padding: 0 0 100px 0;
+  }
+
+  .home-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 54px 24px 0;
+  }
+
+  .logo-text {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .logo-text span { color: var(--bob-yellow); }
+
+  .header-badge {
+    background: rgba(78,205,196,0.15);
+    border: 1px solid rgba(78,205,196,0.3);
+    color: var(--bob-blue);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  .hero-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 24px 0;
+    text-align: center;
+  }
+
+  .bob-mascot-wrap {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    margin-bottom: 24px;
+  }
+
+  .bob-glow {
+    position: absolute;
+    inset: -20px;
+    background: radial-gradient(circle, rgba(255,217,61,0.25) 0%, transparent 70%);
+    animation: pulse-glow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.15); opacity: 1; }
+  }
+
+  .bob-face {
+    width: 160px;
+    height: 160px;
+    background: linear-gradient(145deg, #FFE566, #FFD93D, #FFC107);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 72px;
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 8px 32px rgba(255,217,61,0.3), inset 0 2px 8px rgba(255,255,255,0.3);
+    animation: bob-float 3s ease-in-out infinite;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  @keyframes bob-float {
+    0%, 100% { transform: translateY(0px) rotate(-2deg); }
+    50% { transform: translateY(-10px) rotate(2deg); }
+  }
+
+  .bob-face.thinking {
+    animation: bob-think 0.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes bob-think {
+    from { transform: rotate(-5deg) scale(0.97); }
+    to { transform: rotate(5deg) scale(1.03); }
+  }
+
+  .hero-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 10px;
+    letter-spacing: -0.5px;
+  }
+  .hero-title .highlight { color: var(--bob-yellow); }
+
+  .hero-sub {
+    font-size: 14px;
+    color: var(--bob-muted);
+    line-height: 1.6;
+    max-width: 280px;
+  }
+
+  /* ── SCAN BUTTON ── */
+  .scan-btn-wrap {
+    padding: 28px 24px 0;
+  }
+
+  .scan-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #FFD93D, #FF6B35);
+    border: none;
+    border-radius: 20px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    cursor: pointer;
+    font-family: 'Nunito', sans-serif;
+    font-size: 18px;
+    font-weight: 900;
+    color: #0a0a0f;
+    letter-spacing: -0.3px;
+    box-shadow: 0 8px 32px rgba(255,107,53,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .scan-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.2), transparent);
+    pointer-events: none;
+  }
+
+  .scan-btn:active { transform: scale(0.97); box-shadow: 0 4px 16px rgba(255,107,53,0.3); }
+  .scan-btn-icon { font-size: 24px; }
+
+  /* ── CATEGORIES ── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--bob-muted);
+    padding: 24px 24px 12px;
+  }
+
+  .categories-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 0 24px;
+  }
+
+  .cat-card {
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 16px;
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+
+  .cat-card:active { transform: scale(0.95); background: rgba(255,217,61,0.08); border-color: rgba(255,217,61,0.3); }
+
+  .cat-icon { font-size: 28px; }
+  .cat-name { font-size: 11px; font-weight: 700; color: var(--bob-muted); line-height: 1.3; }
+
+  /* ── HOW IT WORKS ── */
+  .how-section { padding: 24px 24px 0; }
+
+  .how-card {
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 20px;
+    padding: 20px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .how-step {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    background: linear-gradient(135deg, var(--bob-yellow), var(--bob-orange));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 900;
+    color: #0a0a0f;
+  }
+
+  .how-text strong { display: block; font-size: 14px; font-weight: 800; margin-bottom: 2px; }
+  .how-text span { font-size: 12px; color: var(--bob-muted); line-height: 1.4; }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(13,13,20,0.95);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--bob-border);
+    display: flex;
+    padding: 12px 0 28px;
+    z-index: 100;
+  }
+
+  .nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 4px 0;
+    transition: all 0.2s;
+  }
+
+  .nav-item.active .nav-icon { color: var(--bob-yellow); }
+  .nav-item.active .nav-label { color: var(--bob-yellow); }
+  .nav-icon { font-size: 22px; color: rgba(255,255,255,0.35); transition: color 0.2s; }
+  .nav-label { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.35); letter-spacing: 0.3px; transition: color 0.2s; }
+
+  /* ── MODE SHEET ── */
+  .sheet-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    backdrop-filter: blur(4px);
+  }
+
+  .sheet-overlay.open { display: flex; align-items: flex-end; }
+
+  .mode-sheet {
+    background: #16161f;
+    border-radius: 28px 28px 0 0;
+    width: 100%;
+    padding: 0 0 40px;
+    transform: translateY(100%);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    border-top: 1px solid var(--bob-border);
+  }
+
+  .sheet-overlay.open .mode-sheet { transform: translateY(0); }
+
+  .sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+    margin: 16px auto 0;
+  }
+
+  .sheet-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    text-align: center;
+    padding: 20px 24px 8px;
+    letter-spacing: -0.3px;
+  }
+
+  .sheet-sub {
+    font-size: 13px;
+    color: var(--bob-muted);
+    text-align: center;
+    padding: 0 24px 20px;
+  }
+
+  .mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 20px;
+  }
+
+  .mode-btn {
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 18px;
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    text-align: left;
+    font-family: 'Nunito', sans-serif;
+  }
+
+  .mode-btn:active { transform: scale(0.97); border-color: rgba(255,217,61,0.4); background: rgba(255,217,61,0.06); }
+
+  .mode-btn-icon {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+
+  .mode-btn-icon.cam { background: rgba(255,107,53,0.15); }
+  .mode-btn-icon.gallery { background: rgba(78,205,196,0.15); }
+  .mode-btn-icon.text { background: rgba(255,217,61,0.15); }
+
+  .mode-btn-info strong { display: block; font-size: 15px; font-weight: 800; color: var(--bob-text); margin-bottom: 2px; }
+  .mode-btn-info span { font-size: 12px; color: var(--bob-muted); }
+
+  .mode-btn-arrow { margin-left: auto; color: var(--bob-muted); font-size: 18px; }
+
+  /* ── SCAN SCREEN ── */
+  #scan {
+    background: var(--bob-dark);
+  }
+
+  .scan-header {
+    display: flex;
+    align-items: center;
+    padding: 54px 20px 16px;
+    gap: 12px;
+  }
+
+  .back-btn {
+    width: 40px;
+    height: 40px;
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--bob-text);
+  }
+
+  .scan-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  /* ── IMAGE PREVIEW ── */
+  .image-preview-wrap {
+    margin: 0 20px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  #preview-img {
+    width: 100%;
+    max-height: 300px;
+    object-fit: cover;
+    display: none;
+  }
+
+  .preview-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 40px;
+    text-align: center;
+  }
+
+  .preview-placeholder-icon { font-size: 48px; opacity: 0.3; }
+  .preview-placeholder-text { font-size: 14px; color: var(--bob-muted); }
+
+  /* ── THINKING STATE ── */
+  .thinking-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(10,10,15,0.9);
+    border-radius: 20px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  .thinking-overlay.show { display: flex; }
+
+  .thinking-bob { font-size: 60px; animation: bob-think 0.4s ease-in-out infinite alternate; }
+
+  .thinking-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    background: var(--bob-yellow);
+    border-radius: 50%;
+    animation: dot-bounce 1.2s ease-in-out infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes dot-bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+    40% { transform: translateY(-8px); opacity: 1; }
+  }
+
+  .thinking-text { font-size: 14px; color: var(--bob-yellow); font-weight: 700; }
+
+  /* ── DESCRIBE INPUT ── */
+  .describe-wrap {
+    margin: 16px 20px 0;
+  }
+
+  .describe-input {
+    width: 100%;
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 16px;
+    padding: 16px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    color: var(--bob-text);
+    resize: none;
+    min-height: 100px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .describe-input:focus { border-color: rgba(255,217,61,0.4); }
+  .describe-input::placeholder { color: var(--bob-muted); }
+
+  /* ── ANALYZE BTN ── */
+  .analyze-btn {
+    margin: 16px 20px 0;
+    width: calc(100% - 40px);
+    background: linear-gradient(135deg, #FFD93D, #FF6B35);
+    border: none;
+    border-radius: 16px;
+    padding: 18px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 16px;
+    font-weight: 900;
+    color: #0a0a0f;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 6px 24px rgba(255,107,53,0.35);
+    transition: all 0.15s;
+  }
+
+  .analyze-btn:active { transform: scale(0.97); }
+  .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Hidden file input */
+  #file-input { display: none; }
+
+  /* ── RESULT SCREEN ── */
+  #result {
+    background: radial-gradient(ellipse at 50% 0%, rgba(78,205,196,0.1) 0%, transparent 50%), var(--bob-dark);
+    padding-bottom: 40px;
+  }
+
+  .result-header {
+    display: flex;
+    align-items: center;
+    padding: 54px 20px 20px;
+    gap: 12px;
+  }
+
+  .result-bob-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 24px 20px;
+    gap: 8px;
+  }
+
+  .result-bob { font-size: 64px; animation: bob-float 3s ease-in-out infinite; }
+
+  .result-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--bob-blue);
+  }
+
+  .result-problem-card {
+    margin: 0 20px;
+    background: linear-gradient(135deg, rgba(78,205,196,0.12), rgba(78,205,196,0.04));
+    border: 1px solid rgba(78,205,196,0.25);
+    border-radius: 20px;
+    padding: 20px;
+  }
+
+  .result-problem-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    line-height: 1.2;
+  }
+
+  .result-problem-desc {
+    font-size: 14px;
+    color: rgba(240,240,245,0.75);
+    line-height: 1.6;
+  }
+
+  .result-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 16px 20px 0;
+  }
+
+  .meta-card {
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 16px;
+    padding: 16px;
+  }
+
+  .meta-card-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--bob-muted);
+    margin-bottom: 6px;
+  }
+
+  .meta-card-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .meta-card-value.urgent { color: #FF6B6B; }
+  .meta-card-value.medium { color: #FFD93D; }
+  .meta-card-value.low { color: #4ECDC4; }
+
+  .result-tips-card {
+    margin: 16px 20px 0;
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 20px;
+    padding: 20px;
+  }
+
+  .result-tips-title {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--bob-yellow);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tip-item {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(240,240,245,0.8);
+  }
+
+  .tip-dot {
+    width: 6px;
+    height: 6px;
+    min-width: 6px;
+    background: var(--bob-yellow);
+    border-radius: 50%;
+    margin-top: 7px;
+  }
+
+  .find-btn {
+    margin: 20px 20px 0;
+    width: calc(100% - 40px);
+    background: linear-gradient(135deg, #FFD93D, #FF6B35);
+    border: none;
+    border-radius: 16px;
+    padding: 18px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 16px;
+    font-weight: 900;
+    color: #0a0a0f;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 6px 24px rgba(255,107,53,0.35);
+    transition: all 0.15s;
+  }
+
+  .find-btn:active { transform: scale(0.97); }
+
+  .new-scan-btn {
+    margin: 12px 20px 0;
+    width: calc(100% - 40px);
+    background: transparent;
+    border: 1px solid var(--bob-border);
+    border-radius: 16px;
+    padding: 16px;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--bob-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .new-scan-btn:active { border-color: rgba(255,255,255,0.2); color: var(--bob-text); }
+
+  /* ── ABOUT SCREEN ── */
+  #about {
+    background: var(--bob-dark);
+    padding: 54px 24px 100px;
+  }
+
+  .about-header {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    margin-bottom: 8px;
+  }
+
+  .about-sub { font-size: 14px; color: var(--bob-muted); margin-bottom: 32px; line-height: 1.6; }
+
+  .about-card {
+    background: var(--bob-card);
+    border: 1px solid var(--bob-border);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 12px;
+  }
+
+  .about-card h3 { font-size: 15px; font-weight: 800; margin-bottom: 6px; }
+  .about-card p { font-size: 13px; color: var(--bob-muted); line-height: 1.6; }
+
+  /* ── ERROR TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 100px;
+    left: 20px;
+    right: 20px;
+    background: #FF6B6B;
+    color: white;
+    padding: 14px 18px;
+    border-radius: 14px;
+    font-size: 14px;
+    font-weight: 700;
+    z-index: 500;
+    display: none;
+    animation: slide-up 0.3s ease;
+  }
+
+  @keyframes slide-up {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  /* ── LOADING SCREEN ── */
+  .api-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 20px;
+    padding: 40px;
+    text-align: center;
+  }
+
+  .loading-bob { font-size: 80px; animation: bob-think 0.4s ease-in-out infinite alternate; }
+  .loading-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; }
+  .loading-sub { font-size: 14px; color: var(--bob-muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<!-- ══ HOME SCREEN ══ -->
+<div id="home" class="screen active">
+  <div class="home-header">
+    <div class="logo-text">Baby <span>BOB</span></div>
+    <div class="header-badge">KI-SCANNER</div>
+  </div>
+
+  <div class="hero-section">
+    <div class="bob-mascot-wrap">
+      <div class="bob-glow"></div>
+      <div class="bob-face" id="home-bob" onclick="openSheet()">👶</div>
+    </div>
+    <h1 class="hero-title">Dein smarter<br><span class="highlight">Handwerker-Finder</span></h1>
+    <p class="hero-sub">Foto machen oder Problem beschreiben – BOB findet dir den richtigen Fachmann in deiner Nähe.</p>
+  </div>
+
+  <div class="scan-btn-wrap">
+    <button class="scan-btn" onclick="openSheet()">
+      <span class="scan-btn-icon">🔍</span>
+      Problem scannen
+    </button>
+  </div>
+
+  <div class="section-label">Kategorien</div>
+  <div class="categories-grid">
+    <div class="cat-card" onclick="startCategorySearch('Heizung')">
+      <div class="cat-icon">🔥</div>
+      <div class="cat-name">Heizung</div>
+    </div>
+    <div class="cat-card" onclick="startCategorySearch('Sanitär')">
+      <div class="cat-icon">🚿</div>
+      <div class="cat-name">Sanitär</div>
+    </div>
+    <div class="cat-card" onclick="startCategorySearch('Wasser')">
+      <div class="cat-icon">💧</div>
+      <div class="cat-name">Wasser</div>
+    </div>
+    <div class="cat-card" onclick="startCategorySearch('Rohre')">
+      <div class="cat-icon">🔧</div>
+      <div class="cat-name">Rohre</div>
+    </div>
+    <div class="cat-card" onclick="startCategorySearch('Lüftung')">
+      <div class="cat-icon">💨</div>
+      <div class="cat-name">Lüftung</div>
+    </div>
+    <div class="cat-card" onclick="startCategorySearch('Sonstiges')">
+      <div class="cat-icon">🏠</div>
+      <div class="cat-name">Mehr</div>
+    </div>
+  </div>
+
+  <div class="how-section">
+    <div class="how-card">
+      <div class="how-step">💡</div>
+      <div class="how-text">
+        <strong>KI-Diagnose in Sekunden</strong>
+        <span>BOB analysiert dein Foto oder deine Beschreibung und weiss sofort was zu tun ist.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="nav-item active" onclick="showScreen('home')">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Home</span>
+    </div>
+    <div class="nav-item" onclick="openSheet()">
+      <span class="nav-icon">📸</span>
+      <span class="nav-label">Scannen</span>
+    </div>
+    <div class="nav-item" onclick="showScreen('about')">
+      <span class="nav-icon">👶</span>
+      <span class="nav-label">Über BOB</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCAN SCREEN ══ -->
+<div id="scan" class="screen">
+  <div class="scan-header">
+    <div class="back-btn" onclick="showScreen('home')">←</div>
+    <div class="scan-title">Problem beschreiben</div>
+  </div>
+
+  <div class="image-preview-wrap" id="preview-wrap">
+    <img id="preview-img" alt="Vorschau"/>
+    <div class="preview-placeholder" id="preview-placeholder">
+      <div class="preview-placeholder-icon">📷</div>
+      <div class="preview-placeholder-text">Kein Foto ausgewählt</div>
+    </div>
+    <div class="thinking-overlay" id="thinking-overlay">
+      <div class="thinking-bob">👶</div>
+      <div class="thinking-dots">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+      <div class="thinking-text">BOB denkt nach...</div>
+    </div>
+  </div>
+
+  <div class="describe-wrap">
+    <textarea class="describe-input" id="describe-input" placeholder="Beschreibe das Problem... z.B. 'Wasserhahn tropft ständig' oder 'Heizung macht komische Geräusche'" rows="4"></textarea>
+  </div>
+
+  <button class="analyze-btn" id="analyze-btn" onclick="analyzeWithBOB()">
+    <span>🧠</span>
+    BOB fragen
+  </button>
+
+  <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(event)"/>
+</div>
+
+<!-- ══ RESULT SCREEN ══ -->
+<div id="result" class="screen">
+  <div class="result-header">
+    <div class="back-btn" onclick="showScreen('scan')">←</div>
+    <div class="scan-title">BOBs Diagnose</div>
+  </div>
+
+  <div class="result-bob-wrap">
+    <div class="result-bob" id="result-emoji">👷</div>
+    <div class="result-label">Diagnose abgeschlossen</div>
+  </div>
+
+  <div class="result-problem-card">
+    <div class="result-problem-title" id="result-title">Problem erkannt</div>
+    <div class="result-problem-desc" id="result-desc">Analyse läuft...</div>
+  </div>
+
+  <div class="result-meta-grid">
+    <div class="meta-card">
+      <div class="meta-card-label">Kategorie</div>
+      <div class="meta-card-value" id="result-category">–</div>
+    </div>
+    <div class="meta-card">
+      <div class="meta-card-label">Dringlichkeit</div>
+      <div class="meta-card-value" id="result-urgency">–</div>
+    </div>
+    <div class="meta-card">
+      <div class="meta-card-label">Kosten ca.</div>
+      <div class="meta-card-value" id="result-cost">–</div>
+    </div>
+    <div class="meta-card">
+      <div class="meta-card-label">Fachmann</div>
+      <div class="meta-card-value" id="result-specialist">–</div>
+    </div>
+  </div>
+
+  <div class="result-tips-card">
+    <div class="result-tips-title">
+      <span>💡</span> BOBs Tipps
+    </div>
+    <div id="result-tips">
+      <div class="tip-item"><div class="tip-dot"></div><span>Analyse läuft...</span></div>
+    </div>
+  </div>
+
+  <button class="find-btn" onclick="findHandwerker()">
+    🔍 Handwerker finden
+  </button>
+  <button class="new-scan-btn" onclick="newScan()">
+    Neuen Scan starten
+  </button>
+</div>
+
+<!-- ══ ABOUT SCREEN ══ -->
+<div id="about" class="screen">
+  <div class="about-header">Über Baby BOB 👶</div>
+  <div class="about-sub">Dein KI-Assistent für alle Handwerker-Probleme in der Schweiz.</div>
+
+  <div class="about-card">
+    <h3>🧠 Wie BOB funktioniert</h3>
+    <p>BOB nutzt modernste KI-Technologie (Claude von Anthropic) um Handwerker-Probleme zu analysieren. Beschreibe dein Problem oder lade ein Foto hoch – BOB erkennt das Problem, schätzt die Kosten und findet den richtigen Fachmann.</p>
+  </div>
+
+  <div class="about-card">
+    <h3>🔧 Spezialisierung SHK</h3>
+    <p>BOB ist speziell trainiert auf Sanitär, Heizung und Klima (SHK) Bereiche. Von der Diagnose bis zur Vermittlung – alles aus einer Hand.</p>
+  </div>
+
+  <div class="about-card">
+    <h3>🏠 Für die Schweiz gemacht</h3>
+    <p>Schweizer Preise, Schweizer Normen, Schweizer Handwerker. Baby BOB kennt den lokalen Markt und vermittelt zuverlässige Fachbetriebe in deiner Region.</p>
+  </div>
+
+  <div class="about-card">
+    <h3>⚡ Von George Solutions</h3>
+    <p>Baby BOB ist ein Produkt von George Solutions – dem SHK-Spezialisten aus Zürich. Unsere Monteure kommen vollausgerüstet zu dir und können sofort loslegen.</p>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="nav-item" onclick="showScreen('home')">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Home</span>
+    </div>
+    <div class="nav-item" onclick="openSheet(); showScreen('home')">
+      <span class="nav-icon">📸</span>
+      <span class="nav-label">Scannen</span>
+    </div>
+    <div class="nav-item active">
+      <span class="nav-icon">👶</span>
+      <span class="nav-label">Über BOB</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODE SHEET ══ -->
+<div class="sheet-overlay" id="sheet-overlay" onclick="handleSheetClick(event)">
+  <div class="mode-sheet" id="mode-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Wie möchtest du scannen?</div>
+    <div class="sheet-sub">BOB analysiert dein Problem sofort</div>
+    <div class="mode-options">
+      <button class="mode-btn" onclick="startCamera()">
+        <div class="mode-btn-icon cam">📸</div>
+        <div class="mode-btn-info">
+          <strong>Foto aufnehmen</strong>
+          <span>Mache ein Foto vom Problem</span>
+        </div>
+        <div class="mode-btn-arrow">›</div>
+      </button>
+      <button class="mode-btn" onclick="startGallery()">
+        <div class="mode-btn-icon gallery">🖼️</div>
+        <div class="mode-btn-info">
+          <strong>Aus Galerie wählen</strong>
+          <span>Vorhandenes Foto verwenden</span>
+        </div>
+        <div class="mode-btn-arrow">›</div>
+      </button>
+      <button class="mode-btn" onclick="startDescribe()">
+        <div class="mode-btn-icon text">✍️</div>
+        <div class="mode-btn-info">
+          <strong>Problem beschreiben</strong>
+          <span>In eigenen Worten erklären</span>
+        </div>
+        <div class="mode-btn-arrow">›</div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOAST ══ -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══ STATE ══
+let currentImage = null;
+let currentImageBase64 = null;
+
+// ══ SCREEN NAV ══
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ══ SHEET ══
+function openSheet() {
+  document.getElementById('sheet-overlay').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('sheet-overlay').classList.remove('open');
+}
+
+function handleSheetClick(e) {
+  if (e.target === document.getElementById('sheet-overlay')) closeSheet();
+}
+
+// ══ SCAN MODES ══
+function startCamera() {
+  closeSheet();
+  showScreen('scan');
+  const input = document.getElementById('file-input');
+  input.setAttribute('capture', 'environment');
+  input.accept = 'image/*';
+  input.click();
+}
+
+function startGallery() {
+  closeSheet();
+  showScreen('scan');
+  const input = document.getElementById('file-input');
+  input.removeAttribute('capture');
+  input.accept = 'image/*';
+  input.click();
+}
+
+function startDescribe() {
+  closeSheet();
+  showScreen('scan');
+  currentImage = null;
+  currentImageBase64 = null;
+  document.getElementById('preview-img').style.display = 'none';
+  document.getElementById('preview-placeholder').style.display = 'flex';
+  setTimeout(() => document.getElementById('describe-input').focus(), 300);
+}
+
+function startCategorySearch(category) {
+  openSheet();
+  setTimeout(() => {
+    closeSheet();
+    showScreen('scan');
+    document.getElementById('describe-input').value = category + ' Problem: ';
+    document.getElementById('describe-input').focus();
+  }, 200);
+}
+
+// ══ FILE HANDLING ══
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    currentImageBase64 = dataUrl.split(',')[1];
+
+    const img = document.getElementById('preview-img');
+    img.src = dataUrl;
+    img.style.display = 'block';
+    document.getElementById('preview-placeholder').style.display = 'none';
+    currentImage = file;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+// ══ BOB ANALYSE (Anthropic API) ══
+async function analyzeWithBOB() {
+  const description = document.getElementById('describe-input').value.trim();
+
+  if (!description && !currentImageBase64) {
+    showToast('Bitte Foto oder Beschreibung eingeben 📝');
+    return;
+  }
+
+  // Show thinking
+  const thinkingOverlay = document.getElementById('thinking-overlay');
+  thinkingOverlay.classList.add('show');
+  document.getElementById('analyze-btn').disabled = true;
+
+  try {
+    // Build message content
+    const messageContent = [];
+
+    if (currentImageBase64) {
+      messageContent.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/jpeg',
+          data: currentImageBase64
+        }
+      });
+    }
+
+    const textPrompt = description
+      ? `Analysiere dieses SHK-Problem (Sanitär, Heizung, Klima) für einen Schweizer Privatkunden:\n\n"${description}"\n\nGib deine Antwort AUSSCHLIESSLICH als JSON zurück (keine Backticks, kein Markdown), in diesem exakten Format:\n{\n  "emoji": "🔧",\n  "titel": "Kurzer Problemname",\n  "beschreibung": "2-3 Sätze was das Problem ist und wie dringend es ist",\n  "kategorie": "Sanitär|Heizung|Klima|Lüftung|Rohre",\n  "dringlichkeit": "Hoch|Mittel|Niedrig",\n  "kosten": "CHF 80-150",\n  "fachmann": "Sanitärinstallateur",\n  "tipps": ["Tipp 1", "Tipp 2", "Tipp 3"]\n}`
+      : `Analysiere das Problem auf diesem Foto. Es handelt sich um ein SHK-Problem (Sanitär, Heizung, Klima) für einen Schweizer Privatkunden.\n\nGib deine Antwort AUSSCHLIESSLICH als JSON zurück (keine Backticks, kein Markdown), in diesem exakten Format:\n{\n  "emoji": "🔧",\n  "titel": "Kurzer Problemname",\n  "beschreibung": "2-3 Sätze was das Problem ist und wie dringend es ist",\n  "kategorie": "Sanitär|Heizung|Klima|Lüftung|Rohre",\n  "dringlichkeit": "Hoch|Mittel|Niedrig",\n  "kosten": "CHF 80-150",\n  "fachmann": "Sanitärinstallateur",\n  "tipps": ["Tipp 1", "Tipp 2", "Tipp 3"]\n}`;
+
+    messageContent.push({ type: 'text', text: textPrompt });
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': window.ANTHROPIC_API_KEY || '',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: `Du bist Baby BOB, ein freundlicher und kompetenter KI-Assistent für SHK-Probleme (Sanitär, Heizung, Klima) in der Schweiz. Du kennst alle relevanten Schweizer Normen, Preise und Vorschriften. Du antwortest IMMER NUR mit validem JSON, ohne Markdown, ohne Erklärungen darum herum.`,
+        messages: [{ role: 'user', content: messageContent }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || 'API Fehler');
+    }
+
+    const data = await response.json();
+    const rawText = data.content.map(c => c.text || '').join('');
+    const clean = rawText.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+
+    // Show result
+    thinkingOverlay.classList.remove('show');
+    displayResult(result);
+
+  } catch (err) {
+    thinkingOverlay.classList.remove('show');
+    document.getElementById('analyze-btn').disabled = false;
+    console.error(err);
+    if (err.message.includes('API key') || err.message.includes('auth')) {
+      showToast('API Key fehlt – bitte in Vercel konfigurieren 🔑');
+    } else {
+      showToast('BOB hatte ein Problem: ' + err.message);
+    }
+  }
+}
+
+function displayResult(result) {
+  document.getElementById('result-emoji').textContent = result.emoji || '👷';
+  document.getElementById('result-title').textContent = result.titel || 'Problem erkannt';
+  document.getElementById('result-desc').textContent = result.beschreibung || '';
+  document.getElementById('result-category').textContent = result.kategorie || '–';
+
+  const urgencyEl = document.getElementById('result-urgency');
+  urgencyEl.textContent = result.dringlichkeit || '–';
+  urgencyEl.className = 'meta-card-value';
+  if (result.dringlichkeit === 'Hoch') urgencyEl.classList.add('urgent');
+  else if (result.dringlichkeit === 'Mittel') urgencyEl.classList.add('medium');
+  else urgencyEl.classList.add('low');
+
+  document.getElementById('result-cost').textContent = result.kosten || '–';
+  document.getElementById('result-specialist').textContent = result.fachmann || '–';
+
+  const tipsEl = document.getElementById('result-tips');
+  tipsEl.innerHTML = '';
+  (result.tipps || []).forEach(tip => {
+    const div = document.createElement('div');
+    div.className = 'tip-item';
+    div.innerHTML = `<div class="tip-dot"></div><span>${tip}</span>`;
+    tipsEl.appendChild(div);
+  });
+
+  showScreen('result');
+}
+
+function findHandwerker() {
+  showToast('Handwerker-Suche kommt bald! 🔍');
+}
+
+function newScan() {
+  currentImage = null;
+  currentImageBase64 = null;
+  document.getElementById('describe-input').value = '';
+  document.getElementById('preview-img').style.display = 'none';
+  document.getElementById('preview-placeholder').style.display = 'flex';
+  document.getElementById('analyze-btn').disabled = false;
+  showScreen('home');
+  openSheet();
+}
+
+// ══ TOAST ══
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  setTimeout(() => { toast.style.display = 'none'; }, 3000);
+}
+
+// ══ API KEY CONFIG ══
+// In Vercel: set environment variable VITE_ANTHROPIC_API_KEY
+// The key is injected via the server-side API proxy (see api/analyze.js)
+// For direct testing, set window.ANTHROPIC_API_KEY in browser console
+</script>
+</body>
+</html>
