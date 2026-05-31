@@ -1,7 +1,10 @@
 // api/bob.js – Baby BOB Serverless Function
+// Vercel Serverless Function – API Keys sicher hier, nie im Browser
+
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const SUPABASE_URL  = process.env.SUPABASE_URL;
-const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+// Unterstützt beide Varianten: SUPABASE_KEY und SUPABASE_SERVICE_KEY
+const SUPABASE_KEY  = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -19,27 +22,27 @@ export default async function handler(req, res) {
       const keywords = extractKeywords(description, category);
       const allRows = [];
 
-      // Für jedes Keyword eine eigene Abfrage
       for (const kw of keywords) {
         const encoded = encodeURIComponent(kw);
         const url = `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(inhalt.ilike.*${encoded}*,titel.ilike.*${encoded}*,kategorie.ilike.*${encoded}*,unterkategorie.ilike.*${encoded}*)&limit=5&select=titel,inhalt,kategorie,unterkategorie,tags`;
-        
+
         const supaRes = await fetch(url, {
           headers: {
             apikey: SUPABASE_KEY,
             Authorization: `Bearer ${SUPABASE_KEY}`,
           },
         });
+
         if (supaRes.ok) {
           const rows = await supaRes.json();
           if (rows?.length > 0) allRows.push(...rows);
         }
       }
 
-      // Duplikate entfernen via titel
+      // Duplikate entfernen via titel, max 15 Records
       const unique = Array.from(
         new Map(allRows.map(r => [r.titel, r])).values()
-      ).slice(0, 15); // max 15 Records an Claude
+      ).slice(0, 15);
 
       if (unique.length > 0) {
         wissen = unique.map(r =>
@@ -66,7 +69,10 @@ export default async function handler(req, res) {
       category    ? `Kategorie-Hinweis: ${category}` : '',
     ].filter(Boolean).join('\n');
 
-    userContent.push({ type: 'text', text: userText || 'Analysiere das Problem.' });
+    userContent.push({
+      type: 'text',
+      text: userText || 'Analysiere das Bild und erkenne was abgebildet ist und welcher Fachmann benötigt wird.',
+    });
 
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -92,7 +98,7 @@ export default async function handler(req, res) {
       .join('');
 
     const result = safeParseJSON(raw);
-    if (!result) throw new Error('JSON Parse Error');
+    if (!result) throw new Error('JSON Parse Error: ' + raw.substring(0, 200));
 
     return res.status(200).json(result);
 
@@ -106,61 +112,71 @@ export default async function handler(req, res) {
 function extractKeywords(description, category) {
   const keywords = new Set();
 
-  // Kategorie direkt
   if (category) keywords.add(category.toLowerCase());
 
   if (description) {
     const text = description.toLowerCase();
 
     // Alle Wörter mit mehr als 3 Zeichen
-    const words = text.split(/\s+/).filter(w => w.length > 3);
-    words.forEach(w => keywords.add(w));
+    text.split(/\s+/).filter(w => w.length > 3).forEach(w => keywords.add(w));
 
-    // Bekannte Fachbegriffe explizit
+    // Bekannte Fachbegriffe
     const fachbegriffe = [
       'sanitär','heizung','elektro','fliesen','boden','wand','dach',
       'fenster','garten','pool','klima','wärmepumpe','boiler','heizkörper',
       'wasserhahn','abfluss','verstopft','tropft','rohrbruch','leck',
       'strom','schalter','steckdose','sicherung','kabel',
-      'friseur','nägel','massage','tattoo','barber','kosmetik',
+      'friseur','nagel','massage','tattoo','barber','kosmetik','wimper',
       'auto','reifen','bremsen','motor','getriebe',
       'tisch','schrank','möbel','schreiner','stuhl','bett',
       'mauer','estrich','keller','riss','feuchtigkeit',
-      'solar','photovoltaik','panel','dach','ziegel',
-      'notfall','wasser','brand','rauch','gas',
+      'solar','photovoltaik','panel','ziegel',
+      'notfall','brand','rauch','gas',
     ];
     fachbegriffe.forEach(f => { if (text.includes(f)) keywords.add(f); });
   }
 
-  // Mindestens 1 Keyword
   if (keywords.size === 0) keywords.add('problem');
 
-  return Array.from(keywords).slice(0, 6); // max 6 Abfragen
+  return Array.from(keywords).slice(0, 6);
 }
 
 function buildSystemPrompt(wissen) {
-  return `Du bist Baby BOB – ein smarter KI-Assistent der Probleme erkennt und den richtigen Fachmann empfiehlt.
+  return `Du bist Baby BOB – ein smarter KI-Assistent der Bilder und Probleme analysiert und den richtigen Fachmann empfiehlt.
 
 DEINE AUFGABE:
-1. Analysiere das Foto und/oder die Beschreibung
-2. Erkenne WAS es ist (Gegenstand, Anlage, Situation)
-3. Erkenne das PROBLEM oder den Bedarf
+1. Analysiere das Foto GENAU – was ist wirklich abgebildet?
+2. Erkenne WAS es ist (Nagel, Rohr, Wand, Hand, Gerät, Person usw.)
+3. Erkenne das PROBLEM oder den BEDARF
 4. Empfehle den richtigen Fachmann
 5. Nenne Kosten in CHF und Dringlichkeit
 
+BEISPIELE FÜR BILDERKENNUNG:
+- Hände mit Nägeln → Nagelstudio, Maniküre
+- Haar / Frisur → Friseur
+- Wasserhahn tropft → Sanitärinstallateur
+- Steckdose / Kabel → Elektriker
+- Heizung / Heizkörper → Heizungsmonteur
+- Wand mit Riss → Maler / Maurer
+- Badezimmer → Sanitär / Fliesenleger
+- Garten / Rasen → Gärtner
+- Tattoo / Piercing → Tattoo Studio
+- Auto → Autowerkstatt
+- Möbel / Tisch → Schreiner
+
 WICHTIGE REGELN:
-- Erkenne auch alltägliche Objekte: Tisch → Schreiner, Couch → Polsterer, Klimaanlage → Kältetechniker
-- Sei präzise aber ehrlich: "Ich erkenne X, vermutlich Y Problem"
+- Bei Fotos: Beschreibe KONKRET was du siehst im Feld "erkannt_als"
+- Sei präzise: "Ich erkenne X, vermutlich Y Bedarf"
 - Nenne IMMER einen Fachmann und Preisrahmen CHF
-- KEINE verbindlichen Diagnosen – immer "könnte sein" / "vermutlich"
-- Auf Deutsch antworten
+- KEINE verbindlichen Diagnosen – "könnte sein" / "vermutlich"
+- Immer auf Deutsch antworten
 
 ${wissen ? `WISSENSDATENBANK (nutze diese Infos für präzise Antworten):\n${wissen}` : 'Keine Datenbankeinträge gefunden – antworte aus deinem Allgemeinwissen.'}
 
 ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
 {
   "titel": "Kurzer Titel was erkannt wurde (max 40 Zeichen)",
-  "desc": "2-3 Sätze: was erkannt, was das Problem sein könnte, was zu tun ist",
+  "desc": "2-3 Sätze: was konkret erkannt, was das Problem/Bedarf sein könnte, was zu tun ist",
   "kategorie": "Kategorie z.B. Sanitär / Beauty / Heizung / Möbel / Auto",
   "dringlichkeit": "Sofort / Hoch / Mittel / Niedrig",
   "kosten": "CHF XX–YY",
@@ -168,7 +184,7 @@ ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
   "fachmann": "Berufsbezeichnung z.B. Sanitärinstallateur",
   "fachmann_emoji": "passendes Emoji z.B. 🔧",
   "tipps": ["Tipp 1", "Tipp 2", "Tipp 3"],
-  "erkannt_als": "Was genau erkannt wurde"
+  "erkannt_als": "Was genau auf dem Foto / in der Beschreibung erkannt wurde – konkret!"
 }`;
 }
 
