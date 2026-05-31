@@ -1,6 +1,4 @@
 // api/bob.js – Baby BOB Serverless Function
-// Vercel Serverless Function – API Key sicher hier, nie im Browser
-
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const SUPABASE_URL  = process.env.SUPABASE_URL;
 const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -15,31 +13,47 @@ export default async function handler(req, res) {
   try {
     const { description, imageBase64, category } = req.body || {};
 
+    // ── 1. Wissensdatenbank: alles holen was relevant sein könnte ──
     let wissen = '';
     try {
-      const searchTerm = buildSearchTerm(description, category);
-      const supaRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/bob_knowledge?inhalt=ilike.*${encodeURIComponent(searchTerm)}*&limit=8&select=titel,inhalt,kategorie,unterkategorie,tags`,
-        {
+      const keywords = extractKeywords(description, category);
+      const allRows = [];
+
+      // Für jedes Keyword eine eigene Abfrage
+      for (const kw of keywords) {
+        const encoded = encodeURIComponent(kw);
+        const url = `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(inhalt.ilike.*${encoded}*,titel.ilike.*${encoded}*,kategorie.ilike.*${encoded}*,unterkategorie.ilike.*${encoded}*)&limit=5&select=titel,inhalt,kategorie,unterkategorie,tags`;
+        
+        const supaRes = await fetch(url, {
           headers: {
             apikey: SUPABASE_KEY,
             Authorization: `Bearer ${SUPABASE_KEY}`,
           },
-        }
-      );
-      if (supaRes.ok) {
-        const rows = await supaRes.json();
-        if (rows && rows.length > 0) {
-          wissen = rows.map(r =>
-            `[${r.kategorie} / ${r.unterkategorie}] ${r.titel}: ${r.inhalt}`
-          ).join('\n\n');
+        });
+        if (supaRes.ok) {
+          const rows = await supaRes.json();
+          if (rows?.length > 0) allRows.push(...rows);
         }
       }
-    } catch (e) {}
 
+      // Duplikate entfernen via titel
+      const unique = Array.from(
+        new Map(allRows.map(r => [r.titel, r])).values()
+      ).slice(0, 15); // max 15 Records an Claude
+
+      if (unique.length > 0) {
+        wissen = unique.map(r =>
+          `[${r.kategorie} / ${r.unterkategorie}] ${r.titel}: ${r.inhalt}`
+        ).join('\n\n');
+      }
+    } catch (e) {
+      console.error('Supabase Error:', e.message);
+    }
+
+    // ── 2. Claude anfragen ──
     const systemPrompt = buildSystemPrompt(wissen);
-
     const userContent = [];
+
     if (imageBase64) {
       userContent.push({
         type: 'image',
@@ -88,21 +102,40 @@ export default async function handler(req, res) {
   }
 }
 
-function buildSearchTerm(description, category) {
-  const text = [description || '', category || ''].join(' ').toLowerCase();
-  const keywords = [
-    'sanitär','heizung','elektro','fliesen','boden','wand','dach','fenster',
-    'garten','pool','klimaanlage','wärmepumpe','boiler','heizkörper',
-    'wasserhahn','abfluss','verstopft','tropft','rohrbruch',
-    'friseur','nägel','massage','tattoo','barber',
-    'auto','reifen','bremsen','motor',
-    'tisch','schrank','möbel','schreiner',
-    'mauer','estrich','keller',
-  ];
-  for (const kw of keywords) {
-    if (text.includes(kw)) return kw;
+// ── Keywords aus Text + Kategorie extrahieren ──
+function extractKeywords(description, category) {
+  const keywords = new Set();
+
+  // Kategorie direkt
+  if (category) keywords.add(category.toLowerCase());
+
+  if (description) {
+    const text = description.toLowerCase();
+
+    // Alle Wörter mit mehr als 3 Zeichen
+    const words = text.split(/\s+/).filter(w => w.length > 3);
+    words.forEach(w => keywords.add(w));
+
+    // Bekannte Fachbegriffe explizit
+    const fachbegriffe = [
+      'sanitär','heizung','elektro','fliesen','boden','wand','dach',
+      'fenster','garten','pool','klima','wärmepumpe','boiler','heizkörper',
+      'wasserhahn','abfluss','verstopft','tropft','rohrbruch','leck',
+      'strom','schalter','steckdose','sicherung','kabel',
+      'friseur','nägel','massage','tattoo','barber','kosmetik',
+      'auto','reifen','bremsen','motor','getriebe',
+      'tisch','schrank','möbel','schreiner','stuhl','bett',
+      'mauer','estrich','keller','riss','feuchtigkeit',
+      'solar','photovoltaik','panel','dach','ziegel',
+      'notfall','wasser','brand','rauch','gas',
+    ];
+    fachbegriffe.forEach(f => { if (text.includes(f)) keywords.add(f); });
   }
-  return text.split(' ').filter(w => w.length > 4)[0] || 'problem';
+
+  // Mindestens 1 Keyword
+  if (keywords.size === 0) keywords.add('problem');
+
+  return Array.from(keywords).slice(0, 6); // max 6 Abfragen
 }
 
 function buildSystemPrompt(wissen) {
@@ -122,7 +155,7 @@ WICHTIGE REGELN:
 - KEINE verbindlichen Diagnosen – immer "könnte sein" / "vermutlich"
 - Auf Deutsch antworten
 
-${wissen ? `WISSENSDATENBANK:\n${wissen}` : ''}
+${wissen ? `WISSENSDATENBANK (nutze diese Infos für präzise Antworten):\n${wissen}` : 'Keine Datenbankeinträge gefunden – antworte aus deinem Allgemeinwissen.'}
 
 ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
 {
