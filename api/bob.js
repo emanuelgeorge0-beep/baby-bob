@@ -1,112 +1,159 @@
+// api/bob.js – Baby BOB Serverless Function
+// Vercel Serverless Function – API Key sicher hier, nie im Browser
+
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+const SUPABASE_URL  = process.env.SUPABASE_URL;
+const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Nur POST erlaubt' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'Server-Konfigurationsfehler' });
-
-  // ── SUPABASE: Anfrage speichern ──
-  if (req.body && req.body.action === 'save_request') {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_KEY;
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(500).json({ error: 'Supabase nicht konfiguriert' });
-    }
-    try {
-      const r = await fetch(supabaseUrl + '/rest/v1/anfragen', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey,
-          'Authorization': 'Bearer ' + supabaseKey,
-          'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify(req.body.data)
-      });
-      if (!r.ok) {
-        const err = await r.text();
-        console.error('Supabase Fehler:', err);
-        return res.status(500).json({ error: 'Speichern fehlgeschlagen', detail: err });
-      }
-      return res.status(200).json({ success: true });
-    } catch (err) {
-      return res.status(500).json({ error: 'Supabase Verbindungsfehler' });
-    }
-  }
-
-  // ── INPUT VALIDIERUNG ──
-  const { description, imageBase64, category } = req.body || {};
-  if (!description && !imageBase64) return res.status(400).json({ error: 'Text oder Bild erforderlich' });
-  if (description && description.length > 2000) return res.status(400).json({ error: 'Text zu lang' });
-
-  // ── BOB SYSTEM PROMPT ──
-  const SYSTEM_PROMPT = 'Du bist BOB - dein digitaler Hausmeister.\n\nCHARAKTER: Du hast eine SHK-Lehre gemacht, bist witzig und kompetent. Schweizerdeutsch-freundliches Hochdeutsch (kein ss statt Eszett).\n\nWISSEN: Sanitaer, Heizung, Elektro, Bau, Haushalt, Beauty - alles rund ums Haus.\n\nSCHWEIZER KONTEXT: Preise in CHF, SIA/SVGW Normen.\n\nAntworte IMMER als reines JSON ohne Backticks:\n{"emoji":"passendes Emoji","fachmann_emoji":"Emoji fuer Fachmann","titel":"Kurzer Titel","beschreibung":"3-5 Saetze witzige Diagnose","kategorie":"Sanitaer|Heizung|Elektro|Handwerk|Beauty|Allgemein","dringlichkeit":"Hoch|Mittel|Niedrig","kosten":"z.B. CHF 80-250","zeitraum":"z.B. 1-3 Tage","fachmann":"Berufsbezeichnung","tipps":["Tipp 1","Tipp 2","Tipp 3"]}';
-
-  // ── NACHRICHT BAUEN ──
-  let userContent = [];
-  if (imageBase64) {
-    userContent.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } });
-  }
-  let textParts = [];
-  if (category) textParts.push('Kategorie: ' + category);
-  if (description) textParts.push('Problem: ' + description);
-  if (imageBase64 && !description) textParts.push('Analysiere dieses Foto.');
-  userContent.push({ type: 'text', text: textParts.join('\n') || 'Analysiere mein Problem.' });
-
-  // ── ANTHROPIC API ──
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const { description, imageBase64, category } = req.body || {};
+
+    let wissen = '';
+    try {
+      const searchTerm = buildSearchTerm(description, category);
+      const supaRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/bob_knowledge?inhalt=ilike.*${encodeURIComponent(searchTerm)}*&limit=8&select=titel,inhalt,kategorie,unterkategorie,tags`,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      );
+      if (supaRes.ok) {
+        const rows = await supaRes.json();
+        if (rows && rows.length > 0) {
+          wissen = rows.map(r =>
+            `[${r.kategorie} / ${r.unterkategorie}] ${r.titel}: ${r.inhalt}`
+          ).join('\n\n');
+        }
+      }
+    } catch (e) {}
+
+    const systemPrompt = buildSystemPrompt(wissen);
+
+    const userContent = [];
+    if (imageBase64) {
+      userContent.push({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
+      });
+    }
+
+    const userText = [
+      description ? `Problembeschreibung: ${description}` : '',
+      category    ? `Kategorie-Hinweis: ${category}` : '',
+    ].filter(Boolean).join('\n');
+
+    userContent.push({ type: 'text', text: userText || 'Analysiere das Problem.' });
+
+    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userContent }]
-      })
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }],
+      }),
     });
 
-    if (!response.ok) return res.status(502).json({ error: 'KI-Dienst nicht verfuegbar' });
+    if (!claudeRes.ok) throw new Error('Claude API: ' + claudeRes.status);
 
-    const data = await response.json();
-    const rawText = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    const claudeData = await claudeRes.json();
+    const raw = claudeData.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
 
-    let parsed = null;
-    try { parsed = JSON.parse(rawText); } catch (_) {}
-    if (!parsed) {
-      try { const m = rawText.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0]); } catch (_) {}
-    }
-    if (!parsed) {
-      try {
-        const clean = rawText.replace(/```json/gi,'').replace(/```/g,'').trim();
-        const m2 = clean.match(/\{[\s\S]*\}/); if (m2) parsed = JSON.parse(m2[0]);
-      } catch (_) {}
-    }
+    const result = safeParseJSON(raw);
+    if (!result) throw new Error('JSON Parse Error');
 
-    if (!parsed) return res.status(500).json({ error: 'Antwort konnte nicht verarbeitet werden' });
-
-    return res.status(200).json({
-      emoji: parsed.emoji || '🔧',
-      fachmann_emoji: parsed.fachmann_emoji || parsed.emoji || '👷',
-      titel: parsed.titel || 'Problem erkannt',
-      beschreibung: parsed.beschreibung || 'BOB hat dein Problem analysiert.',
-      kategorie: parsed.kategorie || 'Allgemein',
-      dringlichkeit: ['Hoch','Mittel','Niedrig'].includes(parsed.dringlichkeit) ? parsed.dringlichkeit : 'Mittel',
-      kosten: parsed.kosten || 'CHF 80-300',
-      zeitraum: parsed.zeitraum || '1-3 Tage',
-      fachmann: parsed.fachmann || 'Fachmann',
-      tipps: Array.isArray(parsed.tipps) ? parsed.tipps.slice(0,4) : ['Fachmann kontaktieren']
-    });
+    return res.status(200).json(result);
 
   } catch (err) {
-    return res.status(500).json({ error: 'Interner Serverfehler' });
+    console.error('BOB API Error:', err.message);
+    return res.status(500).json({ error: err.message });
   }
+}
+
+function buildSearchTerm(description, category) {
+  const text = [description || '', category || ''].join(' ').toLowerCase();
+  const keywords = [
+    'sanitär','heizung','elektro','fliesen','boden','wand','dach','fenster',
+    'garten','pool','klimaanlage','wärmepumpe','boiler','heizkörper',
+    'wasserhahn','abfluss','verstopft','tropft','rohrbruch',
+    'friseur','nägel','massage','tattoo','barber',
+    'auto','reifen','bremsen','motor',
+    'tisch','schrank','möbel','schreiner',
+    'mauer','estrich','keller',
+  ];
+  for (const kw of keywords) {
+    if (text.includes(kw)) return kw;
+  }
+  return text.split(' ').filter(w => w.length > 4)[0] || 'problem';
+}
+
+function buildSystemPrompt(wissen) {
+  return `Du bist Baby BOB – ein smarter KI-Assistent der Probleme erkennt und den richtigen Fachmann empfiehlt.
+
+DEINE AUFGABE:
+1. Analysiere das Foto und/oder die Beschreibung
+2. Erkenne WAS es ist (Gegenstand, Anlage, Situation)
+3. Erkenne das PROBLEM oder den Bedarf
+4. Empfehle den richtigen Fachmann
+5. Nenne Kosten in CHF und Dringlichkeit
+
+WICHTIGE REGELN:
+- Erkenne auch alltägliche Objekte: Tisch → Schreiner, Couch → Polsterer, Klimaanlage → Kältetechniker
+- Sei präzise aber ehrlich: "Ich erkenne X, vermutlich Y Problem"
+- Nenne IMMER einen Fachmann und Preisrahmen CHF
+- KEINE verbindlichen Diagnosen – immer "könnte sein" / "vermutlich"
+- Auf Deutsch antworten
+
+${wissen ? `WISSENSDATENBANK:\n${wissen}` : ''}
+
+ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
+{
+  "titel": "Kurzer Titel was erkannt wurde (max 40 Zeichen)",
+  "desc": "2-3 Sätze: was erkannt, was das Problem sein könnte, was zu tun ist",
+  "kategorie": "Kategorie z.B. Sanitär / Beauty / Heizung / Möbel / Auto",
+  "dringlichkeit": "Sofort / Hoch / Mittel / Niedrig",
+  "kosten": "CHF XX–YY",
+  "zeitraum": "z.B. Heute / 1-2 Tage / Diese Woche / Nach Termin",
+  "fachmann": "Berufsbezeichnung z.B. Sanitärinstallateur",
+  "fachmann_emoji": "passendes Emoji z.B. 🔧",
+  "tipps": ["Tipp 1", "Tipp 2", "Tipp 3"],
+  "erkannt_als": "Was genau erkannt wurde"
+}`;
+}
+
+function safeParseJSON(raw) {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (e) {}
+  try {
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) return JSON.parse(m[0]);
+  } catch (e) {}
+  try {
+    const clean = raw
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .replace(/[\u201C\u201D]/g, '"')
+      .trim();
+    const m2 = clean.match(/\{[\s\S]*\}/);
+    if (m2) return JSON.parse(m2[0]);
+  } catch (e) {}
+  return null;
 }
