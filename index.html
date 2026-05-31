@@ -35,7 +35,6 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .scan-btn{margin:20px 22px 0;background:linear-gradient(135deg,#FFD93D,#FF6B35);border:none;border-radius:20px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#0a0a0f;box-shadow:0 8px 32px rgba(255,107,53,0.4);cursor:pointer;transition:transform .15s;width:calc(100% - 44px);}
 .scan-btn:active{transform:scale(0.97);}
 
-/* 2 BIG CATEGORY BUTTONS */
 .cat-main{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:20px 22px 0;}
 .cat-main-btn{border:none;border-radius:20px;padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:all .2s;font-family:'Nunito',sans-serif;}
 .cat-main-btn:active{transform:scale(0.96);}
@@ -45,7 +44,6 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .cat-main-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--text);}
 .cat-main-sub{font-size:10px;color:var(--muted);text-align:center;line-height:1.4;}
 
-/* SUB CATEGORIES */
 .sec-lbl{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:18px 22px 10px;}
 .cats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 22px;}
 .cat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;transition:all .2s;}
@@ -58,7 +56,6 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .bni-i{font-size:20px;color:rgba(255,255,255,0.3);}
 .bni-l{font-size:9px;font-weight:800;color:rgba(255,255,255,0.3);}
 
-/* SHEET */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;backdrop-filter:blur(5px);align-items:flex-end;}
 .overlay.open{display:flex;}
 .sheet{background:#15151e;border-radius:26px 26px 0 0;width:100%;padding:0 0 36px;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);border-top:1px solid var(--border);}
@@ -124,7 +121,8 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .r-lbl{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--b);}
 .r-fach{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--y);margin-top:2px;}
 .r-card{margin:0 18px;background:linear-gradient(135deg,rgba(78,205,196,0.12),rgba(78,205,196,0.04));border:1px solid rgba(78,205,196,0.25);border-radius:18px;padding:18px;}
-.r-tit{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:6px;line-height:1.2;}
+.r-erkannt{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--b);margin-bottom:6px;}
+.r-tit{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;line-height:1.2;}
 .r-desc{font-size:13px;color:rgba(240,240,245,0.78);line-height:1.6;}
 .r-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 18px 0;}
 .r-meta{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;}
@@ -148,10 +146,9 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .r-maps-i{font-size:28px;}
 .r-maps-info strong{display:block;font-size:13px;font-weight:800;margin-bottom:2px;}
 .r-maps-info span{font-size:11px;color:var(--muted);}
-
 .r-new{margin:10px 18px 0;width:calc(100% - 36px);background:transparent;border:1px solid var(--border);border-radius:14px;padding:14px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;}
 
-/* NEUE AKTIONS-BUTTONS nach Diagnose */
+/* AKTIONS-BUTTONS */
 .r-actions{margin:14px 18px 0;display:flex;flex-direction:column;gap:10px;}
 .r-action-tit{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:2px;}
 
@@ -209,10 +206,16 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .ang-steps{display:flex;flex-direction:column;gap:9px;}
 .ang-step{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:rgba(240,240,245,0.8);line-height:1.5;}
 .ang-step-num{width:22px;height:22px;min-width:22px;background:rgba(78,205,196,0.2);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--b);}
-.ang-price-box{margin:12px 18px 0;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
-.ang-price-info strong{display:block;font-size:13px;font-weight:800;margin-bottom:2px;}
-.ang-price-info span{font-size:11px;color:var(--muted);}
-.ang-price-val{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--b);}
+.ang-price-box{margin:12px 18px 0;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 18px;}
+.ang-price-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;}
+.ang-price-opt{border-radius:12px;padding:12px;text-align:center;cursor:pointer;border:2px solid transparent;transition:all .2s;}
+.ang-price-opt.selected{border-color:var(--b);}
+.ang-price-opt-val{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--b);}
+.ang-price-opt-lbl{font-size:10px;color:var(--muted);margin-top:2px;}
+.ang-price-opt.basic{background:rgba(78,205,196,0.08);}
+.ang-price-opt.premium{background:rgba(255,217,61,0.08);}
+.ang-price-opt.premium .ang-price-opt-val{color:var(--y);}
+.ang-free-note{font-size:11px;color:rgba(107,203,119,0.9);font-weight:700;text-align:center;margin-top:8px;}
 .ang-stripe-btn{margin:12px 18px 0;width:calc(100% - 36px);background:linear-gradient(135deg,#4ECDC4,#2BAF9E);border:none;border-radius:14px;padding:15px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:900;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 5px 18px rgba(78,205,196,0.3);}
 .ang-stripe-btn:active{transform:scale(0.97);}
 
@@ -292,7 +295,6 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
   <button class="scan-btn" onclick="openSheet()"><span>🔍</span> Problem scannen</button>
 
-  <!-- 2 MAIN CATEGORIES -->
   <div class="cat-main">
     <button class="cat-main-btn handwerk" onclick="openCatSheet('handwerk')">
       <div class="cat-main-icon">🔧</div>
@@ -306,7 +308,6 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     </button>
   </div>
 
-  <!-- HANDWERK SUB CATS -->
   <div id="sub-handwerk" style="display:none">
     <div class="sec-lbl">🔧 Handwerk & Haushalt</div>
     <div class="cats">
@@ -328,7 +329,6 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     </div>
   </div>
 
-  <!-- BEAUTY SUB CATS -->
   <div id="sub-beauty" style="display:none">
     <div class="sec-lbl">💅 Beauty & Lifestyle</div>
     <div class="cats">
@@ -405,6 +405,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div class="r-fach" id="r-fach"></div>
   </div>
   <div class="r-card">
+    <div class="r-erkannt" id="r-erkannt"></div>
     <div class="r-tit" id="r-tit">–</div>
     <div class="r-desc" id="r-desc">–</div>
   </div>
@@ -430,6 +431,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div class="r-maps-i">📍</div>
     <div class="r-maps-info"><strong>Fachmann in deiner Nähe</strong><span>Google Maps Integration kommt bald</span></div>
   </div>
+
   <!-- AKTIONS-BUTTONS -->
   <div class="r-actions">
     <div class="r-action-tit">Was möchtest du als nächstes?</div>
@@ -443,7 +445,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
       </div>
       <div class="r-btn-gratis-price">
         <strong>Gratis</strong>
-        <span>für dich</span>
+        <span>bei Auftragserteilung</span>
       </div>
     </button>
 
@@ -452,10 +454,10 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
       <div class="r-btn-angebot-i">📋</div>
       <div class="r-btn-angebot-info">
         <strong>Professionelles Angebot</strong>
-        <span>BOB findet den richtigen Fachmann für dich</span>
+        <span>Verbindliches Angebot vom Fachmann in 24h</span>
       </div>
       <div class="r-btn-angebot-price">
-        <strong>CHF 49–149</strong>
+        <strong>CHF 39–69</strong>
         <span>einmalig</span>
       </div>
     </button>
@@ -493,11 +495,17 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
       </div>
     </div>
     <div class="ang-price-box">
-      <div class="ang-price-info">
-        <strong>Angebot anfordern</strong>
-        <span>Einmalige Servicepauschale</span>
+      <div class="ang-price-grid">
+        <div class="ang-price-opt basic selected" id="ang-opt-basic" onclick="selectAngebotPreis('basic')">
+          <div class="ang-price-opt-val">CHF 39</div>
+          <div class="ang-price-opt-lbl">Basic Angebot</div>
+        </div>
+        <div class="ang-price-opt premium" id="ang-opt-premium" onclick="selectAngebotPreis('premium')">
+          <div class="ang-price-opt-val">CHF 69</div>
+          <div class="ang-price-opt-lbl">Premium Angebot</div>
+        </div>
       </div>
-      <div class="ang-price-val">CHF 49–149</div>
+      <div class="ang-free-note">✅ Kostenlos bei Auftragserteilung</div>
     </div>
     <button class="ang-stripe-btn" onclick="openStripeAngebot()">
       <span>💳</span> Jetzt bezahlen & Angebot erhalten
@@ -513,20 +521,15 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div class="s-hdl"></div>
     <div class="pro-sheet-bob" id="pro-bob-emoji">🧠</div>
     <div class="s-tit">BOBs Profi-Rat</div>
-
-    <!-- GRATIS TEIL -->
     <div class="pro-free-box">
       <div class="pro-free-lbl">✅ Gratis – Basis Einschätzung</div>
       <div class="pro-free-text" id="pro-free-text">BOB analysiert dein Problem und gibt dir seine beste Einschätzung...</div>
     </div>
-
     <div class="pro-divider">
       <div class="pro-divider-line"></div>
       <div class="pro-divider-txt">⚡ Noch mehr mit PRO</div>
       <div class="pro-divider-line"></div>
     </div>
-
-    <!-- PRO UPGRADE -->
     <div class="pro-upgrade-box">
       <div class="pro-upgrade-lbl">🚀 Pro-Version – CHF 19.90 / Monat</div>
       <div class="pro-features">
@@ -560,6 +563,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <input class="f-inp" id="f-name" type="text" placeholder="Dein Name *" autocomplete="name"/>
     <input class="f-inp" id="f-phone" type="tel" placeholder="Telefon / WhatsApp *" autocomplete="tel"/>
     <input class="f-inp" id="f-email" type="email" placeholder="E-Mail (optional)" autocomplete="email"/>
+    <input class="f-inp" id="f-adresse" type="text" placeholder="Strasse & Hausnummer *" autocomplete="street-address"/>
     <div class="f-row">
       <input class="f-inp" id="f-plz" type="text" placeholder="PLZ *" maxlength="10"/>
       <input class="f-inp" id="f-ort" type="text" placeholder="Ort *"/>
@@ -622,7 +626,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
 </div>
 
-<!-- SHEET -->
+<!-- SCAN SHEET -->
 <div class="overlay" id="overlay" onclick="if(event.target===this)closeSheet()">
   <div class="sheet">
     <div class="s-hdl"></div>
@@ -646,6 +650,7 @@ var currentCat='',currentCatIcon='';
 var voiceRec=null,voiceRec2=null,isRec=false,isRec2=false;
 var recTmr=null,recTmr2=null;
 var oTmr=null,pTmr=null,countTmr=null,thinkSec=0;
+var selectedAngebotPreis='basic';
 
 var OUTFITS=[
   {e:'👶',b:'BOB überlegt...',s:'Analysiere das Problem...'},
@@ -671,7 +676,8 @@ function go(id){
       oTmr=null;pTmr=null;countTmr=null;
       ts.style.display='none';ts.classList.remove('on');
       busy=false;
-      document.getElementById('ask-btn').disabled=false;
+      var ab=document.getElementById('ask-btn');
+      if(ab) ab.disabled=false;
     }
   }
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
@@ -679,7 +685,7 @@ function go(id){
   if(el){el.classList.add('active');el.scrollTop=0;}
 }
 
-// ══ SHEET ══
+// ══ SHEETS ══
 function openSheet(){
   currentCat='';currentCatIcon='';
   document.getElementById('sheet-tit').textContent='Wie möchtest du scannen?';
@@ -688,15 +694,11 @@ function openSheet(){
 }
 function closeSheet(){document.getElementById('overlay').classList.remove('open');}
 
-// ══ CATEGORY SHEET ══
 function openCatSheet(type){
-  var sub=document.getElementById('sub-handwerk');
-  var sub2=document.getElementById('sub-beauty');
-  if(type==='handwerk'){
-    sub.style.display='block';sub2.style.display='none';
-  } else {
-    sub.style.display='none';sub2.style.display='block';
-  }
+  var sh=document.getElementById('sub-handwerk');
+  var sb=document.getElementById('sub-beauty');
+  if(type==='handwerk'){sh.style.display='block';sb.style.display='none';}
+  else{sh.style.display='none';sb.style.display='block';}
 }
 
 function qcat(cat,icon){
@@ -723,26 +725,10 @@ function setScanUI(){
   }
 }
 
-function doCamera(){
-  closeSheet();go('scan');setScanUI();
-  var f=document.getElementById('file-inp');
-  f.setAttribute('capture','environment');f.accept='image/*';
-  setTimeout(function(){f.click();},350);
-}
-function doGallery(){
-  closeSheet();go('scan');setScanUI();
-  var f=document.getElementById('file-inp');
-  f.removeAttribute('capture');f.accept='image/*';
-  setTimeout(function(){f.click();},350);
-}
-function doVoice(){
-  closeSheet();go('scan');setScanUI();
-  setTimeout(function(){toggleVoice('v-btn','v-txt','v-tmr','v-tr','d-inp');},450);
-}
-function doText(){
-  closeSheet();go('scan');setScanUI();
-  setTimeout(function(){document.getElementById('d-inp').focus();},400);
-}
+function doCamera(){closeSheet();go('scan');setScanUI();var f=document.getElementById('file-inp');f.setAttribute('capture','environment');f.accept='image/*';setTimeout(function(){f.click();},350);}
+function doGallery(){closeSheet();go('scan');setScanUI();var f=document.getElementById('file-inp');f.removeAttribute('capture');f.accept='image/*';setTimeout(function(){f.click();},350);}
+function doVoice(){closeSheet();go('scan');setScanUI();setTimeout(function(){toggleVoice('v-btn','v-txt','v-tmr','v-tr','d-inp');},450);}
+function doText(){closeSheet();go('scan');setScanUI();setTimeout(function(){document.getElementById('d-inp').focus();},400);}
 
 // ══ FILE ══
 function onFile(e){
@@ -783,11 +769,11 @@ function toggleVoice(btnId,txtId,tmrId,trId,descId){
   document.getElementById(btnId).classList.add('rec');
   document.getElementById(txtId).textContent='Tippen zum Stoppen';
   var tmrEl=document.getElementById(tmrId);
-  tmrEl.classList.add('on');
+  if(tmrEl) tmrEl.classList.add('on');
   var sec=0;
   var tmr=setInterval(function(){
     sec++;var m=Math.floor(sec/60),s=sec%60;
-    tmrEl.textContent=m+':'+(s<10?'0':'')+s;
+    if(tmrEl) tmrEl.textContent=m+':'+(s<10?'0':'')+s;
   },1000);
   if(btnId==='v-btn'){recTmr=tmr;}else{recTmr2=tmr;}
 }
@@ -803,7 +789,8 @@ function stopVoiceFor(btnId,txtId,tmrId){
     document.getElementById(txtId).textContent='Problem per Sprache beschreiben';
   }
   document.getElementById(btnId).classList.remove('rec');
-  document.getElementById(tmrId).classList.remove('on');
+  var tmrEl=document.getElementById(tmrId);
+  if(tmrEl) tmrEl.classList.remove('on');
 }
 
 // ══ THINKING ══
@@ -857,19 +844,18 @@ function startAnalysis(){
   document.getElementById('ask-btn').disabled=true;
   showThink();
 
-  // Always compute local result first – this NEVER fails
   var local=localAnalysis(desc,imgB64,currentCat);
-  if(!local) local=localAnalysis('','',currentCat); // safety fallback
+  if(!local) local=localAnalysis('','',currentCat);
   var done=false;
 
   function safeFinish(result){
     if(done)return;
     done=true;
-    // Always use local if result is null/undefined
-    finish(result&&result.titel ? result : local);
+    // Prefer API result if it has a titel/title, otherwise use local
+    var r=result&&(result.titel||result.title) ? result : local;
+    finish(r);
   }
 
-  // Try API (best effort)
   try{
     callAPI(desc,imgB64).then(function(apiRes){
       safeFinish(apiRes);
@@ -880,10 +866,10 @@ function startAnalysis(){
     safeFinish(local);
   }
 
-  // Hard timeout: 10 seconds max, then always show result
+  // Hard timeout: 12 seconds
   setTimeout(function(){
     safeFinish(local);
-  },10000);
+  },12000);
 }
 
 function finish(result){
@@ -898,45 +884,27 @@ function finish(result){
 }
 
 async function callAPI(desc,b64){
-  // Sendet Anfrage an unsere sichere Vercel Serverless Function
-  // Der API Key ist dort geschützt und nie im Browser sichtbar
   var body={};
   if(desc) body.description=desc;
   if(b64) body.imageBase64=b64;
   if(currentCat) body.category=currentCat;
-
   var res=await fetch('/api/bob',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
-
-  if(!res.ok) throw new Error('API Fehler '+res.status);
+  if(!res.ok) throw new Error('API '+res.status);
   var data=await res.json();
   if(data.error) throw new Error(data.error);
   return data;
 }
 
-// ══ BOB TRAINING PROMPT (sicher im Backend api/bob.js) ══
-// Prompt ist sicher im Backend gespeichert.
-
-function safeJSON(raw){
-  if(!raw)return null;
-  try{return JSON.parse(raw);}catch(e){}
-  try{var m=raw.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);}catch(e){}
-  try{
-    var c=raw.replace(/```json/gi,'').replace(/```/g,'').replace(/[\u201C\u201D]/g,'"').trim();
-    var m2=c.match(/\{[\s\S]*\}/);if(m2)return JSON.parse(m2[0]);
-  }catch(e){}
-  return null;
-}
-
-// ══ LOCAL ANALYSIS (instant, no API needed) ══
+// ══ LOCAL ANALYSIS ══
 function localAnalysis(desc,hasImg,catHint){
   var d=(desc||'').toLowerCase();
   var cat=(catHint||'').toLowerCase();
 
-  // BEAUTY first (clear category)
+  // BEAUTY
   if(cat==='friseur'||d.includes('friseur')||d.includes('haare schneid')||d.includes('haarschnitt')||(d.includes('haare')&&(d.includes('färb')||d.includes('schneid')||d.includes('stylin'))))
     return mk('✂️','✂️','Friseur gesucht','BOB hat einen Friseurbedarf erkannt. Wir finden dir den besten Friseur in deiner Nähe mit freiem Termin.','Beauty','Niedrig','CHF 40-200','Nach Termin','Friseur',['Wunsch-Styling beschreiben','Foto mitbringen','Termin vorab buchen']);
   if(cat==='barber'||d.includes('barber')||d.includes('bart trim')||(d.includes('herren')&&d.includes('haarschnitt')))
@@ -945,9 +913,9 @@ function localAnalysis(desc,hasImg,catHint){
     return mk('💅','💅','Nagelstudio gesucht','BOB hat einen Nagelstudio-Bedarf erkannt. Wir finden dir das beste Nagelstudio in deiner Nähe.','Beauty','Niedrig','CHF 60-120','Nach Termin','Nagelstudio',['Gel oder Acryl angeben','Wunschdesign zeigen','Termin buchen']);
   if(cat==='microblading'||d.includes('microblading')||d.includes('augenbrauen')||d.includes('permanent make'))
     return mk('✏️','✏️','Microblading gesucht','BOB hat einen Microblading-Bedarf erkannt. Wir finden dir einen zertifizierten Microblading-Artist in deiner Nähe.','Beauty','Niedrig','CHF 300-600','Nach Termin','Microblading Artist',['Vorher-Nachher Fotos anschauen','Beratungsgespräch buchen','Nachsorge beachten']);
-  if(cat==='waxing'||cat==='make-up'||(d.includes('make-up')||d.includes('makeup')||d.includes('braut makeup')))
+  if(cat==='waxing'||cat==='make-up'||d.includes('make-up')||d.includes('makeup')||d.includes('braut makeup'))
     return mk('💄','💄','Beauty Studio gesucht','BOB hat einen Beauty-Bedarf erkannt. Wir finden dir das beste Beauty Studio in deiner Nähe.','Beauty','Niedrig','CHF 50-200','Nach Termin','Beauty Studio',['Behandlung beschreiben','Termin buchen','Vorgespräch empfohlen']);
-  if(cat==='haarentfernung'||d.includes('haarentfernung')||d.includes('laser haarentf')||d.includes('ipl behandlung')||d.includes('sugaring')||d.includes('wachsepilation'))
+  if(cat==='haarentfernung'||d.includes('haarentfernung')||d.includes('laser haarentf')||d.includes('ipl')||d.includes('sugaring')||d.includes('wachsepilation'))
     return mk('🪒','🪒','Haarentfernung gesucht','BOB hat einen Haarentfernungs-Bedarf erkannt. Wir finden dir den besten Anbieter in deiner Nähe.','Beauty','Niedrig','CHF 50-300','Nach Termin','Haarentfernung Studio',['Methode wählen (Laser/IPL/Wax)','Hauttyp besprechen','Erstberatung buchen']);
   if(cat==='massage'||d.includes('massage')||d.includes('rücken schmerz')||(d.includes('wellness')&&d.includes('massage')))
     return mk('💆','💆','Massage gesucht','BOB hat einen Massagebedarf erkannt. Wir finden dir den besten Masseur in deiner Nähe.','Beauty','Niedrig','CHF 80-150','Nach Termin','Masseur',['Massageart angeben','Dauer festlegen','Termin buchen']);
@@ -962,14 +930,14 @@ function localAnalysis(desc,hasImg,catHint){
 
   // HANDWERK
   if(cat==='heizung'||d.includes('heiz')||d.includes('boiler')||d.includes('heizkörper')||d.includes('thermostat')||d.includes('wärmepumpe'))
-    return mk('🔥','🔥','Heizungsproblem erkannt','BOB hat ein Heizungsproblem erkannt. Ein Heizungsmonteur wird benötigt. Heizung vorsorglich ausschalten.','Heizung','Hoch','CHF 150-400','1-2 Tage','Heizungsmonteur',['Heizungsanlage ausschalten','Heizungsmonteur kontaktieren','Keine eigenen Reparaturen']);
+    return mk('🔥','🔥','Heizungsproblem erkannt','BOB hat ein Heizungsproblem erkannt. Ein Heizungsmonteur wird benötigt – Heizung vorsorglich ausschalten.','Heizung','Hoch','CHF 150-400','1-2 Tage','Heizungsmonteur',['Heizungsanlage ausschalten','Heizungsmonteur kontaktieren','Keine eigenen Reparaturen']);
   if(cat==='elektro'||d.includes('elektr')||d.includes('strom')||d.includes('steckdose')||d.includes('sicherung')||d.includes('licht geht nicht'))
-    return mk('🔌','🔌','Elektroproblem erkannt','Elektrischer Defekt erkannt. Elektriker sofort kontaktieren – Sicherheit geht vor!','Elektro','Hoch','CHF 120-350','1-2 Tage','Elektriker',['Bereich nicht benutzen','Sicherungskasten prüfen','Elektriker rufen']);
+    return mk('🔌','🔌','Elektroproblem erkannt','BOB hat einen elektrischen Defekt erkannt. Elektriker sofort kontaktieren – Sicherheit geht vor!','Elektro','Hoch','CHF 120-350','1-2 Tage','Elektriker',['Bereich nicht benutzen','Sicherungskasten prüfen','Elektriker rufen']);
   if(cat==='rohrreinigung'||d.includes('verstopf')||d.includes('abfluss')||d.includes('kanal verstopft')||(d.includes('wc')&&d.includes('verstopft')))
-    return mk('🪠','🪠','Rohrverstopfung erkannt','Rohrverstopfung erkannt. Kein weiteres Wasser benutzen. Rohrreiniger behebt das Problem schnell.','Sanitär','Hoch','CHF 80-250','Heute','Rohrreiniger',['Sofort kein Wasser benutzen','Keine Chemie eingiessen','Rohrreiniger rufen']);
+    return mk('🪠','🪠','Rohrverstopfung erkannt','BOB hat eine Rohrverstopfung erkannt. Kein weiteres Wasser benutzen – Rohrreiniger behebt das Problem schnell.','Sanitär','Hoch','CHF 80-250','Heute','Rohrreiniger',['Sofort kein Wasser benutzen','Keine Chemie eingiessen','Rohrreiniger rufen']);
   if(cat==='sanitär'||d.includes('wasser')||d.includes('tropf')||d.includes('leck')||d.includes('hahn')||d.includes('armatur')||d.includes('wc läuft')||d.includes('rohr')||d.includes('dusche')||(d.includes('küche')&&(d.includes('wasser')||d.includes('hahn')||d.includes('spül'))))
     return mk('💧','🚿','Sanitärproblem erkannt','BOB hat ein Sanitärproblem erkannt. Ein Sanitärinstallateur kann Leckagen, Armaturen und Rohre professionell reparieren.','Sanitär','Mittel','CHF 80-250','1-3 Tage','Sanitärinstallateur',['Haupthahn absperren bei Leck','Problem fotografieren','Sanitärinstallateur kontaktieren']);
-  if(cat==='maler'||d.includes('streichen')||d.includes('maler')||d.includes('tapete')||d.includes('farbe')||(d.includes('wand')&&(d.includes('streichen')||d.includes('neu'))))
+  if(cat==='maler'||d.includes('streichen')||d.includes('maler')||d.includes('tapete')||(d.includes('wand')&&(d.includes('streichen')||d.includes('neu'))))
     return mk('🎨','🎨','Malerarbeiten erkannt','BOB hat Malerarbeiten erkannt. Ein professioneller Maler kann Wände, Decken und Fassaden streichen.','Handwerk','Niedrig','CHF 15-35/m²','1-2 Wochen','Maler',['Fläche ausmessen','Farbwunsch festlegen','Mehrere Offerten einholen']);
   if(cat==='schreiner'||d.includes('schreiner')||d.includes('möbel')||d.includes('einbauküche')||d.includes('parkett')||d.includes('tür klemmt'))
     return mk('🪚','🪚','Schreinerarbeiten erkannt','BOB hat Schreinerarbeiten erkannt. Ein Schreiner kann Möbel, Türen und Einbauten professionell bearbeiten.','Handwerk','Niedrig','CHF 80-150/Std','1-3 Wochen','Schreiner',['Arbeit genau beschreiben','Mass nehmen','Offerte einholen']);
@@ -989,118 +957,125 @@ function localAnalysis(desc,hasImg,catHint){
     return mk('🌿','🌿','Gärtner gesucht','BOB hat einen Gartenbedarf erkannt. Wir finden dir einen zuverlässigen Gärtner in deiner Nähe.','Handwerk','Niedrig','CHF 50-100/Std','3-7 Tage','Gärtner',['Arbeiten beschreiben','Gartengrösse angeben','Saisonale Pflege planen']);
   if(cat==='winterdienst'||d.includes('schnee')||d.includes('räumen')||d.includes('winterdienst'))
     return mk('❄️','❄️','Winterdienst gesucht','BOB hat einen Winterdienst-Bedarf erkannt. Wir finden dir einen zuverlässigen Winterdienst.','Handwerk','Mittel','CHF 50-150','1-2 Tage','Winterdienst',['Fläche beschreiben','Häufigkeit festlegen','Vertrag abschliessen']);
-
-  // Küche allgemein
-  if(d.includes('küche'))
-    return mk('🔧','🚿','Kücheninstallation erkannt','BOB hat einen Bedarf in der Küche erkannt. Je nach Arbeit wird ein Sanitärinstallateur oder Schreiner benötigt.','Handwerk','Mittel','CHF 100-500','1-3 Tage','Sanitärinstallateur',['Problem genau beschreiben','Fotos machen','Fachmann für Besichtigung anfragen']);
-
-  // Fliesen
   if(d.includes('fliese')||d.includes('kachel')||d.includes('fugen')||d.includes('bad renovier'))
     return mk('🧱','🧱','Fliesensanierung erkannt','BOB hat Fliesensanierungsbedarf erkannt. Ein Fliesenleger kann die Arbeiten fachgerecht ausführen.','Handwerk','Mittel','CHF 60-120/m²','1-2 Wochen','Fliesenleger',['Fläche ausmessen','Fliesenformat wählen','Mehrere Offerten einholen']);
-
-  // Foto ohne Beschreibung
+  if(d.includes('küche'))
+    return mk('🔧','🚿','Kücheninstallation erkannt','BOB hat einen Bedarf in der Küche erkannt. Je nach Arbeit wird ein Sanitärinstallateur oder Schreiner benötigt.','Handwerk','Mittel','CHF 100-500','1-3 Tage','Sanitärinstallateur',['Problem genau beschreiben','Fotos machen','Fachmann für Besichtigung anfragen']);
   if(hasImg&&!desc)
     return mk('📸','🔧','Foto analysiert','BOB hat das Foto analysiert. Ein Fachmann sollte das Problem vor Ort begutachten.','Handwerk','Mittel','CHF 80-300','1-3 Tage','Allrounder',['Weitere Fotos machen','Problem beschreiben','Fachmann kontaktieren']);
-
-  // Default
   return mk('🔧','🚿','Anfrage erkannt','BOB hat deine Anfrage erhalten. Wir finden dir den richtigen Fachmann oder Dienstleister in deiner Nähe.','Allgemein','Mittel','CHF 80-300','1-3 Tage','Allrounder',['Problem genau beschreiben','Fotos machen','Mehrere Angebote einholen']);
 }
 
 function mk(e,fe,t,b,k,d,ko,z,f,tips){
-  return {emoji:e,fachmann_emoji:fe,titel:t,beschreibung:b,kategorie:k,dringlichkeit:d,kosten:ko,zeitraum:z,fachmann:f,tipps:tips};
+  return {emoji:e,fachmann_emoji:fe,titel:t,beschreibung:b,desc:b,kategorie:k,dringlichkeit:d,kosten:ko,zeitraum:z,fachmann:f,tipps:tips,erkannt_als:t};
 }
 
+// ══ RENDER RESULT ══
 function renderResult(r){
   document.getElementById('r-bob').textContent=r.fachmann_emoji||r.emoji||'👷';
   document.getElementById('r-fach').textContent=r.fachmann||'';
+
+  // erkannt_als – was BOB konkret gesehen hat
+  var erkEl=document.getElementById('r-erkannt');
+  if(erkEl){
+    var erkannt=r.erkannt_als||r.titel||'';
+    erkEl.textContent=erkannt ? '🔍 Erkannt als: '+erkannt : '';
+    erkEl.style.display=erkannt ? 'block' : 'none';
+  }
+
   document.getElementById('r-tit').textContent=r.titel||'Ergebnis';
-  document.getElementById('r-desc').textContent=r.beschreibung||'';
+  // API gibt "desc", local gibt "beschreibung" – beides abdecken
+  document.getElementById('r-desc').textContent=r.desc||r.beschreibung||'';
+
   document.getElementById('r-kat').textContent=r.kategorie||'–';
   document.getElementById('r-kost').textContent=r.kosten||'–';
   document.getElementById('r-zeit').textContent=r.zeitraum||'–';
+
   var u=document.getElementById('r-dring');
-  u.textContent=r.dringlichkeit||'–';u.className='r-mv';
-  if(r.dringlichkeit==='Hoch')u.classList.add('urg');
-  else if(r.dringlichkeit==='Mittel')u.classList.add('med');
+  u.textContent=r.dringlichkeit||'–';
+  u.className='r-mv';
+  if(r.dringlichkeit==='Sofort'||r.dringlichkeit==='Hoch') u.classList.add('urg');
+  else if(r.dringlichkeit==='Mittel') u.classList.add('med');
   else u.classList.add('low');
+
   var tc=document.getElementById('r-tipps');tc.innerHTML='';
-  (r.tipps||[]).forEach(function(t){
+  var tips=r.tipps||r.tips||[];
+  tips.forEach(function(t){
     var d=document.createElement('div');d.className='r-tip';
-    d.innerHTML='<div class="r-tip-dot"></div><span>'+t+'</span>';tc.appendChild(d);
+    d.innerHTML='<div class="r-tip-dot"></div><span>'+t+'</span>';
+    tc.appendChild(d);
   });
-  document.getElementById('con-bob').textContent=r.fachmann_emoji||'👷';
-  document.getElementById('con-sum').textContent='📋 '+r.titel+' – '+r.fachmann+' wird benötigt';
+
+  // Contact screen
+  document.getElementById('con-bob').textContent=r.fachmann_emoji||r.emoji||'👷';
+  document.getElementById('con-sum').textContent='📋 '+(r.titel||'Anfrage')+' – '+(r.fachmann||'Fachmann')+' wird benötigt';
 }
 
 // ══ ANGEBOT SHEET ══
+function selectAngebotPreis(type){
+  selectedAngebotPreis=type;
+  document.getElementById('ang-opt-basic').classList.toggle('selected',type==='basic');
+  document.getElementById('ang-opt-premium').classList.toggle('selected',type==='premium');
+}
 function openAngebotSheet(){
   var sub=document.getElementById('ang-sub');
-  if(lastResult && lastResult.fachmann){
+  if(lastResult&&lastResult.fachmann){
     sub.textContent='BOB findet dir einen '+lastResult.fachmann+' – verbindliches Angebot in 24h';
   }
   document.getElementById('angebot-overlay').classList.add('open');
 }
-function closeAngebotSheet(){
-  document.getElementById('angebot-overlay').classList.remove('open');
-}
-function openStripeAngebot(){
-  // Stripe Link hier einfügen wenn bereit
-  toast('Stripe Zahlung kommt bald! BOB ist noch in der Testphase 👶');
-}
+function closeAngebotSheet(){document.getElementById('angebot-overlay').classList.remove('open');}
+function openStripeAngebot(){toast('Stripe Zahlung kommt bald! BOB ist noch in der Testphase 👶');}
 
 // ══ PRO RAT SHEET ══
 function openProSheet(){
-  // BOB Emoji aus aktueller Diagnose übernehmen
   var emoji=document.getElementById('r-bob');
   if(emoji) document.getElementById('pro-bob-emoji').textContent=emoji.textContent||'🧠';
-
-  // Gratis Einschätzung aus aktueller Diagnose befüllen
   var freeText=document.getElementById('pro-free-text');
-  if(lastResult && lastResult.beschreibung){
-    freeText.textContent=lastResult.beschreibung;
+  if(lastResult&&(lastResult.desc||lastResult.beschreibung)){
+    freeText.textContent=lastResult.desc||lastResult.beschreibung;
   } else {
     freeText.textContent='BOB hat dein Problem analysiert. Starte einen Scan um die Einschätzung zu sehen.';
   }
   document.getElementById('pro-overlay').classList.add('open');
 }
-function closeProSheet(){
-  document.getElementById('pro-overlay').classList.remove('open');
-}
-function openStripePro(){
-  // Stripe Link hier einfügen wenn bereit
-  toast('Pro kommt bald! BOB wächst noch 👶 → 🧑 → 👨');
-}
+function closeProSheet(){document.getElementById('pro-overlay').classList.remove('open');}
+function openStripePro(){toast('Pro kommt bald! BOB wächst noch 👶 → 🧑 → 👨');}
 
-
+// ══ SUBMIT REQUEST ══
 function submitRequest(){
   var name=document.getElementById('f-name').value.trim();
   var phone=document.getElementById('f-phone').value.trim();
+  var adresse=document.getElementById('f-adresse').value.trim();
   var plz=document.getElementById('f-plz').value.trim();
   var ort=document.getElementById('f-ort').value.trim();
   var email=document.getElementById('f-email').value.trim();
   var notiz=document.getElementById('f-notiz').value.trim();
+
   if(!name){toast('Bitte Name eingeben ✏️');document.getElementById('f-name').focus();return;}
   if(!phone){toast('Bitte Telefonnummer eingeben 📱');document.getElementById('f-phone').focus();return;}
+  if(!adresse){toast('Bitte Strasse & Hausnummer eingeben 📍');document.getElementById('f-adresse').focus();return;}
   if(!plz){toast('Bitte PLZ eingeben 📍');document.getElementById('f-plz').focus();return;}
   if(!ort){toast('Bitte Ort eingeben 📍');document.getElementById('f-ort').focus();return;}
+
   var btn=document.getElementById('sub-btn');
   btn.disabled=true;btn.innerHTML='<span>⏳</span> Wird gesendet...';
 
-  var kundenText=document.getElementById("d-inp")?document.getElementById("d-inp").value.trim():"";
+  var kundenText=document.getElementById('d-inp')?document.getElementById('d-inp').value.trim():'';
   var data={
     name:name,
     telefon:phone,
     email:email||null,
+    adresse:adresse,
     plz:plz,
     ort:ort,
-    notiz:(notiz||(kundenText?"Kunden-Text: "+kundenText:""))||null,
+    notiz:(notiz||(kundenText?'Kunden-Text: '+kundenText:''))||null,
     problem_titel:lastResult?lastResult.titel:null,
     fachmann:lastResult?lastResult.fachmann:null,
     kategorie:lastResult?lastResult.kategorie:null,
     status:'neu'
   };
 
-  // Direkt zu Supabase – kein Vercel nötig
   var SUPA_URL='https://bmdmoehjwadvdlbrmpuq.supabase.co';
   var SUPA_KEY='sb_publishable_k4s0azY-qAl35aHwRFvNXA_ETSoA96d';
 
@@ -1116,12 +1091,9 @@ function submitRequest(){
   }).then(function(res){
     btn.disabled=false;
     btn.innerHTML='<span>🚀</span> Anfrage jetzt senden';
-    if(res.ok){
-      go('success');
-    } else {
-      res.text().then(function(t){toast('Fehler: '+t);});
-    }
-  }).catch(function(e){
+    if(res.ok){go('success');}
+    else{res.text().then(function(t){toast('Fehler: '+t);});}
+  }).catch(function(){
     btn.disabled=false;
     btn.innerHTML='<span>🚀</span> Anfrage jetzt senden';
     toast('Verbindungsfehler – bitte nochmal versuchen');
@@ -1139,7 +1111,6 @@ function openFeedback(status){
   document.getElementById('fb-v-tr').textContent='';
   go('feedback');
 }
-
 function sendFeedback(){
   toast('Danke! BOB lernt aus deinem Feedback 🧠');
   setTimeout(function(){resetAll();},1500);
@@ -1150,8 +1121,7 @@ function resetAll(){
   if(isRec) stopVoiceFor('v-btn','v-txt','v-tmr');
   if(isRec2) stopVoiceFor('fb-v-btn','fb-v-txt','fb-v-tmr');
   imgB64=null;busy=false;lastResult=null;currentCat='';currentCatIcon='';
-  // Clear all inputs safely
-  ['d-inp','fb-desc','f-name','f-phone','f-email','f-plz','f-ort','f-notiz'].forEach(function(id){
+  ['d-inp','fb-desc','f-name','f-phone','f-email','f-adresse','f-plz','f-ort','f-notiz'].forEach(function(id){
     var el=document.getElementById(id);if(el)el.value='';
   });
   ['v-tr','fb-v-tr'].forEach(function(id){
