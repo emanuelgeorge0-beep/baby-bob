@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-<meta name="theme-color" content="#0a0a0f"/>
+<meta name="theme-color" content="#080808"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Baby BOB"/>
@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json"/>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
 <style>
-:root{--y:#FFD93D;--o:#FF6B35;--b:#4ECDC4;--p:#C084FC;--g:#6BCB77;--dark:#0a0a0f;--card:#13131a;--border:rgba(255,255,255,0.08);--text:#f0f0f5;--muted:rgba(240,240,245,0.5);}
+:root{--y:#FFD700;--o:#FF6B35;--b:#4ECDC4;--p:#C084FC;--g:#6BCB77;--dark:#080808;--card:#101016;--border:rgba(255,215,0,0.1);--text:#f0f0f5;--muted:rgba(240,240,245,0.5);}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;overflow:hidden;}
 body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
@@ -27,12 +27,12 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .bob-wrap{position:relative;width:140px;height:140px;margin-bottom:16px;cursor:pointer;}
 .bob-glow{position:absolute;inset:-20px;background:radial-gradient(circle,rgba(255,217,61,0.3) 0%,transparent 70%);animation:glow 2.5s ease-in-out infinite;border-radius:50%;}
 @keyframes glow{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.2);opacity:1}}
-.bob-face{width:140px;height:140px;background:linear-gradient(145deg,#FFE566,#FFD93D,#FFC107);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:64px;position:relative;z-index:1;box-shadow:0 8px 32px rgba(255,217,61,0.35);animation:float 3s ease-in-out infinite;user-select:none;}
+.bob-face{width:140px;height:140px;background:linear-gradient(145deg,#FFE566,#FFD700,#FFC107);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:64px;position:relative;z-index:1;box-shadow:0 8px 32px rgba(255,217,61,0.35);animation:float 3s ease-in-out infinite;user-select:none;}
 @keyframes float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-10px) rotate(2deg)}}
 .h1{font-family:'Syne',sans-serif;font-size:25px;font-weight:800;line-height:1.2;margin-bottom:8px;}
 .h1 span{color:var(--y);}
 .hsub{font-size:12px;color:var(--muted);line-height:1.65;max-width:300px;}
-.scan-btn{margin:20px 22px 0;background:linear-gradient(135deg,#FFD93D,#FF6B35);border:none;border-radius:20px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#0a0a0f;box-shadow:0 8px 32px rgba(255,107,53,0.4);cursor:pointer;transition:transform .15s;width:calc(100% - 44px);}
+.scan-btn{margin:20px 22px 0;background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:20px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#0a0a0f;box-shadow:0 8px 32px rgba(255,107,53,0.4);cursor:pointer;transition:transform .15s;width:calc(100% - 44px);}
 .scan-btn:active{transform:scale(0.97);}
 
 .cat-main{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:20px 22px 0;}
@@ -93,7 +93,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .d-inp{width:100%;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--text);resize:none;min-height:75px;outline:none;transition:border-color .2s;}
 .d-inp:focus{border-color:rgba(255,217,61,0.4);}
 .d-inp::placeholder{color:var(--muted);}
-.ask-btn{margin:12px 18px 0;width:calc(100% - 36px);background:linear-gradient(135deg,#FFD93D,#FF6B35);border:none;border-radius:15px;padding:16px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 6px 22px rgba(255,107,53,0.35);transition:all .15s;}
+.ask-btn{margin:12px 18px 0;width:calc(100% - 36px);background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:15px;padding:16px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 6px 22px rgba(255,107,53,0.35);transition:all .15s;}
 .ask-btn:active{transform:scale(0.97);}
 .ask-btn:disabled{opacity:.5;cursor:not-allowed;}
 #file-inp{display:none;}
@@ -196,7 +196,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .pro-features{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}
 .pro-feature{display:flex;align-items:center;gap:9px;font-size:12px;color:rgba(240,240,245,0.8);}
 .pro-feature-dot{width:18px;height:18px;min-width:18px;background:rgba(255,217,61,0.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;}
-.pro-stripe-btn{width:100%;background:linear-gradient(135deg,#FFD93D,#FF6B35);border:none;border-radius:14px;padding:15px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 5px 18px rgba(255,107,53,0.3);}
+.pro-stripe-btn{width:100%;background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:14px;padding:15px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 5px 18px rgba(255,107,53,0.3);}
 .pro-stripe-btn:active{transform:scale(0.97);}
 .pro-coming-tag{font-size:10px;background:rgba(255,255,255,0.15);padding:2px 7px;border-radius:8px;margin-left:4px;}
 
@@ -232,7 +232,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .f-inp:focus{border-color:rgba(255,217,61,0.4);}
 .f-inp::placeholder{color:var(--muted);}
 .f-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.sub-btn{width:100%;background:linear-gradient(135deg,#FFD93D,#FF6B35);border:none;border-radius:15px;padding:18px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 6px 22px rgba(255,107,53,0.35);}
+.sub-btn{width:100%;background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:15px;padding:18px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 6px 22px rgba(255,107,53,0.35);}
 .sub-btn:active{transform:scale(0.97);}
 .sub-btn:disabled{opacity:.5;cursor:not-allowed;}
 .privacy{font-size:11px;color:var(--muted);text-align:center;line-height:1.5;}
@@ -243,7 +243,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .suc-bob{font-size:80px;animation:float 3s ease-in-out infinite;}
 .suc-tit{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:var(--g);}
 .suc-sub{font-size:14px;color:var(--muted);line-height:1.6;max-width:280px;}
-.suc-btn{margin-top:16px;background:linear-gradient(135deg,#FFD93D,#FF6B35);border:none;border-radius:15px;padding:16px 32px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#0a0a0f;cursor:pointer;}
+.suc-btn{margin-top:16px;background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:15px;padding:16px 32px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#0a0a0f;cursor:pointer;}
 
 /* FEEDBACK */
 #feedback{background:var(--dark);padding-bottom:40px;}
@@ -262,7 +262,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .fb-vtrans{margin-top:5px;font-size:12px;color:var(--muted);font-style:italic;min-height:16px;padding:0 4px;}
 .fb-dw{margin:10px 18px 0;}
 .fb-desc{width:100%;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;font-family:'Nunito',sans-serif;font-size:13px;color:var(--text);resize:none;min-height:80px;outline:none;}
-.fb-send{margin:14px 18px 0;width:calc(100% - 36px);background:linear-gradient(135deg,#FFD93D,#FF6B35);border:none;border-radius:15px;padding:16px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 6px 22px rgba(255,107,53,0.35);}
+.fb-send{margin:14px 18px 0;width:calc(100% - 36px);background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:15px;padding:16px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#0a0a0f;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 6px 22px rgba(255,107,53,0.35);}
 .fb-skip{margin:10px 18px 0;width:calc(100% - 36px);background:transparent;border:1px solid var(--border);border-radius:14px;padding:14px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;}
 
 /* ABOUT */
@@ -284,7 +284,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .mode-toggle-wrap{display:flex;justify-content:center;padding:10px 22px 0;}
 .mode-toggle{display:flex;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:50px;padding:4px;gap:2px;}
 .mt-opt{padding:7px 16px;border-radius:50px;border:none;font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;cursor:pointer;transition:all .2s;color:rgba(240,240,245,0.45);background:transparent;white-space:nowrap;}
-.mt-opt.act-bob{background:linear-gradient(135deg,#FFD93D,#FF6B35);color:#0a0a0f;}
+.mt-opt.act-bob{background:linear-gradient(135deg,#FFD700,#FF6B35);color:#0a0a0f;}
 .mt-opt.act-gs{background:linear-gradient(135deg,#1e4a8a,#2d6bcc);color:#fff;}
 
 /* GS Header */
@@ -315,7 +315,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .gs-svc{background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.2);border-radius:20px;padding:7px 14px;font-size:11px;font-weight:800;color:#4a9eff;}
 
 /* GS CTA */
-.gs-cta{margin:20px 22px 0;background:linear-gradient(135deg,#1e4a8a,#2d6bcc);border:none;border-radius:18px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#fff;cursor:pointer;transition:transform .15s;width:calc(100% - 44px);box-shadow:0 8px 28px rgba(30,74,138,0.5);}
+.gs-cta{margin:20px 22px 0;background:linear-gradient(135deg,#C9A000,#FFD700);border:none;border-radius:18px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#080808;cursor:pointer;transition:transform .15s;width:calc(100% - 44px);box-shadow:0 8px 28px rgba(255,215,0,0.3);}
 .gs-cta:active{transform:scale(0.97);}
 
 /* GS Promise Box */
@@ -339,7 +339,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .gs-chip.sel{background:rgba(74,158,255,0.15);border-color:rgba(74,158,255,0.5);color:#4a9eff;}
 
 /* GS Buttons */
-.gs-btn-primary{margin:18px 18px 0;width:calc(100% - 36px);background:linear-gradient(135deg,#1e4a8a,#2d6bcc);border:none;border-radius:15px;padding:17px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 22px rgba(30,74,138,0.45);transition:transform .15s;}
+.gs-btn-primary{margin:18px 18px 0;width:calc(100% - 36px);background:linear-gradient(135deg,#C9A000,#FFD700);border:none;border-radius:15px;padding:17px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#080808;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 6px 22px rgba(255,215,0,0.25);transition:transform .15s;}
 .gs-btn-primary:active{transform:scale(0.97);}
 .gs-btn-primary:disabled{opacity:.45;cursor:not-allowed;}
 .gs-btn-secondary{margin:10px 18px 0;width:calc(100% - 36px);background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:15px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;color:rgba(232,237,245,0.5);cursor:pointer;}
@@ -804,11 +804,11 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
   <div style="margin:14px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:9px;">
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#4a9eff;">CHF 65/h</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">CHF 65/h</div>
       <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">ab Jahresvertrag</div>
     </div>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#4a9eff;">4 Bereiche</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">4 Bereiche</div>
       <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">SHK Vollservice</div>
     </div>
   </div>
@@ -884,7 +884,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div class="gs-tech-lbl">⚙️ Technische Hinweise</div>
     <div class="gs-tech-txt" id="gs-res-tech">–</div>
   </div>
-  <button class="gs-btn-primary" onclick="gsGo('gs-tarif')">
+  <button class="gs-btn-primary" onclick="gsGoTarif()">
     <span>💼</span> Tarif wählen →
   </button>
 </div>
@@ -920,7 +920,6 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
       <div class="gs-tarif-info">
         <div class="gs-tarif-name">Monthly</div>
         <div class="gs-tarif-desc">Monatliches Kontingent · regelmässig</div>
-        <div class="gs-tarif-badge" id="gs-rec-badge" style="display:none">⭐ KI-Empfehlung</div>
       </div>
       <div class="gs-tarif-price"><strong>67.90</strong><span>CHF/h</span></div>
     </div>
@@ -949,7 +948,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 <!-- GS SCREEN 4: TEAM-VERFÜGBARKEIT -->
 <div id="gs-verfuegbarkeit" class="gs-screen">
   <div class="gs-nav">
-    <div class="gs-back-btn" onclick="gsGo('gs-tarif')">←</div>
+    <div class="gs-back-btn" onclick="gsGoTarif()">←</div>
     <div class="gs-nav-tit">Kontakt & Verfügbarkeit</div>
     <div class="gs-step-chip">4 / 6</div>
   </div>
@@ -1745,20 +1744,28 @@ function gsSelectTarif(name,price){
   if(btn) btn.disabled=false;
 }
 
-// ── GS Tarif Screen vorbereiten ──
+// ── GS Tarif Screen vorbereiten (mit dynamischem Badge) ──
 function gsPrepareTarif(){
   var aiTarif=gsData.ai_tarif||'Single';
-  var rec=document.getElementById('gs-rec-badge');
-  // KI-Empfehlung Badge auf dem richtigen Tarif zeigen
-  ['gs-rec-badge-pilot','gs-rec-badge-single','gs-rec-badge-monthly','gs-rec-badge-quarterly','gs-rec-badge-annual'].forEach(function(id){
-    var el=document.getElementById(id);if(el)el.style.display='none';
-  });
-  if(rec) rec.style.display='none';
   var tarifMap={Pilot:'gt-pilot',Single:'gt-single',Monthly:'gt-monthly',Quarterly:'gt-quarterly',Annual:'gt-annual'};
+  // Alle Karten zurücksetzen + alte Badges entfernen
+  document.querySelectorAll('.gs-tarif-card').forEach(function(c){
+    c.classList.remove('recommended');
+    var b=c.querySelector('.gs-tarif-badge');
+    if(b) b.remove();
+  });
+  // KI-Empfehlung auf richtiger Karte markieren
   var recCard=document.getElementById(tarifMap[aiTarif]);
-  if(recCard) recCard.classList.add('recommended');
-  // Badge im richtigen Tarif zeigen
-  if(aiTarif==='Monthly'&&rec) rec.style.display='inline-block';
+  if(recCard){
+    recCard.classList.add('recommended');
+    var infoEl=recCard.querySelector('.gs-tarif-info');
+    if(infoEl){
+      var badge=document.createElement('div');
+      badge.className='gs-tarif-badge';
+      badge.textContent='⭐ KI-Empfehlung';
+      infoEl.appendChild(badge);
+    }
+  }
   // AI-Empfehlung Text
   var aiRecEl=document.getElementById('gs-tarif-ai-rec');
   if(aiRecEl){
@@ -1768,6 +1775,12 @@ function gsPrepareTarif(){
   // Empfohlenen Tarif vorauswählen
   var priceMap={Pilot:'CHF 60–65/h',Single:'CHF 68–70/h',Monthly:'CHF 67.90/h',Quarterly:'CHF 66.50/h',Annual:'CHF 65/h'};
   gsSelectTarif(aiTarif,priceMap[aiTarif]||'CHF 68–70/h');
+}
+
+// ── GS Navigation zum Tarif-Screen ──
+function gsGoTarif(){
+  gsGo('gs-tarif');
+  gsPrepareTarif();
 }
 
 function gsTarifWeiter(){
@@ -1805,7 +1818,7 @@ function gsRenderSummary(){
     ['Objekttyp',gsData.objekt||'–'],
     ['Dringlichkeit',gsData.dringlichkeit||'Normal'],
     ['Geschätzte Stunden',gsData.ai_stunden||'–'],
-    ['Gewählter Tarif',gsData.tarif+(gsData.tarif_preis?' ('+gsData.tarif_preis+')':'')],
+    ['Gewählter Tarif',(gsData.tarif||'–')+(gsData.tarif_preis?' · '+gsData.tarif_preis:'')],
     ['Gewünschter Start',gsData.start||'–'],
     ['Kontakt',gsData.name+(gsData.firma?' · '+gsData.firma:'')],
     ['Telefon',gsData.telefon||'–'],
@@ -1816,34 +1829,19 @@ function gsRenderSummary(){
   }).join('');
 }
 
-// ── GS Submit ──
+// ── GS Submit → via /api/gs (server-side, mit Service Key + Timeout) ──
 function gsSubmit(){
   var btn=document.getElementById('gs-send-btn');
   if(btn){btn.disabled=true;btn.innerHTML='<span>⏳</span> Wird gesendet...';}
 
-  // 1. Kunden-Datensatz speichern
-  var kundenData={
-    name:gsData.name,
-    firma:gsData.firma||null,
-    telefon:gsData.telefon,
-    email:gsData.email
-  };
-
-  fetch(SUPA_URL+'/rest/v1/gs_kunden',{
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'apikey':SUPA_KEY,
-      'Authorization':'Bearer '+SUPA_KEY,
-      'Prefer':'return=representation'
+  var payload={
+    kunden:{
+      name:gsData.name,
+      firma:gsData.firma||null,
+      telefon:gsData.telefon||null,
+      email:gsData.email||null
     },
-    body:JSON.stringify(kundenData)
-  }).then(function(r){return r.ok?r.json():Promise.reject('gs_kunden '+r.status);})
-  .then(function(kunden){
-    var kundeId=Array.isArray(kunden)&&kunden[0]?kunden[0].id:null;
-    // 2. Anfrage speichern
-    var anfragenData={
-      kunde_id:kundeId,
+    anfrage:{
       projekt_name:gsData.proj_name||null,
       bereich:gsData.bereich||null,
       objekttyp:gsData.objekt||null,
@@ -1854,32 +1852,44 @@ function gsSubmit(){
       geschaetzte_stunden:gsData.ai_stunden||null,
       umfang:gsData.ai_umfang||null,
       gewuenschter_start:gsData.start||null,
-      notiz:gsData.notiz||null,
-      status:'neu'
-    };
-    return fetch(SUPA_URL+'/rest/v1/gs_anfragen',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'apikey':SUPA_KEY,
-        'Authorization':'Bearer '+SUPA_KEY,
-        'Prefer':'return=minimal'
-      },
-      body:JSON.stringify(anfragenData)
-    });
-  }).then(function(r){
+      notiz:gsData.notiz||null
+    }
+  };
+
+  function resetBtn(){
     if(btn){btn.disabled=false;btn.innerHTML='<span>🚀</span> Anfrage jetzt senden';}
-    if(r.ok||r.status===201){
+  }
+
+  // 15s Timeout via AbortController
+  var ctrl=new AbortController();
+  var timeout=setTimeout(function(){ctrl.abort();},15000);
+
+  fetch('/api/gs',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload),
+    signal:ctrl.signal
+  }).then(function(r){
+    clearTimeout(timeout);
+    resetBtn();
+    if(r.ok){
       gsShowBuchung();
     } else {
-      r.text().then(function(t){toast('Fehler: '+t);});
+      r.json().then(function(d){
+        toast('Fehler: '+(d.error||r.status));
+      }).catch(function(){
+        toast('Fehler '+r.status+' – bitte nochmal versuchen');
+      });
     }
   }).catch(function(err){
-    if(btn){btn.disabled=false;btn.innerHTML='<span>🚀</span> Anfrage jetzt senden';}
+    clearTimeout(timeout);
+    resetBtn();
     console.error('GS Submit Error:',err);
-    // Trotzdem Buchungsbestätigung zeigen (Anfrage lokal aufgenommen)
-    toast('Verbindungsfehler – Anfrage wird offline erfasst');
-    setTimeout(function(){gsShowBuchung();},1500);
+    if(err.name==='AbortError'){
+      toast('Timeout – bitte nochmal versuchen');
+    } else {
+      toast('Verbindungsfehler – bitte prüfen Sie Ihre Verbindung');
+    }
   });
 }
 
@@ -1901,20 +1911,14 @@ function gsReset(){
   ['gs-bereich','gs-objekt','gs-dring','gs-start'].forEach(function(id){
     var el=document.getElementById(id);if(el) el.value='';
   });
-  // Alle Chips deselektieren
   document.querySelectorAll('.gs-chip').forEach(function(c){c.classList.remove('sel');});
-  // Alle Tarif-Karten deselektieren
-  document.querySelectorAll('.gs-tarif-card').forEach(function(c){c.classList.remove('sel-tarif','recommended');});
+  document.querySelectorAll('.gs-tarif-card').forEach(function(c){
+    c.classList.remove('sel-tarif','recommended');
+    var b=c.querySelector('.gs-tarif-badge');if(b) b.remove();
+  });
   var btn=document.getElementById('gs-tarif-weiter');if(btn) btn.disabled=true;
   gsGo('gs-home');
 }
-
-// ── GS Tarif Screen Hook (bei Navigation) ──
-var _gsGo=gsGo;
-gsGo=function(screenId){
-  _gsGo(screenId);
-  if(screenId==='gs-tarif') gsPrepareTarif();
-};
 </script>
 </body>
 </html>
