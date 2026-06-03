@@ -27,13 +27,9 @@ export default async function handler(req, res) {
 
     // ── 1. Wissensdatenbank ──
     let wissen = '';
-    try {
-      wissen = isGS
-        ? await fetchGSKnowledge(description, category)
-        : await fetchBOBKnowledge(description, category);
-    } catch (e) {
-      console.error('Supabase Error:', e.message);
-    }
+    wissen = isGS
+      ? await fetchGSKnowledge(description, category)
+      : await fetchBOBKnowledge(description, category);
 
     // ── 2. System Prompt wählen ──
     const systemPrompt = isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
@@ -126,12 +122,38 @@ async function fetchBOBKnowledge(description, category) {
   const allRows = [];
   const headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
 
+  // Diagnose-Basis immer laden (Fachmann-Übersicht als Ankerpunkt für Bildscans)
+  const baseRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/bob_knowledge?kategorie=eq.Diagnose&limit=5&select=titel,inhalt,kategorie,unterkategorie,tags`,
+    { headers }
+  );
+  if (!baseRes.ok) throw new Error(`Supabase Diagnose-Query fehlgeschlagen: ${baseRes.status}`);
+  const baseRows = await baseRes.json();
+  if (Array.isArray(baseRows)) allRows.push(...baseRows);
+
+  // Keyword-Suche über alle Kategorien
   for (const kw of keywords) {
     const encoded = encodeURIComponent(kw);
     const url = `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(inhalt.ilike.*${encoded}*,titel.ilike.*${encoded}*,kategorie.ilike.*${encoded}*,unterkategorie.ilike.*${encoded}*)&limit=5&select=titel,inhalt,kategorie,unterkategorie,tags`;
     const supaRes = await fetch(url, { headers });
-    if (supaRes.ok) {
-      const rows = await supaRes.json();
+    if (!supaRes.ok) {
+      console.error(`Supabase Keyword-Query für "${kw}" fehlgeschlagen: ${supaRes.status}`);
+      continue;
+    }
+    const rows = await supaRes.json();
+    if (Array.isArray(rows)) allRows.push(...rows);
+  }
+
+  // Wenn Keyword-Suche wenig brachte: breite Querung häufigster B2C-Kategorien
+  if (allRows.length < 5) {
+    const b2cCats = ['Sanitär','Elektro','Heizung','Beauty','Garten','Gewerke','Fliesen','Notfall'];
+    const orFilter = b2cCats.map(c => `kategorie.eq.${encodeURIComponent(c)}`).join(',');
+    const broadRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(${orFilter})&limit=10&select=titel,inhalt,kategorie,unterkategorie,tags`,
+      { headers }
+    );
+    if (broadRes.ok) {
+      const rows = await broadRes.json();
       if (Array.isArray(rows)) allRows.push(...rows);
     }
   }
@@ -150,11 +172,15 @@ function formatKnowledge(allRows) {
 // ── Keywords aus Text + Kategorie extrahieren ──
 function extractKeywords(description, category) {
   const keywords = new Set();
-  if (category) keywords.add(category.toLowerCase());
+  if (category) keywords.add(category.toLowerCase().replace(/[^a-zäöüß0-9]/g, ''));
 
   if (description) {
     const text = description.toLowerCase();
-    text.split(/\s+/).filter(w => w.length > 3).forEach(w => keywords.add(w));
+    // Nur alphanumerische + deutsche Zeichen, keine Sonderzeichen die PostgREST-Syntax brechen
+    text.split(/\s+/)
+      .map(w => w.replace(/[^a-zäöüß0-9]/g, ''))
+      .filter(w => w.length > 3)
+      .forEach(w => keywords.add(w));
 
     const fachbegriffe = [
       'sanitär','heizung','elektro','fliesen','boden','wand','dach',
