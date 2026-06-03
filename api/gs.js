@@ -18,8 +18,14 @@ export default async function handler(req, res) {
   try {
     const { kunden, anfrage } = req.body || {};
 
-    if (!kunden?.name) {
-      return res.status(400).json({ error: 'Name ist ein Pflichtfeld' });
+    if (!kunden?.vorname || !kunden?.nachname) {
+      return res.status(400).json({ error: 'Vorname und Nachname sind Pflichtfelder' });
+    }
+    if (!kunden?.strasse || !kunden?.plz || !kunden?.ort) {
+      return res.status(400).json({ error: 'Adresse (Strasse, PLZ, Ort) ist ein Pflichtfeld' });
+    }
+    if (!kunden?.email) {
+      return res.status(400).json({ error: 'E-Mail ist ein Pflichtfeld' });
     }
 
     const headers = {
@@ -28,14 +34,18 @@ export default async function handler(req, res) {
       Authorization: `Bearer ${SUPABASE_KEY}`,
     };
 
-    // ── 1. Kunden speichern / upsert on email ──
+    // ── 1. Kunden speichern ──
     let kundeId = null;
     try {
+      const fullName = `${kunden.vorname} ${kunden.nachname}`.trim();
       const kundenPayload = {
-        firma: kunden.firma || kunden.name || 'Privatkunde',  // NOT NULL in DB
-        kontaktperson: kunden.name || null,
+        firma: kunden.firma || fullName || 'Privatkunde',  // NOT NULL in DB
+        kontaktperson: fullName,
         telefon: kunden.telefon || null,
-        email: kunden.email || null,
+        email: kunden.email,
+        adresse: kunden.strasse || null,
+        plz: kunden.plz || null,
+        ort: kunden.ort || null,
       };
 
       const kundenRes = await fetch(

@@ -332,6 +332,9 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .gs-textarea{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:13px;padding:13px 15px;font-family:'Nunito',sans-serif;font-size:14px;color:#e8edf5;outline:none;resize:none;min-height:90px;transition:border-color .2s;}
 .gs-textarea:focus{border-color:rgba(74,158,255,0.5);}
 .gs-textarea::placeholder{color:rgba(232,237,245,0.28);}
+.gs-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.gs-row-plz{display:grid;grid-template-columns:110px 1fr;gap:10px;}
+.gs-inp.error{border-color:rgba(255,107,53,0.6);}
 
 /* GS Chip Grid */
 .gs-chips{display:flex;flex-wrap:wrap;gap:7px;}
@@ -954,10 +957,30 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:67%"></div></div>
   <div class="gs-form">
-    <div class="gs-label">Name *</div>
-    <input class="gs-inp" id="gs-name" type="text" placeholder="Ihr Name" autocomplete="name"/>
+    <div class="gs-row">
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div class="gs-label">Vorname *</div>
+        <input class="gs-inp" id="gs-vorname" type="text" placeholder="Vorname" autocomplete="given-name"/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div class="gs-label">Nachname *</div>
+        <input class="gs-inp" id="gs-nachname" type="text" placeholder="Nachname" autocomplete="family-name"/>
+      </div>
+    </div>
     <div class="gs-label">Firma</div>
     <input class="gs-inp" id="gs-firma" type="text" placeholder="Firmenname (optional)"/>
+    <div class="gs-label">Strasse &amp; Hausnummer *</div>
+    <input class="gs-inp" id="gs-strasse" type="text" placeholder="z.B. Musterstrasse 12" autocomplete="street-address"/>
+    <div class="gs-row-plz">
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div class="gs-label">PLZ *</div>
+        <input class="gs-inp" id="gs-plz" type="text" placeholder="8000" autocomplete="postal-code" inputmode="numeric"/>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div class="gs-label">Ort *</div>
+        <input class="gs-inp" id="gs-ort" type="text" placeholder="Zürich" autocomplete="address-level2"/>
+      </div>
+    </div>
     <div class="gs-label">Telefon *</div>
     <input class="gs-inp" id="gs-tel" type="tel" placeholder="Telefon / WhatsApp" autocomplete="tel"/>
     <div class="gs-label">E-Mail *</div>
@@ -1792,14 +1815,27 @@ function gsTarifWeiter(){
 
 // ── Verfügbarkeit weiter ──
 function gsVerfuegbarkeitWeiter(){
-  var name=document.getElementById('gs-name').value.trim();
+  var vorname=document.getElementById('gs-vorname').value.trim();
+  var nachname=document.getElementById('gs-nachname').value.trim();
+  var strasse=document.getElementById('gs-strasse').value.trim();
+  var plz=document.getElementById('gs-plz').value.trim();
+  var ort=document.getElementById('gs-ort').value.trim();
   var tel=document.getElementById('gs-tel').value.trim();
   var email=document.getElementById('gs-email').value.trim();
-  if(!name){toast('Bitte Name eingeben');document.getElementById('gs-name').focus();return;}
+  if(!vorname){toast('Bitte Vorname eingeben');document.getElementById('gs-vorname').focus();return;}
+  if(!nachname){toast('Bitte Nachname eingeben');document.getElementById('gs-nachname').focus();return;}
+  if(!strasse){toast('Bitte Strasse & Hausnummer eingeben');document.getElementById('gs-strasse').focus();return;}
+  if(!plz){toast('Bitte PLZ eingeben');document.getElementById('gs-plz').focus();return;}
+  if(!ort){toast('Bitte Ort eingeben');document.getElementById('gs-ort').focus();return;}
   if(!tel){toast('Bitte Telefonnummer eingeben');document.getElementById('gs-tel').focus();return;}
   if(!email){toast('Bitte E-Mail eingeben');document.getElementById('gs-email').focus();return;}
-  gsData.name=name;
+  gsData.vorname=vorname;
+  gsData.nachname=nachname;
+  gsData.name=vorname+' '+nachname;
   gsData.firma=document.getElementById('gs-firma').value.trim();
+  gsData.strasse=strasse;
+  gsData.plz=plz;
+  gsData.ort=ort;
   gsData.telefon=tel;
   gsData.email=email;
   gsData.start=document.getElementById('gs-start').value||'Termin offen';
@@ -1820,7 +1856,10 @@ function gsRenderSummary(){
     ['Geschätzte Stunden',gsData.ai_stunden||'–'],
     ['Gewählter Tarif',(gsData.tarif||'–')+(gsData.tarif_preis?' · '+gsData.tarif_preis:'')],
     ['Gewünschter Start',gsData.start||'–'],
-    ['Kontakt',gsData.name+(gsData.firma?' · '+gsData.firma:'')],
+    ['Vorname',gsData.vorname||'–'],
+    ['Nachname',gsData.nachname||'–'],
+    ['Firma',gsData.firma||'–'],
+    ['Adresse',(gsData.strasse||'–')+(gsData.plz?' · '+gsData.plz:'')+(gsData.ort?' '+gsData.ort:'')],
     ['Telefon',gsData.telefon||'–'],
     ['E-Mail',gsData.email||'–'],
   ];
@@ -1836,8 +1875,13 @@ function gsSubmit(){
 
   var payload={
     kunden:{
-      name:gsData.name,
+      vorname:gsData.vorname||null,
+      nachname:gsData.nachname||null,
+      name:gsData.name||null,
       firma:gsData.firma||null,
+      strasse:gsData.strasse||null,
+      plz:gsData.plz||null,
+      ort:gsData.ort||null,
       telefon:gsData.telefon||null,
       email:gsData.email||null
     },
@@ -1905,7 +1949,7 @@ function gsShowBuchung(){
 // ── GS Reset ──
 function gsReset(){
   gsData={};gsAiResult=null;gsSelectedTarif=null;gsSelectedTarifPrice=null;
-  ['gs-proj-name','gs-proj-desc','gs-name','gs-firma','gs-tel','gs-email','gs-notiz'].forEach(function(id){
+  ['gs-proj-name','gs-proj-desc','gs-vorname','gs-nachname','gs-firma','gs-strasse','gs-plz','gs-ort','gs-tel','gs-email','gs-notiz'].forEach(function(id){
     var el=document.getElementById(id);if(el) el.value='';
   });
   ['gs-bereich','gs-objekt','gs-dring','gs-start'].forEach(function(id){
