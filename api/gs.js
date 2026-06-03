@@ -32,23 +32,17 @@ export default async function handler(req, res) {
     let kundeId = null;
     try {
       const kundenPayload = {
-        name: kunden.name,
-        firma: kunden.firma || null,
+        firma: kunden.firma || kunden.name || 'Privatkunde',  // NOT NULL in DB
+        kontaktperson: kunden.name || null,
         telefon: kunden.telefon || null,
         email: kunden.email || null,
       };
 
-      const onConflict = kunden.email ? '?on_conflict=email' : '';
       const kundenRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/gs_kunden${onConflict}`,
+        `${SUPABASE_URL}/rest/v1/gs_kunden`,
         {
           method: 'POST',
-          headers: {
-            ...headers,
-            Prefer: kunden.email
-              ? 'return=representation,resolution=merge-duplicates'
-              : 'return=representation',
-          },
+          headers: { ...headers, Prefer: 'return=representation' },
           body: JSON.stringify(kundenPayload),
         }
       );
