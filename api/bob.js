@@ -149,7 +149,8 @@ async function fetchBOBKnowledge(description, category) {
     const b2cCats = [
       'Sanit%C3%A4r','Elektro','Heizung','Beauty','Garten','Gewerke',
       'Fliesen','Notfall','Auto','Reinigung','Fenster','Geb%C3%A4ude',
-      'Maler','Schreiner','Dach','K%C3%BCche','Keller'
+      'Maler','Schreiner','Dach','K%C3%BCche','Keller','Solar',
+      'Ger%C3%A4te','IT','Umzug'
     ];
     const orFilter = b2cCats.map(c => `kategorie.eq.${c}`).join(',');
     const broadRes = await fetch(
@@ -201,6 +202,9 @@ function extractKeywords(description, category) {
       'fussbodenheizung','radiatoren','pellets','fernwärme','thermosolar',
       'terrasse','balkon','bad','badezimmer','maler','küche','reinigung',
       'schlüssel','ausgesperrt','umzug','umziehen','garage','carport',
+      'solar','photovoltaik','wechselrichter','waschmaschine','tumbler',
+      'trockner','computer','laptop','wlan','internet','drucker','schimmel',
+      'pool','schwimmbad','tiefkühler','kaffeemaschine','smart','geschirrspüler',
     ];
     fachbegriffe.forEach(f => { if (text.includes(f)) keywords.add(f); });
   }
@@ -273,11 +277,16 @@ BEISPIELE FÜR BILDERKENNUNG:
 - Badezimmer / Fliesen → Sanitär / Fliesenleger
 - Balkon / Terrasse → Fliesenleger / Schreiner
 - Garten / Rasen → Gärtner
+- Pool → Poolservice
 - Tattoo / Piercing → Tattoo Studio
 - Auto / Fahrzeug → Autowerkstatt
 - Möbel / Tisch → Schreiner
 - Schloss / Tür → Schlüsseldienst
 - Küche / Herd → Haushaltsgeräte-Techniker
+- Waschmaschine / Tumbler → Haushaltsgeräte-Techniker
+- Solaranlage / PV → Solarinstallateur
+- Computer / Laptop / WLAN → IT-Techniker
+- Schimmel → Bausanierer / Maler
 - Fenster → Schreiner / Glaserei
 
 WICHTIGE REGELN:
