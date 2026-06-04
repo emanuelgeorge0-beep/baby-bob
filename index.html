@@ -435,8 +435,9 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .gs-ticket-val{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#e8edf5;}
 
 /* ═══ LOGIN SCREEN ═══ */
-.login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;background:#07111f;padding:28px 22px;}
+.login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;background:#07111f;padding:28px 22px;overflow-y:auto;}
 .login-screen.active{display:flex;}
+.login-card.ob-card{margin:auto 0;}
 .login-card{width:100%;max-width:360px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:32px 24px;display:flex;flex-direction:column;gap:18px;}
 .login-logo{text-align:center;margin-bottom:4px;}
 .login-logo-icon{font-size:52px;line-height:1;margin-bottom:8px;}
@@ -456,6 +457,47 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .login-msg{font-size:12px;text-align:center;min-height:18px;color:#4a9eff;}
 .login-msg.err{color:#ff6b6b;}
 .login-skip{font-size:12px;color:rgba(232,237,245,0.3);text-align:center;cursor:pointer;padding:4px;text-decoration:underline;}
+
+/* ═══ ONBOARDING: PW-CHANGE + PROFILE ═══ */
+.ob-card{width:100%;max-width:400px;}
+.ob-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:rgba(232,237,245,0.45);margin:6px 0 -4px;}
+.ob-chips{display:flex;flex-wrap:wrap;gap:7px;}
+.ob-chip{font-size:12px;font-weight:700;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:9px 12px;color:rgba(232,237,245,0.7);cursor:pointer;transition:all .15s;}
+.ob-chip.sel{background:rgba(74,158,255,0.16);border-color:#4a9eff;color:#9cc6ff;}
+.ob-hint{font-size:11px;color:rgba(232,237,245,0.35);text-align:center;}
+
+/* ═══ ADMIN SCREENS ═══ */
+.admin-screen{display:none;flex-direction:column;min-height:100dvh;background:#07111f;color:#e8edf5;padding-bottom:32px;}
+.admin-screen.active{display:flex;}
+.admin-hdr{display:flex;align-items:center;justify-content:space-between;padding:52px 20px 0;}
+.admin-hdr-tit{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;}
+.admin-hdr-sub{font-size:11px;color:rgba(232,237,245,0.4);margin-top:2px;}
+.admin-back{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:7px 12px;font-size:11px;font-weight:800;color:rgba(232,237,245,0.6);cursor:pointer;}
+.admin-hub{display:flex;flex-direction:column;gap:12px;padding:22px 18px 0;}
+.admin-hub-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:18px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:transform .15s;}
+.admin-hub-card:active{transform:scale(0.98);}
+.admin-hub-ico{font-size:26px;}
+.admin-hub-tit{font-size:15px;font-weight:800;}
+.admin-hub-desc{font-size:11.5px;color:rgba(232,237,245,0.45);margin-top:2px;}
+.admin-section{padding:16px 18px 0;}
+.admin-add-btn{width:calc(100% - 36px);margin:14px 18px 0;background:linear-gradient(135deg,#C9A000,#FFD700);border:none;border-radius:13px;padding:14px;font-weight:900;font-size:14px;color:#080808;cursor:pointer;}
+.admin-user-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:13px 14px;margin:10px 18px 0;}
+.admin-user-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.admin-user-name{font-size:14px;font-weight:800;}
+.admin-user-meta{font-size:11px;color:rgba(232,237,245,0.45);margin-top:2px;}
+.admin-badge{font-size:9px;font-weight:900;padding:3px 8px;border-radius:8px;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;}
+.admin-badge.active{background:rgba(107,203,119,0.16);color:#8fe3a0;}
+.admin-badge.must_change_password{background:rgba(255,193,7,0.16);color:#ffd454;}
+.admin-badge.deactivated{background:rgba(255,107,107,0.16);color:#ff9b9b;}
+.admin-role-tag{font-size:9px;font-weight:800;background:rgba(74,158,255,0.14);color:#9cc6ff;padding:2px 7px;border-radius:7px;}
+.admin-user-actions{display:flex;gap:7px;margin-top:11px;}
+.admin-act{flex:1;font-size:11px;font-weight:800;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:8px;color:rgba(232,237,245,0.7);cursor:pointer;}
+.admin-act.danger{color:#ff9b9b;border-color:rgba(255,107,107,0.25);}
+.admin-act.ok{color:#8fe3a0;border-color:rgba(107,203,119,0.25);}
+.admin-temp-box{background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.3);border-radius:14px;padding:16px;margin:14px 18px 0;text-align:center;}
+.admin-temp-pw{font-family:'Syne',monospace;font-size:26px;font-weight:800;letter-spacing:3px;color:#FFD700;margin:8px 0;user-select:all;}
+.admin-temp-hint{font-size:11px;color:rgba(232,237,245,0.5);}
+.admin-empty{text-align:center;font-size:13px;color:rgba(232,237,245,0.4);padding:24px 18px;}
 
 /* ═══ TECHNIKER SCREENS ═══ */
 .tech-screen{display:none;flex-direction:column;min-height:100dvh;background:#07111f;color:#e8edf5;padding-bottom:32px;}
@@ -1221,6 +1263,124 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </button>
   <div class="tech-status" id="tech-status"></div>
   <div class="tech-past-link" onclick="techWeekOffset(-1)">← Vergangene Woche nachfüllen</div>
+</div>
+
+<!-- ═══ FORCED PASSWORD CHANGE ═══ -->
+<div id="pw-change" class="login-screen">
+  <div class="login-card ob-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🔐</div>
+      <div class="login-logo-title">Neues Passwort</div>
+      <div class="login-logo-sub">Bitte vergeben Sie ein persönliches Passwort</div>
+    </div>
+    <input class="login-inp" id="pwc-new" type="password" placeholder="Neues Passwort (min. 8 Zeichen)" autocomplete="new-password"/>
+    <input class="login-inp" id="pwc-confirm" type="password" placeholder="Passwort bestätigen" autocomplete="new-password" onkeydown="if(event.key==='Enter')submitPwChange()"/>
+    <button class="login-btn-magic" id="pwc-btn" onclick="submitPwChange()">Passwort speichern</button>
+    <div class="login-msg" id="pwc-msg"></div>
+  </div>
+</div>
+
+<!-- ═══ MANDATORY PROFILE SETUP ═══ -->
+<div id="profile-setup" class="login-screen">
+  <div class="login-card ob-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">📝</div>
+      <div class="login-logo-title">Ihr Profil</div>
+      <div class="login-logo-sub" id="prof-sub">Bitte vervollständigen Sie Ihr Profil</div>
+    </div>
+    <div class="ob-lbl">Vorname *</div>
+    <input class="login-inp" id="prof-vorname" type="text" placeholder="Vorname" autocomplete="given-name"/>
+    <div class="ob-lbl">Nachname *</div>
+    <input class="login-inp" id="prof-nachname" type="text" placeholder="Nachname" autocomplete="family-name"/>
+
+    <!-- Partner-only -->
+    <div id="prof-partner">
+      <div class="ob-lbl">Firma *</div>
+      <input class="login-inp" id="prof-firma" type="text" placeholder="Firmenname"/>
+      <div class="ob-lbl">Ihre Rolle *</div>
+      <div class="ob-chips" id="prof-position"></div>
+    </div>
+
+    <!-- Techniker-only -->
+    <div id="prof-tech">
+      <div class="ob-lbl">Qualifikation *</div>
+      <div class="ob-chips" id="prof-qual"></div>
+      <div class="ob-lbl">Spezialisierung * (Mehrfachauswahl)</div>
+      <div class="ob-chips" id="prof-spez"></div>
+    </div>
+
+    <div class="ob-lbl">Telefon *</div>
+    <input class="login-inp" id="prof-tel" type="tel" placeholder="Telefon / WhatsApp" autocomplete="tel"/>
+    <button class="login-btn-magic" id="prof-btn" onclick="submitProfile()">Profil speichern & loslegen →</button>
+    <div class="login-msg" id="prof-msg"></div>
+  </div>
+</div>
+
+<!-- ═══ ADMIN HUB ═══ -->
+<div id="admin-home" class="admin-screen">
+  <div class="admin-hdr">
+    <div>
+      <div class="admin-hdr-tit">👑 Admin</div>
+      <div class="admin-hdr-sub" id="admin-welcome">George Solutions</div>
+    </div>
+    <button class="admin-back" onclick="logout()">Abmelden</button>
+  </div>
+  <div class="admin-hub">
+    <div class="admin-hub-card" onclick="showAdminUsers()">
+      <div class="admin-hub-ico">👥</div>
+      <div><div class="admin-hub-tit">User-Verwaltung</div><div class="admin-hub-desc">Partner & Techniker anlegen, Passwörter, Status</div></div>
+    </div>
+    <div class="admin-hub-card" onclick="enterAdminMode('gs')">
+      <div class="admin-hub-ico">🏢</div>
+      <div><div class="admin-hub-tit">George Solutions Modus</div><div class="admin-hub-desc">Projekt-Buchungsportal öffnen</div></div>
+    </div>
+    <div class="admin-hub-card" onclick="enterAdminMode('bob')">
+      <div class="admin-hub-ico">👶</div>
+      <div><div class="admin-hub-tit">Baby BOB Scanner</div><div class="admin-hub-desc">B2C KI-Scanner öffnen</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ADMIN: USER MANAGEMENT ═══ -->
+<div id="admin-users" class="admin-screen">
+  <div class="admin-hdr">
+    <div>
+      <div class="admin-hdr-tit">👥 User-Verwaltung</div>
+      <div class="admin-hdr-sub" id="admin-users-count">–</div>
+    </div>
+    <button class="admin-back" onclick="showScreen('admin-home')">← Zurück</button>
+  </div>
+
+  <!-- Create form (toggled) -->
+  <button class="admin-add-btn" id="admin-add-toggle" onclick="toggleCreateForm()">+ Neuer User</button>
+  <div id="admin-create-form" style="display:none;padding:0 18px;">
+    <div class="admin-user-card" style="margin:12px 0 0;">
+      <div class="ob-lbl">Name *</div>
+      <input class="login-inp" id="cu-name" type="text" placeholder="Vor- und Nachname"/>
+      <div class="ob-lbl">E-Mail *</div>
+      <input class="login-inp" id="cu-email" type="email" placeholder="email@firma.ch"/>
+      <div class="ob-lbl">Firma</div>
+      <input class="login-inp" id="cu-firma" type="text" placeholder="Firmenname (optional)"/>
+      <div class="ob-lbl">Rolle *</div>
+      <div class="ob-chips" id="cu-role">
+        <div class="ob-chip" data-val="gs_partner" onclick="cuPickRole(this,'gs_partner')">🏢 GS Partner</div>
+        <div class="ob-chip" data-val="techniker" onclick="cuPickRole(this,'techniker')">🔧 Techniker</div>
+      </div>
+      <button class="login-btn-magic" id="cu-btn" style="margin-top:14px;" onclick="submitCreateUser()">Account erstellen</button>
+      <div class="login-msg" id="cu-msg"></div>
+    </div>
+  </div>
+
+  <!-- Temp password reveal (after create/reset) -->
+  <div id="admin-temp" class="admin-temp-box" style="display:none;">
+    <div class="admin-temp-hint">Temporäres Passwort für <strong id="admin-temp-email">–</strong></div>
+    <div class="admin-temp-pw" id="admin-temp-pw">––––––––</div>
+    <div class="admin-temp-hint">⚠️ Nur jetzt sichtbar – per WhatsApp/E-Mail an den User senden.</div>
+    <button class="admin-act" style="margin-top:10px;" onclick="copyTempPw()">📋 Kopieren</button>
+    <button class="admin-act ok" style="margin-top:6px;" onclick="dismissTempPw()">Erledigt</button>
+  </div>
+
+  <div id="admin-user-list"><div class="admin-empty">Lädt…</div></div>
 </div>
 
 <script>
@@ -2246,7 +2406,7 @@ function gsReset(){
 var authToken=null,authRole=null,authUser=null,authTechName=null;
 
 function showScreen(id){
-  document.querySelectorAll('.screen,.gs-screen,.login-screen,.tech-screen').forEach(function(s){
+  document.querySelectorAll('.screen,.gs-screen,.login-screen,.tech-screen,.admin-screen').forEach(function(s){
     s.classList.remove('active');
   });
   var el=document.getElementById(id);
@@ -2289,11 +2449,21 @@ function verifyAndRoute(token){
       applyRole(null,null,null,null);
     } else {
       localStorage.setItem('bob_auth_token',token);
-      applyRole(token,d.user,d.role,d.tech_name);
+      routeAfterAuth(token,d);
     }
   }).catch(function(){
     applyRole(null,null,null,null);
   });
+}
+
+// ── Onboarding gate: forced password change → mandatory profile → dashboard ──
+function routeAfterAuth(token,d){
+  authToken=token;authUser=d.user;authRole=d.role;authTechName=d.tech_name;
+  if(d.must_change_password){showScreen('pw-change');return;}
+  if((d.role==='gs_partner'||d.role==='techniker')&&!d.profile_complete){
+    showProfileSetup(d.role);return;
+  }
+  applyRole(token,d.user,d.role,d.tech_name);
 }
 
 function applyRole(token,user,role,techName){
@@ -2301,9 +2471,11 @@ function applyRole(token,user,role,techName){
   var modeWrap=document.querySelector('.mode-toggle-wrap');
   switch(role){
     case 'gs_admin':
-      // Full access: BOB + GS toggle visible
-      if(modeWrap) modeWrap.style.display='';
-      go('home');
+      // Admin hub (user mgmt + mode entry). Mode toggle hidden; admin picks from hub.
+      if(modeWrap) modeWrap.style.display='none';
+      var aw=document.getElementById('admin-welcome');
+      if(aw) aw.textContent=(user&&user.email)||'George Solutions';
+      showScreen('admin-home');
       break;
     case 'gs_partner':
       // GS flow only
@@ -2380,7 +2552,8 @@ function loginPassword(){
     if(d.error){setLoginMsg(d.error,'err');}
     else{
       localStorage.setItem('bob_auth_token',d.access_token);
-      applyRole(d.access_token,d.user,d.role,d.tech_name);
+      setLoginMsg('','');
+      routeAfterAuth(d.access_token,d);
     }
   }).catch(function(){setLoginMsg('Verbindungsfehler','err');});
 }
@@ -2405,6 +2578,254 @@ function logout(){
   var mt=document.getElementById('mt-gs');
   if(mt){mt.textContent='🏢 GS Login';mt.onclick=function(){showScreen('login');};}
   go('home');
+}
+
+// ══════════════════════════════════════════════════════════
+// ══ ONBOARDING: PASSWORD CHANGE + PROFILE ════════════════
+// ══════════════════════════════════════════════════════════
+
+var PARTNER_ROLLEN=['CEO','Projektleiter','Bauleiter','Einkauf','Sonstiges'];
+var TECH_QUALIFIKATION=['Meister','Gesellenbrief AF','Monteur','Bauleiter'];
+var TECH_SPEZIALISIERUNG=['Sanitär','Heizung','Lüftung','Klima'];
+var profPosition=null,profQual=null,profSpez=[];
+
+function setMsg(id,msg,type){
+  var el=document.getElementById(id);if(!el)return;
+  el.textContent=msg;el.className='login-msg'+(type?' '+type:'');
+}
+
+function submitPwChange(){
+  var p1=(document.getElementById('pwc-new')||{}).value||'';
+  var p2=(document.getElementById('pwc-confirm')||{}).value||'';
+  if(p1.length<8){setMsg('pwc-msg','Passwort muss mindestens 8 Zeichen haben','err');return;}
+  if(p1!==p2){setMsg('pwc-msg','Passwörter stimmen nicht überein','err');return;}
+  var btn=document.getElementById('pwc-btn');
+  if(btn){btn.disabled=true;btn.textContent='Speichert…';}
+  fetch('/api/account',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
+    body:JSON.stringify({action:'change_password',new_password:p1})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='Passwort speichern';}
+    if(d.error){setMsg('pwc-msg',d.error,'err');return;}
+    document.getElementById('pwc-new').value='';document.getElementById('pwc-confirm').value='';
+    setMsg('pwc-msg','','');
+    // Re-check status → profile or dashboard.
+    fetchMeAndRoute();
+  }).catch(function(){
+    if(btn){btn.disabled=false;btn.textContent='Passwort speichern';}
+    setMsg('pwc-msg','Verbindungsfehler','err');
+  });
+}
+
+function fetchMeAndRoute(){
+  fetch('/api/account',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
+    body:JSON.stringify({action:'me'})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.error){return;}
+    authRole=d.role;
+    if((d.role==='gs_partner'||d.role==='techniker')&&!d.profile_complete){showProfileSetup(d.role);}
+    else{applyRole(authToken,d.user||authUser,d.role,authTechName);}
+  });
+}
+
+function chipHtml(values,picked,multi){
+  return values.map(function(v){
+    var on=(multi?(picked.indexOf(v)>-1):(picked===v))?' sel':'';
+    return '<div class="ob-chip'+on+'" data-val="'+v+'">'+v+'</div>';
+  }).join('');
+}
+
+function showProfileSetup(role){
+  profPosition=null;profQual=null;profSpez=[];
+  var isPartner=role==='gs_partner';
+  document.getElementById('prof-partner').style.display=isPartner?'block':'none';
+  document.getElementById('prof-tech').style.display=isPartner?'none':'block';
+  document.getElementById('prof-sub').textContent=isPartner?'Partner-Profil · George Solutions':'Techniker-Profil · George Solutions';
+  setMsg('prof-msg','','');
+  if(isPartner){
+    var pos=document.getElementById('prof-position');
+    pos.innerHTML=chipHtml(PARTNER_ROLLEN,null,false);
+    pos.querySelectorAll('.ob-chip').forEach(function(c){
+      c.onclick=function(){pos.querySelectorAll('.ob-chip').forEach(function(x){x.classList.remove('sel');});c.classList.add('sel');profPosition=c.getAttribute('data-val');};
+    });
+  }else{
+    var q=document.getElementById('prof-qual');
+    q.innerHTML=chipHtml(TECH_QUALIFIKATION,null,false);
+    q.querySelectorAll('.ob-chip').forEach(function(c){
+      c.onclick=function(){q.querySelectorAll('.ob-chip').forEach(function(x){x.classList.remove('sel');});c.classList.add('sel');profQual=c.getAttribute('data-val');};
+    });
+    var s=document.getElementById('prof-spez');
+    s.innerHTML=chipHtml(TECH_SPEZIALISIERUNG,[],true);
+    s.querySelectorAll('.ob-chip').forEach(function(c){
+      c.onclick=function(){
+        var v=c.getAttribute('data-val');var i=profSpez.indexOf(v);
+        if(i>-1){profSpez.splice(i,1);c.classList.remove('sel');}else{profSpez.push(v);c.classList.add('sel');}
+      };
+    });
+  }
+  showScreen('profile-setup');
+}
+
+function submitProfile(){
+  var profile={
+    vorname:(document.getElementById('prof-vorname')||{}).value.trim(),
+    nachname:(document.getElementById('prof-nachname')||{}).value.trim(),
+    telefon:(document.getElementById('prof-tel')||{}).value.trim()
+  };
+  if(!profile.vorname||!profile.nachname||!profile.telefon){setMsg('prof-msg','Bitte Vorname, Nachname und Telefon ausfüllen','err');return;}
+  if(authRole==='gs_partner'){
+    profile.firma=(document.getElementById('prof-firma')||{}).value.trim();
+    profile.position=profPosition;
+    if(!profile.firma){setMsg('prof-msg','Bitte Firma angeben','err');return;}
+    if(!profile.position){setMsg('prof-msg','Bitte Ihre Rolle wählen','err');return;}
+  }else{
+    profile.qualifikation=profQual;
+    profile.spezialisierung=profSpez;
+    if(!profile.qualifikation){setMsg('prof-msg','Bitte Qualifikation wählen','err');return;}
+    if(!profile.spezialisierung.length){setMsg('prof-msg','Bitte mindestens eine Spezialisierung wählen','err');return;}
+  }
+  var btn=document.getElementById('prof-btn');
+  if(btn){btn.disabled=true;btn.textContent='Speichert…';}
+  fetch('/api/account',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
+    body:JSON.stringify({action:'complete_profile',profile:profile})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='Profil speichern & loslegen →';}
+    if(d.error){setMsg('prof-msg',d.error,'err');return;}
+    authTechName=profile.vorname;
+    applyRole(authToken,authUser,d.role||authRole,authTechName);
+  }).catch(function(){
+    if(btn){btn.disabled=false;btn.textContent='Profil speichern & loslegen →';}
+    setMsg('prof-msg','Verbindungsfehler','err');
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// ══ ADMIN: USER MANAGEMENT ════════════════════════════════
+// ══════════════════════════════════════════════════════════
+
+var cuRole=null,lastTempPw='';
+
+function enterAdminMode(mode){
+  var modeWrap=document.querySelector('.mode-toggle-wrap');
+  if(modeWrap) modeWrap.style.display='';
+  setMode(mode);
+}
+
+function showAdminUsers(){showScreen('admin-users');loadAdminUsers();}
+
+function adminApi(body){
+  return fetch('/api/admin',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
+    body:JSON.stringify(body)
+  }).then(function(r){return r.json();});
+}
+
+function loadAdminUsers(){
+  var list=document.getElementById('admin-user-list');
+  if(list) list.innerHTML='<div class="admin-empty">Lädt…</div>';
+  adminApi({action:'list_users'}).then(function(d){
+    if(d.error){if(list)list.innerHTML='<div class="admin-empty">'+gsEsc(d.error)+'</div>';return;}
+    renderAdminUsers(d.users||[]);
+  }).catch(function(){if(list)list.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
+}
+
+function renderAdminUsers(users){
+  var cnt=document.getElementById('admin-users-count');
+  if(cnt) cnt.textContent=users.length+' Benutzer';
+  var list=document.getElementById('admin-user-list');
+  if(!list) return;
+  if(!users.length){list.innerHTML='<div class="admin-empty">Noch keine Benutzer angelegt.</div>';return;}
+  var roleLbl={gs_partner:'🏢 Partner',techniker:'🔧 Techniker',gs_admin:'👑 Admin',bob_user:'BOB'};
+  var statusLbl={active:'Aktiv',must_change_password:'PW ändern',deactivated:'Deaktiviert'};
+  list.innerHTML=users.map(function(u){
+    var acts='';
+    if(u.role!=='gs_admin'){
+      acts='<div class="admin-user-actions">'
+        +'<button class="admin-act" onclick="resetUserPw(\''+u.id+'\',\''+gsEsc(u.email)+'\')">🔑 Passwort neu</button>'
+        +(u.active
+          ?'<button class="admin-act danger" onclick="toggleUserActive(\''+u.id+'\',false)">Deaktivieren</button>'
+          :'<button class="admin-act ok" onclick="toggleUserActive(\''+u.id+'\',true)">Aktivieren</button>')
+      +'</div>';
+    }
+    return '<div class="admin-user-card">'
+      +'<div class="admin-user-top">'
+        +'<div><div class="admin-user-name">'+gsEsc(u.name)+'</div>'
+          +'<div class="admin-user-meta">'+gsEsc(u.email)+(u.firma?(' · '+gsEsc(u.firma)):'')+'</div>'
+          +'<div style="margin-top:6px;"><span class="admin-role-tag">'+(roleLbl[u.role]||u.role)+'</span></div></div>'
+        +'<span class="admin-badge '+u.status+'">'+(statusLbl[u.status]||u.status)+'</span>'
+      +'</div>'+acts
+    +'</div>';
+  }).join('');
+}
+
+function toggleCreateForm(){
+  var f=document.getElementById('admin-create-form');
+  if(!f)return;
+  f.style.display=f.style.display==='none'?'block':'none';
+  if(f.style.display==='block'){
+    cuRole=null;setMsg('cu-msg','','');
+    ['cu-name','cu-email','cu-firma'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+    document.querySelectorAll('#cu-role .ob-chip').forEach(function(c){c.classList.remove('sel');});
+  }
+}
+
+function cuPickRole(el,role){
+  cuRole=role;
+  document.querySelectorAll('#cu-role .ob-chip').forEach(function(c){c.classList.remove('sel');});
+  el.classList.add('sel');
+}
+
+function submitCreateUser(){
+  var name=(document.getElementById('cu-name')||{}).value.trim();
+  var email=(document.getElementById('cu-email')||{}).value.trim();
+  var firma=(document.getElementById('cu-firma')||{}).value.trim();
+  if(!name){setMsg('cu-msg','Name erforderlich','err');return;}
+  if(!email){setMsg('cu-msg','E-Mail erforderlich','err');return;}
+  if(!cuRole){setMsg('cu-msg','Bitte Rolle wählen','err');return;}
+  var btn=document.getElementById('cu-btn');
+  if(btn){btn.disabled=true;btn.textContent='Erstellt…';}
+  adminApi({action:'create_user',name:name,email:email,firma:firma,role:cuRole}).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='Account erstellen';}
+    if(d.error){setMsg('cu-msg',d.error,'err');return;}
+    toggleCreateForm();
+    showTempPw(email,d.temp_password);
+    loadAdminUsers();
+  }).catch(function(){
+    if(btn){btn.disabled=false;btn.textContent='Account erstellen';}
+    setMsg('cu-msg','Verbindungsfehler','err');
+  });
+}
+
+function resetUserPw(id,email){
+  if(!confirm('Neues temporäres Passwort für '+email+' generieren?'))return;
+  adminApi({action:'reset_password',user_id:id}).then(function(d){
+    if(d.error){alert(d.error);return;}
+    showTempPw(email,d.temp_password);
+    loadAdminUsers();
+  });
+}
+
+function toggleUserActive(id,active){
+  adminApi({action:'set_active',user_id:id,active:active}).then(function(d){
+    if(d.error){alert(d.error);return;}
+    loadAdminUsers();
+  });
+}
+
+function showTempPw(email,pw){
+  lastTempPw=pw||'';
+  var box=document.getElementById('admin-temp');
+  document.getElementById('admin-temp-email').textContent=email;
+  document.getElementById('admin-temp-pw').textContent=pw||'––––––––';
+  if(box){box.style.display='block';box.scrollIntoView({behavior:'smooth',block:'center'});}
+}
+function dismissTempPw(){var b=document.getElementById('admin-temp');if(b)b.style.display='none';lastTempPw='';}
+function copyTempPw(){
+  if(!lastTempPw)return;
+  if(navigator.clipboard){navigator.clipboard.writeText(lastTempPw).then(function(){toast('Passwort kopiert');},function(){toast('Kopieren nicht möglich');});}
+  else{toast(lastTempPw);}
 }
 
 // ══════════════════════════════════════════════════════════
