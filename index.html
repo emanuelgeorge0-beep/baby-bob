@@ -394,6 +394,28 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .gs-tarif-badge{font-size:9px;font-weight:900;background:linear-gradient(135deg,#1e4a8a,#4a9eff);color:#fff;padding:2px 7px;border-radius:8px;margin-top:4px;display:inline-block;}
 .gs-ai-rec{margin:14px 18px 0;background:rgba(74,158,255,0.06);border:1px solid rgba(74,158,255,0.2);border-radius:12px;padding:12px 15px;font-size:12px;color:rgba(74,158,255,0.9);}
 
+/* GS Techniker-Auswahl */
+.gs-tech-list{display:flex;flex-direction:column;gap:11px;padding:14px 18px 0;}
+.gs-tech-card{background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.08);border-radius:16px;padding:14px;display:flex;gap:13px;cursor:pointer;transition:all .2s;align-items:flex-start;}
+.gs-tech-card:active{transform:scale(0.98);}
+.gs-tech-card.sel-tech{border-color:#4a9eff;background:rgba(74,158,255,0.1);}
+.gs-tech-card.match{border-color:rgba(107,203,119,0.3);}
+.gs-tech-avatar{width:52px;height:52px;min-width:52px;border-radius:14px;background:linear-gradient(135deg,rgba(74,158,255,0.18),rgba(30,74,138,0.25));display:flex;align-items:center;justify-content:center;font-size:26px;}
+.gs-tech-main{flex:1;min-width:0;}
+.gs-tech-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.gs-tech-name{font-size:15px;font-weight:800;color:#e8edf5;}
+.gs-tech-rating{font-size:12px;font-weight:800;color:#FFD700;white-space:nowrap;}
+.gs-tech-qual{font-size:11.5px;color:rgba(232,237,245,0.5);margin-top:2px;}
+.gs-tech-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.gs-tech-tag{font-size:10px;font-weight:700;background:rgba(74,158,255,0.12);color:#9cc6ff;padding:3px 8px;border-radius:7px;}
+.gs-tech-tag.on{background:rgba(107,203,119,0.18);color:#8fe3a0;}
+.gs-tech-meta{display:flex;gap:12px;margin-top:8px;font-size:10.5px;color:rgba(232,237,245,0.45);}
+.gs-tech-avail{display:inline-flex;align-items:center;gap:4px;}
+.gs-tech-dot{width:7px;height:7px;border-radius:50%;background:#6bcb77;display:inline-block;}
+.gs-tech-match-badge{font-size:9px;font-weight:900;background:rgba(107,203,119,0.18);color:#8fe3a0;padding:2px 7px;border-radius:8px;margin-top:6px;display:inline-block;}
+.gs-tech-skip{margin:12px 18px 0;text-align:center;font-size:12px;color:rgba(232,237,245,0.35);}
+.gs-tech-empty{margin:24px 18px;text-align:center;font-size:13px;color:rgba(232,237,245,0.4);}
+
 /* GS Summary */
 .gs-summary{margin:14px 18px 0;display:flex;flex-direction:column;gap:8px;}
 .gs-sum-row{display:flex;align-items:center;justify-content:space-between;padding:12px 15px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;}
@@ -1023,14 +1045,32 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </button>
 </div>
 
-<!-- GS SCREEN 4: TEAM-VERFÜGBARKEIT -->
+<!-- GS SCREEN 4: TECHNIKER-AUSWAHL -->
+<div id="gs-techniker" class="gs-screen">
+  <div class="gs-nav">
+    <div class="gs-back-btn" onclick="gsGo('gs-tarif')">←</div>
+    <div class="gs-nav-tit">Unser Team</div>
+    <div class="gs-step-chip">4 / 7</div>
+  </div>
+  <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:57%"></div></div>
+  <div class="gs-ai-rec" id="gs-tech-hint">👷 Verfügbare Techniker für Ihr Projekt</div>
+  <div class="gs-tech-list" id="gs-tech-list">
+    <div class="gs-tech-empty" id="gs-tech-loading">Techniker werden geladen…</div>
+  </div>
+  <div class="gs-tech-skip">Optional – Sie können einen Wunsch-Techniker wählen oder dies dem Team überlassen.</div>
+  <button class="gs-btn-primary" onclick="gsTechnikerWeiter()">
+    Weiter →
+  </button>
+</div>
+
+<!-- GS SCREEN 5: KONTAKT & VERFÜGBARKEIT -->
 <div id="gs-verfuegbarkeit" class="gs-screen">
   <div class="gs-nav">
-    <div class="gs-back-btn" onclick="gsGoTarif()">←</div>
+    <div class="gs-back-btn" onclick="gsGo('gs-techniker')">←</div>
     <div class="gs-nav-tit">Kontakt & Verfügbarkeit</div>
-    <div class="gs-step-chip">4 / 6</div>
+    <div class="gs-step-chip">5 / 7</div>
   </div>
-  <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:67%"></div></div>
+  <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:71%"></div></div>
   <div class="gs-form">
     <div class="gs-row">
       <div style="display:flex;flex-direction:column;gap:6px;">
@@ -1076,14 +1116,14 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </button>
 </div>
 
-<!-- GS SCREEN 5: ANFRAGE-BESTÄTIGUNG -->
+<!-- GS SCREEN 6: ANFRAGE-BESTÄTIGUNG -->
 <div id="gs-bestaetigung" class="gs-screen">
   <div class="gs-nav">
     <div class="gs-back-btn" onclick="gsGo('gs-verfuegbarkeit')">←</div>
     <div class="gs-nav-tit">Anfrage bestätigen</div>
-    <div class="gs-step-chip">5 / 6</div>
+    <div class="gs-step-chip">6 / 7</div>
   </div>
-  <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:83%"></div></div>
+  <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:86%"></div></div>
   <div style="padding:14px 18px 0;font-size:13px;color:rgba(232,237,245,0.5);">Bitte prüfen Sie Ihre Anfrage vor dem Absenden:</div>
   <div class="gs-summary" id="gs-summary-list"></div>
   <div class="gs-24h-box">
@@ -1099,7 +1139,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   <div style="padding:10px 18px 0;font-size:11px;color:rgba(232,237,245,0.3);text-align:center;">Ihre Daten werden vertraulich behandelt und nur für diese Anfrage verwendet.</div>
 </div>
 
-<!-- GS SCREEN 6: BUCHUNGSBESTÄTIGUNG -->
+<!-- GS SCREEN 7: BUCHUNGSBESTÄTIGUNG -->
 <div id="gs-buchung" class="gs-screen">
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:100%"></div></div>
   <div class="gs-success-wrap">
@@ -1752,7 +1792,7 @@ var gsSelectedTarifPrice=null;
 function setMode(mode){
   appMode=mode;
   var bobScreens=['home','scan','result','contact','success','feedback','about'];
-  var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
+  var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
 
   if(mode==='bob'){
     // Zeige BOB, verstecke GS
@@ -1785,7 +1825,7 @@ function setMode(mode){
 
 // ── GS Navigation ──
 function gsGo(screenId){
-  var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
+  var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
   gsScreens.forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.classList.remove('active');
@@ -1965,7 +2005,85 @@ function gsTarifWeiter(){
   if(!gsSelectedTarif){toast('Bitte Tarif wählen');return;}
   gsData.tarif=gsSelectedTarif;
   gsData.tarif_preis=gsSelectedTarifPrice;
+  gsGo('gs-techniker');
+  gsLoadTechniker();
+}
+
+// ── Techniker-Auswahl (Step 4/7) ──
+var gsTechniker=[];
+var gsSelectedTechniker=null;
+
+function gsLoadTechniker(){
+  var list=document.getElementById('gs-tech-list');
+  // Only fetch once per flow; keep selection on back-navigation.
+  if(gsTechniker.length){gsRenderTechniker();return;}
+  if(list) list.innerHTML='<div class="gs-tech-empty" id="gs-tech-loading">Techniker werden geladen…</div>';
+  var bereich=encodeURIComponent(gsData.bereich||'');
+  fetch('/api/techniker'+(bereich?('?bereich='+bereich):''))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      gsTechniker=(d&&d.techniker)||[];
+      gsRenderTechniker();
+    })
+    .catch(function(){
+      if(list) list.innerHTML='<div class="gs-tech-empty">Techniker konnten nicht geladen werden. Sie können trotzdem fortfahren – das Team wird zugeteilt.</div>';
+    });
+}
+
+function gsRenderTechniker(){
+  var list=document.getElementById('gs-tech-list');
+  if(!list) return;
+  if(!gsTechniker.length){
+    list.innerHTML='<div class="gs-tech-empty">Aktuell sind keine Techniker-Profile hinterlegt. Das Team wird Ihrem Projekt passend zugeteilt.</div>';
+    return;
+  }
+  var bereich=(gsData.bereich||'').toLowerCase();
+  var hint=document.getElementById('gs-tech-hint');
+  if(hint) hint.textContent='👷 '+gsTechniker.length+' verfügbare Techniker'+(gsData.bereich?(' · Fokus '+gsData.bereich):'');
+  list.innerHTML=gsTechniker.map(function(t){
+    var isMatch=(t.specialization||[]).some(function(s){return s.toLowerCase()===bereich;});
+    var sel=gsSelectedTechniker===t.id?' sel-tech':'';
+    var matchCls=isMatch&&!sel?' match':'';
+    var tags=(t.specialization||[]).map(function(s){
+      var on=s.toLowerCase()===bereich?' on':'';
+      return '<span class="gs-tech-tag'+on+'">'+gsEsc(s)+'</span>';
+    }).join('');
+    var rating=t.rating!=null?('★ '+Number(t.rating).toFixed(1)):'';
+    var years=t.years_experience!=null?(t.years_experience+' J. Erfahrung'):'';
+    var loc=t.location?('📍 '+gsEsc(t.location)):'';
+    var meta=[years,loc].filter(Boolean).map(function(m){return '<span>'+m+'</span>';}).join('');
+    return '<div class="gs-tech-card'+sel+matchCls+'" onclick="gsSelectTechniker(\''+t.id+'\')">'
+      +'<div class="gs-tech-avatar">'+(t.photo_emoji||'👷')+'</div>'
+      +'<div class="gs-tech-main">'
+        +'<div class="gs-tech-top"><span class="gs-tech-name">'+gsEsc(t.name)+'</span>'
+          +(rating?'<span class="gs-tech-rating">'+rating+'</span>':'')+'</div>'
+        +(t.qualification?'<div class="gs-tech-qual">'+gsEsc(t.qualification)+'</div>':'')
+        +(isMatch?'<div class="gs-tech-match-badge">✓ Passt zu '+gsEsc(gsData.bereich)+'</div>':'')
+        +'<div class="gs-tech-tags">'+tags+'</div>'
+        +(meta?'<div class="gs-tech-meta">'+meta+'<span class="gs-tech-avail"><span class="gs-tech-dot"></span>Verfügbar</span></div>'
+              :'<div class="gs-tech-meta"><span class="gs-tech-avail"><span class="gs-tech-dot"></span>Verfügbar</span></div>')
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
+function gsSelectTechniker(id){
+  // Toggle: tapping the selected card again deselects it.
+  gsSelectedTechniker=gsSelectedTechniker===id?null:id;
+  var t=gsTechniker.filter(function(x){return x.id===id;})[0];
+  gsData.preferred_techniker=(gsSelectedTechniker&&t)?t.name:null;
+  gsRenderTechniker();
+}
+
+function gsTechnikerWeiter(){
+  // Selection is optional – always allowed to proceed.
   gsGo('gs-verfuegbarkeit');
+}
+
+function gsEsc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
 }
 
 // ── Verfügbarkeit weiter ──
@@ -2010,6 +2128,7 @@ function gsRenderSummary(){
     ['Dringlichkeit',gsData.dringlichkeit||'Normal'],
     ['Geschätzte Stunden',gsData.ai_stunden||'–'],
     ['Gewählter Tarif',(gsData.tarif||'–')+(gsData.tarif_preis?' · '+gsData.tarif_preis:'')],
+    ['Wunsch-Techniker',gsData.preferred_techniker||'Team entscheidet'],
     ['Gewünschter Start',gsData.start||'–'],
     ['Vorname',gsData.vorname||'–'],
     ['Nachname',gsData.nachname||'–'],
@@ -2051,7 +2170,7 @@ function gsSubmit(){
       geschaetzte_stunden:gsData.ai_stunden||null,
       umfang:gsData.ai_umfang||null,
       gewuenschter_start:gsData.start||null,
-      notiz:gsData.notiz||null
+      notiz:(gsData.preferred_techniker?('Wunsch-Techniker: '+gsData.preferred_techniker+(gsData.notiz?' · ':'')):'')+(gsData.notiz||'')||null
     }
   };
 
@@ -2104,6 +2223,7 @@ function gsShowBuchung(){
 // ── GS Reset ──
 function gsReset(){
   gsData={};gsAiResult=null;gsSelectedTarif=null;gsSelectedTarifPrice=null;
+  gsTechniker=[];gsSelectedTechniker=null;
   ['gs-proj-name','gs-proj-desc','gs-vorname','gs-nachname','gs-firma','gs-strasse','gs-plz','gs-ort','gs-tel','gs-email','gs-notiz'].forEach(function(id){
     var el=document.getElementById(id);if(el) el.value='';
   });
