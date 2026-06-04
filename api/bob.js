@@ -144,12 +144,16 @@ async function fetchBOBKnowledge(description, category) {
     if (Array.isArray(rows)) allRows.push(...rows);
   }
 
-  // Wenn Keyword-Suche wenig brachte: breite Querung häufigster B2C-Kategorien
+  // Wenn Keyword-Suche wenig brachte: breite Querung aller B2C-Kategorien
   if (allRows.length < 5) {
-    const b2cCats = ['Sanitär','Elektro','Heizung','Beauty','Garten','Gewerke','Fliesen','Notfall'];
-    const orFilter = b2cCats.map(c => `kategorie.eq.${encodeURIComponent(c)}`).join(',');
+    const b2cCats = [
+      'Sanit%C3%A4r','Elektro','Heizung','Beauty','Garten','Gewerke',
+      'Fliesen','Notfall','Auto','Reinigung','Fenster','Geb%C3%A4ude',
+      'Maler','Schreiner','Dach','K%C3%BCche','Keller'
+    ];
+    const orFilter = b2cCats.map(c => `kategorie.eq.${c}`).join(',');
     const broadRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(${orFilter})&limit=10&select=titel,inhalt,kategorie,unterkategorie,tags`,
+      `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(${orFilter})&limit=12&select=titel,inhalt,kategorie,unterkategorie,tags`,
       { headers }
     );
     if (broadRes.ok) {
@@ -186,15 +190,17 @@ function extractKeywords(description, category) {
       'sanitär','heizung','elektro','fliesen','boden','wand','dach',
       'fenster','garten','pool','klima','wärmepumpe','boiler','heizkörper',
       'wasserhahn','abfluss','verstopft','tropft','rohrbruch','leck',
-      'strom','schalter','steckdose','sicherung','kabel',
+      'strom','schalter','steckdose','sicherung','kabel','lampe','licht',
       'friseur','nagel','massage','tattoo','barber','kosmetik','wimper',
-      'auto','reifen','bremsen','motor','getriebe',
-      'tisch','schrank','möbel','schreiner','stuhl','bett',
-      'mauer','estrich','keller','riss','feuchtigkeit',
+      'auto','reifen','bremsen','motor','getriebe','werkstatt',
+      'tisch','schrank','möbel','schreiner','stuhl','bett','parkett',
+      'mauer','estrich','keller','riss','feuchtigkeit','schimmel',
       'solar','photovoltaik','panel','ziegel',
       'notfall','brand','rauch','gas',
       'lüftung','komfortlüftung','kwl','split','vrf','kälte',
       'fussbodenheizung','radiatoren','pellets','fernwärme','thermosolar',
+      'terrasse','balkon','bad','badezimmer','maler','küche','reinigung',
+      'schlüssel','ausgesperrt','umzug','umziehen','garage','carport',
     ];
     fachbegriffe.forEach(f => { if (text.includes(f)) keywords.add(f); });
   }
@@ -259,13 +265,20 @@ BEISPIELE FÜR BILDERKENNUNG:
 - Haar / Frisur → Friseur
 - Wasserhahn tropft → Sanitärinstallateur
 - Steckdose / Kabel → Elektriker
+- Lampe / Leuchtmittel defekt → Elektriker
 - Heizung / Heizkörper → Heizungsmonteur
+- Boiler / Warmwasserspeicher → Heizungsmonteur
 - Wand mit Riss → Maler / Maurer
-- Badezimmer → Sanitär / Fliesenleger
+- Schimmel an Wand → Maler / Bausanierer
+- Badezimmer / Fliesen → Sanitär / Fliesenleger
+- Balkon / Terrasse → Fliesenleger / Schreiner
 - Garten / Rasen → Gärtner
 - Tattoo / Piercing → Tattoo Studio
-- Auto → Autowerkstatt
+- Auto / Fahrzeug → Autowerkstatt
 - Möbel / Tisch → Schreiner
+- Schloss / Tür → Schlüsseldienst
+- Küche / Herd → Haushaltsgeräte-Techniker
+- Fenster → Schreiner / Glaserei
 
 WICHTIGE REGELN:
 - Bei Fotos: Beschreibe KONKRET was du siehst im Feld "erkannt_als"
