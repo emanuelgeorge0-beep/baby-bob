@@ -34,11 +34,11 @@ async function sendMagicLink(res, email) {
   const r = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
     method: 'POST',
     headers: SB_HEADERS,
-    body: JSON.stringify({ email, createUser: false }),
+    body: JSON.stringify({ email, create_user: false }),
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
-    // createUser:false → user doesn't exist error is expected for unknown emails
+    // create_user:false → Supabase returns error if user doesn't exist (no auto-signup)
     const msg = err.msg || err.message || err.error_description || '';
     if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('signup')) {
       return res.status(404).json({ error: 'Kein Konto mit dieser E-Mail gefunden.' });

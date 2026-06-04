@@ -2383,7 +2383,7 @@ function buildTechWeek(resetDelta){
           +'</div>'
         +'</div>'
         +'<input class="tech-note" placeholder="Notiz (optional)..." value="'+(dd.notiz||'')+'"'
-          +' oninput="techDayData[\''+iso+'\']=techDayData[\''+iso+'\'||\'{}\']; techDayData[\''+iso+'\'].notiz=this.value">'
+          +' oninput="if(!techDayData[\''+iso+'\'])techDayData[\''+iso+'\']={}; techDayData[\''+iso+'\'].notiz=this.value">'
       +'</div>';
     // Init data
     if(!techDayData[iso]) techDayData[iso]={stunden:dd.stunden,aktivitaeten:dd.aktivitaeten.slice(),materialien:dd.materialien.slice(),notiz:dd.notiz||''};
