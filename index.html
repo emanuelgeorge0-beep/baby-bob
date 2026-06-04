@@ -498,6 +498,41 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .admin-temp-pw{font-family:'Syne',monospace;font-size:26px;font-weight:800;letter-spacing:3px;color:#FFD700;margin:8px 0;user-select:all;}
 .admin-temp-hint{font-size:11px;color:rgba(232,237,245,0.5);}
 .admin-empty{text-align:center;font-size:13px;color:rgba(232,237,245,0.4);padding:24px 18px;}
+.admin-ampel{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:13px;padding:13px 15px;margin:9px 18px 0;}
+.admin-ampel-dot{font-size:18px;}
+.admin-ampel-name{font-size:14px;font-weight:800;}
+.admin-ampel-meta{font-size:11px;color:rgba(232,237,245,0.45);margin-top:2px;}
+.admin-proj-row{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:13px 14px;margin:10px 18px 0;}
+.admin-proj-name{font-size:14px;font-weight:800;}
+.admin-proj-meta{font-size:11px;color:rgba(232,237,245,0.45);margin-top:2px;}
+.admin-proj-techs{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+
+/* ═══ TAGESRAPPORT (techniker) ═══ */
+.tr-week{display:flex;gap:6px;padding:14px 18px 0;}
+.tr-wday{flex:1;text-align:center;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:11px;padding:8px 2px;}
+.tr-wday-d{font-size:10px;color:rgba(232,237,245,0.45);}
+.tr-wday-s{font-size:15px;margin-top:3px;}
+.tr-form{padding:8px 18px 0;display:flex;flex-direction:column;}
+.tr-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.tr-hours{margin:10px 0 2px;font-size:13px;color:rgba(232,237,245,0.6);}
+.tr-hours strong{color:#FFD700;font-size:16px;}
+.tr-foto-preview{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.tr-foto-preview img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.15);}
+.tr-sign{width:100%;background:rgba(255,255,255,0.95);border-radius:11px;touch-action:none;margin-top:4px;}
+.tr-sign-clear{font-size:11px;color:rgba(232,237,245,0.4);text-align:right;padding:4px 2px;cursor:pointer;text-decoration:underline;}
+.tr-actions{display:flex;gap:9px;margin-top:16px;}
+.tr-actions .admin-act{flex:0 0 auto;padding:14px 16px;}
+.tr-actions .login-btn-magic{flex:1;margin:0;}
+
+/* ═══ PARTNER DASHBOARD ═══ */
+.pd-tabs{display:flex;gap:6px;padding:16px 18px 0;}
+.pd-tab{flex:1;text-align:center;font-size:12px;font-weight:800;padding:10px;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);color:rgba(232,237,245,0.55);cursor:pointer;}
+.pd-tab.act{background:rgba(74,158,255,0.14);border-color:#4a9eff;color:#9cc6ff;}
+.pd-item{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:13px;padding:13px 14px;margin-top:10px;}
+.pd-item-top{display:flex;justify-content:space-between;gap:8px;align-items:center;}
+.pd-item-tit{font-size:14px;font-weight:800;}
+.pd-item-meta{font-size:11px;color:rgba(232,237,245,0.45);margin-top:3px;}
+.pd-dl{font-size:11px;font-weight:800;color:#4a9eff;cursor:pointer;text-decoration:none;}
 
 /* ═══ TECHNIKER SCREENS ═══ */
 .tech-screen{display:none;flex-direction:column;min-height:100dvh;background:#07111f;color:#e8edf5;padding-bottom:32px;}
@@ -1330,6 +1365,14 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
       <div class="admin-hub-ico">👥</div>
       <div><div class="admin-hub-tit">User-Verwaltung</div><div class="admin-hub-desc">Partner & Techniker anlegen, Passwörter, Status</div></div>
     </div>
+    <div class="admin-hub-card" onclick="showAdminProjekte()">
+      <div class="admin-hub-ico">📁</div>
+      <div><div class="admin-hub-tit">Projektmanagement</div><div class="admin-hub-desc">Projekte anlegen, Techniker zuteilen</div></div>
+    </div>
+    <div class="admin-hub-card" onclick="showAdminStatus()">
+      <div class="admin-hub-ico">📊</div>
+      <div><div class="admin-hub-tit">Rapport-Status</div><div class="admin-hub-desc">Live-Übersicht aller Techniker (🟢🟡🔴)</div></div>
+    </div>
     <div class="admin-hub-card" onclick="enterAdminMode('gs')">
       <div class="admin-hub-ico">🏢</div>
       <div><div class="admin-hub-tit">George Solutions Modus</div><div class="admin-hub-desc">Projekt-Buchungsportal öffnen</div></div>
@@ -1381,6 +1424,104 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
 
   <div id="admin-user-list"><div class="admin-empty">Lädt…</div></div>
+</div>
+
+<!-- ═══ ADMIN: PROJEKTMANAGEMENT ═══ -->
+<div id="admin-projekte" class="admin-screen">
+  <div class="admin-hdr">
+    <div><div class="admin-hdr-tit">📁 Projekte</div><div class="admin-hdr-sub" id="admin-proj-count">–</div></div>
+    <button class="admin-back" onclick="showScreen('admin-home')">← Zurück</button>
+  </div>
+  <button class="admin-add-btn" onclick="toggleProjForm()">+ Neues Projekt</button>
+  <div id="admin-proj-form" style="display:none;padding:0 18px;">
+    <div class="admin-user-card" style="margin:12px 0 0;">
+      <div class="ob-lbl">Projektname *</div>
+      <input class="login-inp" id="np-name" type="text" placeholder="z.B. Heizungsrevision Objekt Zürich"/>
+      <div class="ob-lbl">Standort</div>
+      <input class="login-inp" id="np-standort" type="text" placeholder="Ort / Adresse"/>
+      <div class="ob-lbl">Bereich</div>
+      <div class="ob-chips" id="np-bereich"></div>
+      <div class="ob-lbl">Stundensatz (CHF) *</div>
+      <input class="login-inp" id="np-satz" type="number" inputmode="decimal" placeholder="67.90"/>
+      <div class="ob-lbl">Partner (Auftraggeber)</div>
+      <select class="login-inp" id="np-partner"><option value="">– kein Partner –</option></select>
+      <div class="ob-lbl">Techniker zuteilen</div>
+      <div class="ob-chips" id="np-techs"></div>
+      <button class="login-btn-magic" id="np-btn" style="margin-top:14px;" onclick="submitProjekt()">Projekt erstellen</button>
+      <div class="login-msg" id="np-msg"></div>
+    </div>
+  </div>
+  <div id="admin-proj-list"><div class="admin-empty">Lädt…</div></div>
+</div>
+
+<!-- ═══ ADMIN: RAPPORT-STATUS ═══ -->
+<div id="admin-status" class="admin-screen">
+  <div class="admin-hdr">
+    <div><div class="admin-hdr-tit">📊 Rapport-Status</div><div class="admin-hdr-sub" id="admin-status-sub">–</div></div>
+    <button class="admin-back" onclick="showScreen('admin-home')">← Zurück</button>
+  </div>
+  <div id="admin-status-list" class="admin-section"><div class="admin-empty">Lädt…</div></div>
+</div>
+
+<!-- ═══ TECHNIKER: TAGESRAPPORT ═══ -->
+<div id="tech-rapport" class="tech-screen">
+  <div class="tech-hdr">
+    <div class="tech-hdr-left">
+      <div class="tech-hdr-name" id="tr-welcome">Tagesrapport</div>
+      <div class="tech-hdr-role">🔧 George Solutions</div>
+    </div>
+    <button class="tech-logout" onclick="logout()">Abmelden</button>
+  </div>
+  <!-- Week strip -->
+  <div class="tr-week" id="tr-week"></div>
+  <div class="tr-form">
+    <div class="ob-lbl">Baustelle / Objekt *</div>
+    <select class="login-inp" id="tr-projekt" onchange="trProjektChange()"><option value="">– Projekt wählen –</option></select>
+    <div class="tr-row2">
+      <div><div class="ob-lbl">Datum</div><input class="login-inp" id="tr-datum" type="date"/></div>
+      <div><div class="ob-lbl">Projektnr.</div><input class="login-inp" id="tr-pnr" type="text" disabled placeholder="–"/></div>
+    </div>
+    <div class="tr-row2">
+      <div><div class="ob-lbl">Von</div><input class="login-inp" id="tr-von" type="time" value="08:00" onchange="trCalcHours()"/></div>
+      <div><div class="ob-lbl">Bis</div><input class="login-inp" id="tr-bis" type="time" value="17:00" onchange="trCalcHours()"/></div>
+    </div>
+    <div class="tr-hours">Gesamtstunden: <strong id="tr-hours">9.0</strong> h</div>
+    <div class="ob-lbl">Ausgeführte Arbeiten</div>
+    <div class="ob-chips" id="tr-arbeiten"></div>
+    <div class="ob-lbl">Material</div>
+    <div class="ob-chips" id="tr-material"></div>
+    <div class="ob-lbl">Team (weitere Personen)</div>
+    <input class="login-inp" id="tr-team" type="text" placeholder="Namen, kommagetrennt"/>
+    <div class="ob-lbl">Besonderheiten</div>
+    <textarea class="login-inp" id="tr-notiz" rows="2" placeholder="Besonderheiten / Notizen..."></textarea>
+    <div class="ob-lbl">Fotos</div>
+    <input type="file" id="tr-fotos" accept="image/*" multiple capture="environment" onchange="trFotoPreview()"/>
+    <div class="tr-foto-preview" id="tr-foto-preview"></div>
+    <div class="ob-lbl">Digitale Unterschrift</div>
+    <canvas id="tr-sign" class="tr-sign" width="300" height="120"></canvas>
+    <div class="tr-sign-clear" onclick="trClearSign()">Unterschrift löschen</div>
+    <div class="ob-lbl">Empfänger</div>
+    <div class="ob-chips" id="tr-empfaenger"></div>
+    <div class="tr-actions">
+      <button class="admin-act" onclick="trSave('entwurf')">Entwurf speichern</button>
+      <button class="login-btn-magic" id="tr-submit" onclick="trSave('eingereicht')">Rapport senden →</button>
+    </div>
+    <div class="login-msg" id="tr-msg"></div>
+  </div>
+</div>
+
+<!-- ═══ PARTNER DASHBOARD ═══ -->
+<div id="partner-dash" class="admin-screen">
+  <div class="admin-hdr">
+    <div><div class="admin-hdr-tit">🏢 Mein Portal</div><div class="admin-hdr-sub" id="pd-welcome">George Solutions</div></div>
+    <button class="admin-back" onclick="logout()">Abmelden</button>
+  </div>
+  <div class="pd-tabs">
+    <div class="pd-tab act" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
+    <div class="pd-tab" id="pdt-rapporte" onclick="pdTab('rapporte')">Rapporte</div>
+    <div class="pd-tab" id="pdt-rechnungen" onclick="pdTab('rechnungen')">Rechnungen</div>
+  </div>
+  <div id="pd-content" class="admin-section"><div class="admin-empty">Lädt…</div></div>
 </div>
 
 <script>
@@ -2478,17 +2619,15 @@ function applyRole(token,user,role,techName){
       showScreen('admin-home');
       break;
     case 'gs_partner':
-      // GS flow only
+      // Partner portal: own projects, rapporte, invoices
       if(modeWrap) modeWrap.style.display='none';
-      setMode('gs');
+      showScreen('partner-dash');
+      initPartnerDash();
       break;
     case 'techniker':
-      // Techniker dashboard
+      // Techniker: Tagesrapport capture
       if(modeWrap) modeWrap.style.display='none';
-      var nm=document.getElementById('tech-welcome');
-      if(nm) nm.textContent='Hallo, '+(techName||user&&user.email.split('@')[0]||'Techniker');
-      buildTechWeek(0);
-      showScreen('tech-home');
+      initTechRapport();
       break;
     default:
       // bob_user or anonymous: BOB scanner + visible GS Login button.
@@ -2827,6 +2966,260 @@ function copyTempPw(){
   if(navigator.clipboard){navigator.clipboard.writeText(lastTempPw).then(function(){toast('Passwort kopiert');},function(){toast('Kopieren nicht möglich');});}
   else{toast(lastTempPw);}
 }
+
+// ══════════════════════════════════════════════════════════
+// ══ PROJEKTMANAGEMENT + RAPPORT + DASHBOARDS ══════════════
+// ══════════════════════════════════════════════════════════
+
+var BEREICHE=['Heizung','Sanitär','Lüftung','Klima','Kombiniert'];
+var TR_ARBEITEN=['Montage','Wartung','Reparatur','Installation','Inbetriebnahme','Demontage','Service','Besprechung','Fahrt'];
+var TR_MATERIAL=['Rohre/Fittings','Armaturen','Pumpe','Heizkörper','Thermostat','Ventile','Dämmung','Kabel','Sonstiges'];
+var TR_EMPFAENGER=['Projektleiter','Kunde','Emanuel'];
+
+function gsAuthApi(ep,body){
+  return fetch('/api/'+ep,{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
+    body:JSON.stringify(body)}).then(function(r){return r.json();});
+}
+function chipsInto(containerId,values,picked,multi,onchange){
+  var c=document.getElementById(containerId);if(!c)return;
+  c.innerHTML=values.map(function(v){
+    var on=(multi?(picked.indexOf(v)>-1):(picked===v))?' sel':'';
+    return '<div class="ob-chip'+on+'" data-val="'+gsEsc(v)+'">'+gsEsc(v)+'</div>';
+  }).join('');
+  c.querySelectorAll('.ob-chip').forEach(function(el){
+    el.onclick=function(){
+      if(multi){el.classList.toggle('sel');}
+      else{c.querySelectorAll('.ob-chip').forEach(function(x){x.classList.remove('sel');});el.classList.add('sel');}
+      if(onchange)onchange();
+    };
+  });
+}
+function chipsSelected(containerId){
+  var c=document.getElementById(containerId);if(!c)return [];
+  return Array.prototype.map.call(c.querySelectorAll('.ob-chip.sel'),function(e){return e.getAttribute('data-val');});
+}
+function chipSelectedOne(containerId){var s=chipsSelected(containerId);return s[0]||null;}
+
+// ── ADMIN: PROJEKTMANAGEMENT ──
+var adminPartners=[],adminTechs=[];
+function showAdminProjekte(){showScreen('admin-projekte');loadProjMeta();loadProjekte();}
+function loadProjMeta(){
+  chipsInto('np-bereich',BEREICHE,null,false);
+  gsAuthApi('projekte',{action:'partners'}).then(function(d){
+    adminPartners=d.partners||[];
+    var sel=document.getElementById('np-partner');
+    if(sel)sel.innerHTML='<option value="">– kein Partner –</option>'+adminPartners.map(function(p){return '<option value="'+p.user_id+'">'+gsEsc(p.name)+(p.firma?(' ('+gsEsc(p.firma)+')'):'')+'</option>';}).join('');
+  });
+  gsAuthApi('projekte',{action:'technicians'}).then(function(d){
+    adminTechs=d.technicians||[];
+    chipsInto('np-techs',adminTechs.map(function(t){return t.name;}),[],true);
+  });
+}
+function toggleProjForm(){var f=document.getElementById('admin-proj-form');if(f)f.style.display=f.style.display==='none'?'block':'none';}
+function submitProjekt(){
+  var name=(document.getElementById('np-name')||{}).value.trim();
+  var satz=parseFloat((document.getElementById('np-satz')||{}).value);
+  if(!name){setMsg('np-msg','Projektname erforderlich','err');return;}
+  var techNames=chipsSelected('np-techs');
+  var techIds=adminTechs.filter(function(t){return techNames.indexOf(t.name)>-1;}).map(function(t){return t.user_id;});
+  var btn=document.getElementById('np-btn');if(btn){btn.disabled=true;btn.textContent='Erstellt…';}
+  gsAuthApi('projekte',{action:'create',name:name,standort:(document.getElementById('np-standort')||{}).value.trim(),
+    bereich:chipSelectedOne('np-bereich'),stundensatz:isNaN(satz)?null:satz,
+    partner_user_id:(document.getElementById('np-partner')||{}).value||null,techniker_user_ids:techIds}).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='Projekt erstellen';}
+    if(d.error){setMsg('np-msg',d.error,'err');return;}
+    setMsg('np-msg','','');toggleProjForm();
+    ['np-name','np-standort','np-satz'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+    loadProjekte();toast('Projekt '+(d.projekt&&d.projekt.projektnummer||'')+' erstellt');
+  });
+}
+function loadProjekte(){
+  var l=document.getElementById('admin-proj-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';
+  gsAuthApi('projekte',{action:'list'}).then(function(d){
+    var ps=d.projekte||[];
+    var cnt=document.getElementById('admin-proj-count');if(cnt)cnt.textContent=ps.length+' Projekte';
+    if(!l)return;
+    if(!ps.length){l.innerHTML='<div class="admin-empty">Noch keine Projekte.</div>';return;}
+    l.innerHTML=ps.map(function(p){
+      var techs=(p.techniker||[]).map(function(t){return '<span class="admin-role-tag">'+gsEsc(t.name)+'</span>';}).join('')||'<span class="admin-proj-meta">keine Techniker</span>';
+      return '<div class="admin-proj-row"><div class="admin-proj-name">'+gsEsc(p.name)+'</div>'
+        +'<div class="admin-proj-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')+(p.stundensatz?(' · CHF '+p.stundensatz+'/h'):'')+' · '+gsEsc(p.status||'')+'</div>'
+        +'<div class="admin-proj-techs">'+techs+'</div></div>';
+    }).join('');
+  });
+}
+
+// ── ADMIN: RAPPORT-STATUS ──
+function showAdminStatus(){showScreen('admin-status');loadStatus();}
+function loadStatus(){
+  var l=document.getElementById('admin-status-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';
+  gsAuthApi('tagesrapport',{action:'status_overview'}).then(function(d){
+    var sub=document.getElementById('admin-status-sub');if(sub)sub.textContent='KW '+(d.woche||'')+' · '+(d.datum||'');
+    var ts=d.techniker||[];
+    if(!l)return;
+    if(!ts.length){l.innerHTML='<div class="admin-empty">Keine Techniker.</div>';return;}
+    var dot={gruen:'🟢',gelb:'🟡',rot:'🔴'};
+    l.innerHTML=ts.map(function(t){
+      return '<div class="admin-ampel"><div><div class="admin-ampel-name">'+gsEsc(t.name)+'</div>'
+        +'<div class="admin-ampel-meta">'+t.week_submitted+'/5 Tage diese Woche</div></div>'
+        +'<div class="admin-ampel-dot">'+(dot[t.ampel]||'🟡')+'</div></div>';
+    }).join('');
+  });
+}
+
+// ── TECHNIKER: TAGESRAPPORT ──
+var trProjekte=[],trFotosB64=[],trSignCtx=null,trSignHas=false;
+function initTechRapport(){
+  document.getElementById('tr-welcome').textContent='Hallo, '+(authTechName||(authUser&&authUser.email.split('@')[0])||'Techniker');
+  document.getElementById('tr-datum').value=new Date().toISOString().slice(0,10);
+  chipsInto('tr-arbeiten',TR_ARBEITEN,[],true);
+  chipsInto('tr-material',TR_MATERIAL,[],true);
+  chipsInto('tr-empfaenger',TR_EMPFAENGER,[],true);
+  trFotosB64=[];document.getElementById('tr-foto-preview').innerHTML='';
+  trInitSign();trCalcHours();
+  showScreen('tech-rapport');
+  gsAuthApi('projekte',{action:'list'}).then(function(d){
+    trProjekte=d.projekte||[];
+    var sel=document.getElementById('tr-projekt');
+    sel.innerHTML='<option value="">– Projekt wählen –</option>'+trProjekte.map(function(p){return '<option value="'+p.id+'">'+gsEsc(p.name)+'</option>';}).join('');
+    if(trProjekte.length===1){sel.value=trProjekte[0].id;trProjektChange();}
+  });
+  trLoadWeek();
+}
+function trProjektChange(){
+  var id=document.getElementById('tr-projekt').value;
+  var p=trProjekte.filter(function(x){return x.id===id;})[0];
+  document.getElementById('tr-pnr').value=p?(p.projektnummer||'–'):'–';
+  if(!id)return;
+  gsAuthApi('tagesrapport',{action:'today',projekt_id:id,datum:document.getElementById('tr-datum').value}).then(function(d){
+    var sug=d.suggestions||[];
+    if(sug.length){chipsInto('tr-arbeiten',TR_ARBEITEN.concat(sug.filter(function(s){return TR_ARBEITEN.indexOf(s)<0;})),sug,true);}
+    if(d.rapport){trFillFrom(d.rapport);}
+  });
+}
+function trFillFrom(r){
+  document.getElementById('tr-von').value=(r.zeit_von||'08:00').slice(0,5);
+  document.getElementById('tr-bis').value=(r.zeit_bis||'17:00').slice(0,5);
+  document.getElementById('tr-team').value=(r.team||[]).join(', ');
+  document.getElementById('tr-notiz').value=r.besonderheiten||'';
+  chipsInto('tr-arbeiten',TR_ARBEITEN,r.arbeiten||[],true);
+  chipsInto('tr-material',TR_MATERIAL,r.material||[],true);
+  trCalcHours();
+}
+function trCalcHours(){
+  var v=document.getElementById('tr-von').value,b=document.getElementById('tr-bis').value;
+  var el=document.getElementById('tr-hours');
+  if(!v||!b){el.textContent='0.0';return;}
+  var pv=v.split(':'),pb=b.split(':');
+  var mins=(pb[0]*60+ +pb[1])-(pv[0]*60+ +pv[1]);if(mins<0)mins+=1440;
+  el.textContent=(Math.round(mins/60*10)/10).toFixed(1);
+}
+function trFotoPreview(){
+  var files=document.getElementById('tr-fotos').files;
+  trFotosB64=[];var prev=document.getElementById('tr-foto-preview');prev.innerHTML='';
+  Array.prototype.forEach.call(files,function(file){
+    var rd=new FileReader();
+    rd.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var max=1000,sc=Math.min(1,max/Math.max(img.width,img.height));
+        var cv=document.createElement('canvas');cv.width=img.width*sc;cv.height=img.height*sc;
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        var b64=cv.toDataURL('image/jpeg',0.7);
+        trFotosB64.push(b64);
+        var t=document.createElement('img');t.src=b64;prev.appendChild(t);
+      };
+      img.src=e.target.result;
+    };
+    rd.readAsDataURL(file);
+  });
+}
+function trInitSign(){
+  var cv=document.getElementById('tr-sign');if(!cv)return;
+  trSignCtx=cv.getContext('2d');trSignCtx.strokeStyle='#07111f';trSignCtx.lineWidth=2;trSignCtx.lineCap='round';
+  trSignHas=false;var drawing=false,last=null;
+  function pos(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;return {x:(t.clientX-r.left)*(cv.width/r.width),y:(t.clientY-r.top)*(cv.height/r.height)};}
+  function start(e){drawing=true;last=pos(e);e.preventDefault();}
+  function move(e){if(!drawing)return;var p=pos(e);trSignCtx.beginPath();trSignCtx.moveTo(last.x,last.y);trSignCtx.lineTo(p.x,p.y);trSignCtx.stroke();last=p;trSignHas=true;e.preventDefault();}
+  function end(){drawing=false;}
+  cv.onmousedown=start;cv.onmousemove=move;cv.onmouseup=end;cv.onmouseleave=end;
+  cv.ontouchstart=start;cv.ontouchmove=move;cv.ontouchend=end;
+}
+function trClearSign(){if(trSignCtx){trSignCtx.clearRect(0,0,300,120);trSignHas=false;}}
+function trLoadWeek(){
+  gsAuthApi('tagesrapport',{action:'week'}).then(function(d){
+    var wd=['Mo','Di','Mi','Do','Fr'];var ic={eingereicht:'🟢',entwurf:'✏️',ausstehend:'🟡',offen:'⚪',ueberfaellig:'🔴'};
+    var el=document.getElementById('tr-week');if(!el)return;
+    el.innerHTML=(d.days||[]).map(function(day,i){
+      return '<div class="tr-wday"><div class="tr-wday-d">'+wd[i]+'</div><div class="tr-wday-s">'+(ic[day.status]||'⚪')+'</div></div>';
+    }).join('')+'<div class="tr-wday" style="flex:1.3;"><div class="tr-wday-d">KW '+(d.woche||'')+'</div><div class="tr-wday-s" style="font-size:12px;font-weight:800;color:#FFD700;">'+(d.eingereicht||0)+'/5</div></div>';
+  });
+}
+function trSave(status){
+  var projekt_id=document.getElementById('tr-projekt').value;
+  if(!projekt_id){setMsg('tr-msg','Bitte Projekt wählen','err');return;}
+  var body={action:'save',projekt_id:projekt_id,datum:document.getElementById('tr-datum').value,
+    zeit_von:document.getElementById('tr-von').value,zeit_bis:document.getElementById('tr-bis').value,
+    arbeiten:chipsSelected('tr-arbeiten'),material:chipsSelected('tr-material'),
+    team:document.getElementById('tr-team').value.split(',').map(function(s){return s.trim();}).filter(Boolean),
+    besonderheiten:document.getElementById('tr-notiz').value.trim(),
+    empfaenger:chipsSelected('tr-empfaenger'),status:status};
+  if(trFotosB64.length)body.fotos=trFotosB64;
+  if(trSignHas)body.unterschrift=document.getElementById('tr-sign').toDataURL('image/png');
+  var btn=document.getElementById('tr-submit');if(btn&&status==='eingereicht'){btn.disabled=true;btn.textContent='Sendet…';}
+  gsAuthApi('tagesrapport',body).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}
+    if(d.error){setMsg('tr-msg',d.error,'err');return;}
+    if(status==='eingereicht'){
+      var msg='✓ Rapport gesendet'+(d.invoice?(' · Rechnung CHF '+d.invoice.betrag):'');
+      setMsg('tr-msg',msg,'');toast(msg);
+    }else{setMsg('tr-msg','Entwurf gespeichert','');}
+    trLoadWeek();
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}setMsg('tr-msg','Verbindungsfehler','err');});
+}
+
+// ── PARTNER DASHBOARD ──
+function initPartnerDash(){
+  document.getElementById('pd-welcome').textContent=(authUser&&authUser.email)||'George Solutions';
+  pdTab('projekte');
+}
+function pdTab(tab){
+  ['projekte','rapporte','rechnungen'].forEach(function(t){
+    var el=document.getElementById('pdt-'+t);if(el)el.classList.toggle('act',t===tab);
+  });
+  var c=document.getElementById('pd-content');c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  if(tab==='projekte'){
+    gsAuthApi('projekte',{action:'list'}).then(function(d){
+      var ps=d.projekte||[];
+      c.innerHTML=ps.length?ps.map(function(p){
+        return '<div class="pd-item"><div class="pd-item-tit">'+gsEsc(p.name)+'</div><div class="pd-item-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')+' · '+gsEsc(p.status||'')+'</div></div>';
+      }).join(''):'<div class="admin-empty">Keine Projekte.</div>';
+    });
+  }else if(tab==='rapporte'){
+    gsAuthApi('tagesrapport',{action:'list'}).then(function(d){
+      var rs=d.rapporte||[];
+      c.innerHTML=rs.length?rs.map(function(r){
+        return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(r.datum)+' · '+(r.gesamtstunden||0)+'h</div>'
+          +(r.status==='eingereicht'?'<span class="admin-badge active">eingereicht</span>':'<span class="admin-badge must_change_password">entwurf</span>')+'</div>'
+          +'<div class="pd-item-meta">'+gsEsc((r.arbeiten||[]).join(', ')||'–')+'</div>'
+          +(r.pdf_url?'<div class="pd-dl" onclick="pdDownloadRapport(\''+r.id+'\')">📄 PDF herunterladen</div>':'')+'</div>';
+      }).join(''):'<div class="admin-empty">Keine Rapporte.</div>';
+    });
+  }else{
+    gsAuthApi('rechnung',{action:'list'}).then(function(d){
+      var rs=d.rechnungen||[];
+      c.innerHTML=rs.length?rs.map(function(r){
+        return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(r.rechnungsnummer||'')+'</div>'
+          +'<div class="pd-item-tit" style="color:#FFD700;">CHF '+r.betrag+'</div></div>'
+          +'<div class="pd-item-meta">'+r.stunden+'h × CHF '+r.stundensatz+' · '+gsEsc(r.status||'')+'</div>'
+          +(r.pdf_url?'<div class="pd-dl" onclick="pdDownloadRechnung(\''+r.id+'\')">📄 PDF herunterladen</div>':'')+'</div>';
+      }).join(''):'<div class="admin-empty">Keine Rechnungen.</div>';
+    });
+  }
+}
+function pdDownloadRapport(id){gsAuthApi('tagesrapport',{action:'get',id:id}).then(function(d){if(d.rapport&&d.rapport.pdf_signed)window.open(d.rapport.pdf_signed,'_blank');});}
+function pdDownloadRechnung(id){gsAuthApi('rechnung',{action:'get',id:id}).then(function(d){if(d.rechnung&&d.rechnung.pdf_signed)window.open(d.rechnung.pdf_signed,'_blank');});}
 
 // ══════════════════════════════════════════════════════════
 // ══ TECHNIKER RAPPORT ════════════════════════════════════
