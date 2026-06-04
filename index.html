@@ -2199,9 +2199,9 @@ function applyRole(token,user,role,techName){
       showScreen('tech-home');
       break;
     default:
-      // bob_user or anonymous: BOB scanner only, no GS access
-      if(modeWrap) modeWrap.style.display='none';
-      // Show login button in GS toggle area
+      // bob_user or anonymous: BOB scanner + visible GS Login button.
+      // Keep the toggle wrap VISIBLE — the GS Login button lives inside it.
+      if(modeWrap) modeWrap.style.display='';
       var mt=document.getElementById('mt-gs');
       if(mt){mt.textContent='🏢 GS Login';mt.onclick=function(){showScreen('login');};}
       go('home');
@@ -2279,9 +2279,9 @@ function setLoginMsg(msg,type){
 function logout(){
   localStorage.removeItem('bob_auth_token');
   authToken=null;authRole=null;authUser=null;authTechName=null;
-  // Reset mode toggle
+  // Reset mode toggle — keep it visible so the GS Login button shows.
   var modeWrap=document.querySelector('.mode-toggle-wrap');
-  if(modeWrap) modeWrap.style.display='none';
+  if(modeWrap) modeWrap.style.display='';
   var mt=document.getElementById('mt-gs');
   if(mt){mt.textContent='🏢 GS Login';mt.onclick=function(){showScreen('login');};}
   go('home');
