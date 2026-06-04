@@ -38,9 +38,14 @@ export default async function handler(req, res) {
     // ── 3. User Content aufbauen ──
     const userContent = [];
     if (imageBase64) {
+      const mediaType = imageBase64.startsWith('/9j/') ? 'image/jpeg'
+        : imageBase64.startsWith('iVBOR') ? 'image/png'
+        : imageBase64.startsWith('R0lGO') ? 'image/gif'
+        : imageBase64.startsWith('UklGR') ? 'image/webp'
+        : 'image/jpeg';
       userContent.push({
         type: 'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
+        source: { type: 'base64', media_type: mediaType, data: imageBase64 },
       });
     }
 
