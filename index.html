@@ -411,6 +411,68 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .gs-ticket{background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.2);border-radius:16px;padding:16px 20px;width:100%;text-align:left;}
 .gs-ticket-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4a9eff;margin-bottom:4px;}
 .gs-ticket-val{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#e8edf5;}
+
+/* ═══ LOGIN SCREEN ═══ */
+.login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;background:#07111f;padding:28px 22px;}
+.login-screen.active{display:flex;}
+.login-card{width:100%;max-width:360px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:32px 24px;display:flex;flex-direction:column;gap:18px;}
+.login-logo{text-align:center;margin-bottom:4px;}
+.login-logo-icon{font-size:52px;line-height:1;margin-bottom:8px;}
+.login-logo-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#e8edf5;}
+.login-logo-sub{font-size:12px;color:rgba(232,237,245,0.4);margin-top:4px;}
+.login-sep{display:flex;align-items:center;gap:10px;color:rgba(232,237,245,0.25);font-size:11px;}
+.login-sep::before,.login-sep::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.08);}
+.login-inp{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:13px;padding:13px 15px;font-family:'Nunito',sans-serif;font-size:15px;color:#e8edf5;outline:none;transition:border-color .2s;box-sizing:border-box;}
+.login-inp:focus{border-color:rgba(74,158,255,0.5);}
+.login-inp::placeholder{color:rgba(232,237,245,0.3);}
+.login-btn-magic{width:100%;background:linear-gradient(135deg,#C9A000,#FFD700);border:none;border-radius:14px;padding:15px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#080808;cursor:pointer;transition:transform .15s;display:flex;align-items:center;justify-content:center;gap:8px;}
+.login-btn-magic:active{transform:scale(0.97);}
+.login-btn-pw{width:100%;background:rgba(74,158,255,0.12);border:1px solid rgba(74,158,255,0.3);border-radius:14px;padding:14px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:#4a9eff;cursor:pointer;transition:transform .15s;}
+.login-btn-pw:active{transform:scale(0.97);}
+.login-pw-wrap{display:none;flex-direction:column;gap:10px;}
+.login-pw-wrap.open{display:flex;}
+.login-msg{font-size:12px;text-align:center;min-height:18px;color:#4a9eff;}
+.login-msg.err{color:#ff6b6b;}
+.login-skip{font-size:12px;color:rgba(232,237,245,0.3);text-align:center;cursor:pointer;padding:4px;text-decoration:underline;}
+
+/* ═══ TECHNIKER SCREENS ═══ */
+.tech-screen{display:none;flex-direction:column;min-height:100dvh;background:#07111f;color:#e8edf5;padding-bottom:32px;}
+.tech-screen.active{display:flex;}
+.tech-hdr{display:flex;align-items:center;justify-content:space-between;padding:52px 20px 0;}
+.tech-hdr-left{display:flex;flex-direction:column;}
+.tech-hdr-name{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#e8edf5;}
+.tech-hdr-role{font-size:11px;color:rgba(232,237,245,0.4);margin-top:2px;}
+.tech-logout{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:7px 12px;font-size:11px;font-weight:800;color:rgba(232,237,245,0.5);cursor:pointer;}
+.tech-week-hdr{padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;}
+.tech-week-tit{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:#e8edf5;}
+.tech-week-chip{background:rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.25);border-radius:20px;padding:5px 12px;font-size:11px;font-weight:800;color:#4a9eff;}
+.tech-day-card{margin:10px 16px 0;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:18px;overflow:hidden;}
+.tech-day-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;}
+.tech-day-name{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:#e8edf5;}
+.tech-day-date{font-size:11px;color:rgba(232,237,245,0.4);}
+.tech-day-h{font-size:13px;font-weight:800;color:#4a9eff;}
+.tech-day-body{padding:0 16px 16px;display:none;flex-direction:column;gap:12px;}
+.tech-day-body.open{display:flex;}
+.tech-slider-wrap{display:flex;align-items:center;gap:10px;}
+.tech-slider-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(232,237,245,0.35);white-space:nowrap;}
+.tech-slider{flex:1;accent-color:#4a9eff;height:4px;}
+.tech-slider-val{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#4a9eff;min-width:38px;text-align:right;}
+.tech-tags-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(232,237,245,0.35);margin-bottom:6px;}
+.tech-tags{display:flex;flex-wrap:wrap;gap:6px;}
+.tech-tag{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:5px 11px;font-size:11px;font-weight:800;color:rgba(232,237,245,0.55);cursor:pointer;transition:all .15s;user-select:none;}
+.tech-tag.sel{background:rgba(74,158,255,0.18);border-color:rgba(74,158,255,0.5);color:#4a9eff;}
+.tech-mat-tag{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:4px 10px;font-size:10px;font-weight:800;color:rgba(232,237,245,0.4);cursor:pointer;transition:all .15s;user-select:none;}
+.tech-mat-tag.sel{background:rgba(107,203,119,0.12);border-color:rgba(107,203,119,0.4);color:#6bcb77;}
+.tech-note{width:100%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:11px;padding:10px 12px;font-family:'Nunito',sans-serif;font-size:13px;color:#e8edf5;outline:none;box-sizing:border-box;}
+.tech-note::placeholder{color:rgba(232,237,245,0.25);}
+.tech-submit{margin:20px 16px 8px;background:linear-gradient(135deg,#1e4a8a,#4a9eff);border:none;border-radius:16px;padding:16px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .15s;}
+.tech-submit:active{transform:scale(0.97);}
+.tech-submit:disabled{opacity:0.5;cursor:not-allowed;}
+.tech-status{padding:0 20px;font-size:12px;text-align:center;min-height:18px;color:#6bcb77;}
+.tech-status.err{color:#ff6b6b;}
+.tech-past-link{padding:10px 20px;text-align:center;font-size:12px;color:rgba(232,237,245,0.3);cursor:pointer;text-decoration:underline;}
+.tech-kw-nav{display:flex;align-items:center;gap:8px;}
+.tech-kw-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:#e8edf5;}
 </style>
 </head>
 <body>
@@ -1059,6 +1121,66 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <button class="gs-btn-primary" onclick="gsReset()" style="margin-top:8px;">+ Neues Projekt</button>
     <button class="gs-btn-secondary" onclick="setMode('bob')">Zurück zu Baby BOB</button>
   </div>
+</div>
+
+<!-- ═══ LOGIN SCREEN ═══ -->
+<div id="login" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">👶🏢</div>
+      <div class="login-logo-title">George Solutions</div>
+      <div class="login-logo-sub">Partner & Techniker Login</div>
+    </div>
+    <input class="login-inp" id="login-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" inputmode="email"/>
+    <button class="login-btn-magic" id="login-magic-btn" onclick="loginMagicLink()">✨ Magic Link senden</button>
+    <div class="login-sep">oder</div>
+    <button class="login-btn-pw" onclick="togglePwForm()">🔐 Mit Passwort anmelden</button>
+    <div class="login-pw-wrap" id="login-pw-wrap">
+      <input class="login-inp" id="login-pw" type="password" placeholder="Passwort" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginPassword()"/>
+      <button class="login-btn-magic" onclick="loginPassword()">Anmelden</button>
+    </div>
+    <div class="login-msg" id="login-msg"></div>
+    <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner)</div>
+  </div>
+</div>
+
+<!-- ═══ MAGIC LINK SENT SCREEN ═══ -->
+<div id="login-sent" class="login-screen">
+  <div class="login-card" style="text-align:center;gap:16px;">
+    <div style="font-size:52px;">📧</div>
+    <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#e8edf5;">Magic Link gesendet</div>
+    <div style="font-size:13px;color:rgba(232,237,245,0.5);line-height:1.65;">Prüfe dein E-Mail-Postfach und klicke auf den Link. Danach wirst du automatisch eingeloggt.</div>
+    <div id="login-sent-email" style="font-size:13px;font-weight:800;color:#4a9eff;"></div>
+    <button class="login-btn-pw" onclick="showScreen('login')">← Zurück</button>
+  </div>
+</div>
+
+<!-- ═══ TECHNIKER HOME ═══ -->
+<div id="tech-home" class="tech-screen">
+  <div class="tech-hdr">
+    <div class="tech-hdr-left">
+      <div class="tech-hdr-name" id="tech-welcome">Willkommen</div>
+      <div class="tech-hdr-role">🔧 Techniker · George Solutions</div>
+    </div>
+    <button class="tech-logout" onclick="logout()">Abmelden</button>
+  </div>
+  <div class="tech-week-hdr">
+    <div class="tech-week-tit" id="tech-week-title">Wochenbericht</div>
+    <div class="tech-kw-nav">
+      <div class="tech-kw-btn" onclick="techWeekOffset(-1)">‹</div>
+      <div class="tech-week-chip" id="tech-kw-chip">KW –</div>
+      <div class="tech-kw-btn" onclick="techWeekOffset(+1)">›</div>
+    </div>
+  </div>
+
+  <!-- Day cards generated by JS -->
+  <div id="tech-days-container"></div>
+
+  <button class="tech-submit" id="tech-submit-btn" onclick="submitRapport()">
+    <span>📋</span> Wochenbericht einreichen
+  </button>
+  <div class="tech-status" id="tech-status"></div>
+  <div class="tech-past-link" onclick="techWeekOffset(-1)">← Vergangene Woche nachfüllen</div>
 </div>
 
 <script>
@@ -1995,6 +2117,335 @@ function gsReset(){
   });
   var btn=document.getElementById('gs-tarif-weiter');if(btn) btn.disabled=true;
   gsGo('gs-home');
+}
+
+// ══════════════════════════════════════════════════════════
+// ══ AUTH & ROLE SYSTEM ════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+
+var authToken=null,authRole=null,authUser=null,authTechName=null;
+
+function showScreen(id){
+  document.querySelectorAll('.screen,.gs-screen,.login-screen,.tech-screen').forEach(function(s){
+    s.classList.remove('active');
+  });
+  var el=document.getElementById(id);
+  if(el){el.classList.add('active');el.scrollTop=0;}
+}
+
+// ── Init on page load ──
+(function initAuth(){
+  // 1. Check for magic link callback (#access_token=...)
+  var hash=window.location.hash;
+  if(hash&&hash.indexOf('access_token=')>-1){
+    var params={};
+    hash.slice(1).split('&').forEach(function(p){
+      var kv=p.split('=');params[kv[0]]=decodeURIComponent(kv[1]||'');
+    });
+    if(params.access_token){
+      history.replaceState(null,'',window.location.pathname);
+      verifyAndRoute(params.access_token);
+      return;
+    }
+  }
+  // 2. Check localStorage for existing session
+  var t=localStorage.getItem('bob_auth_token');
+  if(t){
+    verifyAndRoute(t);
+    return;
+  }
+  // 3. No session → show BOB home (anonymous OK for B2C scanner)
+  applyRole(null,null,null,null);
+})();
+
+function verifyAndRoute(token){
+  fetch('/api/auth',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'verify',token:token})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.error){
+      localStorage.removeItem('bob_auth_token');
+      applyRole(null,null,null,null);
+    } else {
+      localStorage.setItem('bob_auth_token',token);
+      applyRole(token,d.user,d.role,d.tech_name);
+    }
+  }).catch(function(){
+    applyRole(null,null,null,null);
+  });
+}
+
+function applyRole(token,user,role,techName){
+  authToken=token;authUser=user;authRole=role;authTechName=techName;
+  var modeWrap=document.querySelector('.mode-toggle-wrap');
+  switch(role){
+    case 'gs_admin':
+      // Full access: BOB + GS toggle visible
+      if(modeWrap) modeWrap.style.display='';
+      go('home');
+      break;
+    case 'gs_partner':
+      // GS flow only
+      if(modeWrap) modeWrap.style.display='none';
+      setMode('gs');
+      break;
+    case 'techniker':
+      // Techniker dashboard
+      if(modeWrap) modeWrap.style.display='none';
+      var nm=document.getElementById('tech-welcome');
+      if(nm) nm.textContent='Hallo, '+(techName||user&&user.email.split('@')[0]||'Techniker');
+      buildTechWeek(0);
+      showScreen('tech-home');
+      break;
+    default:
+      // bob_user or anonymous: BOB scanner only, no GS access
+      if(modeWrap) modeWrap.style.display='none';
+      // Show login button in GS toggle area
+      var mt=document.getElementById('mt-gs');
+      if(mt){mt.textContent='🏢 GS Login';mt.onclick=function(){showScreen('login');};}
+      go('home');
+      break;
+  }
+}
+
+// ── GS mode toggle guard ──
+var _origSetMode=setMode;
+setMode=function(mode){
+  if(mode==='gs'&&authRole!=='gs_partner'&&authRole!=='gs_admin'){
+    showScreen('login');return;
+  }
+  _origSetMode(mode);
+};
+
+// ── Login functions ──
+function togglePwForm(){
+  var w=document.getElementById('login-pw-wrap');
+  if(w) w.classList.toggle('open');
+}
+
+function loginMagicLink(){
+  var email=(document.getElementById('login-email')||{}).value.trim();
+  if(!email){setLoginMsg('Bitte E-Mail eingeben','err');return;}
+  var btn=document.getElementById('login-magic-btn');
+  if(btn){btn.disabled=true;btn.textContent='Sende...';}
+  fetch('/api/auth',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'magic_link',email:email})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(btn){btn.disabled=false;btn.innerHTML='✨ Magic Link senden';}
+    if(d.error){setLoginMsg(d.error,'err');}
+    else{
+      var el=document.getElementById('login-sent-email');
+      if(el) el.textContent=email;
+      showScreen('login-sent');
+    }
+  }).catch(function(){
+    if(btn){btn.disabled=false;btn.innerHTML='✨ Magic Link senden';}
+    setLoginMsg('Verbindungsfehler – bitte nochmal versuchen','err');
+  });
+}
+
+function loginPassword(){
+  var email=(document.getElementById('login-email')||{}).value.trim();
+  var pw=(document.getElementById('login-pw')||{}).value;
+  if(!email||!pw){setLoginMsg('E-Mail und Passwort eingeben','err');return;}
+  setLoginMsg('Anmeldung läuft...','');
+  fetch('/api/auth',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'login',email:email,password:pw})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.error){setLoginMsg(d.error,'err');}
+    else{
+      localStorage.setItem('bob_auth_token',d.access_token);
+      applyRole(d.access_token,d.user,d.role,d.tech_name);
+    }
+  }).catch(function(){setLoginMsg('Verbindungsfehler','err');});
+}
+
+function skipLogin(){
+  showScreen('home');
+}
+
+function setLoginMsg(msg,type){
+  var el=document.getElementById('login-msg');
+  if(!el) return;
+  el.textContent=msg;
+  el.className='login-msg'+(type?' '+type:'');
+}
+
+function logout(){
+  localStorage.removeItem('bob_auth_token');
+  authToken=null;authRole=null;authUser=null;authTechName=null;
+  // Reset mode toggle
+  var modeWrap=document.querySelector('.mode-toggle-wrap');
+  if(modeWrap) modeWrap.style.display='none';
+  var mt=document.getElementById('mt-gs');
+  if(mt){mt.textContent='🏢 GS Login';mt.onclick=function(){showScreen('login');};}
+  go('home');
+}
+
+// ══════════════════════════════════════════════════════════
+// ══ TECHNIKER RAPPORT ════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+
+var AKTIVITAETEN=['Sanitär','Heizung','Lüftung','Klima','Montage','Wartung','Reparatur','Besprechung','Fahrt'];
+var MATERIALIEN=['Rohre/Fittings','Armaturen','Pumpe','Heizkörper','Thermostat','Kabel','Sonstiges'];
+var WOCHENTAGE=['Mo','Di','Mi','Do','Fr'];
+var WOCHENTAGE_FULL=['Montag','Dienstag','Mittwoch','Donnerstag','Freitag'];
+var techWeekDelta=0;
+var techDayData={};  // {datum: {stunden, aktivitaeten:[], materialien:[], notiz}}
+
+function getWeekDates(delta){
+  var now=new Date();
+  var day=now.getDay()||7;
+  var mon=new Date(now);
+  mon.setDate(now.getDate()-day+1+(delta*7));
+  var dates=[];
+  for(var i=0;i<5;i++){
+    var d=new Date(mon);d.setDate(mon.getDate()+i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function isoDate(d){return d.toISOString().slice(0,10);}
+
+function getKW(d){
+  var date=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  var dn=date.getUTCDay()||7;date.setUTCDate(date.getUTCDate()+4-dn);
+  var y1=new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  return Math.ceil((((date-y1)/86400000)+1)/7);
+}
+
+function techWeekOffset(delta){
+  techWeekDelta+=delta;
+  buildTechWeek(0);
+}
+
+function buildTechWeek(resetDelta){
+  if(resetDelta) techWeekDelta=0;
+  var dates=getWeekDates(techWeekDelta);
+  var kw=getKW(dates[0]);
+  var yr=dates[0].getFullYear();
+  var kwEl=document.getElementById('tech-kw-chip');
+  if(kwEl) kwEl.textContent='KW '+kw+' · '+yr;
+  var titEl=document.getElementById('tech-week-title');
+  if(titEl){
+    var isNow=techWeekDelta===0;
+    var isPast=techWeekDelta<0;
+    titEl.textContent=isNow?'Aktuelle Woche':isPast?'Vergangene Woche':'Kommende Woche';
+  }
+  var cont=document.getElementById('tech-days-container');
+  if(!cont) return;
+  cont.innerHTML='';
+  dates.forEach(function(d,i){
+    var iso=isoDate(d);
+    var dd=techDayData[iso]||{stunden:8,aktivitaeten:[],materialien:[],notiz:''};
+    var card=document.createElement('div');
+    card.className='tech-day-card';
+    card.id='day-card-'+iso;
+    var dayLabel=WOCHENTAGE_FULL[i]+' '+d.getDate()+'.'+(d.getMonth()+1)+'.';
+    var isToday=isoDate(new Date())===iso;
+    card.innerHTML=
+      '<div class="tech-day-hdr" onclick="toggleDayCard(\''+iso+'\')">'
+        +'<div><div class="tech-day-name">'+(isToday?'● ':'')+WOCHENTAGE[i]+'</div>'
+        +'<div class="tech-day-date">'+dayLabel+'</div></div>'
+        +'<div class="tech-day-h" id="day-h-'+iso+'">'+dd.stunden+'h</div>'
+      +'</div>'
+      +'<div class="tech-day-body" id="day-body-'+iso+'">'
+        +'<div class="tech-slider-wrap">'
+          +'<span class="tech-slider-lbl">Stunden</span>'
+          +'<input type="range" class="tech-slider" min="0" max="12" step="0.5" value="'+dd.stunden+'"'
+            +' oninput="updateHours(\''+iso+'\',this.value)">'
+          +'<span class="tech-slider-val" id="sv-'+iso+'">'+dd.stunden+'h</span>'
+        +'</div>'
+        +'<div>'
+          +'<div class="tech-tags-lbl">Tätigkeit</div>'
+          +'<div class="tech-tags" id="act-'+iso+'">'+
+            AKTIVITAETEN.map(function(a){
+              var sel=(dd.aktivitaeten||[]).indexOf(a)>-1?' sel':'';
+              return '<span class="tech-tag'+sel+'" onclick="toggleTag(\''+iso+'\',\'act\',this,\''+a+'\')">'
+                +a+'</span>';
+            }).join('')
+          +'</div>'
+        +'</div>'
+        +'<div>'
+          +'<div class="tech-tags-lbl">Material</div>'
+          +'<div class="tech-tags" id="mat-'+iso+'">'+
+            MATERIALIEN.map(function(m){
+              var sel=(dd.materialien||[]).indexOf(m)>-1?' sel':'';
+              return '<span class="tech-mat-tag'+sel+'" onclick="toggleTag(\''+iso+'\',\'mat\',this,\''+m+'\')">'
+                +m+'</span>';
+            }).join('')
+          +'</div>'
+        +'</div>'
+        +'<input class="tech-note" placeholder="Notiz (optional)..." value="'+(dd.notiz||'')+'"'
+          +' oninput="techDayData[\''+iso+'\']=techDayData[\''+iso+'\'||\'{}\']; techDayData[\''+iso+'\'].notiz=this.value">'
+      +'</div>';
+    // Init data
+    if(!techDayData[iso]) techDayData[iso]={stunden:dd.stunden,aktivitaeten:dd.aktivitaeten.slice(),materialien:dd.materialien.slice(),notiz:dd.notiz||''};
+    cont.appendChild(card);
+    // Auto-open today
+    if(isToday) toggleDayCard(iso,true);
+  });
+}
+
+function toggleDayCard(iso,force){
+  var body=document.getElementById('day-body-'+iso);
+  if(!body) return;
+  if(force===true) body.classList.add('open');
+  else body.classList.toggle('open');
+}
+
+function updateHours(iso,val){
+  var v=parseFloat(val)||0;
+  if(!techDayData[iso]) techDayData[iso]={stunden:v,aktivitaeten:[],materialien:[],notiz:''};
+  techDayData[iso].stunden=v;
+  var sv=document.getElementById('sv-'+iso);if(sv) sv.textContent=v+'h';
+  var dh=document.getElementById('day-h-'+iso);if(dh) dh.textContent=v+'h';
+}
+
+function toggleTag(iso,type,el,val){
+  if(!techDayData[iso]) techDayData[iso]={stunden:8,aktivitaeten:[],materialien:[],notiz:''};
+  var arr=type==='act'?techDayData[iso].aktivitaeten:techDayData[iso].materialien;
+  var idx=arr.indexOf(val);
+  if(idx>-1){arr.splice(idx,1);el.classList.remove('sel');}
+  else{arr.push(val);el.classList.add('sel');}
+}
+
+function submitRapport(){
+  if(!authToken){setTechStatus('Nicht eingeloggt','err');return;}
+  var btn=document.getElementById('tech-submit-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<span>⏳</span> Wird gesendet...';}
+  var dates=getWeekDates(techWeekDelta);
+  var tage=dates.map(function(d){
+    var iso=isoDate(d);
+    var dd=techDayData[iso]||{stunden:0,aktivitaeten:[],materialien:[],notiz:''};
+    return{datum:iso,stunden:dd.stunden,aktivitaeten:dd.aktivitaeten,materialien:dd.materialien,notiz:dd.notiz};
+  });
+  fetch('/api/rapport',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
+    body:JSON.stringify({tage:tage})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(btn){btn.disabled=false;btn.innerHTML='<span>📋</span> Wochenbericht einreichen';}
+    if(d.error){setTechStatus(d.error,'err');}
+    else{setTechStatus('✓ Wochenbericht KW eingereicht – Danke!','');}
+  }).catch(function(){
+    if(btn){btn.disabled=false;btn.innerHTML='<span>📋</span> Wochenbericht einreichen';}
+    setTechStatus('Verbindungsfehler – bitte nochmal versuchen','err');
+  });
+}
+
+function setTechStatus(msg,type){
+  var el=document.getElementById('tech-status');
+  if(!el) return;
+  el.textContent=msg;
+  el.className='tech-status'+(type?' '+type:'');
+  setTimeout(function(){if(el.textContent===msg) el.textContent='';},5000);
 }
 </script>
 </body>
