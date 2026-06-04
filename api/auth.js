@@ -62,11 +62,14 @@ async function loginWithPassword(res, email, password) {
   const data = await r.json();
   const role = await getUserRole(data.user?.id);
   const techName = role === 'techniker' ? await getTechName(data.user?.id) : null;
+  const m = data.user?.user_metadata || {};
   return res.status(200).json({
     access_token: data.access_token,
     user: { id: data.user?.id, email: data.user?.email },
     role,
     tech_name: techName,
+    must_change_password: !!m.must_change_password,
+    profile_complete: !!m.profile_complete,
   });
 }
 
@@ -79,10 +82,13 @@ async function verifyToken(res, token) {
   const user = await r.json();
   const role = await getUserRole(user.id);
   const techName = role === 'techniker' ? await getTechName(user.id) : null;
+  const m = user.user_metadata || {};
   return res.status(200).json({
     user: { id: user.id, email: user.email },
     role,
     tech_name: techName,
+    must_change_password: !!m.must_change_password,
+    profile_complete: !!m.profile_complete,
   });
 }
 
