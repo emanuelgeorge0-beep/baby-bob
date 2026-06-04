@@ -1307,10 +1307,10 @@ function startAnalysis(){
     safeFinish(local);
   }
 
-  // Hard timeout: 12 seconds
+  // Hard timeout: 20 seconds (image analysis needs up to 8s)
   setTimeout(function(){
     safeFinish(local);
-  },12000);
+  },20000);
 }
 
 function finish(result){
@@ -1330,9 +1330,9 @@ async function callAPI(desc,b64){
   if(b64) body.imageBase64=b64;
   if(currentCat) body.category=currentCat;
 
-  // Timeout nach 15 Sekunden
+  // Timeout nach 18 Sekunden
   var controller=new AbortController();
-  var timeout=setTimeout(function(){controller.abort();},15000);
+  var timeout=setTimeout(function(){controller.abort();},18000);
 
   try{
     var res=await fetch('/api/bob',{

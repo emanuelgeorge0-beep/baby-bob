@@ -5,7 +5,7 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
     },
     {
-      "source": "/(.*)\\.(?:js|css|png|jpg|svg|ico|woff2?)$",
+      "source": "/:file.(js|css|png|jpg|svg|ico|woff2)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {

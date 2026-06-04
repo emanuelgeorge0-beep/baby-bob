@@ -24,21 +24,13 @@ export default async function handler(req, res) {
   try {
     const { description, imageBase64, category, mode } = req.body || {};
     const isGS = mode === 'gs';
+    const imageOnly = !!(imageBase64 && !description && !category && !isGS);
 
-    // ── 1. Visuelle Voranalyse bei Bild ohne Text ──
-    let visualKeywords = [];
-    let visualCategory = category || '';
-    if (imageBase64 && !description && !category && !isGS) {
-      const vk = await extractImageKeywords(imageBase64);
-      visualKeywords = vk.keywords || [];
-      visualCategory = vk.kategorie || '';
-    }
-
-    // ── 2. Wissensdatenbank ──
+    // ── 1. Wissensdatenbank ──
     let wissen = '';
     wissen = isGS
       ? await fetchGSKnowledge(description, category)
-      : await fetchBOBKnowledge(description, visualCategory, visualKeywords);
+      : await fetchBOBKnowledge(description, category, imageOnly);
 
     // ── 2. System Prompt wählen ──
     const systemPrompt = isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
@@ -126,12 +118,30 @@ async function fetchGSKnowledge(description, category) {
 }
 
 // ── BOB-Modus: Keyword-basierte Suche (alle Kategorien) ──
-async function fetchBOBKnowledge(description, category, extraKeywords = []) {
-  const keywords = [...new Set([...extractKeywords(description, category), ...extraKeywords.map(k => k.toLowerCase())])];
-  const allRows = [];
+async function fetchBOBKnowledge(description, category, imageOnly = false) {
+  const keywords = extractKeywords(description, category);
   const headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
 
-  // Diagnose-Basis immer laden (Fachmann-Übersicht als Ankerpunkt für Bildscans)
+  // Bild ohne Text: visuelle Trigger für alle Kategorien parallel laden (kein Extra-API-Call)
+  if (imageOnly) {
+    const visualCats = [
+      'Sanit%C3%A4r','Heizung','Elektro','Schreiner','Auto',
+      'Beauty','Garten','Geb%C3%A4ude','Dach','Ger%C3%A4te','Maler'
+    ];
+    const orFilter = visualCats.map(c => `kategorie.eq.${c}`).join(',');
+    const [visualRes, diagRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/bob_knowledge?or=(${orFilter})&quelle=eq.BOB%20Wissensdatenbank%20Visual&limit=15&select=titel,inhalt,kategorie,unterkategorie,tags`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/bob_knowledge?or=(${orFilter})&limit=6&select=titel,inhalt,kategorie,unterkategorie,tags`, { headers }),
+    ]);
+    const allRows = [];
+    if (visualRes.ok) { const r = await visualRes.json(); if (Array.isArray(r)) allRows.push(...r); }
+    if (diagRes.ok)   { const r = await diagRes.json();   if (Array.isArray(r)) allRows.push(...r); }
+    return formatKnowledge(allRows);
+  }
+
+  const allRows = [];
+
+  // Diagnose-Basis immer laden (Fachmann-Übersicht als Ankerpunkt)
   const baseRes = await fetch(
     `${SUPABASE_URL}/rest/v1/bob_knowledge?kategorie=eq.Diagnose&limit=5&select=titel,inhalt,kategorie,unterkategorie,tags`,
     { headers }
@@ -140,11 +150,11 @@ async function fetchBOBKnowledge(description, category, extraKeywords = []) {
   const baseRows = await baseRes.json();
   if (Array.isArray(baseRows)) allRows.push(...baseRows);
 
-  // Kategorie-gezielte Suche wenn visuelle Kategorie bekannt
+  // Kategorie-gezielte Suche
   if (category) {
     const encCat = encodeURIComponent(category);
     const catRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/bob_knowledge?kategorie.ilike=*${encCat}*&limit=8&select=titel,inhalt,kategorie,unterkategorie,tags`,
+      `${SUPABASE_URL}/rest/v1/bob_knowledge?kategorie=ilike.*${encCat}*&limit=8&select=titel,inhalt,kategorie,unterkategorie,tags`,
       { headers }
     );
     if (catRes.ok) {
@@ -153,20 +163,16 @@ async function fetchBOBKnowledge(description, category, extraKeywords = []) {
     }
   }
 
-  // Keyword-Suche über alle Kategorien
-  for (const kw of keywords.slice(0, 8)) {
+  // Keyword-Suche parallel (max 5 Keywords gleichzeitig)
+  const kwFetches = keywords.slice(0, 5).map(kw => {
     const encoded = encodeURIComponent(kw);
-    const url = `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(inhalt.ilike.*${encoded}*,titel.ilike.*${encoded}*,kategorie.ilike.*${encoded}*,unterkategorie.ilike.*${encoded}*,tags.cs.{${encoded}})&limit=5&select=titel,inhalt,kategorie,unterkategorie,tags`;
-    const supaRes = await fetch(url, { headers });
-    if (!supaRes.ok) {
-      console.error(`Supabase Keyword-Query für "${kw}" fehlgeschlagen: ${supaRes.status}`);
-      continue;
-    }
-    const rows = await supaRes.json();
-    if (Array.isArray(rows)) allRows.push(...rows);
-  }
+    const url = `${SUPABASE_URL}/rest/v1/bob_knowledge?or=(inhalt.ilike.*${encoded}*,titel.ilike.*${encoded}*,kategorie.ilike.*${encoded}*,unterkategorie.ilike.*${encoded}*)&limit=5&select=titel,inhalt,kategorie,unterkategorie,tags`;
+    return fetch(url, { headers }).then(r => r.ok ? r.json() : []).catch(() => []);
+  });
+  const kwResults = await Promise.all(kwFetches);
+  kwResults.forEach(rows => { if (Array.isArray(rows)) allRows.push(...rows); });
 
-  // Wenn Keyword-Suche wenig brachte: breite Querung aller B2C-Kategorien
+  // Fallback: breite Querung
   if (allRows.length < 5) {
     const b2cCats = [
       'Sanit%C3%A4r','Elektro','Heizung','Beauty','Garten','Gewerke',
@@ -233,60 +239,6 @@ function extractKeywords(description, category) {
 
   if (keywords.size === 0) keywords.add('problem');
   return Array.from(keywords).slice(0, 6);
-}
-
-// ── Visuelle Voranalyse: Bild → Kategorie + Keywords ──
-async function extractImageKeywords(imageBase64) {
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        system: `Analysiere das Bild und erkenne was darauf zu sehen ist.
-Antworte NUR mit diesem JSON (kein Text davor/danach):
-{"kategorie":"z.B. Sanitär/Heizung/Elektro/Auto/Möbel/Beauty/Garten/Gebäude/Geräte/Dach/Reinigung","keywords":["keyword1","keyword2","keyword3","keyword4","keyword5"]}
-
-Kategorie-Mapping:
-- Wasserhahn, Armatur, Rohr, WC, Dusche, Badezimmer, Waschbecken → Sanitär
-- Heizkörper, Radiator, Thermostat, Kessel, Heizung, Boiler → Heizung
-- Steckdose, Schalter, Kabel, Sicherungskasten, Lampe, Leitung → Elektro
-- Tisch, Stuhl, Schrank, Bett, Regal, Holzmöbel → Möbel (Kategorie: Schreiner)
-- Reifen, Lenkrad, Motor, Motorraum, Fahrzeug, Felge → Auto
-- Haar, Frisur, Nägel, Hand, Wimper, Make-up → Beauty
-- Rasen, Pflanze, Baum, Blumen, Garten, Hecke → Garten
-- Wand, Riss, Schimmel, Fassade, Putz, Mauerwerk → Gebäude
-- Dach, Ziegel, Pfanne, Dachrinne, Firstziegel → Dach
-- Waschmaschine, Geschirrspüler, Kühlschrank, Herd → Geräte
-- Schmutz, Fleck, Dreck, Fenster putzen → Reinigung
-
-Keywords = konkrete Objekte was du siehst (deutsch, lowercase).`,
-        messages: [{
-          role: 'user',
-          content: [{
-            type: 'image',
-            source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
-          }, {
-            type: 'text',
-            text: 'Was ist auf diesem Bild? Welche Kategorie und Keywords?',
-          }],
-        }],
-      }),
-    });
-    if (!res.ok) return { kategorie: '', keywords: [] };
-    const data = await res.json();
-    const raw = data.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '';
-    const parsed = safeParseJSON(raw);
-    return parsed || { kategorie: '', keywords: [] };
-  } catch (e) {
-    console.error('Visual pre-analysis error:', e.message);
-    return { kategorie: '', keywords: [] };
-  }
 }
 
 // ── GS System Prompt (B2B, SHK-Fachmann) ──
