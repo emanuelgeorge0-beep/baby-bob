@@ -154,6 +154,14 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .fb-partial{border-color:rgba(255,217,61,0.4);background:rgba(255,217,61,0.08);}
 .fb-bad{border-color:rgba(255,107,53,0.4);background:rgba(255,107,53,0.08);}
 .fb-icon{font-size:22px;}.fb-txt{font-size:10px;font-weight:800;color:var(--muted);}
+.bob-fb-correct{display:none;margin-top:12px;}
+.bob-fb-correct.open{display:block;}
+.bob-fb-send{width:100%;margin-top:8px;background:rgba(255,107,53,0.14);border:1px solid rgba(255,107,53,0.4);border-radius:12px;padding:11px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:800;color:#ff8a5c;cursor:pointer;}
+.bob-fb-thanks{display:none;margin-top:10px;text-align:center;font-size:12px;font-weight:800;color:#6bcb77;}
+.bob-fb-thanks.open{display:block;}
+.bob-unbekannt{margin:14px 18px 0;background:rgba(255,217,61,0.07);border:1px solid rgba(255,217,61,0.28);border-radius:16px;padding:15px;}
+.bob-unbekannt-tit{font-size:13px;font-weight:800;color:var(--text,#e8edf5);}
+.bob-unbekannt-sub{font-size:11px;color:var(--muted);margin:4px 0 10px;line-height:1.5;}
 .r-maps{margin:12px 18px 0;background:linear-gradient(135deg,rgba(255,107,53,0.1),rgba(255,107,53,0.03));border:1px solid rgba(255,107,53,0.2);border-radius:18px;padding:16px;display:flex;align-items:center;gap:12px;}
 .r-maps-i{font-size:28px;}
 .r-maps-info strong{display:block;font-size:13px;font-weight:800;margin-bottom:2px;}
@@ -741,13 +749,28 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div class="r-tips-tit"><span>💡</span> BOBs Tipps</div>
     <div id="r-tipps"></div>
   </div>
-  <div class="fb-row">
-    <div class="fb-lbl">Hat BOB das richtig erkannt?</div>
+  <div class="fb-row" id="bob-fb-row">
+    <div class="fb-lbl">War diese Antwort hilfreich?</div>
     <div class="fb-btns">
-      <button class="fb-btn fb-good" onclick="openFeedback('good')"><span class="fb-icon">✅</span><span class="fb-txt">Gut erkannt</span></button>
-      <button class="fb-btn fb-partial" onclick="openFeedback('partial')"><span class="fb-icon">⚠️</span><span class="fb-txt">Teilweise</span></button>
-      <button class="fb-btn fb-bad" onclick="openFeedback('bad')"><span class="fb-icon">❌</span><span class="fb-txt">Nicht erkannt</span></button>
+      <button class="fb-btn fb-good" onclick="bobFeedback('correct')"><span class="fb-icon">✅</span><span class="fb-txt">Ja</span></button>
+      <button class="fb-btn fb-bad" onclick="bobFeedback('wrong')"><span class="fb-icon">❌</span><span class="fb-txt">Nein</span></button>
+      <button class="fb-btn fb-partial" onclick="bobFeedback('corrected')"><span class="fb-icon">✏️</span><span class="fb-txt">Korrigieren</span></button>
     </div>
+    <div class="bob-fb-correct" id="bob-fb-correct">
+      <div class="fb-lbl" id="bob-fb-q">Was wäre richtig gewesen? (optional)</div>
+      <input class="login-inp" id="bob-fb-input" type="text" placeholder="Deine Korrektur…"/>
+      <button class="bob-fb-send" onclick="bobSendCorrection()">Absenden</button>
+    </div>
+    <div class="bob-fb-thanks" id="bob-fb-thanks">🧠 Danke! BOB lernt aus deinem Feedback.</div>
+  </div>
+
+  <!-- BOB doesn't know → teach it -->
+  <div class="bob-unbekannt" id="bob-unbekannt" style="display:none;">
+    <div class="bob-unbekannt-tit">🤔 Das kenne ich noch nicht – kannst du mir helfen?</div>
+    <div class="bob-unbekannt-sub">Was ist das? Beschreibe es kurz, damit BOB dazulernt.</div>
+    <input class="login-inp" id="bob-unbekannt-input" type="text" placeholder="z.B. Entkalkungsanlage, Marke XY…"/>
+    <button class="bob-fb-send" onclick="bobSendUnbekannt()">BOB beibringen</button>
+    <div class="bob-fb-thanks" id="bob-unbekannt-thanks">🧠 Danke! BOB merkt sich das.</div>
   </div>
   <div class="r-maps">
     <div class="r-maps-i">📍</div>
@@ -1971,6 +1994,13 @@ function renderResult(r){
   // Contact screen
   document.getElementById('con-bob').textContent=r.fachmann_emoji||r.emoji||'👷';
   document.getElementById('con-sum').textContent='📋 '+(r.titel||'Anfrage')+' – '+(r.fachmann||'Fachmann')+' wird benötigt';
+
+  // Reset self-learning feedback widget for this new result.
+  bobResetFeedback();
+  // If BOB didn't recognise it → show the "teach BOB" widget.
+  var unknown=(r.kategorie==='Unbekannt')||/nicht bestimmbar|nicht möglich|fehlgeschlagen|kein bild/i.test((r.fachmann||'')+(r.erkannt_als||''));
+  var ub=document.getElementById('bob-unbekannt');
+  if(ub) ub.style.display=unknown?'block':'none';
 }
 
 // ══ ANGEBOT SHEET ══
@@ -2076,6 +2106,58 @@ function openFeedback(status){
 function sendFeedback(){
   toast('Danke! BOB lernt aus deinem Feedback 🧠');
   setTimeout(function(){resetAll();},1500);
+}
+
+// ══ BOB SELF-LEARNING (Task 7) ══
+var bobFbKind=null;
+function bobHash(){
+  // Cheap stable hash of the scanned image (or text) for dedup — no PII stored.
+  var s=imgB64||(lastResult&&(lastResult.titel||'')+(lastResult.desc||lastResult.beschreibung||''))||'';
+  var h=5381;for(var i=0;i<s.length;i++){h=((h<<5)+h+s.charCodeAt(i))>>>0;}
+  return 'b'+h.toString(16);
+}
+function bobPost(body){
+  return fetch('/api/bob-feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}).catch(function(){return{};});
+}
+function bobResetFeedback(){
+  bobFbKind=null;
+  var c=document.getElementById('bob-fb-correct');if(c)c.classList.remove('open');
+  var t=document.getElementById('bob-fb-thanks');if(t)t.classList.remove('open');
+  var i=document.getElementById('bob-fb-input');if(i)i.value='';
+  var row=document.getElementById('bob-fb-row');if(row)row.style.display='';
+  var ut=document.getElementById('bob-unbekannt-thanks');if(ut)ut.classList.remove('open');
+  var ui=document.getElementById('bob-unbekannt-input');if(ui)ui.value='';
+}
+function bobFeedback(kind){
+  bobFbKind=kind;
+  var correct=document.getElementById('bob-fb-correct');
+  if(kind==='correct'){
+    if(correct)correct.classList.remove('open');
+    bobPost({action:'feedback',user_feedback:'correct',bild_hash:bobHash(),
+      bob_antwort:lastResult?(lastResult.titel||lastResult.fachmann||''):'',kategorie:lastResult?lastResult.kategorie:null});
+    var th=document.getElementById('bob-fb-thanks');if(th)th.classList.add('open');
+  }else{
+    // wrong | corrected → ask for the correction text
+    var q=document.getElementById('bob-fb-q');
+    if(q)q.textContent=kind==='wrong'?'Was wäre richtig gewesen? (optional)':'Deine Korrektur:';
+    if(correct)correct.classList.add('open');
+    var i=document.getElementById('bob-fb-input');if(i)i.focus();
+  }
+}
+function bobSendCorrection(){
+  var val=(document.getElementById('bob-fb-input')||{}).value||'';
+  bobPost({action:'feedback',user_feedback:bobFbKind||'corrected',bild_hash:bobHash(),
+    bob_antwort:lastResult?(lastResult.titel||lastResult.fachmann||''):'',kategorie:lastResult?lastResult.kategorie:null,user_korrektur:val.trim()||null});
+  var c=document.getElementById('bob-fb-correct');if(c)c.classList.remove('open');
+  var th=document.getElementById('bob-fb-thanks');if(th)th.classList.add('open');
+}
+function bobSendUnbekannt(){
+  var val=((document.getElementById('bob-unbekannt-input')||{}).value||'').trim();
+  if(!val){toast('Bitte kurz beschreiben');return;}
+  bobPost({action:'unbekannt',bild_hash:bobHash(),bob_antwort:lastResult?(lastResult.titel||''):'',
+    user_korrektur:val,kategorie_vorschlag:lastResult?lastResult.kategorie:null});
+  var ui=document.getElementById('bob-unbekannt-input');if(ui)ui.value='';
+  var ut=document.getElementById('bob-unbekannt-thanks');if(ut)ut.classList.add('open');
 }
 
 // ══ RESET ══
