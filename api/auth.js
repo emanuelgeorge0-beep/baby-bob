@@ -30,19 +30,21 @@ export default async function handler(req, res) {
 }
 
 async function sendMagicLink(res, email) {
-  if (!email) return res.status(400).json({ error: 'E-Mail fehlt' });
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error: 'Bitte gültige E-Mail eingeben' });
+  }
+  // create_user:true → OTP works for ANY email (creates the user if new).
+  // No whitelist/restriction. NOTE: deliverability + rate limits are a
+  // Supabase Auth setting (custom SMTP required for production volume).
   const r = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
     method: 'POST',
     headers: SB_HEADERS,
-    body: JSON.stringify({ email, create_user: false }),
+    body: JSON.stringify({ email, create_user: true }),
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
-    // create_user:false → Supabase returns error if user doesn't exist (no auto-signup)
     const msg = err.msg || err.message || err.error_description || '';
-    if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('signup')) {
-      return res.status(404).json({ error: 'Kein Konto mit dieser E-Mail gefunden.' });
-    }
+    if (/rate limit/i.test(msg)) return res.status(429).json({ error: 'Zu viele Anfragen – bitte in einer Minute erneut versuchen.' });
     return res.status(400).json({ error: msg || 'Magic Link fehlgeschlagen' });
   }
   return res.status(200).json({ ok: true });

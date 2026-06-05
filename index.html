@@ -445,6 +445,10 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .gs-success-icon{font-size:72px;}
 .gs-success-tit{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:#4a9eff;}
 .gs-success-sub{font-size:13px;color:rgba(232,237,245,0.55);line-height:1.65;max-width:280px;}
+.gs-acct-offer{width:calc(100% - 36px);margin:6px 18px 0;background:rgba(74,158,255,0.06);border:1px solid rgba(74,158,255,0.2);border-radius:14px;padding:14px;box-sizing:border-box;}
+.gs-acct-tit{font-size:13px;font-weight:800;color:#e8edf5;}
+.gs-acct-sub{font-size:11px;color:rgba(232,237,245,0.5);margin-top:3px;line-height:1.5;}
+.gs-login-link{font-size:12px;color:rgba(232,237,245,0.5);text-align:center;padding:10px;cursor:pointer;text-decoration:underline;}
 .gs-ticket{background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.2);border-radius:16px;padding:16px 20px;width:100%;text-align:left;}
 .gs-ticket-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#4a9eff;margin-bottom:4px;}
 .gs-ticket-val{font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#e8edf5;}
@@ -1004,6 +1008,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
       <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">SHK Vollservice</div>
     </div>
   </div>
+  <div class="gs-login-link" onclick="showScreen('login')">🔑 Partner / Techniker Login</div>
 </div>
 
 <!-- GS SCREEN 1: PROJEKTERFASSUNG -->
@@ -1249,6 +1254,13 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div class="gs-ticket" style="background:rgba(107,203,119,0.07);border-color:rgba(107,203,119,0.25);">
       <div class="gs-ticket-lbl" style="color:#6bcb77;">Status</div>
       <div class="gs-ticket-val" style="color:#6bcb77;">✅ Anfrage eingegangen</div>
+    </div>
+    <!-- Optional: account / magic-link after booking (not required) -->
+    <div class="gs-acct-offer" id="gs-acct-offer">
+      <div class="gs-acct-tit">📩 Status live verfolgen?</div>
+      <div class="gs-acct-sub">Optional – erhalten Sie einen Login-Link per E-Mail, um Ihre Anfrage & Rechnungen zu sehen.</div>
+      <button class="gs-btn-secondary" id="gs-acct-btn" style="margin-top:10px;" onclick="gsOfferMagicLink()">🔑 Login-Link senden</button>
+      <div class="login-msg" id="gs-acct-msg"></div>
     </div>
     <button class="gs-btn-primary" onclick="gsReset()" style="margin-top:8px;">+ Neues Projekt</button>
     <button class="gs-btn-secondary" onclick="setMode('bob')">Zurück zu Baby BOB</button>
@@ -2579,7 +2591,24 @@ function gsShowBuchung(){
   var tt=document.getElementById('gs-tick-tarif');
   if(tp) tp.textContent=(gsData.proj_name||'SHK-Projekt')+(gsData.bereich?' · '+gsData.bereich:'');
   if(tt) tt.textContent=(gsData.tarif||'–')+(gsData.tarif_preis?' · '+gsData.tarif_preis:'');
+  // Reset the optional account offer for this booking.
+  var off=document.getElementById('gs-acct-offer');if(off) off.style.display='';
+  setMsg('gs-acct-msg','','');
   gsGo('gs-buchung');
+}
+
+// Optional, post-booking: send a magic-link so the customer can track status.
+function gsOfferMagicLink(){
+  var email=gsData.email;
+  if(!email){setMsg('gs-acct-msg','Keine E-Mail aus der Anfrage gefunden','err');return;}
+  var btn=document.getElementById('gs-acct-btn');if(btn){btn.disabled=true;btn.textContent='Sende…';}
+  fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'magic_link',email:email})}).then(function(r){return r.json();}).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='🔑 Login-Link senden';}
+    if(d.error){setMsg('gs-acct-msg',d.error,'err');return;}
+    setMsg('gs-acct-msg','✓ Link an '+email+' gesendet','');
+    var off=document.getElementById('gs-acct-offer');if(off) off.style.display='none';
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='🔑 Login-Link senden';}setMsg('gs-acct-msg','Verbindungsfehler','err');});
 }
 
 // ── GS Reset ──
@@ -2695,20 +2724,15 @@ function applyRole(token,user,role,techName){
       // Keep the toggle wrap VISIBLE — the GS Login button lives inside it.
       if(modeWrap) modeWrap.style.display='';
       var mt=document.getElementById('mt-gs');
-      if(mt){mt.textContent='🏢 GS Login';mt.onclick=function(){showScreen('login');};}
+      if(mt){mt.textContent='🏢 George Solutions';mt.onclick=function(){setMode('gs');};}
       go('home');
       break;
   }
 }
 
 // ── GS mode toggle guard ──
-var _origSetMode=setMode;
-setMode=function(mode){
-  if(mode==='gs'&&authRole!=='gs_partner'&&authRole!=='gs_admin'){
-    showScreen('login');return;
-  }
-  _origSetMode(mode);
-};
+// GS Anfrage is fully anonymous — no login required to request/book.
+// (Partner/Techniker still log in via the login screen for their portals.)
 
 // ── Login functions ──
 function togglePwForm(){
@@ -2776,7 +2800,7 @@ function logout(){
   var modeWrap=document.querySelector('.mode-toggle-wrap');
   if(modeWrap) modeWrap.style.display='';
   var mt=document.getElementById('mt-gs');
-  if(mt){mt.textContent='🏢 GS Login';mt.onclick=function(){showScreen('login');};}
+  if(mt){mt.textContent='🏢 George Solutions';mt.onclick=function(){setMode('gs');};}
   go('home');
 }
 
