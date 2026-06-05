@@ -88,7 +88,22 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('BOB API Error:', err.message);
-    return res.status(500).json({ error: err.message });
+    // Graceful degradation: BOB always returns a usable result screen.
+    // (GS mode has its own client-side fallback, so let it see the error.)
+    const isGSerr = (req.body && req.body.mode) === 'gs';
+    if (isGSerr) return res.status(500).json({ error: err.message });
+    return res.status(200).json({
+      titel: 'Analyse momentan nicht möglich',
+      desc: 'BOB konnte das nicht analysieren. Bitte beschreibe dein Problem kurz in Worten oder versuche ein anderes, gut beleuchtetes Foto.',
+      kategorie: 'Unbekannt',
+      dringlichkeit: 'Mittel',
+      kosten: 'CHF --',
+      zeitraum: 'Nach Analyse',
+      fachmann: 'Noch nicht bestimmbar',
+      fachmann_emoji: '🔍',
+      tipps: ['Beschreibe dein Problem in Textform', 'Mache ein klares Foto bei guter Beleuchtung', 'Mehr Details = bessere Empfehlung'],
+      erkannt_als: 'Analyse fehlgeschlagen – bitte erneut versuchen',
+    });
   }
 }
 
