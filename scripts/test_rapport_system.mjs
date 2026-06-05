@@ -66,7 +66,10 @@ async function guards() {
 
 async function cycle(i) {
   const pnr = `T-${Date.now()}-${i}`;
-  const datum = `2026-06-${String((i % 27) + 1).padStart(2, '0')}`;
+  // Weekdays only (Mon–Fri) so they appear in the Mon–Fri week view.
+  const base = new Date(Date.UTC(2026, 5, 1)); // Mon 2026-06-01
+  base.setUTCDate(base.getUTCDate() + Math.floor(i / 5) * 7 + (i % 5));
+  const datum = base.toISOString().slice(0, 10);
   const [von, bis, expH] = TIMES[i % TIMES.length];
   const withMedia = i % 4 === 0;
   let projektId, rapportId, invoiceId;
@@ -105,13 +108,13 @@ async function cycle(i) {
     is('submit status eingereicht', sub.body?.rapport?.status === 'eingereicht');
     is('submit pdf_url set', !!sub.body?.rapport?.pdf_url);
     if (withMedia) is('photos uploaded', (sub.body?.rapport?.foto_urls || []).length === 2, JSON.stringify(sub.body?.rapport?.foto_urls));
-    const expBetrag = Math.round(expH * 67.9 * 100) / 100;
+    // betrag must equal (server-rounded hours) × stundensatz
+    const srvHours = sub.body?.rapport?.gesamtstunden;
+    const expBetrag = Math.round(srvHours * 67.9 * 100) / 100;
     invoiceId = sub.body?.invoice?.id;
-    if (expH > 0.01) {
-      is('invoice created', !!invoiceId);
-      is('invoice betrag correct', Math.abs((sub.body?.invoice?.betrag || 0) - expBetrag) < 0.05, `${sub.body?.invoice?.betrag} vs ${expBetrag}`);
-    }
-    const wk = await call('tagesrapport', { action: 'week', jahr: 2026, woche: weekOf(datum) });
+    is('invoice created', !!invoiceId);
+    is('invoice betrag correct', Math.abs((sub.body?.invoice?.betrag || 0) - expBetrag) < 0.05, `${sub.body?.invoice?.betrag} vs ${expBetrag}`);
+    const wk = await call('tagesrapport', { action: 'week', jahr: base.getUTCFullYear(), woche: weekOf(datum) });
     is('week 200', wk.status === 200);
     is('week has eingereicht day', (wk.body?.days || []).some((d) => d.datum === datum && d.status === 'eingereicht'), JSON.stringify(wk.body?.days));
     const lst = await call('tagesrapport', { action: 'list', projekt_id: projektId });

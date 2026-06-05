@@ -34,21 +34,28 @@ typeof t.rating === 'number' ? ok('rating is number') : no('rating is number', t
 const leaked = techs?.some((x) => 'email' in x || 'telefon' in x || 'phone' in x);
 !leaked ? ok('no email/telefon leaked') : no('no email/telefon leaked');
 
-// 4. Only available technicians
-const allAvail = techs?.every((x) => x.availability === true);
-allAvail ? ok('all availability=true') : no('all availability=true');
+// 4. Network: all 12 returned, counts correct, available-first ordering
+techs?.length >= 12 ? ok(`network has >=12 (${techs.length})`) : no('network has >=12', techs?.length);
+list.body?.total === techs?.length ? ok('total matches list length') : no('total matches list length', list.body?.total);
+list.body?.available === 4 ? ok('available count = 4') : no('available count = 4', list.body?.available);
+const firstBookedIdx = techs.findIndex((x) => x.availability === false);
+const lastAvailIdx = techs.map((x) => x.availability).lastIndexOf(true);
+firstBookedIdx === -1 || lastAvailIdx < firstBookedIdx ? ok('available listed before booked') : no('available listed before booked');
+// booked profiles carry booked_until
+const booked = techs.filter((x) => !x.availability);
+booked.every((x) => !!x.booked_until) ? ok('booked have booked_until') : no('booked have booked_until');
+techs.filter((x) => x.availability).every((x) => !x.booked_until) ? ok('available have no booked_until') : no('available have no booked_until');
 
-// 5. bereich sorting — Heizung specialist should rank first
+// 5. bereich sorting — within available, a Heizung specialist first
 const heiz = await get('/api/techniker?bereich=Heizung');
 const first = heiz.body?.techniker?.[0];
-first?.specialization?.some((s) => s.toLowerCase() === 'heizung')
-  ? ok('?bereich=Heizung ranks a Heizung specialist first')
-  : no('?bereich=Heizung ranks a Heizung specialist first', first?.name);
+first?.availability === true && first?.specialization?.some((s) => s.toLowerCase() === 'heizung')
+  ? ok('?bereich=Heizung ranks an available Heizung specialist first')
+  : no('?bereich=Heizung ranks available Heizung first', first?.name);
 
-// 6. Sorted by rating (no bereich)
-const ratings = (techs || []).map((x) => x.rating ?? 0);
-const sorted = ratings.every((v, i) => i === 0 || ratings[i - 1] >= v);
-sorted ? ok('default sort by rating desc') : no('default sort by rating desc', ratings.join(','));
+// 6. Within each availability group, sorted by rating desc
+const avail = techs.filter((x) => x.availability).map((x) => x.rating ?? 0);
+avail.every((v, i) => i === 0 || avail[i - 1] >= v) ? ok('available sorted by rating desc') : no('available sorted by rating desc', avail.join(','));
 
 // 7. Edge: wrong method
 const post = await fetch(BASE + '/api/techniker', { method: 'POST' });

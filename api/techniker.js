@@ -25,9 +25,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Only available technicians; select=* tolerates either schema version.
+    // All technicians (available + booked); select=* tolerates either schema.
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/gs_techniker?verfuegbar=eq.true&select=*`,
+      `${SUPABASE_URL}/rest/v1/gs_techniker?select=*`,
       { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
     );
     if (!r.ok) {
@@ -41,8 +41,9 @@ export default async function handler(req, res) {
 
     let techniker = rows.map(normalizeTechniker).filter(Boolean);
 
-    // Sort: best match for requested bereich first, then rating desc.
+    // Sort: available first, then bereich match (within group), then rating desc.
     techniker.sort((a, b) => {
+      if (a.availability !== b.availability) return a.availability ? -1 : 1;
       if (bereich) {
         const am = a.specialization.some((s) => s.toLowerCase() === bereich) ? 1 : 0;
         const bm = b.specialization.some((s) => s.toLowerCase() === bereich) ? 1 : 0;
@@ -51,8 +52,9 @@ export default async function handler(req, res) {
       return (b.rating || 0) - (a.rating || 0);
     });
 
+    const available = techniker.filter((t) => t.availability).length;
     res.setHeader('Cache-Control', 'public, max-age=60');
-    return res.status(200).json({ techniker });
+    return res.status(200).json({ techniker, total: techniker.length, available });
   } catch (err) {
     console.error('Techniker Error:', err.message);
     return res.status(500).json({ error: err.message });
@@ -97,6 +99,7 @@ function normalizeTechniker(row) {
     photo_emoji: side.photo_emoji || '👷',
     location: side.location || null,
     availability: row.availability_status ?? row.verfuegbar ?? true,
+    booked_until: side.booked_until || null,
   };
 }
 
