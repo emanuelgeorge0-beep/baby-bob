@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/bob-learn", "schedule": "0 1 * * *" }
+  ],
   "headers": [
     {
       "source": "/manifest.json",
