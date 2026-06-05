@@ -65,21 +65,22 @@ function normalizeTechniker(row) {
   if (!row) return null;
   const side = parseSidecar(row.notizen);
 
-  // Real columns (post-migration) win; otherwise fall back to sidecar JSON.
-  const specialization = Array.isArray(row.specialization)
-    ? row.specialization
-    : Array.isArray(side.specialization)
-    ? side.specialization
+  // Prefer the sidecar value when set; fall back to the (possibly empty/default)
+  // real column. The migration adds specialization '{}' + rating 5.0 defaults,
+  // so an empty/absent real value must NOT shadow real sidecar data.
+  const specialization =
+    Array.isArray(side.specialization) && side.specialization.length ? side.specialization
+    : Array.isArray(row.specialization) && row.specialization.length ? row.specialization
     : [];
 
   const rating =
-    typeof row.rating === 'number' ? row.rating
-    : typeof side.rating === 'number' ? side.rating
+    typeof side.rating === 'number' ? side.rating
+    : typeof row.rating === 'number' ? row.rating
     : null;
 
   const years =
-    typeof row.years_experience === 'number' ? row.years_experience
-    : typeof side.years_experience === 'number' ? side.years_experience
+    typeof side.years_experience === 'number' ? side.years_experience
+    : typeof row.years_experience === 'number' ? row.years_experience
     : null;
 
   // qualifikation is a TEXT[] in the legacy schema; flatten it if so.
