@@ -2586,7 +2586,55 @@ function bobBestVoice(lang){
 }
 // BOB voice: ElevenLabs TTS first, SpeechSynthesis as fallback.
 var bobAudio=null;
-function bobSpeak(text){
+// Aufgabe Voice-2: Preise/Zahlen sprechbar machen (NUR der vorgelesene Text).
+function _zahlInWorte(n){
+  n=Math.floor(Math.abs(n));
+  if(n>999999) return String(n);
+  var e=['null','eins','zwei','drei','vier','fünf','sechs','sieben','acht','neun','zehn','elf','zwölf','dreizehn','vierzehn','fünfzehn','sechzehn','siebzehn','achtzehn','neunzehn'];
+  var z=['','','zwanzig','dreissig','vierzig','fünfzig','sechzig','siebzig','achtzig','neunzig'];
+  function u100(x){ if(x<20)return e[x]; var t=Math.floor(x/10),o=x%10; return (o?(o===1?'einund':e[o]+'und'):'')+z[t]; }
+  function u1000(x){ if(x<100)return u100(x); var h=Math.floor(x/100),r=x%100; return (h===1?'ein':e[h])+'hundert'+(r?u1000(r):''); }
+  if(n===0) return 'null';
+  var out='',th=Math.floor(n/1000),rest=n%1000;
+  if(th>0) out+=(th===1?'ein':u1000(th))+'tausend';
+  if(rest>0) out+=u1000(rest);
+  return out;
+}
+function _chfInWorte(num){
+  var c=String(num).replace(/['’\s]/g,'').replace(',','.');
+  var p=c.split('.'); var ganz=parseInt((p[0]||'').replace(/[^\d]/g,''),10);
+  if(isNaN(ganz)) return num+' Franken';
+  var w=_zahlInWorte(ganz)+' Franken';
+  if(p[1]){ var rp=parseInt(p[1].slice(0,2),10); if(rp>0) w+=' '+_zahlInWorte(rp); }
+  return w;
+}
+function sanitizeForSpeech(text){
+  if(!text) return text;
+  var s=String(text);
+  s=s.replace(/m²|m2\b/gi,' Quadratmeter');
+  s=s.replace(/%/g,' Prozent');
+  s=s.replace(/\s*\/\s*h\b/gi,' pro Stunde');
+  s=s.replace(/\bpro\s+Stunde\b/gi,'pro Stunde');
+  // CHF-Bereich: "CHF 1500–2000" -> "... bis ... Franken"
+  s=s.replace(/(?:CHF|Fr\.?)\s*([\d'’.,]+)\s*[–-]\s*([\d'’.,]+)/gi,function(m,a,b){ return _chfInWorte(a).replace(/ Franken$/,'')+' bis '+_chfInWorte(b); });
+  s=s.replace(/(?:CHF|Fr\.?)\s*([\d'’.,]+)/gi,function(m,a){ return _chfInWorte(a); });
+  // Reiner Zahlenbereich ohne CHF: "1500–2000" -> "... bis ..."
+  s=s.replace(/(\d[\d'’.,]*)\s*[–-]\s*(\d[\d'’.,]*)/g,function(m,a,b){ return _numStr(a)+' bis '+_numStr(b); });
+  // Restliche Zahlen -> Worte
+  s=s.replace(/\d[\d'’.,]*/g,function(m){ return _numStr(m); });
+  return s.replace(/\s{2,}/g,' ').trim();
+}
+function _numStr(m){
+  var c=String(m).replace(/['’\s]/g,'').replace(',','.');
+  var p=c.split('.'); var ganz=parseInt((p[0]||'').replace(/[^\d]/g,''),10);
+  if(isNaN(ganz)) return m;
+  var w=_zahlInWorte(ganz);
+  if(p[1]&&parseInt(p[1],10)>0) w+=' Komma '+p[1].split('').map(function(d){return _zahlInWorte(parseInt(d,10)||0);}).join(' ');
+  return w;
+}
+function bobSpeak(rawText){
+  if(!rawText) return;
+  var text=sanitizeForSpeech(rawText); // nur der gesprochene Text wird verändert
   if(!text) return;
   bobStopSpeak();
   fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
