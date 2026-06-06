@@ -2507,7 +2507,30 @@ function bobBestVoice(lang){
     ||byLang.filter(function(v){return v.lang.toLowerCase()===pre;})[0]
     ||byLang[0]||null;
 }
+// BOB voice: ElevenLabs TTS first, SpeechSynthesis as fallback.
+var bobAudio=null;
 function bobSpeak(text){
+  if(!text) return;
+  bobStopSpeak();
+  fetch('/api/bob-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+    .then(function(r){
+      if(!r.ok) return null;
+      var ct=r.headers.get('content-type')||'';
+      return ct.indexOf('audio')>-1?r.blob():null;
+    })
+    .then(function(blob){
+      if(!blob){bobSpeakFallback(text);return;}
+      try{
+        var url=URL.createObjectURL(blob);
+        bobAudio=new Audio(url);
+        bobAudio.onended=function(){try{URL.revokeObjectURL(url);}catch(e){}};
+        var p=bobAudio.play();
+        if(p&&p.catch)p.catch(function(){bobSpeakFallback(text);});
+      }catch(e){bobSpeakFallback(text);}
+    })
+    .catch(function(){bobSpeakFallback(text);});
+}
+function bobSpeakFallback(text){
   if(!text||!('speechSynthesis' in window)) return;
   try{
     window.speechSynthesis.cancel();
@@ -2518,7 +2541,10 @@ function bobSpeak(text){
     window.speechSynthesis.speak(u);
   }catch(e){}
 }
-function bobStopSpeak(){if('speechSynthesis' in window){try{window.speechSynthesis.cancel();}catch(e){}}}
+function bobStopSpeak(){
+  if(bobAudio){try{bobAudio.pause();}catch(e){}bobAudio=null;}
+  if('speechSynthesis' in window){try{window.speechSynthesis.cancel();}catch(e){}}
+}
 function bobVoiceLang(){
   var l=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
   if(l==='de'||l==='ch'){return bobAccent==='at'?'de-AT':(bobAccent==='ch'?'de-CH':'de-DE');}
