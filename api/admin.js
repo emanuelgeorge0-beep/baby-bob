@@ -93,6 +93,7 @@ async function createUser(res, body) {
       user_metadata: {
         name,
         firma: firma || null,
+        tarif: body.tarif != null ? Number(body.tarif) : null,
         must_change_password: true,
         profile_complete: false,
         active: true,
