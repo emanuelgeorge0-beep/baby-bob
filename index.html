@@ -131,6 +131,19 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .scan-counter{text-align:center;font-size:12px;color:rgba(232,237,245,0.5);margin:0 18px 12px;display:flex;align-items:center;justify-content:center;gap:7px;}
 .scan-counter strong{color:#FFD700;font-weight:800;}
 .sc-dot{width:8px;height:8px;border-radius:50%;background:#6bcb77;display:inline-block;box-shadow:0 0 0 0 rgba(107,203,119,0.5);animation:dotpulse 1.8s infinite;}
+
+/* ═══ Task 9: DESIGN POLISH (additive, no layout change) ═══ */
+@keyframes screenIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+.screen.active,.gs-screen.active,.tech-screen.active,.admin-screen.active,.login-screen.active{animation:screenIn .28s ease both;}
+.admin-hub-card,.pd-item,.admin-user-card,.admin-proj-row,.gs-tech-card,.admin-ampel,.tech-day-card,.pd-card{transition:transform .15s ease,box-shadow .2s ease,border-color .2s ease;}
+.admin-hub-card:hover,.pd-item:hover{transform:translateY(-1px);border-color:rgba(255,215,0,0.25);}
+@keyframes shimmer{0%{background-position:-400px 0;}100%{background-position:400px 0;}}
+.skeleton{background:linear-gradient(90deg,rgba(255,255,255,0.05) 25%,rgba(255,255,255,0.12) 50%,rgba(255,255,255,0.05) 75%);background-size:800px 100%;animation:shimmer 1.3s infinite;border-radius:10px;height:54px;margin:10px 18px 0;}
+@keyframes successPop{0%{transform:scale(0);}60%{transform:scale(1.15);}100%{transform:scale(1);}}
+.success-pop{display:inline-block;animation:successPop .45s ease both;}
+.login-msg:not(:empty){animation:screenIn .25s ease both;}
+button,.gs-btn-primary,.admin-act,.fb-btn,.tr-nav-btn,.pd-tab{transition:transform .12s ease,background .2s ease,border-color .2s ease,box-shadow .2s ease;}
+button:active{transform:scale(0.97);}
 .r-notfall{margin:0 18px 12px;background:linear-gradient(135deg,rgba(255,59,48,0.18),rgba(255,59,48,0.06));border:1px solid rgba(255,59,48,0.45);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;}
 .r-notfall-txt{font-size:14px;color:#ffb3ae;}
 .r-notfall-call{display:block;text-align:center;background:#ff3b30;color:#fff;font-weight:900;font-size:15px;padding:13px;border-radius:12px;text-decoration:none;}
