@@ -130,8 +130,14 @@ async function cycle(i) {
 
     // ── admin verify invoice + overview ──
     await setRole('gs_admin');
-    const il = await call('rechnung', { action: 'list', projekt_id: projektId });
-    if (expH > 0.01) is('invoice in list', (il.body?.rechnungen || []).some((r) => r.id === invoiceId));
+    // Retry once for read-after-write consistency.
+    let inList = false;
+    for (let a = 0; a < 2 && !inList; a++) {
+      const il = await call('rechnung', { action: 'list', projekt_id: projektId });
+      inList = (il.body?.rechnungen || []).some((r) => r.id === invoiceId);
+      if (!inList) await new Promise((r) => setTimeout(r, 700));
+    }
+    if (expH > 0.01) is('invoice in list', inList);
     if (invoiceId) {
       const ig = await call('rechnung', { action: 'get', id: invoiceId });
       is('invoice pdf signed', !!ig.body?.rechnung?.pdf_signed);
