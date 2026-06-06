@@ -6,7 +6,7 @@
 //   POST {action:'stt', audio}  → {text}      (audio = base64, ElevenLabs scribe)
 
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
-const VOICE_ID = 'nGgbw9l4dtIoQA9YZHgx'; // Brian
+const VOICE_ID = 'nPczCjzI2devNBz1zQrb'; // Brian (verified working with this account/key)
 const TTS_MODEL = 'eleven_multilingual_v2';
 const STT_MODEL = 'scribe_v1';
 
@@ -19,28 +19,15 @@ export default async function handler(req, res) {
   if (!ELEVEN_KEY) return res.status(503).json({ error: 'Voice not configured', fallback: true });
 
   const body = req.body || {};
-  if (body.action === 'list') return await listVoices(res); // diagnostic: find correct voice_id
   if (body.action === 'stt') return await stt(res, body);
   return await tts(res, body);
-}
-
-async function listVoices(res) {
-  try {
-    const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': ELEVEN_KEY } });
-    const d = await r.json();
-    const voices = (d.voices || []).map((v) => ({ name: v.name, voice_id: v.voice_id }));
-    return res.status(200).json({ ok: r.ok, count: voices.length, voices });
-  } catch (err) {
-    return res.status(502).json({ error: err.message });
-  }
 }
 
 async function tts(res, body) {
   const text = (body.text ? String(body.text) : '').trim();
   if (!text) return res.status(400).json({ error: 'text erforderlich' });
-  const voiceId = body.voice_id && /^[A-Za-z0-9]{15,30}$/.test(body.voice_id) ? body.voice_id : VOICE_ID; // optional test override
   try {
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
       method: 'POST',
       headers: { 'xi-api-key': ELEVEN_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
       body: JSON.stringify({
