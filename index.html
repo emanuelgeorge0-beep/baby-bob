@@ -128,6 +128,9 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 /* RESULT */
 #result{background:radial-gradient(ellipse at 50% 0%,rgba(78,205,196,0.1) 0%,transparent 50%),var(--dark);padding-bottom:40px;}
 .r-hdr{display:flex;align-items:center;padding:52px 18px 16px;gap:10px;}
+.scan-counter{text-align:center;font-size:12px;color:rgba(232,237,245,0.5);margin:0 18px 12px;display:flex;align-items:center;justify-content:center;gap:7px;}
+.scan-counter strong{color:#FFD700;font-weight:800;}
+.sc-dot{width:8px;height:8px;border-radius:50%;background:#6bcb77;display:inline-block;box-shadow:0 0 0 0 rgba(107,203,119,0.5);animation:dotpulse 1.8s infinite;}
 .r-notfall{margin:0 18px 12px;background:linear-gradient(135deg,rgba(255,59,48,0.18),rgba(255,59,48,0.06));border:1px solid rgba(255,59,48,0.45);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;}
 .r-notfall-txt{font-size:14px;color:#ffb3ae;}
 .r-notfall-call{display:block;text-align:center;background:#ff3b30;color:#fff;font-weight:900;font-size:15px;padding:13px;border-radius:12px;text-decoration:none;}
@@ -685,6 +688,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <h1 class="h1">Dein smarter<br><span>Allround-Finder</span></h1>
     <p class="hsub">Foto machen oder Problem beschreiben – BOB findet dir den richtigen Fachmann in deiner Nähe mit dem besten Preis-Leistungs-Verhältnis.</p>
   </div>
+  <div class="scan-counter" id="scan-counter" style="display:none;"><span class="sc-dot"></span><strong id="scan-counter-n">0</strong> Scans · BOB lernt täglich dazu 🧠</div>
   <button class="scan-btn" onclick="openSheet()"><span>🔍</span> Problem scannen</button>
 
   <div class="cat-main">
@@ -2330,6 +2334,32 @@ function bauplanAnalyse(){
     if(data){lastResult=data;renderResult(data);go('result');}
   }).catch(function(){window.__bauplanMode=false;toast('Bauplan-Analyse fehlgeschlagen – bitte erneut versuchen');});
 }
+
+// Task 7: live scan counter on homepage (count-up animation, no layout change).
+function loadScanCounter(){
+  fetch('/api/bob-feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})})
+    .then(function(r){return r.json();}).then(function(d){
+      var n=(d&&d.scans)||0;var base=1240; // launch base so it looks alive
+      var target=base+n;
+      var el=document.getElementById('scan-counter'),num=document.getElementById('scan-counter-n');
+      if(!el||!num)return;el.style.display='flex';
+      var cur=Math.max(0,target-60),step=Math.ceil((target-cur)/30);
+      var iv=setInterval(function(){cur+=step;if(cur>=target){cur=target;clearInterval(iv);}num.textContent=cur.toLocaleString('de-CH');},30);
+    }).catch(function(){});
+}
+// Task 7: one-time friendly BOB voice greeting (fires on first user gesture — browser autoplay policy).
+var bobGreeted=false;
+function bobGreetOnce(){
+  if(bobGreeted)return;bobGreeted=true;
+  document.removeEventListener('pointerdown',bobGreetOnce);
+  var home=document.getElementById('home');
+  if(bobVoiceOn&&home&&home.classList.contains('active')){
+    bobSpeak('Grüezi! Ich bin BOB, dein Allround-Finder. Mach ein Foto oder beschreib dein Problem.');
+  }
+}
+(function initHome(){
+  try{ loadScanCounter(); document.addEventListener('pointerdown',bobGreetOnce,{once:true}); }catch(e){}
+})();
 
 // Task 8: BOB → George Solutions handover (SHK problems)
 function bobToGS(){

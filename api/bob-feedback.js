@@ -20,6 +20,7 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
     if (action === 'feedback') return await saveFeedback(res, req.body);
     if (action === 'unbekannt') return await saveUnbekannt(res, req.body);
+    if (action === 'stats') return await stats(res);
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
     console.error('BOB-Feedback Error:', err.message);
@@ -51,6 +52,18 @@ async function saveUnbekannt(res, body) {
   };
   if (!row.user_korrektur) return res.status(400).json({ error: 'user_korrektur erforderlich' });
   return await insert(res, 'bob_unbekannt', row);
+}
+
+// Task 7: live scan counter for the homepage (public).
+async function stats(res) {
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  const count = async (t) => {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${t}?select=id`, { headers: { ...SB, Prefer: 'count=exact', Range: '0-0' } });
+    return Number((r.headers.get('content-range') || '0/0').split('/')[1]) || 0;
+  };
+  const [anfragen, scans] = await Promise.all([count('anfragen').catch(() => 0), count('bob_scans').catch(() => 0)]);
+  // Display number = real B2C requests + feedback scans + a launch base.
+  return res.status(200).json({ scans: anfragen + scans, anfragen, feedback: scans });
 }
 
 async function insert(res, table, row) {
