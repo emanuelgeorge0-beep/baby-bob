@@ -603,6 +603,13 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .tr-nav-btn{flex:1;font-size:12px;font-weight:800;padding:10px;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:rgba(232,237,245,0.55);cursor:pointer;}
 .tr-nav-btn.act{background:rgba(74,158,255,0.14);border-color:#4a9eff;color:#9cc6ff;}
 .tr-tarif{margin:10px 20px 0;font-size:12px;color:rgba(232,237,245,0.6);background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:10px;padding:8px 12px;}
+.ts-timer-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 20px 0;}
+.ts-timer{font-family:'Syne',monospace;font-size:46px;font-weight:800;color:#FFD700;letter-spacing:2px;}
+.ts-timer-btn{background:linear-gradient(135deg,#C9A000,#FFD700);border:none;border-radius:14px;padding:14px 40px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#080808;cursor:pointer;}
+.ts-timer-btn.running{background:#ff3b30;color:#fff;}
+.ts-week{margin-top:18px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:13px;padding:14px;}
+.ts-week-row{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;color:rgba(232,237,245,0.7);}
+.ts-week-tot{font-weight:800;color:#FFD700;border-top:1px solid rgba(255,255,255,0.1);margin-top:6px;padding-top:8px;}
 .tr-tarif strong{color:#FFD700;}.tr-tarif span{color:rgba(232,237,245,0.4);font-size:10px;}
 .tm-row{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:6px;margin-top:6px;align-items:center;}
 .tm-row input{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:9px;font-family:'Nunito',sans-serif;font-size:13px;color:#e8edf5;outline:none;box-sizing:border-box;width:100%;}
@@ -1508,6 +1515,10 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <button class="admin-back" onclick="logout()">Abmelden</button>
   </div>
   <div class="admin-hub">
+    <div class="admin-hub-card" onclick="showAdminDashboard()">
+      <div class="admin-hub-ico">📈</div>
+      <div><div class="admin-hub-tit">Lead-Dashboard</div><div class="admin-hub-desc">Alle Leads S1–S4 (BOB, GS, Marketplace, Direkt)</div></div>
+    </div>
     <div class="admin-hub-card" onclick="showAdminUsers()">
       <div class="admin-hub-ico">👥</div>
       <div><div class="admin-hub-tit">User-Verwaltung</div><div class="admin-hub-desc">Partner & Techniker anlegen, Passwörter, Status</div></div>
@@ -1610,6 +1621,16 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   <div id="admin-status-list" class="admin-section"><div class="admin-empty">Lädt…</div></div>
 </div>
 
+<!-- ═══ ADMIN: LEAD-DASHBOARD (S1–S4) ═══ -->
+<div id="admin-dashboard" class="admin-screen">
+  <div class="admin-hdr">
+    <div><div class="admin-hdr-tit">📈 Lead-Dashboard</div><div class="admin-hdr-sub" id="admin-dash-sub">–</div></div>
+    <button class="admin-back" onclick="showScreen('admin-home')">← Zurück</button>
+  </div>
+  <div class="pd-cards" id="admin-dash-cards"></div>
+  <div id="admin-dash-list" class="admin-section"><div class="admin-empty">Lädt…</div></div>
+</div>
+
 <!-- ═══ TECHNIKER: TAGESRAPPORT ═══ -->
 <div id="tech-rapport" class="tech-screen">
   <div class="tech-hdr">
@@ -1621,7 +1642,9 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
   <div class="tr-nav">
     <button class="tr-nav-btn act" onclick="showScreen('tech-rapport')">📋 Rapport</button>
-    <button class="tr-nav-btn" onclick="showTechMaterial()">📦 Materialliste</button>
+    <button class="tr-nav-btn" onclick="showTechStunden()">⏱️ Stunden</button>
+    <button class="tr-nav-btn" onclick="showTechMaterial()">📦 Material</button>
+    <button class="tr-nav-btn" onclick="showTechProfil()">👷 Profil</button>
   </div>
   <div class="tr-tarif">💰 Dein Tarif: <strong>CHF 37.– bis 43.76/h</strong> <span>(Kundenpreis abweichend)</span></div>
   <!-- Week strip -->
@@ -1690,6 +1713,40 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
 </div>
 
+<!-- ═══ TECHNIKER: STUNDENERFASSUNG ═══ -->
+<div id="tech-stunden" class="tech-screen">
+  <div class="tech-hdr">
+    <div class="tech-hdr-left"><div class="tech-hdr-name">⏱️ Stundenerfassung</div><div class="tech-hdr-role">Timer & manuelle Erfassung</div></div>
+    <button class="tech-logout" onclick="showScreen('tech-rapport')">← Zurück</button>
+  </div>
+  <div class="ts-timer-wrap">
+    <div class="ts-timer" id="ts-timer">00:00:00</div>
+    <select class="login-inp" id="ts-projekt" style="max-width:300px;margin:0 auto;"><option value="">– Projekt wählen –</option></select>
+    <button class="ts-timer-btn" id="ts-timer-btn" onclick="tsToggleTimer()">▶ Start</button>
+  </div>
+  <div class="tr-form">
+    <div class="ob-lbl">Manuelle Erfassung</div>
+    <div class="tr-row2">
+      <div><div class="ob-lbl">Datum</div><input class="login-inp" id="ts-datum" type="date"/></div>
+      <div><div class="ob-lbl">Stunden</div><input class="login-inp" id="ts-stunden" type="number" step="0.25" inputmode="decimal" placeholder="z.B. 3.5"/></div>
+    </div>
+    <div class="ob-lbl">Tätigkeit</div>
+    <input class="login-inp" id="ts-taetigkeit" type="text" placeholder="z.B. Montage Heizkörper"/>
+    <button class="login-btn-magic" id="ts-save" style="margin-top:12px;" onclick="tsSaveManual()">Stunden speichern</button>
+    <div class="login-msg" id="ts-msg"></div>
+    <div class="ts-week" id="ts-week"></div>
+  </div>
+</div>
+
+<!-- ═══ TECHNIKER: PROFIL + EINSATZVERTRAG ═══ -->
+<div id="tech-profil" class="tech-screen">
+  <div class="tech-hdr">
+    <div class="tech-hdr-left"><div class="tech-hdr-name">👷 Mein Profil</div><div class="tech-hdr-role">George Solutions</div></div>
+    <button class="tech-logout" onclick="showScreen('tech-rapport')">← Zurück</button>
+  </div>
+  <div class="tr-form" id="tech-profil-body"><div class="admin-empty">Lädt…</div></div>
+</div>
+
 <!-- ═══ PARTNER DASHBOARD ═══ -->
 <div id="partner-dash" class="admin-screen">
   <div class="admin-hdr">
@@ -1701,6 +1758,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   <div class="pd-tabs">
     <div class="pd-tab act" id="pdt-inbox" onclick="pdTab('inbox')">📨 Inbox<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span></div>
     <div class="pd-tab" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
+    <div class="pd-tab" id="pdt-rapporte" onclick="pdTab('rapporte')">Rapporte</div>
     <div class="pd-tab" id="pdt-rechnungen" onclick="pdTab('rechnungen')">Rechnungen</div>
     <div class="pd-tab" id="pdt-settings" onclick="pdTab('settings')">⚙️</div>
   </div>
@@ -3550,6 +3608,25 @@ function loadProjekte(){
 }
 
 // ── ADMIN: RAPPORT-STATUS ──
+function showAdminDashboard(){showScreen('admin-dashboard');loadAdminDashboard();}
+function loadAdminDashboard(){
+  var l=document.getElementById('admin-dash-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';
+  var SRC={S1:'👶 Baby BOB',S2:'🏢 GS Modus',S3:'🛒 Marketplace',S4:'📞 GS Direkt'};
+  fetch('/api/dashboard',{headers:{'Authorization':'Bearer '+authToken}}).then(function(r){return r.json();}).then(function(d){
+    if(d.error){if(l)l.innerHTML='<div class="admin-empty">'+gsEsc(d.error)+'</div>';return;}
+    var sub=document.getElementById('admin-dash-sub');if(sub)sub.textContent=(d.totals&&d.totals.all||0)+' Leads gesamt';
+    var c=document.getElementById('admin-dash-cards');
+    if(c){var s=d.sources||{};c.innerHTML=['S1','S2','S3','S4'].map(function(k){
+      return '<div class="pd-card"><div class="pd-card-n">'+((s[k]&&s[k].count)||0)+'</div><div class="pd-card-l">'+SRC[k]+'</div></div>';
+    }).join('');c.style.gridTemplateColumns='1fr 1fr 1fr 1fr';}
+    var leads=d.leads||[];
+    if(l)l.innerHTML=leads.length?leads.slice(0,60).map(function(x){
+      return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(x.title||'–')+'</div>'
+        +'<span class="admin-role-tag">'+gsEsc(x.source||'')+'</span></div>'
+        +'<div class="pd-item-meta">'+(x.date?gsEsc(String(x.date).slice(0,10)):'')+(x.detail?(' · '+gsEsc(x.detail)):'')+' · '+gsEsc(x.status||'')+(x.partner?(' · 👤 '+gsEsc(x.partner)):'')+'</div></div>';
+    }).join(''):'<div class="admin-empty">Keine Leads.</div>';
+  }).catch(function(){if(l)l.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
+}
 function showAdminStatus(){showScreen('admin-status');loadStatus();}
 function loadStatus(){
   var l=document.getElementById('admin-status-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';
@@ -3678,6 +3755,88 @@ function trSave(status){
   }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}setMsg('tr-msg','Verbindungsfehler','err');});
 }
 
+// ── TECHNIKER: STUNDENERFASSUNG (Task 6) ──
+var tsTimer=null,tsStart=0,tsElapsed=0,tsRunning=false,tsTarif=40.38; // Ø Techniker-Tarif CHF
+function showTechStunden(){
+  showScreen('tech-stunden');
+  document.getElementById('ts-datum').value=new Date().toISOString().slice(0,10);
+  var sel=document.getElementById('ts-projekt');
+  sel.innerHTML='<option value="">– Projekt wählen –</option>'+(trProjekte||[]).map(function(p){return '<option value="'+p.id+'">'+gsEsc(p.name)+'</option>';}).join('');
+  tsRenderTimer();tsLoadWeek();
+}
+function tsFmt(ms){var s=Math.floor(ms/1000);var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),se=s%60;
+  return [h,m,se].map(function(x){return String(x).padStart(2,'0');}).join(':');}
+function tsRenderTimer(){var el=document.getElementById('ts-timer');if(el)el.textContent=tsFmt(tsElapsed+(tsRunning?(Date.now()-tsStart):0));}
+function tsToggleTimer(){
+  var btn=document.getElementById('ts-timer-btn');
+  if(tsRunning){
+    tsElapsed+=Date.now()-tsStart;tsRunning=false;clearInterval(tsTimer);
+    if(btn){btn.textContent='▶ Start';btn.classList.remove('running');}
+    var hrs=Math.round(tsElapsed/3600000*100)/100;
+    if(hrs>0){document.getElementById('ts-stunden').value=hrs;toast('Timer gestoppt: '+hrs+' h – jetzt speichern');}
+  }else{
+    if(!document.getElementById('ts-projekt').value){toast('Bitte Projekt wählen');return;}
+    tsStart=Date.now();tsRunning=true;
+    tsTimer=setInterval(tsRenderTimer,1000);
+    if(btn){btn.textContent='⏸ Stop';btn.classList.add('running');}
+  }
+}
+function tsSaveManual(){
+  var projekt_id=document.getElementById('ts-projekt').value;
+  var stunden=parseFloat(document.getElementById('ts-stunden').value);
+  var datum=document.getElementById('ts-datum').value;
+  var taet=document.getElementById('ts-taetigkeit').value.trim();
+  if(!projekt_id){setMsg('ts-msg','Bitte Projekt wählen','err');return;}
+  if(!(stunden>0)){setMsg('ts-msg','Bitte Stunden eingeben','err');return;}
+  var btn=document.getElementById('ts-save');if(btn){btn.disabled=true;btn.textContent='Speichert…';}
+  // Linked to rapport: save as a draft tagesrapport (hours + activity).
+  gsAuthApi('tagesrapport',{action:'save',projekt_id:projekt_id,datum:datum,gesamtstunden:stunden,
+    arbeiten:taet?[taet]:[],status:'entwurf'}).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='Stunden speichern';}
+    if(d.error){setMsg('ts-msg',d.error,'err');return;}
+    var lohn=Math.round(stunden*tsTarif*100)/100;
+    setMsg('ts-msg','✓ '+stunden+' h gespeichert (Lohnkosten ca. CHF '+lohn+')','');
+    tsElapsed=0;tsRenderTimer();tsLoadWeek();
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Stunden speichern';}setMsg('ts-msg','Verbindungsfehler','err');});
+}
+function tsLoadWeek(){
+  gsAuthApi('tagesrapport',{action:'week'}).then(function(d){
+    var el=document.getElementById('ts-week');if(!el)return;
+    var wd=['Mo','Di','Mi','Do','Fr'];var tot=0;
+    var rows=(d.days||[]).map(function(day,i){tot+=day.stunden||0;
+      return '<div class="ts-week-row"><span>'+wd[i]+' '+(day.datum||'').slice(5)+'</span><span>'+(day.stunden||0)+' h</span></div>';}).join('');
+    var lohn=Math.round(tot*tsTarif*100)/100;
+    el.innerHTML='<div style="font-size:12px;font-weight:800;color:rgba(232,237,245,0.5);margin-bottom:6px;">Woche KW '+(d.woche||'')+'</div>'+rows
+      +'<div class="ts-week-row ts-week-tot"><span>Total · Lohnkosten</span><span>'+tot+' h · CHF '+lohn+'</span></div>';
+  });
+}
+
+// ── TECHNIKER: PROFIL + EINSATZVERTRAG ──
+function showTechProfil(){
+  showScreen('tech-profil');
+  var b=document.getElementById('tech-profil-body');
+  gsAuthApi('account',{action:'me'}).then(function(d){
+    var p=d.profile||{};
+    b.innerHTML='<div class="tr-tarif" style="margin:0 0 14px;">💰 Dein Tarif: <strong>CHF 37.– bis 43.76/h</strong></div>'
+      +'<div class="ob-lbl">Name</div><input class="login-inp" id="tp-name" value="'+gsEsc(p.name||'')+'"/>'
+      +'<div class="ob-lbl">Telefon</div><input class="login-inp" id="tp-tel" value="'+gsEsc(p.telefon||'')+'"/>'
+      +'<div class="ob-lbl">Qualifikation</div><input class="login-inp" value="'+gsEsc(p.qualifikation||'–')+'" disabled/>'
+      +'<div class="ob-lbl">Spezialisierung</div><input class="login-inp" value="'+gsEsc((p.spezialisierung||[]).join(', ')||'–')+'" disabled/>'
+      +'<div class="ob-lbl">IBAN</div><input class="login-inp" id="tp-iban" value="'+gsEsc(p.iban||'')+'" placeholder="CH.."/>'
+      +'<button class="login-btn-magic" style="margin-top:12px;" onclick="tpSave()">Speichern</button>'
+      +'<div class="login-msg" id="tp-msg"></div>'
+      +'<div class="ob-lbl" style="margin-top:18px;">Dokumente</div>'
+      +'<button class="login-btn-pw" onclick="toast(\'Einsatzvertrag-PDF folgt (Platzhalter)\')">📄 Einsatzvertrag herunterladen</button>'
+      +'<button class="login-btn-pw" style="margin-top:8px;" onclick="toast(\'Stundenblatt-PDF folgt (Platzhalter)\')">📄 Stundenblatt</button>';
+  });
+}
+function tpSave(){
+  gsAuthApi('account',{action:'update_settings',
+    telefon:(document.getElementById('tp-tel')||{}).value.trim(),
+    iban:(document.getElementById('tp-iban')||{}).value.trim()
+  }).then(function(d){setMsg('tp-msg',d.error?d.error:'✓ Gespeichert',d.error?'err':'');});
+}
+
 // ── TECHNIKER: MATERIALLISTE → Projektleiter ──
 var tmFotoB64=null;
 function showTechMaterial(){
@@ -3793,7 +3952,7 @@ function pdLoadBadge(){
   });
 }
 function pdTab(tab){
-  ['inbox','projekte','rechnungen','settings'].forEach(function(t){
+  ['inbox','projekte','rapporte','rechnungen','settings'].forEach(function(t){
     var el=document.getElementById('pdt-'+t);if(el)el.classList.toggle('act',t===tab);
   });
   var c=document.getElementById('pd-content');c.innerHTML='<div class="admin-empty">Lädt…</div>';
