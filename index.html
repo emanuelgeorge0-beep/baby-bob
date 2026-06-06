@@ -3309,6 +3309,11 @@ function skipLogin(){
 // Login code stays intact; this only bypasses the gate. Banner shown.
 // NOTE: data endpoints still require a real token, so lists may be empty.
 var demoMode=false;
+// Demo-safe error: never show raw token errors in demo mode.
+function demoOrError(d){
+  if(demoMode) return '🧪 Demo-Ansicht – für echte Daten bitte einloggen.';
+  return gsEsc((d&&d.error)||'Fehler beim Laden');
+}
 function demoEnter(role){
   demoMode=true;authToken=null;authRole=role;
   authUser={email:'demo@george-solutions.ch'};authTechName='Demo';
@@ -3489,7 +3494,7 @@ function loadAdminUsers(){
   var list=document.getElementById('admin-user-list');
   if(list) list.innerHTML='<div class="admin-empty">Lädt…</div>';
   adminApi({action:'list_users'}).then(function(d){
-    if(d.error){if(list)list.innerHTML='<div class="admin-empty">'+gsEsc(d.error)+'</div>';return;}
+    if(d.error){if(list)list.innerHTML='<div class="admin-empty">'+demoOrError(d)+'</div>';return;}
     renderAdminUsers(d.users||[]);
   }).catch(function(){if(list)list.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
 }
@@ -3681,7 +3686,7 @@ function loadAdminDashboard(){
   var l=document.getElementById('admin-dash-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';
   var SRC={S1:'👶 Baby BOB',S2:'🏢 GS Modus',S3:'🛒 Marketplace',S4:'📞 GS Direkt'};
   fetch('/api/dashboard',{headers:{'Authorization':'Bearer '+authToken}}).then(function(r){return r.json();}).then(function(d){
-    if(d.error){if(l)l.innerHTML='<div class="admin-empty">'+gsEsc(d.error)+'</div>';return;}
+    if(d.error){if(l)l.innerHTML='<div class="admin-empty">'+demoOrError(d)+'</div>';return;}
     var sub=document.getElementById('admin-dash-sub');if(sub)sub.textContent=(d.totals&&d.totals.all||0)+' Leads gesamt';
     var c=document.getElementById('admin-dash-cards');
     if(c){var s=d.sources||{};c.innerHTML=['S1','S2','S3','S4'].map(function(k){
