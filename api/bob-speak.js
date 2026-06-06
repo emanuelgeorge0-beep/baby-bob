@@ -32,8 +32,11 @@ export default async function handler(req, res) {
     });
     if (!r.ok) {
       const t = await r.text().catch(() => '');
-      console.error('ElevenLabs error:', r.status, t.slice(0, 200));
-      return res.status(502).json({ error: 'TTS failed', fallback: true });
+      console.error('ElevenLabs error:', r.status, t.slice(0, 300));
+      // Surface upstream status + sanitized detail (no secrets) for diagnosis.
+      let detail = t.slice(0, 240);
+      try { const j = JSON.parse(t); detail = j.detail?.message || j.detail?.status || j.detail || j.message || detail; } catch {}
+      return res.status(502).json({ error: 'TTS failed', fallback: true, upstream_status: r.status, detail });
     }
     const buf = Buffer.from(await r.arrayBuffer());
     res.setHeader('Content-Type', 'audio/mpeg');
