@@ -2367,7 +2367,7 @@ function bobGreetOnce(){
   document.removeEventListener('pointerdown',bobGreetOnce);
   var home=document.getElementById('home');
   if(bobVoiceOn&&home&&home.classList.contains('active')){
-    bobSpeak('Grüezi! Ich bin BOB, dein Allround-Finder. Mach ein Foto oder beschreib dein Problem.');
+    bobSpeak('Guten Tag. Ich bin BOB, Ihr digitaler Fachassistent.');
   }
 }
 (function initHome(){
@@ -2479,12 +2479,33 @@ function toggleVoice(){
 }
 function bobResultSpeech(r){
   if(!r) return '';
-  var parts=[];
-  if(r.fachmann) parts.push('Du brauchst wahrscheinlich einen '+r.fachmann+'.');
+  // JARVIS-style: short, confident, Sie-form.
+  var parts=['Analyse abgeschlossen.'];
   if(r.titel) parts.push(r.titel+'.');
-  if(r.desc||r.beschreibung) parts.push(r.desc||r.beschreibung);
-  if(r.kosten&&r.kosten!=='CHF --') parts.push('Kosten ca. '+r.kosten+'.');
+  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') parts.push('Meine Empfehlung: '+r.fachmann+'.');
+  if(r.kosten&&r.kosten!=='CHF --'&&r.kosten!=='n/a') parts.push('Geschätzte Kosten: '+r.kosten+'.');
   return parts.join(' ');
+}
+// JARVIS-style voice: deep, calm, confident male. British-English preference.
+var bobVoices=[];
+function bobLoadVoices(){try{bobVoices=window.speechSynthesis.getVoices()||[];}catch(e){}}
+if('speechSynthesis' in window){bobLoadVoices();try{window.speechSynthesis.onvoiceschanged=bobLoadVoices;}catch(e){}}
+function bobBestVoice(lang){
+  if(!bobVoices.length)bobLoadVoices();
+  var pre=(lang||'de-DE').toLowerCase();var base=pre.split('-')[0];
+  var male=/(male|männl|markus|yannick|daniel|arthur|oliver|thomas|conrad|reed|rishi|fred|stefan|google deutsch|google uk english male|microsoft (markus|stefan|conrad|hedda|george|ryan))/i;
+  // For English: prefer a British (en-GB) male voice — the JARVIS accent.
+  if(base==='en'){
+    return bobVoices.filter(function(v){return /en-gb/i.test(v.lang)&&male.test(v.name);})[0]
+      ||bobVoices.filter(function(v){return /en-gb/i.test(v.lang);})[0]
+      ||bobVoices.filter(function(v){return /^en/i.test(v.lang)&&male.test(v.name);})[0]
+      ||bobVoices.filter(function(v){return /^en/i.test(v.lang);})[0]||null;
+  }
+  var byLang=bobVoices.filter(function(v){return v.lang&&v.lang.toLowerCase().indexOf(base)===0;});
+  return byLang.filter(function(v){return v.lang.toLowerCase()===pre&&male.test(v.name);})[0]
+    ||byLang.filter(function(v){return male.test(v.name);})[0]
+    ||byLang.filter(function(v){return v.lang.toLowerCase()===pre;})[0]
+    ||byLang[0]||null;
 }
 function bobSpeak(text){
   if(!text||!('speechSynthesis' in window)) return;
@@ -2492,7 +2513,8 @@ function bobSpeak(text){
     window.speechSynthesis.cancel();
     var u=new SpeechSynthesisUtterance(text);
     u.lang=bobVoiceLang();
-    u.rate=1.0;u.pitch=1.05;
+    var v=bobBestVoice(u.lang);if(v)u.voice=v;
+    u.rate=0.95;u.pitch=0.9;u.volume=1;
     window.speechSynthesis.speak(u);
   }catch(e){}
 }
