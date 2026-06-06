@@ -586,6 +586,12 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .pd-tab{flex:1;text-align:center;font-size:12px;font-weight:800;padding:10px;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);color:rgba(232,237,245,0.55);cursor:pointer;}
 .pd-tab.act{background:rgba(74,158,255,0.14);border-color:#4a9eff;color:#9cc6ff;}
 .pd-badge{display:inline-block;margin-left:5px;background:#ff3b30;color:#fff;font-size:9px;font-weight:900;min-width:15px;height:15px;line-height:15px;border-radius:8px;padding:0 4px;}
+.pd-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px 18px 0;}
+.pd-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:13px;padding:12px 8px;text-align:center;}
+.pd-card-n{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#FFD700;}
+.pd-card-l{font-size:9.5px;color:rgba(232,237,245,0.45);margin-top:2px;line-height:1.3;}
+.pd-legal{display:flex;gap:10px;justify-content:center;margin-top:14px;}
+.pd-legal a{font-size:11px;color:rgba(232,237,245,0.45);text-decoration:underline;cursor:pointer;}
 .tr-nav{display:flex;gap:8px;padding:14px 20px 0;}
 .tr-nav-btn{flex:1;font-size:12px;font-weight:800;padding:10px;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:rgba(232,237,245,0.55);cursor:pointer;}
 .tr-nav-btn.act{background:rgba(74,158,255,0.14);border-color:#4a9eff;color:#9cc6ff;}
@@ -1460,6 +1466,8 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
       <div class="ob-chips" id="prof-qual"></div>
       <div class="ob-lbl">Spezialisierung * (Mehrfachauswahl)</div>
       <div class="ob-chips" id="prof-spez"></div>
+      <div class="ob-lbl">IBAN (für Lohnabrechnung)</div>
+      <input class="login-inp" id="prof-iban" type="text" placeholder="CH.. .... .... .... ...." autocomplete="off"/>
     </div>
 
     <div class="ob-lbl">Telefon *</div>
@@ -1653,8 +1661,9 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div class="tr-foto-preview" id="tm-foto-preview"></div>
     <button class="login-btn-pw" style="margin-top:10px;" id="tm-bob-btn" onclick="tmBobAnalyse()">🧠 BOB analysieren</button>
     <div class="tm-bob-result" id="tm-bob-result" style="display:none;"></div>
-    <div class="ob-lbl">Notiz</div>
+    <div class="ob-lbl">Notiz / Sprachmemo</div>
     <textarea class="login-inp" id="tm-notiz" rows="2" placeholder="Bemerkung an den Projektleiter…"></textarea>
+    <button class="login-btn-pw" id="tm-dictate" style="margin-top:8px;" onclick="tmDictate()">🎙️ Sprachmemo diktieren</button>
     <button class="login-btn-magic" id="tm-send" style="margin-top:14px;" onclick="tmSend()">📨 An Projektleiter senden</button>
     <div class="login-msg" id="tm-msg"></div>
   </div>
@@ -1666,11 +1675,13 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div><div class="admin-hdr-tit">🏢 Mein Portal</div><div class="admin-hdr-sub" id="pd-welcome">George Solutions</div></div>
     <button class="admin-back" onclick="logout()">Abmelden</button>
   </div>
+  <div class="pd-cards" id="pd-cards"></div>
+  <button class="admin-add-btn" onclick="setMode('gs')">+ Neues Projekt buchen</button>
   <div class="pd-tabs">
     <div class="pd-tab act" id="pdt-inbox" onclick="pdTab('inbox')">📨 Inbox<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span></div>
     <div class="pd-tab" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
-    <div class="pd-tab" id="pdt-rapporte" onclick="pdTab('rapporte')">Rapporte</div>
     <div class="pd-tab" id="pdt-rechnungen" onclick="pdTab('rechnungen')">Rechnungen</div>
+    <div class="pd-tab" id="pdt-settings" onclick="pdTab('settings')">⚙️</div>
   </div>
   <div id="pd-content" class="admin-section"><div class="admin-empty">Lädt…</div></div>
 </div>
@@ -3196,6 +3207,7 @@ function submitProfile(){
   }else{
     profile.qualifikation=profQual;
     profile.spezialisierung=profSpez;
+    profile.iban=(document.getElementById('prof-iban')||{}).value.trim()||null;
     if(!profile.qualifikation){setMsg('prof-msg','Bitte Qualifikation wählen','err');return;}
     if(!profile.spezialisierung.length){setMsg('prof-msg','Bitte mindestens eine Spezialisierung wählen','err');return;}
   }
@@ -3608,6 +3620,22 @@ function tmBobAnalyse(){
       el.dataset.summary=txt;
     }).catch(function(){if(btn){btn.disabled=false;btn.textContent='🧠 BOB analysieren';}setMsg('tm-msg','BOB-Analyse fehlgeschlagen','err');});
 }
+var tmRec=null,tmRecOn=false;
+function tmDictate(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var btn=document.getElementById('tm-dictate');
+  if(!SR){toast('Spracherkennung wird nicht unterstützt – bitte tippen');return;}
+  if(tmRecOn&&tmRec){tmRec.stop();return;}
+  tmRec=new SR();tmRec.lang='de-CH';tmRec.interimResults=false;tmRec.continuous=true;
+  tmRecOn=true;if(btn){btn.textContent='⏺️ Aufnahme… (tippen zum Stoppen)';}
+  tmRec.onresult=function(e){
+    var t='';for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;}
+    var ta=document.getElementById('tm-notiz');ta.value=(ta.value?ta.value+' ':'')+t.trim();
+  };
+  tmRec.onend=function(){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';};
+  tmRec.onerror=function(){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';};
+  try{tmRec.start();}catch(e){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';}
+}
 function tmSend(){
   var projekt_id=document.getElementById('tm-projekt').value;
   if(!projekt_id){setMsg('tm-msg','Bitte Projekt wählen','err');return;}
@@ -3630,7 +3658,21 @@ function tmSend(){
 function initPartnerDash(){
   document.getElementById('pd-welcome').textContent=(authUser&&authUser.email)||'George Solutions';
   pdLoadBadge();
+  pdLoadCards();
   pdTab('inbox');
+}
+function pdLoadCards(){
+  var el=document.getElementById('pd-cards');if(!el)return;
+  var proj=0,offen=0,neu=0;
+  Promise.all([
+    gsAuthApi('projekte',{action:'list'}).then(function(d){proj=(d.projekte||[]).filter(function(p){return p.status!=='abgeschlossen';}).length;}),
+    gsAuthApi('rechnung',{action:'list'}).then(function(d){offen=(d.rechnungen||[]).filter(function(r){return r.status!=='bezahlt';}).length;}),
+    gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){neu=d.unread||0;})
+  ]).then(function(){
+    el.innerHTML='<div class="pd-card"><div class="pd-card-n">'+proj+'</div><div class="pd-card-l">Aktive Projekte</div></div>'
+      +'<div class="pd-card"><div class="pd-card-n">'+offen+'</div><div class="pd-card-l">Offene Rechnungen</div></div>'
+      +'<div class="pd-card"><div class="pd-card-n">'+neu+'</div><div class="pd-card-l">Neue Nachrichten</div></div>';
+  });
 }
 function pdLoadBadge(){
   gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){
@@ -3639,10 +3681,11 @@ function pdLoadBadge(){
   });
 }
 function pdTab(tab){
-  ['inbox','projekte','rapporte','rechnungen'].forEach(function(t){
+  ['inbox','projekte','rechnungen','settings'].forEach(function(t){
     var el=document.getElementById('pdt-'+t);if(el)el.classList.toggle('act',t===tab);
   });
   var c=document.getElementById('pd-content');c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  if(tab==='settings'){ pdRenderSettings(c); return; }
   if(tab==='inbox'){
     gsAuthApi('nachrichten',{action:'inbox'}).then(function(d){
       var ns=d.nachrichten||[];
@@ -3697,8 +3740,36 @@ function pdTab(tab){
 function pdMsgStatus(id,status){
   gsAuthApi('nachrichten',{action:'set_status',id:id,status:status}).then(function(d){
     if(d.error){toast(d.error);return;}
-    pdLoadBadge();pdTab('inbox');
+    pdLoadBadge();pdLoadCards();pdTab('inbox');
   });
+}
+function pdRenderSettings(c){
+  gsAuthApi('account',{action:'me'}).then(function(d){
+    var p=d.profile||{};
+    c.innerHTML='<div class="pd-item"><div class="pd-item-tit">⚙️ Einstellungen</div>'
+      +'<div class="ob-lbl">Firma</div><input class="login-inp" id="set-firma" value="'+gsEsc(p.firma||'')+'"/>'
+      +'<div class="ob-lbl">Telefon</div><input class="login-inp" id="set-tel" value="'+gsEsc(p.telefon||'')+'"/>'
+      +'<div class="ob-lbl">Rechnungsadresse</div><textarea class="login-inp" id="set-radr" rows="3">'+gsEsc(p.rechnungsadresse||'')+'</textarea>'
+      +'<button class="login-btn-magic" style="margin-top:12px;" onclick="pdSaveSettings()">Speichern</button>'
+      +'<div class="login-msg" id="set-msg"></div></div>'
+      +'<div class="pd-item"><div class="pd-item-tit">📑 Tarif-Übersicht (was Sie zahlen)</div>'
+      +'<div class="pd-item-meta" style="margin-top:6px;line-height:1.7;">Pilot CHF 60–65/h · Single CHF 68–70/h · Monthly CHF 67.90/h · Quarterly CHF 66.50/h · Annual CHF 65/h</div></div>'
+      +'<div class="pd-legal"><a onclick="openLegal(\'agb\')">AGB</a><a onclick="openLegal(\'datenschutz\')">Datenschutzerklärung</a></div>';
+  });
+}
+function pdSaveSettings(){
+  gsAuthApi('account',{action:'update_settings',
+    firma:(document.getElementById('set-firma')||{}).value.trim(),
+    telefon:(document.getElementById('set-tel')||{}).value.trim(),
+    rechnungsadresse:(document.getElementById('set-radr')||{}).value.trim()
+  }).then(function(d){
+    setMsg('set-msg',d.error?d.error:'✓ Gespeichert',d.error?'err':'');
+    if(!d.error)pdLoadCards();
+  });
+}
+function openLegal(which){
+  var t=which==='agb'?'AGB – George Solutions':'Datenschutzerklärung – George Solutions';
+  toast(t+' (Platzhalter – PDF folgt)');
 }
 function pdDownloadRapport(id){gsAuthApi('tagesrapport',{action:'get',id:id}).then(function(d){if(d.rapport&&d.rapport.pdf_signed)window.open(d.rapport.pdf_signed,'_blank');});}
 function pdDownloadRechnung(id){gsAuthApi('rechnung',{action:'get',id:id}).then(function(d){if(d.rechnung&&d.rechnung.pdf_signed)window.open(d.rechnung.pdf_signed,'_blank');});}

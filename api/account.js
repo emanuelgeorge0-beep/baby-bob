@@ -32,12 +32,30 @@ export default async function handler(req, res) {
       case 'me':               return await me(res, user);
       case 'change_password':  return await changePassword(res, user, req.body);
       case 'complete_profile': return await completeProfile(res, user, req.body);
+      case 'update_settings':  return await updateSettings(res, user, req.body);
       default:                 return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
     console.error('Account Error:', err.message);
     return res.status(500).json({ error: err.message });
   }
+}
+
+// Post-onboarding settings edit (Partner Einstellungen, Techniker IBAN, etc.)
+async function updateSettings(res, user, body) {
+  const allowed = ['firma', 'telefon', 'rechnungsadresse', 'iban', 'vorname', 'nachname', 'position', 'photo_url'];
+  const meta = { ...(user.user_metadata || {}) };
+  let changed = 0;
+  for (const k of allowed) {
+    if (k in (body || {})) { meta[k] = body[k]; changed++; }
+  }
+  if (meta.vorname || meta.nachname) meta.name = `${meta.vorname || ''} ${meta.nachname || ''}`.trim();
+  if (!changed) return res.status(400).json({ error: 'Keine Felder' });
+  const upd = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
+    method: 'PUT', headers: SB, body: JSON.stringify({ user_metadata: meta }),
+  });
+  if (!upd.ok) return res.status(500).json({ error: 'Speichern fehlgeschlagen' });
+  return res.status(200).json({ ok: true, profile: profileView(meta) });
 }
 
 async function me(res, user) {
@@ -103,6 +121,7 @@ async function completeProfile(res, user, body) {
     if (!spez.length) errs.push('Spezialisierung');
     meta.qualifikation = p.qualifikation;
     meta.spezialisierung = spez;
+    if (p.iban) meta.iban = p.iban;
   } else {
     return res.status(403).json({ error: 'Profil nur für gs_partner oder techniker' });
   }
@@ -143,6 +162,7 @@ function profileView(m) {
     vorname: m.vorname || null, nachname: m.nachname || null, name: m.name || null,
     firma: m.firma || null, position: m.position || null, telefon: m.telefon || null,
     qualifikation: m.qualifikation || null, spezialisierung: m.spezialisierung || [],
+    iban: m.iban || null, rechnungsadresse: m.rechnungsadresse || null, photo_url: m.photo_url || null,
   };
 }
 
