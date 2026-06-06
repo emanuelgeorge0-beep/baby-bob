@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'Claude not configured' });
 
   try {
-    const { messages, context, lang } = req.body || {};
+    const { messages, context, lang, accent } = req.body || {};
     if (!Array.isArray(messages) || !messages.length) return res.status(400).json({ error: 'messages erforderlich' });
 
     // Keep only the last 6 messages (≈5 exchanges) and normalise.
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 700, system: buildSystem(context, lang), messages: history }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 700, system: buildSystem(context, lang, accent), messages: history }),
     });
     if (!r.ok) throw new Error('Claude API: ' + r.status);
     const d = await r.json();
@@ -41,21 +41,28 @@ export default async function handler(req, res) {
   }
 }
 
-function buildSystem(context, lang) {
-  const ctx = context
-    ? `\n\nKONTEXT (BOBs vorherigi Diagnose): ${typeof context === 'string' ? context : JSON.stringify(context)}. Beziäh dich druf, wenn passend.`
-    : '';
+function buildSystem(context, lang, accent) {
+  const ctxDe = context ? `\n\nKONTEXT (BOBs vorherige Diagnose): ${typeof context === 'string' ? context : JSON.stringify(context)}. Beziehe dich darauf, wenn passend.` : '';
 
-  // Swiss-flavored German for the default (de). Other languages → standard.
+  // German is the default. Accent only flavours the German tone.
   if (!lang || lang === 'de' || lang === 'ch') {
-    return `Du bisch BOB, en fründliche, kompetente Schwiizer Handwerks-Experte. Du hilfsch Privatpersone bi Handwerker-Probleme (Sanitär, Heizig, Elektro, Fliese, Maler, Dach, Garte, usw.).
+    // Schweizerdeutsch — PREPARED but only used when accent==='ch' (deactivated in UI for now).
+    if (accent === 'ch') {
+      return `Du bisch BOB, en fründliche, kompetente Schwiizer Handwerks-Experte. TON: schwiizerisch gfärbts Hochdütsch (CH-DE) – "Grüezi", "Merci vilmal", "lueg emal", "Ich ha das gfunde...". Kei volle Dialekt. Du-Form. Churz, praktisch, CHF-Priise wo sinnvoll. Bi Sicherheits-Sache (Gas, Strom, Wasserleitig i de Wand) uf Fachmaa verwiise.${ctxDe}`;
+    }
+    const at = accent === 'at'
+      ? ' Verwende einen leicht österreichischen, herzlichen Ton ("Servus", "Grüß dich", "passt").'
+      : '';
+    // Default: friendly Hochdeutsch (de-DE).
+    return `Du bist BOB, ein freundlicher, kompetenter Handwerks-Experte für die Schweiz. Du hilfst Privatpersonen bei Handwerker-Problemen (Sanitär, Heizung, Elektro, Fliesen, Maler, Dach, Garten usw.).
 
-TON: Fründlich, locker, schwiizerisch gfärbts Hochdütsch (CH-DE). Bruuch typischi Usdrück wie "Grüezi", "Merci vilmal", "Alles guet?", "lueg emal", und säg "Ich ha das gfunde..." statt "Ich habe gefunden...". ABER kei volle Dialekt (nid extrem Züri/Bärn/Basler) – eifach sympathisch schwiizerisch. Immer Du-Form.
+TON: Freundlich, sympathisch, locker, klares Hochdeutsch. Du-Form.${at}
 
-INHALT: Churz und praktisch. Gib konkreti Tipps, näme CHF-Priise wenn sinnvoll, und säg ehrlich wenn me en Profi bruucht. Bi Sicherheits-Sache (Gas, Strom fest verdrahtet, Wasserleitig i de Wand) immer uf Fachmaa verwiise.${ctx}`;
+INHALT: Kurz und praktisch. Gib konkrete Tipps, nenne CHF-Preise wenn sinnvoll, und sag ehrlich, wenn ein Profi nötig ist. Bei Sicherheitsthemen (Gas, fest verdrahteter Strom, Wasserleitung in der Wand) immer auf eine Fachperson verweisen.${ctxDe}`;
   }
 
-  const name = LANG_NAME[lang] || 'the user\'s language';
-  return `You are BOB, a friendly and competent Swiss handyman expert helping private individuals with home/trade problems (plumbing, heating, electrical, tiling, painting, roofing, garden, etc.).
-Reply in ${name}. Tone: warm, friendly, informal. Keep it short and practical, give concrete tips, mention CHF prices when useful, and be honest when a professional is needed (especially for gas, fixed electrical wiring, in-wall water pipes — always refer to a pro).${ctx}`;
+  const ctxEn = context ? `\n\nCONTEXT (BOB's earlier diagnosis): ${typeof context === 'string' ? context : JSON.stringify(context)}. Refer to it when relevant.` : '';
+  const name = LANG_NAME[lang] || "the user's language";
+  return `You are BOB, a friendly and competent handyman expert for Switzerland helping private individuals with home/trade problems (plumbing, heating, electrical, tiling, painting, roofing, garden, etc.).
+Reply in ${name}. Tone: warm, friendly, informal. Keep it short and practical, give concrete tips, mention CHF prices when useful, and be honest when a professional is needed (especially gas, fixed electrical wiring, in-wall water pipes — always refer to a pro).${ctxEn}`;
 }
