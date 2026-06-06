@@ -95,13 +95,19 @@ async function update(res, body) {
   const { id } = body || {};
   if (!id) return res.status(400).json({ error: 'id erforderlich' });
   const fields = {};
-  ['name', 'standort', 'bereich', 'tarif', 'status', 'kunde_id', 'partner_user_id'].forEach((k) => { if (k in body) fields[k] = body[k]; });
+  ['name', 'standort', 'bereich', 'tarif', 'status', 'kunde_id', 'partner_user_id', 'notiz'].forEach((k) => { if (k in body) fields[k] = body[k]; });
   if ('stundensatz' in body) fields.stundensatz = body.stundensatz != null ? Number(body.stundensatz) : null;
   if (!Object.keys(fields).length) return res.status(400).json({ error: 'Keine Felder zum Aktualisieren' });
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?id=eq.${id}`, { method: 'PATCH', headers: { ...SB, Prefer: 'return=representation' }, body: JSON.stringify(fields) });
-  const rows = await sbJson(r);
-  if (!r.ok || !rows?.[0]) return res.status(r.ok ? 404 : 400).json({ error: 'Aktualisierung fehlgeschlagen' });
-  return res.status(200).json({ ok: true, projekt: rows[0] });
+
+  const patch = async (f) => {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?id=eq.${id}`, { method: 'PATCH', headers: { ...SB, Prefer: 'return=representation' }, body: JSON.stringify(f) });
+    return { ok: r.ok, rows: await sbJson(r), text: r.ok ? '' : JSON.stringify(await sbJson(r).catch(() => '')) };
+  };
+  let r = await patch(fields);
+  // If the notiz column isn't migrated yet, save the rest without it.
+  if (!r.ok && 'notiz' in fields) { const { notiz, ...rest } = fields; if (Object.keys(rest).length) r = await patch(rest); }
+  if (!r.ok || !r.rows?.[0]) return res.status(400).json({ error: 'Aktualisierung fehlgeschlagen' });
+  return res.status(200).json({ ok: true, projekt: r.rows[0] });
 }
 
 async function assign(res, body) {

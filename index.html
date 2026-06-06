@@ -595,6 +595,12 @@ button:active{transform:scale(0.97);}
 .admin-proj-name{font-size:14px;font-weight:800;}
 .admin-proj-meta{font-size:11px;color:rgba(232,237,245,0.45);margin-top:2px;}
 .admin-proj-techs{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.pb-sec{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin:0 18px 12px;}
+.pb-sec-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#FFD700;margin-bottom:10px;}
+.pb-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);}
+.pb-row:last-child{border-bottom:none;}
+.pb-row span:first-child{color:rgba(232,237,245,0.5);}
+.pb-tot{font-weight:800;color:#FFD700;border-top:1px solid rgba(255,255,255,0.14);margin-top:4px;padding-top:8px;}
 
 /* ═══ TAGESRAPPORT (techniker) ═══ */
 .tr-week{display:flex;gap:6px;padding:14px 18px 0;}
@@ -1660,6 +1666,15 @@ button:active{transform:scale(0.97);}
     </div>
   </div>
   <div id="admin-proj-list"><div class="admin-empty">Lädt…</div></div>
+</div>
+
+<!-- ═══ ADMIN: PROJEKTDATENBLATT (Detailansicht) ═══ -->
+<div id="admin-projektblatt" class="admin-screen">
+  <div class="admin-hdr">
+    <div><div class="admin-hdr-tit" id="pb-title">Projektdatenblatt</div><div class="admin-hdr-sub" id="pb-nr">–</div></div>
+    <button class="admin-back" onclick="showAdminProjekte()">← Projekte</button>
+  </div>
+  <div id="pb-body" class="admin-section"><div class="admin-empty">Lädt…</div></div>
 </div>
 
 <!-- ═══ ADMIN: RAPPORT-STATUS ═══ -->
@@ -3824,11 +3839,116 @@ function loadProjekte(){
     if(!ps.length){l.innerHTML='<div class="admin-empty">Noch keine Projekte.</div>';return;}
     l.innerHTML=ps.map(function(p){
       var techs=(p.techniker||[]).map(function(t){return '<span class="admin-role-tag">'+gsEsc(t.name)+'</span>';}).join('')||'<span class="admin-proj-meta">keine Techniker</span>';
-      return '<div class="admin-proj-row"><div class="admin-proj-name">'+gsEsc(p.name)+'</div>'
+      return '<div class="admin-proj-row" style="cursor:pointer;" onclick="showProjektDatenblatt(\''+p.id+'\')"><div class="admin-proj-name">'+gsEsc(p.name)+' <span style="float:right;color:#FFD700;">›</span></div>'
         +'<div class="admin-proj-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')+(p.stundensatz?(' · CHF '+p.stundensatz+'/h'):'')+' · '+gsEsc(p.status||'')+'</div>'
         +'<div class="admin-proj-techs">'+techs+'</div></div>';
     }).join('');
   });
+}
+
+// ── ADMIN: PROJEKTDATENBLATT (Detailansicht) ──
+var pbProjekt=null,pbAllTechs=[],pbPartners=[],pbAssigned=[];
+var PB_STATUS=['aktiv','laufend','pausiert','abgeschlossen'];
+function showProjektDatenblatt(id){
+  showScreen('admin-projektblatt');
+  var b=document.getElementById('pb-body');
+  if(demoMode){ pbRenderDemo(); return; }
+  b.innerHTML='<div class="admin-empty">Lädt…</div>';
+  Promise.all([
+    gsAuthApi('projekte',{action:'get',id:id}),
+    gsAuthApi('tagesrapport',{action:'list',projekt_id:id}),
+    gsAuthApi('projekte',{action:'technicians'}),
+    gsAuthApi('projekte',{action:'partners'})
+  ]).then(function(r){
+    if(r[0].error){b.innerHTML='<div class="admin-empty">'+demoOrError(r[0])+'</div>';return;}
+    pbProjekt=r[0].projekt||{};
+    pbAllTechs=r[2].technicians||[];
+    pbPartners=r[3].partners||[];
+    pbAssigned=(pbProjekt.techniker||[]).map(function(t){return t.user_id;});
+    pbLastRapporte=r[1].rapporte||[];
+    pbRender(pbProjekt,pbLastRapporte);
+  }).catch(function(){b.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
+}
+function pbTechName(uid){var t=(pbAllTechs||[]).filter(function(x){return x.user_id===uid;})[0];return t?t.name:'Techniker';}
+function pbRender(p,rapporte){
+  document.getElementById('pb-title').textContent=p.name||'Projekt';
+  document.getElementById('pb-nr').textContent=(p.projektnummer||'')+' · '+(p.standort||'');
+  var totH=rapporte.reduce(function(a,r){return a+(Number(r.gesamtstunden)||0);},0);
+  var matCount={};rapporte.forEach(function(r){(r.material||[]).forEach(function(m){matCount[m]=(matCount[m]||0)+1;});});
+  var matKeys=Object.keys(matCount);
+  var statusOpts=PB_STATUS.map(function(s){return '<option'+(p.status===s?' selected':'')+'>'+s+'</option>';}).join('');
+  var bereichOpts=['Heizung','Sanitär','Lüftung','Klima','Kombiniert'].map(function(s){return '<option'+(p.bereich===s?' selected':'')+'>'+s+'</option>';}).join('');
+  var partnerOpts='<option value="">– kein Partner –</option>'+(pbPartners||[]).map(function(pa){return '<option value="'+pa.user_id+'"'+(p.partner_user_id===pa.user_id?' selected':'')+'>'+gsEsc(pa.name)+(pa.firma?(' ('+gsEsc(pa.firma)+')'):'')+'</option>';}).join('');
+  // Techniker chips (selected = assigned)
+  var techChips=(pbAllTechs||[]).map(function(t){
+    var on=pbAssigned.indexOf(t.user_id)>-1;
+    return '<span class="ob-chip'+(on?' sel':'')+'" onclick="pbToggleTech(\''+t.user_id+'\')">'+gsEsc(t.name)+'</span>';
+  }).join('')||'<span class="admin-proj-meta">Keine Techniker im System.</span>';
+  // Rapporte
+  var rapHtml=rapporte.length?rapporte.map(function(r){
+    return '<div class="pb-row"><span>'+gsEsc((r.datum||'').slice(0,10))+' · '+gsEsc(pbTechName(r.techniker_user_id))+'</span>'
+      +'<span>'+(r.gesamtstunden||0)+' h'+((r.arbeiten||[]).length?(' · '+gsEsc((r.arbeiten||[]).join(', '))):'')+'</span></div>';
+  }).join(''):'<div class="admin-empty" style="padding:8px;">Noch keine Rapporte.</div>';
+
+  document.getElementById('pb-body').innerHTML=
+    '<div class="pb-sec"><div class="pb-sec-t">Kopfdaten</div>'
+      +'<div class="ob-lbl">Projektname</div><input class="login-inp" id="pb-name" value="'+gsEsc(p.name||'')+'"/>'
+      +'<div class="ob-lbl">Standort</div><input class="login-inp" id="pb-standort" value="'+gsEsc(p.standort||'')+'"/>'
+      +'<div class="tr-row2"><div><div class="ob-lbl">Bereich</div><select class="login-inp" id="pb-bereich">'+bereichOpts+'</select></div>'
+      +'<div><div class="ob-lbl">Status</div><select class="login-inp" id="pb-status">'+statusOpts+'</select></div></div>'
+      +'<div class="ob-lbl">Stundensatz (CHF/h)</div><input class="login-inp" id="pb-satz" type="number" step="0.01" value="'+(p.stundensatz!=null?p.stundensatz:'')+'"/>'
+      +'<div class="ob-lbl">Partner / Auftraggeber</div><select class="login-inp" id="pb-partner">'+partnerOpts+'</select></div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Zugeteilte Techniker</div><div class="ob-chips">'+techChips+'</div></div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Rapporte ('+rapporte.length+')</div>'+rapHtml
+      +'<div class="pb-row pb-tot"><span>Total erfasste Stunden</span><span>'+(Math.round(totH*10)/10)+' h</span></div></div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Material (aggregiert)</div>'
+      +(matKeys.length?matKeys.map(function(m){return '<div class="pb-row"><span>'+gsEsc(m)+'</span><span>×'+matCount[m]+'</span></div>';}).join(''):'<div class="admin-empty" style="padding:8px;">Kein Material erfasst.</div>')+'</div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Projekt-Notiz</div><textarea class="login-inp" id="pb-notiz" rows="3" placeholder="Interne Notiz zum Projekt…">'+gsEsc(p.notiz||'')+'</textarea></div>'
+    +'<button class="admin-add-btn" style="margin:0 18px;width:calc(100% - 36px);" onclick="pbSave()">💾 Änderungen speichern</button>'
+    +'<div class="login-msg" id="pb-msg"></div>';
+}
+function pbToggleTech(uid){
+  var i=pbAssigned.indexOf(uid);
+  if(i>-1)pbAssigned.splice(i,1);else pbAssigned.push(uid);
+  // re-render just the chips
+  document.querySelectorAll('#pb-body .ob-chip').forEach(function(el){});
+  pbRender(pbProjekt,[].concat(pbLastRapporte||[]));
+}
+var pbLastRapporte=[];
+function pbSave(){
+  if(!pbProjekt||!pbProjekt.id)return;
+  var satz=parseFloat(document.getElementById('pb-satz').value);
+  var body={action:'update',id:pbProjekt.id,
+    name:document.getElementById('pb-name').value.trim(),
+    standort:document.getElementById('pb-standort').value.trim(),
+    bereich:document.getElementById('pb-bereich').value,
+    status:document.getElementById('pb-status').value,
+    stundensatz:isNaN(satz)?null:satz,
+    partner_user_id:document.getElementById('pb-partner').value||null,
+    notiz:document.getElementById('pb-notiz').value.trim()};
+  setMsg('pb-msg','Speichert…','');
+  Promise.all([
+    gsAuthApi('projekte',body),
+    gsAuthApi('projekte',{action:'assign',projekt_id:pbProjekt.id,techniker_user_ids:pbAssigned})
+  ]).then(function(r){
+    if(r[0].error){setMsg('pb-msg',r[0].error,'err');return;}
+    setMsg('pb-msg','✓ Gespeichert','');
+    pbProjekt=r[0].projekt||pbProjekt;pbProjekt.notiz=body.notiz;
+    toast('Projekt aktualisiert');
+  }).catch(function(){setMsg('pb-msg','Verbindungsfehler','err');});
+}
+// Demo: Beispiel-Datenblatt ohne Login.
+function pbRenderDemo(){
+  pbProjekt={id:'demo',name:'Heizungsrevision MFH Zürich',projektnummer:'P-2026-0007',standort:'Zürich',bereich:'Heizung',status:'laufend',stundensatz:67.9,partner_user_id:null,notiz:'Zugang via Hauswart, Schlüssel im Büro.',techniker:[{user_id:'d1',name:'Patrick Notter'},{user_id:'d2',name:'Dimitri Grill'}]};
+  pbAllTechs=[{user_id:'d1',name:'Patrick Notter'},{user_id:'d2',name:'Dimitri Grill'},{user_id:'d3',name:'Vasil Ignatov'}];
+  pbPartners=[{user_id:'p1',name:'Anna Muster',firma:'Muster Immobilien AG'}];
+  pbAssigned=['d1','d2'];
+  pbLastRapporte=[
+    {datum:'2026-06-02',techniker_user_id:'d1',gesamtstunden:8.5,arbeiten:['Demontage','Montage'],material:['Pumpe','Thermostat']},
+    {datum:'2026-06-03',techniker_user_id:'d2',gesamtstunden:7,arbeiten:['Wartung'],material:['Thermostat','Dichtung']},
+    {datum:'2026-06-04',techniker_user_id:'d1',gesamtstunden:6.5,arbeiten:['Inbetriebnahme'],material:['Pumpe']}
+  ];
+  pbRender(pbProjekt,pbLastRapporte);
 }
 
 // ── ADMIN: RAPPORT-STATUS ──
