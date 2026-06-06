@@ -38,8 +38,9 @@ async function listVoices(res) {
 async function tts(res, body) {
   const text = (body.text ? String(body.text) : '').trim();
   if (!text) return res.status(400).json({ error: 'text erforderlich' });
+  const voiceId = body.voice_id && /^[A-Za-z0-9]{15,30}$/.test(body.voice_id) ? body.voice_id : VOICE_ID; // optional test override
   try {
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: { 'xi-api-key': ELEVEN_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
       body: JSON.stringify({
