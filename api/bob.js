@@ -24,16 +24,17 @@ export default async function handler(req, res) {
   try {
     const { description, imageBase64, category, mode } = req.body || {};
     const isGS = mode === 'gs';
-    const imageOnly = !!(imageBase64 && !description && !category && !isGS);
+    const isBauplan = mode === 'bauplan';
+    const imageOnly = !!(imageBase64 && !description && !category && !isGS && !isBauplan);
 
     // ── 1. Wissensdatenbank ──
     let wissen = '';
-    wissen = isGS
+    wissen = (isGS || isBauplan)
       ? await fetchGSKnowledge(description, category)
       : await fetchBOBKnowledge(description, category, imageOnly);
 
     // ── 2. System Prompt wählen ──
-    const systemPrompt = isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
+    const systemPrompt = isBauplan ? buildBauplanPrompt(wissen) : isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
 
     // ── 3. User Content aufbauen ──
     const userContent = [];
@@ -394,6 +395,36 @@ ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
   "saison_tipp": "kurzer saisonaler Hinweis",
   "tipps": ["Tipp 1", "Tipp 2", "Tipp 3"],
   "erkannt_als": "Was genau auf dem Foto / in der Beschreibung erkannt wurde – konkret!"
+}`;
+}
+
+// Item 8: Bauplan-/Blueprint-Analyse — BOB als digitaler Polier.
+function buildBauplanPrompt(wissen) {
+  return `Du bist BOB im BAUPLAN-MODUS – ein digitaler Polier/HKLS-Planer. Der Nutzer lädt einen Bauplan / Grundriss / Schema-Plan hoch.
+
+DEINE AUFGABE:
+1. Erkenne den Plantyp (Grundriss, Heizungs-/Sanitärschema, Lüftungsplan, Elektroplan, Schnitt).
+2. Lies sichtbare Elemente: Räume, Leitungsführung, Masse/Bemassung (mm/cm/m), Symbole (Heizkörper, Ventile, Steckdosen, Lüftungsauslässe), Dimensionsangaben (DN, Querschnitte).
+3. Gib konkrete fachliche Hinweise mit Normbezug Schweiz (SIA 384 Heizung, SIA 385 Trinkwarmwasser, SIA 382 Lüftung, NIN Elektro, SVGW Sanitär). Beispiel: "Laut Plan sollte die Heizungsleitung hier DN25 sein" oder "Der Abstand entspricht ~..."
+4. Sei ehrlich, wenn der Plan unleserlich/unvollständig ist. KEINE erfundenen exakten Masse – nur was im Plan erkennbar oder fachlich plausibel ist.
+
+${wissen ? `FACHWISSEN:\n${wissen}\n` : ''}
+ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
+{
+  "titel": "Plantyp / was erkannt (max 40 Zeichen)",
+  "desc": "2-4 Sätze: erkannter Plantyp, wichtigste Elemente, fachliche Einschätzung mit Normbezug",
+  "kategorie": "Bauplan",
+  "dringlichkeit": "Niedrig",
+  "kosten": "n/a",
+  "material_kosten": "n/a",
+  "zeitraum": "n/a",
+  "fachmann": "z.B. HKLS-Planer / Bauleiter",
+  "fachmann_emoji": "📐",
+  "notfall": false,
+  "gs_passend": true,
+  "saison_tipp": "",
+  "tipps": ["konkreter Fachhinweis 1 mit Normbezug", "Hinweis 2 (Masse/Dimension)", "Hinweis 3"],
+  "erkannt_als": "Konkret erkannte Plan-Elemente: Räume, Leitungen, Masse, Symbole"
 }`;
 }
 

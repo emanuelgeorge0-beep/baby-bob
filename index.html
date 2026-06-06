@@ -810,6 +810,11 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <div id="r-tipps"></div>
     <div class="r-saison" id="r-saison" style="display:none;"></div>
   </div>
+  <div class="r-gs-cta" id="r-bauplan-cta" style="display:none;" onclick="bauplanAnalyse()">
+    <div class="r-gs-cta-i">📐</div>
+    <div class="r-gs-cta-info"><strong>Als Bauplan analysieren (Pro)</strong><span>BOB liest Grundriss, Leitungen, Masse & Normen</span></div>
+    <div class="r-gs-cta-arrow">→</div>
+  </div>
   <div class="r-gs-cta" id="r-gs-cta" style="display:none;" onclick="bobToGS()">
     <div class="r-gs-cta-i">🏢</div>
     <div class="r-gs-cta-info"><strong>George Solutions kann das für Sie lösen</strong><span>SHK-Profis auf Abruf – in 24h ein Angebot</span></div>
@@ -1970,6 +1975,7 @@ async function callAPI(desc,b64){
   if(desc) body.description=desc;
   if(b64) body.imageBase64=b64;
   if(currentCat) body.category=currentCat;
+  if(window.__bauplanMode) body.mode='bauplan';
 
   // Timeout nach 18 Sekunden
   var controller=new AbortController();
@@ -2112,6 +2118,9 @@ function renderResult(r){
   var cta=document.getElementById('r-gs-cta');
   var shk=/heiz|sanit|lüft|lueft|klima/i.test((r.kategorie||'')+' '+(r.fachmann||''));
   if(cta) cta.style.display=(r.gs_passend||shk)?'flex':'none';
+  // Item 8: offer Bauplan analysis when an image is present (Pro feature)
+  var bp=document.getElementById('r-bauplan-cta');
+  if(bp) bp.style.display=(imgB64&&r.kategorie!=='Bauplan')?'flex':'none';
 
   var u=document.getElementById('r-dring');
   u.textContent=r.dringlichkeit||'–';
@@ -2248,6 +2257,18 @@ function openFeedback(status){
 function sendFeedback(){
   toast('Danke! BOB lernt aus deinem Feedback 🧠');
   setTimeout(function(){resetAll();},1500);
+}
+
+// Item 8: BOB Bauplan-Analyse (digitaler Polier) — re-analyse current image as a plan.
+function bauplanAnalyse(){
+  if(!imgB64){toast('Kein Bild vorhanden – bitte Foto/Plan hochladen');return;}
+  window.__bauplanMode=true;
+  toast('📐 BOB liest den Bauplan…');
+  var bp=document.getElementById('r-bauplan-cta');if(bp)bp.style.display='none';
+  callAPI(null,imgB64).then(function(data){
+    window.__bauplanMode=false;
+    if(data){lastResult=data;renderResult(data);go('result');}
+  }).catch(function(){window.__bauplanMode=false;toast('Bauplan-Analyse fehlgeschlagen – bitte erneut versuchen');});
 }
 
 // Task 8: BOB → George Solutions handover (SHK problems)
