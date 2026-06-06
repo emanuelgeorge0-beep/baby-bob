@@ -585,6 +585,16 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .pd-tabs{display:flex;gap:6px;padding:16px 18px 0;}
 .pd-tab{flex:1;text-align:center;font-size:12px;font-weight:800;padding:10px;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);color:rgba(232,237,245,0.55);cursor:pointer;}
 .pd-tab.act{background:rgba(74,158,255,0.14);border-color:#4a9eff;color:#9cc6ff;}
+.pd-badge{display:inline-block;margin-left:5px;background:#ff3b30;color:#fff;font-size:9px;font-weight:900;min-width:15px;height:15px;line-height:15px;border-radius:8px;padding:0 4px;}
+.tr-nav{display:flex;gap:8px;padding:14px 20px 0;}
+.tr-nav-btn{flex:1;font-size:12px;font-weight:800;padding:10px;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:rgba(232,237,245,0.55);cursor:pointer;}
+.tr-nav-btn.act{background:rgba(74,158,255,0.14);border-color:#4a9eff;color:#9cc6ff;}
+.tr-tarif{margin:10px 20px 0;font-size:12px;color:rgba(232,237,245,0.6);background:rgba(255,215,0,0.06);border:1px solid rgba(255,215,0,0.2);border-radius:10px;padding:8px 12px;}
+.tr-tarif strong{color:#FFD700;}.tr-tarif span{color:rgba(232,237,245,0.4);font-size:10px;}
+.tm-row{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:6px;margin-top:6px;align-items:center;}
+.tm-row input{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:9px;font-family:'Nunito',sans-serif;font-size:13px;color:#e8edf5;outline:none;box-sizing:border-box;width:100%;}
+.tm-row .tm-del{background:none;border:none;color:#ff9b9b;font-size:18px;cursor:pointer;}
+.tm-bob-result{margin-top:10px;background:rgba(255,215,0,0.07);border:1px solid rgba(255,215,0,0.2);border-radius:11px;padding:11px;font-size:12px;color:rgba(232,237,245,0.8);line-height:1.5;white-space:pre-wrap;}
 .pd-item{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:13px;padding:13px 14px;margin-top:10px;}
 .pd-item-top{display:flex;justify-content:space-between;gap:8px;align-items:center;}
 .pd-item-tit{font-size:14px;font-weight:800;}
@@ -1580,6 +1590,11 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     </div>
     <button class="tech-logout" onclick="logout()">Abmelden</button>
   </div>
+  <div class="tr-nav">
+    <button class="tr-nav-btn act" onclick="showScreen('tech-rapport')">📋 Rapport</button>
+    <button class="tr-nav-btn" onclick="showTechMaterial()">📦 Materialliste</button>
+  </div>
+  <div class="tr-tarif">💰 Dein Tarif: <strong>CHF 37.– bis 43.76/h</strong> <span>(Kundenpreis abweichend)</span></div>
   <!-- Week strip -->
   <div class="tr-week" id="tr-week"></div>
   <div class="tr-form">
@@ -1618,6 +1633,33 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
   </div>
 </div>
 
+<!-- ═══ TECHNIKER: MATERIALLISTE ═══ -->
+<div id="tech-material" class="tech-screen">
+  <div class="tech-hdr">
+    <div class="tech-hdr-left">
+      <div class="tech-hdr-name">📦 Materialliste</div>
+      <div class="tech-hdr-role">an Projektleiter senden</div>
+    </div>
+    <button class="tech-logout" onclick="showScreen('tech-rapport')">← Zurück</button>
+  </div>
+  <div class="tr-form">
+    <div class="ob-lbl">Projekt *</div>
+    <select class="login-inp" id="tm-projekt"><option value="">– Projekt wählen –</option></select>
+    <div class="ob-lbl">Positionen</div>
+    <div id="tm-positions"></div>
+    <button class="admin-act" style="margin-top:8px;" onclick="tmAddRow()">+ Position</button>
+    <div class="ob-lbl">Foto</div>
+    <input type="file" id="tm-foto" accept="image/*" capture="environment" onchange="tmFotoPreview()"/>
+    <div class="tr-foto-preview" id="tm-foto-preview"></div>
+    <button class="login-btn-pw" style="margin-top:10px;" id="tm-bob-btn" onclick="tmBobAnalyse()">🧠 BOB analysieren</button>
+    <div class="tm-bob-result" id="tm-bob-result" style="display:none;"></div>
+    <div class="ob-lbl">Notiz</div>
+    <textarea class="login-inp" id="tm-notiz" rows="2" placeholder="Bemerkung an den Projektleiter…"></textarea>
+    <button class="login-btn-magic" id="tm-send" style="margin-top:14px;" onclick="tmSend()">📨 An Projektleiter senden</button>
+    <div class="login-msg" id="tm-msg"></div>
+  </div>
+</div>
+
 <!-- ═══ PARTNER DASHBOARD ═══ -->
 <div id="partner-dash" class="admin-screen">
   <div class="admin-hdr">
@@ -1625,7 +1667,8 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
     <button class="admin-back" onclick="logout()">Abmelden</button>
   </div>
   <div class="pd-tabs">
-    <div class="pd-tab act" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
+    <div class="pd-tab act" id="pdt-inbox" onclick="pdTab('inbox')">📨 Inbox<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span></div>
+    <div class="pd-tab" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
     <div class="pd-tab" id="pdt-rapporte" onclick="pdTab('rapporte')">Rapporte</div>
     <div class="pd-tab" id="pdt-rechnungen" onclick="pdTab('rechnungen')">Rechnungen</div>
   </div>
@@ -3511,17 +3554,118 @@ function trSave(status){
   }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}setMsg('tr-msg','Verbindungsfehler','err');});
 }
 
+// ── TECHNIKER: MATERIALLISTE → Projektleiter ──
+var tmFotoB64=null;
+function showTechMaterial(){
+  showScreen('tech-material');
+  var sel=document.getElementById('tm-projekt');
+  sel.innerHTML='<option value="">– Projekt wählen –</option>'+(trProjekte||[]).map(function(p){return '<option value="'+p.id+'">'+gsEsc(p.name)+'</option>';}).join('');
+  if(!document.getElementById('tm-positions').children.length) tmAddRow();
+  tmFotoB64=null;document.getElementById('tm-foto-preview').innerHTML='';
+  document.getElementById('tm-bob-result').style.display='none';
+  setMsg('tm-msg','','');
+}
+function tmAddRow(){
+  var wrap=document.getElementById('tm-positions');
+  var row=document.createElement('div');row.className='tm-row';
+  row.innerHTML='<input placeholder="Position" class="tm-pos"/><input placeholder="Menge" class="tm-menge" inputmode="decimal"/><input placeholder="Einheit/Art.-Nr." class="tm-einheit"/><button class="tm-del" onclick="this.parentNode.remove()">×</button>';
+  wrap.appendChild(row);
+}
+function tmCollect(){
+  return Array.prototype.map.call(document.querySelectorAll('#tm-positions .tm-row'),function(r){
+    return {position:r.querySelector('.tm-pos').value.trim(),menge:r.querySelector('.tm-menge').value.trim(),einheit:r.querySelector('.tm-einheit').value.trim()};
+  }).filter(function(p){return p.position;});
+}
+function tmFotoPreview(){
+  var f=document.getElementById('tm-foto').files[0];if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      var max=1000,sc=Math.min(1,max/Math.max(img.width,img.height));
+      var cv=document.createElement('canvas');cv.width=img.width*sc;cv.height=img.height*sc;
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      tmFotoB64=cv.toDataURL('image/jpeg',0.7);
+      document.getElementById('tm-foto-preview').innerHTML='<img src="'+tmFotoB64+'"/>';
+    };img.src=e.target.result;
+  };rd.readAsDataURL(f);
+}
+function tmBobAnalyse(){
+  var btn=document.getElementById('tm-bob-btn');
+  var pos=tmCollect();
+  var desc='Materialliste analysieren: '+pos.map(function(p){return p.position+' '+p.menge+' '+p.einheit;}).join(', ')+(document.getElementById('tm-notiz').value?(' · '+document.getElementById('tm-notiz').value):'');
+  if(!tmFotoB64&&!pos.length){setMsg('tm-msg','Bitte Foto oder Positionen erfassen','err');return;}
+  if(btn){btn.disabled=true;btn.textContent='BOB analysiert…';}
+  var body={description:desc};
+  if(tmFotoB64)body.imageBase64=tmFotoB64.split(',')[1];
+  fetch('/api/bob',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json();}).then(function(d){
+      if(btn){btn.disabled=false;btn.textContent='🧠 BOB analysieren';}
+      var el=document.getElementById('tm-bob-result');
+      var txt='🧠 '+(d.erkannt_als||d.titel||'')+'\n'+(d.desc||'');
+      if(d.material_kosten)txt+='\nMaterial ca.: '+d.material_kosten;
+      el.textContent=txt;el.style.display='block';
+      el.dataset.summary=txt;
+    }).catch(function(){if(btn){btn.disabled=false;btn.textContent='🧠 BOB analysieren';}setMsg('tm-msg','BOB-Analyse fehlgeschlagen','err');});
+}
+function tmSend(){
+  var projekt_id=document.getElementById('tm-projekt').value;
+  if(!projekt_id){setMsg('tm-msg','Bitte Projekt wählen','err');return;}
+  var pos=tmCollect();
+  if(!pos.length&&!tmFotoB64){setMsg('tm-msg','Bitte Positionen oder Foto erfassen','err');return;}
+  var bobEl=document.getElementById('tm-bob-result');
+  var inhalt={positionen:pos,notiz:document.getElementById('tm-notiz').value.trim(),
+    foto:tmFotoB64||null,bob_analyse:(bobEl&&bobEl.dataset.summary)||null,
+    von_name:authTechName||(authUser&&authUser.email)||'Techniker'};
+  var btn=document.getElementById('tm-send');if(btn){btn.disabled=true;btn.textContent='Sendet…';}
+  gsAuthApi('nachrichten',{action:'send',typ:'materialliste',projekt_id:projekt_id,inhalt:inhalt}).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='📨 An Projektleiter senden';}
+    if(d.error){setMsg('tm-msg',d.error,'err');return;}
+    setMsg('tm-msg','✓ Materialliste gesendet','');toast('Materialliste an Projektleiter gesendet');
+    setTimeout(function(){showScreen('tech-rapport');},1200);
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📨 An Projektleiter senden';}setMsg('tm-msg','Verbindungsfehler','err');});
+}
+
 // ── PARTNER DASHBOARD ──
 function initPartnerDash(){
   document.getElementById('pd-welcome').textContent=(authUser&&authUser.email)||'George Solutions';
-  pdTab('projekte');
+  pdLoadBadge();
+  pdTab('inbox');
+}
+function pdLoadBadge(){
+  gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){
+    var b=document.getElementById('pd-inbox-badge');if(!b)return;
+    var n=d.unread||0;b.textContent=n;b.style.display=n>0?'inline-block':'none';
+  });
 }
 function pdTab(tab){
-  ['projekte','rapporte','rechnungen'].forEach(function(t){
+  ['inbox','projekte','rapporte','rechnungen'].forEach(function(t){
     var el=document.getElementById('pdt-'+t);if(el)el.classList.toggle('act',t===tab);
   });
   var c=document.getElementById('pd-content');c.innerHTML='<div class="admin-empty">Lädt…</div>';
-  if(tab==='projekte'){
+  if(tab==='inbox'){
+    gsAuthApi('nachrichten',{action:'inbox'}).then(function(d){
+      var ns=d.nachrichten||[];
+      if(!ns.length){c.innerHTML='<div class="admin-empty">Keine Nachrichten.</div>';return;}
+      c.innerHTML=ns.map(function(n){
+        var inh=n.inhalt||{};
+        var pos=(inh.positionen||[]).map(function(p){return '• '+gsEsc(p.position)+(p.menge?(' – '+gsEsc(p.menge)):'')+(p.einheit?(' '+gsEsc(p.einheit)):'');}).join('<br>');
+        var head=n.typ==='materialliste'?'📦 Materialliste':(n.typ==='rapport'?'📋 Rapport':'💬 Nachricht');
+        var unread=n.status==='ungelesen';
+        return '<div class="pd-item" style="'+(unread?'border-color:rgba(255,59,48,0.35);':'')+'">'
+          +'<div class="pd-item-top"><div class="pd-item-tit">'+head+' · '+gsEsc(inh.von_name||'Techniker')+'</div>'
+          +'<span class="admin-badge '+(unread?'must_change_password':'active')+'">'+gsEsc(n.status)+'</span></div>'
+          +(pos?'<div class="pd-item-meta" style="margin-top:6px;">'+pos+'</div>':'')
+          +(inh.notiz?'<div class="pd-item-meta">📝 '+gsEsc(inh.notiz)+'</div>':'')
+          +(inh.bob_analyse?'<div class="tm-bob-result" style="margin-top:8px;">'+gsEsc(inh.bob_analyse)+'</div>':'')
+          +(inh.foto?'<img src="'+inh.foto+'" style="width:100%;max-width:240px;border-radius:10px;margin-top:8px;"/>':'')
+          +'<div style="display:flex;gap:7px;margin-top:9px;">'
+            +(unread?'<button class="admin-act" onclick="pdMsgStatus(\''+n.id+'\',\'gelesen\')">Als gelesen</button>':'')
+            +'<button class="admin-act ok" onclick="pdMsgStatus(\''+n.id+'\',\'bestaetigt\')">✓ Bestätigen</button>'
+          +'</div></div>';
+      }).join('');
+    });
+  }else if(tab==='projekte'){
     gsAuthApi('projekte',{action:'list'}).then(function(d){
       var ps=d.projekte||[];
       c.innerHTML=ps.length?ps.map(function(p){
@@ -3549,6 +3693,12 @@ function pdTab(tab){
       }).join(''):'<div class="admin-empty">Keine Rechnungen.</div>';
     });
   }
+}
+function pdMsgStatus(id,status){
+  gsAuthApi('nachrichten',{action:'set_status',id:id,status:status}).then(function(d){
+    if(d.error){toast(d.error);return;}
+    pdLoadBadge();pdTab('inbox');
+  });
 }
 function pdDownloadRapport(id){gsAuthApi('tagesrapport',{action:'get',id:id}).then(function(d){if(d.rapport&&d.rapport.pdf_signed)window.open(d.rapport.pdf_signed,'_blank');});}
 function pdDownloadRechnung(id){gsAuthApi('rechnung',{action:'get',id:id}).then(function(d){if(d.rechnung&&d.rechnung.pdf_signed)window.open(d.rechnung.pdf_signed,'_blank');});}
