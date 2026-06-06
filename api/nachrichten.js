@@ -35,22 +35,36 @@ export default async function handler(req, res) {
 }
 
 async function send(res, user, role, body) {
-  const { projekt_id, typ, inhalt } = body || {};
+  // typ is CHECK-constrained on the table; coerce to an allowed value.
+  const typ = ['materialliste', 'rapport', 'nachricht'].includes(body.typ) ? body.typ : 'nachricht';
+  const projekt_id = body.projekt_id || null;
   let an_id = body.an_id || null;
-  // If no explicit recipient, route to the project's owning partner.
+  // Best-effort recipient resolution from a GS project (read-only).
   if (!an_id && projekt_id) {
     const p = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?id=eq.${projekt_id}&select=partner_user_id&limit=1`, { headers: SB }));
     an_id = (Array.isArray(p) ? p : [])[0]?.partner_user_id || null;
   }
-  const row = { von_id: user.id, an_id, projekt_id: projekt_id || null, typ: typ || 'nachricht', inhalt: inhalt || {}, status: 'ungelesen' };
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/gs_nachrichten`, { method: 'POST', headers: { ...SB, Prefer: 'return=representation' }, body: JSON.stringify(row) });
-  const saved = (await sbJson(r))?.[0];
-  if (!r.ok || !saved) {
-    const t = await r.text().catch(() => '');
-    if (/PGRST205|not find the table/i.test(t + JSON.stringify(saved || ''))) return res.status(503).json({ error: 'gs_nachrichten nicht migriert' });
+  const base = { von_id: user.id, an_id, typ, inhalt: body.inhalt || {}, status: 'ungelesen' };
+
+  // projekt_id FK may reference gs_anfragen (Emanuel's schema), so a gs_projekte
+  // id would violate it — retry without projekt_id on FK error.
+  let r = await insertNachricht({ ...base, projekt_id });
+  if (r.fkError) r = await insertNachricht(base);
+  if (!r.row) {
+    if (r.notMigrated) return res.status(503).json({ error: 'gs_nachrichten nicht migriert' });
     return res.status(500).json({ error: 'Nachricht konnte nicht gesendet werden' });
   }
-  return res.status(200).json({ ok: true, nachricht: saved });
+  return res.status(200).json({ ok: true, nachricht: r.row });
+}
+
+async function insertNachricht(row) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/gs_nachrichten`, { method: 'POST', headers: { ...SB, Prefer: 'return=representation' }, body: JSON.stringify(row) });
+  if (r.ok) return { row: (await sbJson(r))?.[0] };
+  const t = await r.text().catch(() => '');
+  if (/23503|foreign key/i.test(t)) return { fkError: true };
+  if (/PGRST205|not find the table/i.test(t)) return { notMigrated: true };
+  console.error('nachricht insert error', r.status, t);
+  return {};
 }
 
 async function inbox(res, user, role, body) {

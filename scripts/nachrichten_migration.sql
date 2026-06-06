@@ -7,8 +7,11 @@ CREATE TABLE IF NOT EXISTS gs_nachrichten (
   id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   von_id      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   an_id       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  projekt_id  UUID REFERENCES gs_projekte(id) ON DELETE SET NULL,
-  typ         TEXT NOT NULL DEFAULT 'nachricht',  -- materialliste | rapport | nachricht | system
+  -- NOTE: live schema references gs_anfragen(id) (Emanuel's version). The
+  -- endpoint retries without projekt_id on FK mismatch, so a gs_projekte id
+  -- still sends (projekt_id null) rather than failing.
+  projekt_id  UUID REFERENCES gs_anfragen(id) ON DELETE SET NULL,
+  typ         TEXT DEFAULT 'nachricht' CHECK (typ IN ('materialliste','rapport','nachricht')),
   inhalt      JSONB DEFAULT '{}'::jsonb,
   status      TEXT NOT NULL DEFAULT 'ungelesen'   -- ungelesen | gelesen | bestaetigt
               CHECK (status IN ('ungelesen','gelesen','bestaetigt')),
