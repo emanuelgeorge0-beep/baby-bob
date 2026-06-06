@@ -1718,7 +1718,9 @@ button:active{transform:scale(0.97);}
     <div class="ob-lbl">Team (weitere Personen)</div>
     <input class="login-inp" id="tr-team" type="text" placeholder="Namen, kommagetrennt"/>
     <div class="ob-lbl">Besonderheiten</div>
-    <textarea class="login-inp" id="tr-notiz" rows="2" placeholder="Besonderheiten / Notizen..."></textarea>
+    <div class="ob-lbl" style="margin-top:0;font-weight:600;text-transform:none;color:rgba(232,237,245,0.4);">SHK-Textbausteine (tippen zum Einfügen):</div>
+    <div class="ob-chips" id="tr-bausteine"></div>
+    <textarea class="login-inp" id="tr-notiz" rows="3" placeholder="Besonderheiten / Notizen..."></textarea>
     <div class="ob-lbl">Fotos</div>
     <input type="file" id="tr-fotos" accept="image/*" multiple capture="environment" onchange="trFotoPreview()"/>
     <div class="tr-foto-preview" id="tr-foto-preview"></div>
@@ -3826,6 +3828,7 @@ function initTechRapport(){
   chipsInto('tr-arbeiten',TR_ARBEITEN,[],true);
   chipsInto('tr-material',TR_MATERIAL,[],true);
   chipsInto('tr-empfaenger',TR_EMPFAENGER,[],true);
+  trRenderBausteine();
   trFotosB64=[];document.getElementById('tr-foto-preview').innerHTML='';
   trInitSign();trCalcHours();
   showScreen('tech-rapport');
@@ -3927,6 +3930,28 @@ function trSave(status){
     }else{setMsg('tr-msg','Entwurf gespeichert','');}
     trLoadWeek();
   }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}setMsg('tr-msg','Verbindungsfehler','err');});
+}
+
+// PM-Prototyp: SHK-Textbausteine für den Rapport.
+var SHK_BAUSTEINE=[
+  'Heizkörper demontiert und neuen montiert.',
+  'Thermostatventil ersetzt und Anlage entlüftet.',
+  'Sanitärinstallation gemäss SVGW W3 ausgeführt.',
+  'Dichtheitsprüfung durchgeführt – i.O.',
+  'Boiler entkalkt, Heizstab geprüft.',
+  'Lüftungsfilter (F7) gewechselt.',
+  'Wasseranschluss erstellt, Druckprobe i.O.',
+  'Mischer/Armatur ersetzt und abgedichtet.',
+  'Material gemäss Materialliste verbaut.',
+  'Inbetriebnahme und Funktionskontrolle durchgeführt.'
+];
+function trRenderBausteine(){
+  var c=document.getElementById('tr-bausteine');if(!c)return;
+  c.innerHTML=SHK_BAUSTEINE.map(function(b,i){return '<span class="ob-chip" onclick="trInsertBaustein('+i+')">+ '+gsEsc(b.slice(0,26))+'…</span>';}).join('');
+}
+function trInsertBaustein(i){
+  var ta=document.getElementById('tr-notiz');if(!ta)return;
+  ta.value=(ta.value?ta.value.replace(/\s*$/,'')+' ':'')+SHK_BAUSTEINE[i];
 }
 
 // ── TECHNIKER: STUNDENERFASSUNG (Task 6) ──
