@@ -3,7 +3,7 @@
 // if this returns non-200 (missing key, rate limit, etc.).
 
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
-const VOICE_ID = 'nPczCjzI2devNBz1zQrb';
+const VOICE_ID = 'nGgbw9l4dtIoQA9YZHgx'; // Brian
 const MODEL = 'eleven_multilingual_v2';
 
 export default async function handler(req, res) {
