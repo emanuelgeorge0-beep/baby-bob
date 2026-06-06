@@ -363,6 +363,19 @@ WICHTIGE REGELN:
 - KEINE verbindlichen Diagnosen – "könnte sein" / "vermutlich"
 - Immer auf Deutsch antworten
 
+KOSTEN-LOGIK SCHWEIZ (für realistische Preise):
+- Stundenansätze CH: Sanitär/Heizung CHF 90–130/h, Elektro CHF 95–130/h, Maler CHF 75–110/h, Schreiner CHF 90–120/h, Garten CHF 60–110/h. + Anfahrt CHF 60–120, + MwSt 8.1%.
+- "kosten" = realistische Gesamtspanne für den typischen Einsatz (Arbeit + Anfahrt). "material_kosten" = grobe Materialkosten separat (CH-Preise), z.B. "CHF 20–60 (Kartusche)".
+- Kleinreparatur 0.5–1.5h, mittlere Arbeit 2–4h, grössere Sache realistisch höher.
+
+NOTFALL-ERKENNUNG:
+- "notfall": true bei akuter Gefahr/Schaden: Wasserrohrbruch, Gasgeruch, Stromausfall mit Brandgeruch, Heizungsausfall im Winter, überlaufendes Wasser, Stromschlag-Risiko. Sonst false.
+- Bei notfall=true: dringlichkeit "Sofort" und im ersten Tipp konkrete Sofortmassnahme (Haupthahn/Strom abstellen).
+
+SAISON: Heute ist ${new Date().toLocaleDateString('de-CH', { month: 'long' })} (Monat ${new Date().getMonth() + 1}). Gib in "saison_tipp" einen passenden saisonalen Hinweis (Winter→Heizung/Frost, Frühling→Garten/Lüftung-Filter, Sommer→Klima, Herbst→Heizung-Service/Dach-Check). Kurz, 1 Satz.
+
+GEORGE SOLUTIONS: "gs_passend": true wenn das Problem im SHK-Bereich liegt (Heizung, Sanitär, Lüftung, Klima) – dann kann George Solutions das direkt lösen. Sonst false.
+
 ${wissen ? `WISSENSDATENBANK (nutze diese Infos für präzise Antworten):\n${wissen}` : 'Keine Datenbankeinträge gefunden – antworte aus deinem Allgemeinwissen.'}
 
 ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
@@ -372,9 +385,13 @@ ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
   "kategorie": "Kategorie z.B. Sanitär / Beauty / Heizung / Möbel / Auto",
   "dringlichkeit": "Sofort / Hoch / Mittel / Niedrig",
   "kosten": "CHF XX–YY",
+  "material_kosten": "grobe Materialkosten CH, z.B. CHF 20–60",
   "zeitraum": "z.B. Heute / 1-2 Tage / Diese Woche / Nach Termin",
   "fachmann": "Berufsbezeichnung z.B. Sanitärinstallateur",
   "fachmann_emoji": "passendes Emoji z.B. 🔧",
+  "notfall": false,
+  "gs_passend": false,
+  "saison_tipp": "kurzer saisonaler Hinweis",
   "tipps": ["Tipp 1", "Tipp 2", "Tipp 3"],
   "erkannt_als": "Was genau auf dem Foto / in der Beschreibung erkannt wurde – konkret!"
 }`;
