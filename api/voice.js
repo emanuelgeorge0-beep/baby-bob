@@ -19,8 +19,20 @@ export default async function handler(req, res) {
   if (!ELEVEN_KEY) return res.status(503).json({ error: 'Voice not configured', fallback: true });
 
   const body = req.body || {};
+  if (body.action === 'list') return await listVoices(res); // diagnostic: find correct voice_id
   if (body.action === 'stt') return await stt(res, body);
   return await tts(res, body);
+}
+
+async function listVoices(res) {
+  try {
+    const r = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': ELEVEN_KEY } });
+    const d = await r.json();
+    const voices = (d.voices || []).map((v) => ({ name: v.name, voice_id: v.voice_id }));
+    return res.status(200).json({ ok: r.ok, count: voices.length, voices });
+  } catch (err) {
+    return res.status(502).json({ error: err.message });
+  }
 }
 
 async function tts(res, body) {
