@@ -45,6 +45,8 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .h1 span{color:var(--y);}
 .hsub{font-size:12px;color:var(--muted);line-height:1.65;max-width:300px;}
 .scan-btn{margin:20px 22px 0;background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:20px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#0a0a0f;box-shadow:0 8px 32px rgba(255,107,53,0.4);cursor:pointer;transition:transform .15s;width:calc(100% - 44px);}
+.mic-btn{margin:10px 22px 0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,215,0,0.3);border-radius:18px;padding:14px;display:flex;align-items:center;justify-content:center;gap:9px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:#FFD700;cursor:pointer;transition:all .15s;width:calc(100% - 44px);}
+.mic-btn.rec{background:rgba(255,59,48,0.18);border-color:#ff3b30;color:#fff;animation:reqpulse 1.2s infinite;}
 .scan-btn:active{transform:scale(0.97);}
 
 .cat-main{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:20px 22px 0;}
@@ -703,6 +705,7 @@ button:active{transform:scale(0.97);}
   </div>
   <div class="scan-counter" id="scan-counter" style="display:none;"><span class="sc-dot"></span><strong id="scan-counter-n">0</strong> Scans · BOB lernt täglich dazu 🧠</div>
   <button class="scan-btn" onclick="openSheet()"><span>🔍</span> Problem scannen</button>
+  <button class="mic-btn" id="bob-mic-btn" onclick="startListening()"><span>🎙️</span> Mit BOB sprechen</button>
 
   <div class="cat-main">
     <button class="cat-main-btn handwerk" onclick="openCatSheet('handwerk')">
@@ -2360,19 +2363,44 @@ function loadScanCounter(){
       var iv=setInterval(function(){cur+=step;if(cur>=target){cur=target;clearInterval(iv);}num.textContent=cur.toLocaleString('de-CH');},30);
     }).catch(function(){});
 }
-// Task 7: one-time friendly BOB voice greeting (fires on first user gesture — browser autoplay policy).
+// BOB greeting on the FIRST tap per session (sessionStorage flag → saves voice credits).
 var bobGreeted=false;
 function bobGreetOnce(){
   if(bobGreeted)return;bobGreeted=true;
   document.removeEventListener('pointerdown',bobGreetOnce);
+  try{ if(sessionStorage.getItem('bob_greeted')==='1') return; }catch(e){}
+  try{ sessionStorage.setItem('bob_greeted','1'); }catch(e){}
   var home=document.getElementById('home');
   if(bobVoiceOn&&home&&home.classList.contains('active')){
-    bobSpeak('Guten Tag. Ich bin BOB, Ihr digitaler Fachassistent.');
+    bobSpeak('Hey, mein Name ist Bob! Ich helfe dir bei jedem Problem – egal ob Handwerk oder Beauty. Wie kann ich dir helfen?');
   }
 }
 (function initHome(){
   try{ loadScanCounter(); document.addEventListener('pointerdown',bobGreetOnce,{once:true}); }catch(e){}
 })();
+
+// Aufgabe 1: Voice input → STT → BOB scan → answer read aloud.
+var bobRec=null,bobRecOn=false;
+function startListening(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var btn=document.getElementById('bob-mic-btn');
+  if(!SR){toast('Spracherkennung wird auf diesem Gerät nicht unterstützt – bitte tippen');return;}
+  bobStopSpeak();
+  if(bobRecOn&&bobRec){bobRec.stop();return;}
+  bobRec=new SR();bobRec.lang=(typeof bobVoiceLang==='function')?bobVoiceLang():'de-DE';
+  bobRec.interimResults=false;bobRec.continuous=false;
+  bobRecOn=true;if(btn){btn.classList.add('rec');btn.innerHTML='<span>⏺️</span> Ich höre zu…';}
+  bobRec.onresult=function(e){
+    var t='';for(var i=0;i<e.results.length;i++){t+=e.results[i][0].transcript;}
+    t=t.trim();if(!t)return;
+    var inp=document.getElementById('d-inp');if(inp)inp.value=t;
+    toast('🎙️ '+t);
+    if(typeof startAnalysis==='function') startAnalysis(); // → api/bob → result → bobSpeak liest vor
+  };
+  bobRec.onend=function(){bobRecOn=false;if(btn){btn.classList.remove('rec');btn.innerHTML='<span>🎙️</span> Mit BOB sprechen';}};
+  bobRec.onerror=function(){bobRecOn=false;if(btn){btn.classList.remove('rec');btn.innerHTML='<span>🎙️</span> Mit BOB sprechen';}};
+  try{bobRec.start();}catch(e){bobRecOn=false;if(btn){btn.classList.remove('rec');btn.innerHTML='<span>🎙️</span> Mit BOB sprechen';}}
+}
 
 // Task 8: BOB → George Solutions handover (SHK problems)
 function bobToGS(){
@@ -2512,7 +2540,7 @@ var bobAudio=null;
 function bobSpeak(text){
   if(!text) return;
   bobStopSpeak();
-  fetch('/api/bob-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
     .then(function(r){
       if(!r.ok) return null;
       var ct=r.headers.get('content-type')||'';
