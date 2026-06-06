@@ -58,12 +58,21 @@ async function createSession(req, res) {
   if (anfrage_id) form.set('client_reference_id', String(anfrage_id));
   if (anfrage_id) form.set('metadata[anfrage_id]', String(anfrage_id));
 
-  const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+  const post = (f) => fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${STRIPE_SECRET}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: form.toString(),
+    body: f.toString(),
   });
-  const session = await r.json();
+  let r = await post(form);
+  let session = await r.json();
+  // If TWINT isn't enabled on the account, retry card-only.
+  if (!r.ok && /twint/i.test(session.error?.message || '')) {
+    const f2 = new URLSearchParams(form);
+    f2.delete('payment_method_types[]');
+    f2.append('payment_method_types[]', 'card');
+    r = await post(f2);
+    session = await r.json();
+  }
   if (!r.ok) return res.status(400).json({ error: session.error?.message || 'Stripe-Session fehlgeschlagen' });
 
   // Mark the anfrage as awaiting payment (best-effort).
