@@ -127,6 +127,20 @@ async function save(res, user, role, body) {
   const saved = (await sbJson(up))?.[0];
   if (!up.ok || !saved) return res.status(500).json({ error: 'Rapport konnte nicht gespeichert werden' });
 
+  // Block 1: weitere Positionen (mehrere Projekte pro Tag) → gs_rapport_positionen.
+  // Best-effort: scheitert die Tabelle (Migration noch nicht ausgeführt), bleibt der Rapport gespeichert.
+  if (Array.isArray(body.positionen) && body.positionen.length) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/gs_rapport_positionen?rapport_id=eq.${rapportId}`, { method: 'DELETE', headers: { ...SB, Prefer: 'return=minimal' } });
+      const posRows = body.positionen.map((p, i) => ({
+        rapport_id: rapportId, projekt_id: p.projekt_id || null, projektnummer: p.projektnummer || null,
+        zeit_von: p.zeit_von || null, zeit_bis: p.zeit_bis || null, stunden: Number(p.stunden) || 0,
+        arbeiten: arr(p.arbeiten), material: arr(p.material), notiz: p.notiz || null, sortierung: i,
+      }));
+      await fetch(`${SUPABASE_URL}/rest/v1/gs_rapport_positionen`, { method: 'POST', headers: { ...SB, Prefer: 'return=minimal' }, body: JSON.stringify(posRows) });
+    } catch (e) { console.error('rapport positionen insert failed (migration run?):', e.message); }
+  }
+
   let invoice = null;
   if (submit) {
     const projekt = await getProjekt(projekt_id);

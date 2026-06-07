@@ -672,6 +672,12 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .tr-matqty{display:flex;align-items:center;gap:8px;margin-top:8px;}
 .tr-matqty-name{font-size:13px;font-weight:700;color:#e8edf5;flex:0 0 40%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .tr-matqty .login-inp{flex:1;padding:9px 12px;font-size:14px;}
+.tr-pos-card{background:rgba(255,255,255,0.04);border:1px solid rgba(74,158,255,0.25);border-radius:14px;padding:12px;margin-top:10px;display:flex;flex-direction:column;gap:8px;}
+.tr-pos-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:800;color:#9cc6ff;}
+.tr-pos-head .tm-del{background:rgba(255,107,107,0.15);border:1px solid rgba(255,107,107,0.4);color:#ff9b9b;border-radius:9px;width:30px;height:30px;font-size:16px;cursor:pointer;line-height:1;}
+.tr-pos-card .tr-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.tr-pos-card .login-inp{padding:10px 12px;font-size:14px;}
+.tr-grandtotal{margin-top:12px;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.3);border-radius:12px;padding:11px 14px;font-size:14px;font-weight:800;color:#FFD700;text-align:center;}
 .tr-actions{display:flex;gap:9px;margin-top:16px;}
 .tr-actions .admin-act{flex:0 0 auto;padding:14px 16px;}
 .tr-actions .login-btn-magic{flex:1;margin:0;}
@@ -2012,6 +2018,11 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="ob-lbl">Digitale Unterschrift</div>
     <canvas id="tr-sign" class="tr-sign" width="300" height="120"></canvas>
     <div class="tr-sign-clear" onclick="trClearSign()">Unterschrift löschen</div>
+    <!-- Block 1: mehrere Projekte/Baustellen am selben Tag -->
+    <div class="ob-lbl" style="margin-top:18px;">Weitere Projekte / Positionen (gleicher Tag)</div>
+    <div id="tr-extra-positions"></div>
+    <button type="button" class="admin-act" style="width:100%;margin-top:8px;" onclick="trAddPosition()">+ Weiteres Projekt / weitere Position</button>
+    <div class="tr-grandtotal" id="tr-grandtotal" style="display:none;"></div>
     <div class="ob-lbl">Empfänger</div>
     <div class="ob-chips" id="tr-empfaenger"></div>
     <div class="tr-actions">
@@ -4990,6 +5001,7 @@ function initTechRapport(){
   trRenderMaterialQty();
   chipsInto('tr-empfaenger',TR_EMPFAENGER,[],true);
   trRenderBausteine();
+  var ep=document.getElementById('tr-extra-positions');if(ep)ep.innerHTML='';  // Block 1: frischer Tag
   trFotosB64=[];document.getElementById('tr-foto-preview').innerHTML='';
   trInitSign();trCalcHours();
   showScreen('tech-rapport');
@@ -5028,13 +5040,77 @@ function trFillFrom(r){
   Object.keys(matQty).forEach(function(k){ var i=document.querySelector('#tr-material-qty input[data-mat="'+k.replace(/"/g,'\\"')+'"]'); if(i)i.value=matQty[k]; });
   trCalcHours();
 }
+function trHourValue(von,bis){
+  if(!von||!bis) return 0;
+  var pv=von.split(':'),pb=bis.split(':');
+  var mins=(pb[0]*60+ +pb[1])-(pv[0]*60+ +pv[1]); if(mins<0)mins+=1440;
+  return Math.round(mins/60*10)/10;
+}
 function trCalcHours(){
-  var v=document.getElementById('tr-von').value,b=document.getElementById('tr-bis').value;
   var el=document.getElementById('tr-hours');
-  if(!v||!b){el.textContent='0.0';return;}
-  var pv=v.split(':'),pb=b.split(':');
-  var mins=(pb[0]*60+ +pb[1])-(pv[0]*60+ +pv[1]);if(mins<0)mins+=1440;
-  el.textContent=(Math.round(mins/60*10)/10).toFixed(1);
+  if(el) el.textContent=trHourValue(document.getElementById('tr-von').value,document.getElementById('tr-bis').value).toFixed(1);
+  trUpdateGrandTotal();
+}
+// Block 1: mehrere Positionen pro Tag.
+var trPosSeq=0;
+function trProjektOptions(){
+  return '<option value="">– Projekt wählen –</option>'+(trProjekte||[]).map(function(p){return '<option value="'+p.id+'" data-pnr="'+gsEsc(p.projektnummer||'')+'">'+gsEsc(p.name)+'</option>';}).join('');
+}
+function trAddPosition(){
+  var wrap=document.getElementById('tr-extra-positions'); if(!wrap) return;
+  trPosSeq++;
+  var card=document.createElement('div'); card.className='tr-pos-card';
+  card.innerHTML='<div class="tr-pos-head"><span>Position '+(wrap.children.length+2)+'</span><button type="button" class="tm-del" onclick="trRemovePosition(this)" aria-label="Position entfernen">×</button></div>'
+    +'<select class="login-inp tr-pos-projekt" onchange="trPosProjektChange(this)">'+trProjektOptions()+'</select>'
+    +'<div class="tr-row2"><input class="login-inp tr-pos-pnr" type="text" placeholder="Projektnr."/>'
+      +'<div class="tr-row2"><input class="login-inp tr-pos-von" type="time" value="08:00" onchange="trUpdateGrandTotal()"/><input class="login-inp tr-pos-bis" type="time" value="10:00" onchange="trUpdateGrandTotal()"/></div></div>'
+    +'<input class="login-inp tr-pos-arbeiten" type="text" placeholder="Tätigkeiten, kommagetrennt (z.B. C-Stahl Heizungsinstallation, Druckprobe)"/>'
+    +'<input class="login-inp tr-pos-material" type="text" placeholder="Material, kommagetrennt (z.B. Rohre 5 m, Armaturen 2 Stk)"/>'
+    +'<input class="login-inp tr-pos-notiz" type="text" placeholder="Notiz (optional)"/>';
+  wrap.appendChild(card);
+  trUpdateGrandTotal();
+}
+function trPosProjektChange(sel){
+  var opt=sel.options[sel.selectedIndex];
+  var pnr=opt?opt.getAttribute('data-pnr'):'';
+  var card=sel.closest('.tr-pos-card'); var p=card&&card.querySelector('.tr-pos-pnr');
+  if(p&&!p.value) p.value=pnr||'';
+}
+function trRemovePosition(btn){
+  var card=btn.closest('.tr-pos-card'); if(card) card.remove();
+  // Positionsnummern neu durchnummerieren
+  var cards=document.querySelectorAll('#tr-extra-positions .tr-pos-card');
+  cards.forEach(function(c,i){ var h=c.querySelector('.tr-pos-head span'); if(h)h.textContent='Position '+(i+2); });
+  trUpdateGrandTotal();
+}
+function trCollectPositions(){
+  var out=[];
+  document.querySelectorAll('#tr-extra-positions .tr-pos-card').forEach(function(c){
+    var pid=(c.querySelector('.tr-pos-projekt')||{}).value||'';
+    var von=(c.querySelector('.tr-pos-von')||{}).value||'';
+    var bis=(c.querySelector('.tr-pos-bis')||{}).value||'';
+    var arb=((c.querySelector('.tr-pos-arbeiten')||{}).value||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var mat=((c.querySelector('.tr-pos-material')||{}).value||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var notiz=((c.querySelector('.tr-pos-notiz')||{}).value||'').trim();
+    if(!pid&&!arb.length&&!mat.length&&!notiz) return; // leere Position überspringen
+    out.push({projekt_id:pid||null,projektnummer:((c.querySelector('.tr-pos-pnr')||{}).value||'').trim()||null,
+      zeit_von:von||null,zeit_bis:bis||null,stunden:trHourValue(von,bis),arbeiten:arb,material:mat,notiz:notiz||null});
+  });
+  return out;
+}
+function trGrandTotalHours(){
+  var total=trHourValue(document.getElementById('tr-von').value,document.getElementById('tr-bis').value);
+  document.querySelectorAll('#tr-extra-positions .tr-pos-card').forEach(function(c){
+    total+=trHourValue((c.querySelector('.tr-pos-von')||{}).value,(c.querySelector('.tr-pos-bis')||{}).value);
+  });
+  return Math.round(total*10)/10;
+}
+function trUpdateGrandTotal(){
+  var el=document.getElementById('tr-grandtotal'); if(!el) return;
+  var n=document.querySelectorAll('#tr-extra-positions .tr-pos-card').length;
+  if(!n){ el.style.display='none'; return; }
+  el.style.display='block';
+  el.textContent='Σ Gesamtstunden alle Positionen: '+trGrandTotalHours().toFixed(1)+' h ('+(n+1)+' Positionen)';
 }
 function trFotoPreview(){
   var files=document.getElementById('tr-fotos').files;
@@ -5088,6 +5164,9 @@ function trSave(status){
     team:document.getElementById('tr-team').value.split(',').map(function(s){return s.trim();}).filter(Boolean),
     besonderheiten:document.getElementById('tr-notiz').value.trim(),
     empfaenger:chipsSelected('tr-empfaenger'),status:status};
+  // Block 1: weitere Positionen + Gesamtstunden über alle Positionen
+  var positionen=trCollectPositions();
+  if(positionen.length){ body.positionen=positionen; body.gesamtstunden=trGrandTotalHours(); }
   if(trFotosB64.length)body.fotos=trFotosB64;
   if(trSignHas)body.unterschrift=document.getElementById('tr-sign').toDataURL('image/png');
   var btn=document.getElementById('tr-submit');if(btn&&status==='eingereicht'){btn.disabled=true;btn.textContent='Sendet…';}
