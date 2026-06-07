@@ -93,6 +93,14 @@ function normalizeTechniker(row) {
     ? qualRaw.join(' · ')
     : qualRaw || side.qualification || '';
 
+  // Equipment-Träger (voll ausgestattet: Werkzeug/Fahrzeug/Material). Real column or
+  // sidecar wins; otherwise fall back to the two known bearers by name so the booking
+  // flow's "always one equipment bearer in the 2er-Team" rule works pre-migration.
+  const equipment_traeger =
+    typeof side.equipment_traeger === 'boolean' ? side.equipment_traeger
+    : typeof row.equipment_traeger === 'boolean' ? row.equipment_traeger
+    : /(emanuel\s*george|patrick\s*notter)/i.test(row.name || '');
+
   return {
     id: row.id,
     name: row.name || 'Techniker',
@@ -105,6 +113,7 @@ function normalizeTechniker(row) {
     location: side.location || null,
     availability: row.availability_status ?? row.verfuegbar ?? true,
     booked_until: side.booked_until || null,
+    equipment_traeger,
   };
 }
 

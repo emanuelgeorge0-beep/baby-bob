@@ -502,6 +502,35 @@ button:active{transform:scale(0.97);}
 .gs-net-updated{margin:4px 18px 0;font-size:10px;color:rgba(232,237,245,0.35);text-align:right;}
 .gs-team-pricing{margin:12px 18px 0;background:rgba(255,215,0,0.07);border:1px solid rgba(255,215,0,0.25);border-radius:13px;padding:11px 14px;font-size:11.5px;color:rgba(232,237,245,0.7);}
 .gs-team-pricing strong{color:#FFD700;}
+/* GS Team-Auswahl (2er-Team ↔ Einzel) */
+.gs-team-toggle{margin:16px 18px 0;display:flex;gap:9px;}
+.gs-team-opt{flex:1;position:relative;background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.1);border-radius:15px;padding:14px 12px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;cursor:pointer;transition:transform .15s,border-color .18s,background .18s;font-family:'Nunito',sans-serif;text-align:left;min-height:74px;}
+.gs-team-opt:active{transform:scale(0.98);}
+.gs-team-opt.sel{border-color:#FFD700;background:rgba(255,215,0,0.1);box-shadow:inset 0 0 0 1px rgba(255,215,0,0.35);}
+.gs-team-opt:focus-visible{outline:3px solid #4ECDC4;outline-offset:2px;}
+.gs-team-opt-tit{font-size:13.5px;font-weight:900;color:#e8edf5;}
+.gs-team-opt.sel .gs-team-opt-tit{color:#FFD700;}
+.gs-team-opt-price{font-size:11.5px;font-weight:800;color:rgba(232,237,245,0.6);}
+.gs-team-opt.sel .gs-team-opt-price{color:#FFD700;}
+.gs-team-opt-save{font-size:9.5px;font-weight:800;color:#6bcb77;line-height:1.35;}
+.gs-team-opt-badge{position:absolute;top:-9px;right:10px;font-size:8.5px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;background:linear-gradient(135deg,#FFD700,#FF6B35);color:#080808;padding:2px 8px;border-radius:8px;}
+.gs-team-pricebox{margin:11px 18px 0;background:rgba(255,215,0,0.07);border:1px solid rgba(255,215,0,0.25);border-radius:13px;padding:12px 15px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.gs-tpb-left{font-size:11.5px;color:rgba(232,237,245,0.7);line-height:1.5;}
+.gs-tpb-left strong{color:#FFD700;}
+.gs-tpb-total{text-align:right;flex-shrink:0;}
+.gs-tpb-total strong{display:block;font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;}
+.gs-tpb-total span{font-size:9.5px;color:rgba(232,237,245,0.45);}
+.gs-team-partner{margin:11px 18px 0;background:rgba(74,158,255,0.07);border:1px solid rgba(74,158,255,0.22);border-radius:13px;padding:12px 14px;}
+.gs-team-partner-tit{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:#4a9eff;margin-bottom:7px;}
+.gs-team-partner-row{display:flex;align-items:center;gap:10px;}
+.gs-team-partner-av{width:38px;height:38px;min-width:38px;border-radius:11px;background:linear-gradient(135deg,rgba(255,215,0,0.2),rgba(255,107,53,0.2));display:flex;align-items:center;justify-content:center;font-size:19px;}
+.gs-team-partner-info{flex:1;min-width:0;}
+.gs-team-partner-name{font-size:13px;font-weight:800;color:#e8edf5;}
+.gs-team-partner-tag{font-size:10px;color:rgba(232,237,245,0.5);margin-top:1px;line-height:1.4;}
+.gs-team-partner-swap{font-size:11px;font-weight:800;color:#4a9eff;background:rgba(74,158,255,0.12);border:1px solid rgba(74,158,255,0.3);border-radius:9px;padding:8px 11px;cursor:pointer;white-space:nowrap;min-height:38px;font-family:'Nunito',sans-serif;}
+.gs-team-partner-swap:active{transform:scale(0.96);}
+.gs-team-partner-swap:focus-visible{outline:3px solid #4ECDC4;outline-offset:2px;}
+.gs-team-note{margin:9px 20px 0;font-size:11px;color:rgba(232,237,245,0.45);line-height:1.5;}
 
 /* GS Summary */
 .gs-summary{margin:14px 18px 0;display:flex;flex-direction:column;gap:8px;}
@@ -1363,6 +1392,22 @@ button:active{transform:scale(0.97);}
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:57%"></div></div>
   <div class="gs-ai-rec" id="gs-tech-hint">👷 Verfügbare Techniker für Ihr Projekt</div>
+  <div class="gs-team-toggle" role="radiogroup" aria-label="Team-Grösse wählen">
+    <button type="button" class="gs-team-opt sel" id="gs-team-opt-team" role="radio" aria-checked="true" onclick="gsSetTeamMode('team')">
+      <span class="gs-team-opt-badge">Empfohlen</span>
+      <span class="gs-team-opt-tit">👥 2er-Team</span>
+      <span class="gs-team-opt-price" id="gs-team-price-team">CHF 65/h pro Person</span>
+      <span class="gs-team-opt-save">Vollequipment immer dabei</span>
+    </button>
+    <button type="button" class="gs-team-opt" id="gs-team-opt-single" role="radio" aria-checked="false" onclick="gsSetTeamMode('single')">
+      <span class="gs-team-opt-tit">👤 Einzel-Techniker</span>
+      <span class="gs-team-opt-price" id="gs-team-price-single">CHF 70/h</span>
+      <span class="gs-team-opt-save" style="color:rgba(232,237,245,0.4);">Ohne mitgeführtes Vollequipment</span>
+    </button>
+  </div>
+  <div class="gs-team-pricebox" id="gs-team-pricebox"></div>
+  <div class="gs-team-partner" id="gs-team-partner" style="display:none;"></div>
+  <div class="gs-team-note" id="gs-team-note"></div>
   <div class="gs-tech-list" id="gs-tech-list">
     <div class="gs-tech-empty" id="gs-tech-loading">Techniker werden geladen…</div>
   </div>
@@ -1462,6 +1507,10 @@ button:active{transform:scale(0.97);}
     <div class="gs-ticket">
       <div class="gs-ticket-lbl">Gewählter Tarif</div>
       <div class="gs-ticket-val" id="gs-tick-tarif">–</div>
+    </div>
+    <div class="gs-ticket">
+      <div class="gs-ticket-lbl">Team</div>
+      <div class="gs-ticket-val" id="gs-tick-team">–</div>
     </div>
     <div class="gs-ticket" style="background:rgba(107,203,119,0.07);border-color:rgba(107,203,119,0.25);">
       <div class="gs-ticket-lbl" style="color:#6bcb77;">Status</div>
@@ -3251,6 +3300,7 @@ function gsTarifWeiter(){
   gsData.tarif=gsSelectedTarif;
   gsData.tarif_preis=gsSelectedTarifPrice;
   gsGo('gs-techniker');
+  gsSyncTeam();      // render team toggle/price immediately (refines once roster loads)
   gsLoadTechniker();
 }
 
@@ -3259,6 +3309,142 @@ var gsTechniker=[];
 var gsSelectedTechniker=null;
 
 var gsTechTotal=0,gsTechAvail=0,gsTechUpdated=null,gsTechReq={},gsLiveTimer=null;
+
+// ── Team-Auswahl: 2er-Team (Standard/empfohlen) ↔ Einzel ──
+// USP: GS-Teams sind voll ausgestattet → immer ein Equipment-Träger (Emanuel George
+// ODER Patrick Notter) im 2er-Team. Stundensätze: Einzel CHF 70/h, 2er CHF 65/h p.P.
+var gsTeamMode='team';          // 'team' (default) | 'single'
+var gsTeamPartner=null;         // id des Equipment-Träger-Partners (nur Team-Modus)
+var GS_RATE_TEAM=65, GS_RATE_SINGLE=70;
+
+function gsFmtCHF(n){
+  try{ if(typeof window!=='undefined'&&window.bbFormatPrice) return window.bbFormatPrice(n,'CH'); }catch(e){}
+  return 'CHF '+n;
+}
+function gsTechById(id){ return gsTechniker.filter(function(t){return t.id===id;})[0]||null; }
+function gsIsEquip(t){
+  if(!t) return false;
+  if(t.equipment_traeger===true) return true;
+  // Fallback, falls Flag/Spalte fehlt: die zwei bekannten Equipment-Träger per Name.
+  return /(emanuel\s*george|patrick\s*notter)/i.test(t.name||'');
+}
+function gsEquipBearers(){
+  var list=gsTechniker.filter(function(t){return (t.availability!==false)&&gsIsEquip(t);});
+  list.sort(function(a,b){
+    function rank(n){ n=(n||'').toLowerCase(); if(/emanuel/.test(n))return 0; if(/patrick/.test(n))return 1; return 2; }
+    return rank(a.name)-rank(b.name);
+  });
+  return list;
+}
+function gsSetTeamMode(mode){
+  gsTeamMode=(mode==='single')?'single':'team';
+  var ot=document.getElementById('gs-team-opt-team'), os=document.getElementById('gs-team-opt-single');
+  if(ot){ ot.classList.toggle('sel',gsTeamMode==='team'); ot.setAttribute('aria-checked',gsTeamMode==='team'?'true':'false'); }
+  if(os){ os.classList.toggle('sel',gsTeamMode==='single'); os.setAttribute('aria-checked',gsTeamMode==='single'?'true':'false'); }
+  gsSyncTeam();
+}
+// Equipment-Bedingung sicherstellen + Preis/Partner neu rendern.
+function gsSyncTeam(){
+  var primary=gsTechById(gsSelectedTechniker);
+  var bearers=gsEquipBearers();
+  if(gsTeamMode==='team'){
+    if(primary&&gsIsEquip(primary)){
+      gsTeamPartner=null;                 // Equipment schon durch Erstwahl erfüllt → 2. Platz frei
+    }else{
+      var keep=bearers.filter(function(b){return b.id===gsTeamPartner;})[0];
+      gsTeamPartner=keep?keep.id:(bearers[0]?bearers[0].id:null);
+    }
+  }else{
+    gsTeamPartner=null;
+  }
+  gsRenderTeamPrice();
+  gsRenderTeamPartner();
+}
+function gsRenderTeamPrice(){
+  var pt=document.getElementById('gs-team-price-team'), ps=document.getElementById('gs-team-price-single');
+  if(pt) pt.textContent=gsFmtCHF(GS_RATE_TEAM)+'/h pro Person';
+  if(ps) ps.textContent=gsFmtCHF(GS_RATE_SINGLE)+'/h';
+  var box=document.getElementById('gs-team-pricebox');
+  if(!box) return;
+  if(gsTeamMode==='team'){
+    var total=GS_RATE_TEAM*2, save=(GS_RATE_SINGLE-GS_RATE_TEAM);
+    box.innerHTML='<div class="gs-tpb-left">👥 <strong>2er-Team</strong> · '+gsFmtCHF(GS_RATE_TEAM)+'/h pro Person'
+      +'<br>2 × '+gsFmtCHF(GS_RATE_TEAM)+' = <strong>'+gsFmtCHF(total)+'/h</strong> gesamt'
+      +' · '+gsFmtCHF(save)+'/h p.P. günstiger als Einzel</div>'
+      +'<div class="gs-tpb-total"><strong>'+gsFmtCHF(total)+'</strong><span>pro Stunde gesamt</span></div>';
+  }else{
+    box.innerHTML='<div class="gs-tpb-left">👤 <strong>Einzel-Techniker</strong> · ein Profi vor Ort</div>'
+      +'<div class="gs-tpb-total"><strong>'+gsFmtCHF(GS_RATE_SINGLE)+'</strong><span>pro Stunde</span></div>';
+  }
+}
+function gsRenderTeamPartner(){
+  var panel=document.getElementById('gs-team-partner');
+  var note=document.getElementById('gs-team-note');
+  var primary=gsTechById(gsSelectedTechniker);
+  var bearers=gsEquipBearers();
+  if(gsTeamMode!=='team'){
+    if(panel) panel.style.display='none';
+    if(note) note.textContent='Hinweis: Ein Einzel-Techniker rückt ggf. ohne mitgeführtes Vollequipment an – bei grösserem Material- oder Werkzeugbedarf empfehlen wir das 2er-Team.';
+    return;
+  }
+  if(!panel) return;
+  if(primary&&gsIsEquip(primary)){
+    panel.style.display='block';
+    panel.innerHTML='<div class="gs-team-partner-tit">✓ Equipment-Träger bereits im Team</div>'
+      +'<div class="gs-team-partner-row"><div class="gs-team-partner-av">'+(primary.photo_emoji||'🧰')+'</div>'
+      +'<div class="gs-team-partner-info"><div class="gs-team-partner-name">'+gsEsc(primary.name)+'</div>'
+      +'<div class="gs-team-partner-tag">Bringt Vollequipment mit · zweiter Partner frei wählbar</div></div></div>';
+    if(note) note.textContent='Ihre Wahl bringt bereits das Vollequipment mit – den zweiten Partner teilt das Team passend zu.';
+    return;
+  }
+  if(!bearers.length){
+    panel.style.display='block';
+    panel.innerHTML='<div class="gs-team-partner-tit">🧰 Equipment-Träger</div>'
+      +'<div class="gs-team-partner-row"><div class="gs-team-partner-av">🧰</div>'
+      +'<div class="gs-team-partner-info"><div class="gs-team-partner-name">Wird vom Team zugeteilt</div>'
+      +'<div class="gs-team-partner-tag">Ein Equipment-Träger ist immer im 2er-Team dabei</div></div></div>';
+    if(note) note.textContent='';
+    return;
+  }
+  var anchor=bearers.filter(function(b){return b.id===gsTeamPartner;})[0]||bearers[0];
+  gsTeamPartner=anchor.id;
+  var canSwap=bearers.length>1;
+  panel.style.display='block';
+  panel.innerHTML='<div class="gs-team-partner-tit">🧰 Equipment-Träger im 2er-Team</div>'
+    +'<div class="gs-team-partner-row"><div class="gs-team-partner-av">'+(anchor.photo_emoji||'🧰')+'</div>'
+    +'<div class="gs-team-partner-info"><div class="gs-team-partner-name">'+gsEsc(anchor.name)+'</div>'
+    +'<div class="gs-team-partner-tag">Bringt Vollequipment mit (Werkzeug · Fahrzeug · Material)</div></div>'
+    +(canSwap?'<button type="button" class="gs-team-partner-swap" aria-label="Equipment-Träger tauschen" onclick="gsSwapEquip()">↔ Tauschen</button>':'')
+    +'</div>';
+  if(note) note.textContent='So ist immer ein voll ausgestatteter Equipment-Träger (Emanuel George oder Patrick Notter) in Ihrem Team.';
+}
+function gsSwapEquip(){
+  var bearers=gsEquipBearers();
+  if(bearers.length<2) return;
+  var idx=0;
+  for(var i=0;i<bearers.length;i++){ if(bearers[i].id===gsTeamPartner){ idx=i; break; } }
+  gsTeamPartner=bearers[(idx+1)%bearers.length].id;
+  gsRenderTeamPartner();
+}
+// Team-Auswahl in gsData übernehmen (für Summary, Ticket, Submit).
+function gsApplyTeamToData(){
+  var primary=gsTechById(gsSelectedTechniker);
+  gsData.team_mode=gsTeamMode;
+  if(gsTeamMode==='team'){
+    gsData.team_size=2;
+    gsData.stundensatz=GS_RATE_TEAM;
+    gsData.team_preis=gsFmtCHF(GS_RATE_TEAM)+'/h pro Person · '+gsFmtCHF(GS_RATE_TEAM*2)+'/h gesamt';
+    var anchorName;
+    if(primary&&gsIsEquip(primary)) anchorName=primary.name;
+    else { var a=gsTechById(gsTeamPartner); anchorName=a?a.name:'wird zugeteilt'; }
+    gsData.equipment_traeger=anchorName;
+  }else{
+    gsData.team_size=1;
+    gsData.stundensatz=GS_RATE_SINGLE;
+    gsData.team_preis=gsFmtCHF(GS_RATE_SINGLE)+'/h';
+    gsData.equipment_traeger=null;
+  }
+}
 
 function gsLoadTechniker(){
   var list=document.getElementById('gs-tech-list');
@@ -3296,6 +3482,7 @@ function gsRenderTechniker(){
   if(!list) return;
   if(!gsTechniker.length){
     list.innerHTML='<div class="gs-tech-empty">Aktuell sind keine Techniker-Profile hinterlegt. Das Team wird Ihrem Projekt passend zugeteilt.</div>';
+    gsSyncTeam();
     return;
   }
   var bereich=(gsData.bereich||'').toLowerCase();
@@ -3336,9 +3523,9 @@ function gsRenderTechniker(){
       +'</div>'
     +'</div>';
   }).join('');
-  list.innerHTML='<div class="gs-team-pricing">👥 <strong>2er-Team</strong> ab CHF 65/h pro Person statt CHF 70/h einzeln · Emanuel George immer im Team dabei.</div>'
-    +cards
+  list.innerHTML=cards
     +'<div class="gs-net-updated">Zuletzt aktualisiert: '+gsAgo(gsTechUpdated)+'</div>';
+  gsSyncTeam(); // keep team price/equipment anchor in sync with the current roster
 }
 
 // Live status simulation (frontend only — scarcity effect, no DB writes).
@@ -3364,10 +3551,12 @@ function gsSelectTechniker(id){
   gsSelectedTechniker=gsSelectedTechniker===id?null:id;
   gsData.preferred_techniker=(gsSelectedTechniker&&t)?t.name:null;
   gsRenderTechniker();
+  gsSyncTeam();   // re-evaluate equipment anchor for the new primary pick
 }
 
 function gsTechnikerWeiter(){
   // Selection is optional – always allowed to proceed.
+  gsApplyTeamToData();
   gsGo('gs-verfuegbarkeit');
 }
 
@@ -3412,6 +3601,7 @@ function gsVerfuegbarkeitWeiter(){
 function gsRenderSummary(){
   var list=document.getElementById('gs-summary-list');
   if(!list)return;
+  var teamLabel=(gsData.team_mode==='single')?'Einzel-Techniker':'2er-Team';
   var rows=[
     ['Projekt',gsData.proj_name||'–'],
     ['Bereich',gsData.bereich||'–'],
@@ -3419,6 +3609,10 @@ function gsRenderSummary(){
     ['Dringlichkeit',gsData.dringlichkeit||'Normal'],
     ['Geschätzte Stunden',gsData.ai_stunden||'–'],
     ['Gewählter Tarif',(gsData.tarif||'–')+(gsData.tarif_preis?' · '+gsData.tarif_preis:'')],
+    ['Team',teamLabel+(gsData.team_preis?' · '+gsData.team_preis:'')],
+  ];
+  if(gsData.team_mode!=='single') rows.push(['Equipment-Träger',gsData.equipment_traeger||'wird zugeteilt']);
+  rows=rows.concat([
     ['Wunsch-Techniker',gsData.preferred_techniker||'Team entscheidet'],
     ['Gewünschter Start',gsData.start||'–'],
     ['Vorname',gsData.vorname||'–'],
@@ -3427,7 +3621,7 @@ function gsRenderSummary(){
     ['Adresse',(gsData.strasse||'–')+(gsData.plz?' · '+gsData.plz:'')+(gsData.ort?' '+gsData.ort:'')],
     ['Telefon',gsData.telefon||'–'],
     ['E-Mail',gsData.email||'–'],
-  ];
+  ]);
   list.innerHTML=rows.map(function(r){
     return '<div class="gs-sum-row"><span class="gs-sum-key">'+r[0]+'</span><span class="gs-sum-val">'+r[1]+'</span></div>';
   }).join('');
@@ -3461,7 +3655,18 @@ function gsSubmit(){
       geschaetzte_stunden:gsData.ai_stunden||null,
       umfang:gsData.ai_umfang||null,
       gewuenschter_start:gsData.start||null,
-      notiz:(gsData.preferred_techniker?('Wunsch-Techniker: '+gsData.preferred_techniker+(gsData.notiz?' · ':'')):'')+(gsData.notiz||'')||null
+      notiz:(function(){
+        var teamTxt=(gsData.team_mode==='single')
+          ? ('Einzel-Techniker ('+gsFmtCHF(GS_RATE_SINGLE)+'/h)')
+          : ('2er-Team ('+gsFmtCHF(GS_RATE_TEAM)+'/h pro Person, '+gsFmtCHF(GS_RATE_TEAM*2)+'/h gesamt'
+             +(gsData.equipment_traeger?(', Equipment-Träger: '+gsData.equipment_traeger):'')+')');
+        var parts=[
+          'Team: '+teamTxt,
+          gsData.preferred_techniker?('Wunsch-Techniker: '+gsData.preferred_techniker):'',
+          gsData.notiz||''
+        ].filter(Boolean);
+        return parts.join(' · ')||null;
+      })()
     }
   };
 
@@ -3508,6 +3713,12 @@ function gsShowBuchung(){
   var tt=document.getElementById('gs-tick-tarif');
   if(tp) tp.textContent=(gsData.proj_name||'SHK-Projekt')+(gsData.bereich?' · '+gsData.bereich:'');
   if(tt) tt.textContent=(gsData.tarif||'–')+(gsData.tarif_preis?' · '+gsData.tarif_preis:'');
+  var ttm=document.getElementById('gs-tick-team');
+  if(ttm){
+    var teamLabel=(gsData.team_mode==='single')?'Einzel-Techniker':'2er-Team';
+    ttm.textContent=teamLabel+(gsData.team_preis?' · '+gsData.team_preis:'')
+      +((gsData.team_mode!=='single'&&gsData.equipment_traeger)?(' · 🧰 '+gsData.equipment_traeger):'');
+  }
   // Reset the optional account offer for this booking.
   var off=document.getElementById('gs-acct-offer');if(off) off.style.display='';
   setMsg('gs-acct-msg','','');
@@ -3532,6 +3743,10 @@ function gsOfferMagicLink(){
 function gsReset(){
   gsData={};gsAiResult=null;gsSelectedTarif=null;gsSelectedTarifPrice=null;
   gsTechniker=[];gsSelectedTechniker=null;
+  gsTeamMode='team';gsTeamPartner=null;
+  var _ot=document.getElementById('gs-team-opt-team'),_os=document.getElementById('gs-team-opt-single');
+  if(_ot){_ot.classList.add('sel');_ot.setAttribute('aria-checked','true');}
+  if(_os){_os.classList.remove('sel');_os.setAttribute('aria-checked','false');}
   ['gs-proj-name','gs-proj-desc','gs-vorname','gs-nachname','gs-firma','gs-strasse','gs-plz','gs-ort','gs-tel','gs-email','gs-notiz'].forEach(function(id){
     var el=document.getElementById(id);if(el) el.value='';
   });
