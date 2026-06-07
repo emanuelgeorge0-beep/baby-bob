@@ -101,6 +101,14 @@ function normalizeTechniker(row) {
     : typeof row.equipment_traeger === 'boolean' ? row.equipment_traeger
     : /(emanuel\s*george|patrick\s*notter)/i.test(row.name || '');
 
+  // Herkunft: 'CH' (🇨🇭) | 'CH_AT' (🇨🇭🇦🇹). Real column / sidecar win; otherwise a name
+  // fallback for the known CH_AT technicians so flags show even before the migration runs.
+  const herkunft = normHerkunft(
+    side.herkunft || row.herkunft || (
+      /(emanuel\s*george|dimitri\s*grill|vasil\s*ignatov)/i.test(row.name || '') ? 'CH_AT' : 'CH'
+    )
+  );
+
   return {
     id: row.id,
     name: row.name || 'Techniker',
@@ -114,7 +122,13 @@ function normalizeTechniker(row) {
     availability: row.availability_status ?? row.verfuegbar ?? true,
     booked_until: side.booked_until || null,
     equipment_traeger,
+    herkunft,
   };
+}
+
+function normHerkunft(v) {
+  const s = String(v || 'CH').toUpperCase().replace(/[\s-]/g, '_');
+  return s === 'CH_AT' ? 'CH_AT' : 'CH';
 }
 
 function parseSidecar(notizen) {

@@ -19,6 +19,7 @@
 <meta name="twitter:description" content="Foto scannen → Fachmann finden. Sofort, kostenlos, KI-gestützt."/>
 <title>Baby BOB – Dein Allround-Finder</title>
 <link rel="manifest" href="manifest.json"/>
+<script src="lib/regions.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Syne:wght@700;800&display=swap" rel="stylesheet"/>
@@ -72,6 +73,8 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .cat-i{font-size:24px;}.cat-n{font-size:10px;font-weight:700;color:var(--muted);text-align:center;line-height:1.3;}
 
 .bnav{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,15,0.96);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding:10px 0 calc(26px + env(safe-area-inset-bottom,0px));z-index:100;}
+/* Inhalt der Screens mit fixer Tab-Leiste bekommt unten Platz, damit nichts verdeckt wird */
+#home,#about{padding-bottom:calc(86px + env(safe-area-inset-bottom,0px));}
 .bni{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 0;}
 .bni.on .bni-i,.bni.on .bni-l{color:var(--y);}
 .bni-i{font-size:20px;color:rgba(255,255,255,0.3);}
@@ -142,7 +145,9 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 .sc-dot{width:8px;height:8px;border-radius:50%;background:#6bcb77;display:inline-block;box-shadow:0 0 0 0 rgba(107,203,119,0.5);animation:dotpulse 1.8s infinite;}
 
 /* ═══ Task 9: DESIGN POLISH (additive, no layout change) ═══ */
-@keyframes screenIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+/* Opacity-only (NO transform): a transform on the active screen would create a
+   containing block in WebKit and break position:fixed of the bottom nav (.bnav). */
+@keyframes screenIn{from{opacity:0;}to{opacity:1;}}
 .screen.active,.gs-screen.active,.tech-screen.active,.admin-screen.active,.login-screen.active{animation:screenIn .28s ease both;}
 .admin-hub-card,.pd-item,.admin-user-card,.admin-proj-row,.gs-tech-card,.admin-ampel,.tech-day-card,.pd-card{transition:transform .15s ease,box-shadow .2s ease,border-color .2s ease;}
 .admin-hub-card:hover,.pd-item:hover{transform:translateY(-1px);border-color:rgba(255,215,0,0.25);}
@@ -234,6 +239,8 @@ button:active{transform:scale(0.97);}
 
 /* AKTIONS-BUTTONS */
 .r-actions{margin:14px 18px 0;display:flex;flex-direction:column;gap:10px;}
+.r-richtpreis{background:rgba(255,217,61,0.08);border:1px solid rgba(255,217,61,0.25);border-radius:12px;padding:11px 14px;font-size:12.5px;color:var(--text);line-height:1.5;}
+.r-richtpreis strong{color:var(--y);}
 .r-action-tit{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:2px;}
 
 /* Option 0: Gratis Handwerker finden */
@@ -476,6 +483,7 @@ button:active{transform:scale(0.97);}
 .gs-tech-main{flex:1;min-width:0;}
 .gs-tech-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .gs-tech-name{font-size:15px;font-weight:800;color:#e8edf5;}
+.gs-herkunft{font-size:12px;letter-spacing:-1px;vertical-align:middle;opacity:.92;}
 .gs-tech-rating{font-size:12px;font-weight:800;color:#FFD700;white-space:nowrap;}
 .gs-tech-qual{font-size:11.5px;color:rgba(232,237,245,0.5);margin-top:2px;}
 .gs-tech-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
@@ -784,6 +792,27 @@ button:active{transform:scale(0.97);}
 .landing-cta-bob{background:linear-gradient(135deg,#FFD700,#FF6B35);color:#0a0a0f;box-shadow:0 8px 26px rgba(255,170,40,0.4);}
 .landing-or{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:6;width:48px;height:48px;border-radius:50%;background:#07111f;border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;color:rgba(232,237,245,0.65);box-shadow:0 4px 18px rgba(0,0,0,0.5);}
 .landing-foot{flex-shrink:0;text-align:center;font-size:10.5px;color:rgba(232,237,245,0.32);padding:12px 18px calc(12px + var(--safe-bottom));background:#07111f;}
+/* Landing: Markt-Label (GS, statisch) + Regionen-Selektor (BOB, 5 Flaggen) */
+.landing-region{margin-top:12px;display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;}
+.landing-region-gs{font-size:13px;font-weight:800;color:rgba(234,241,251,0.7);}
+.landing-flag-static{font-size:20px;}
+.landing-region-lbl{font-size:12px;}
+.landing-flag{font-size:22px;line-height:1;background:transparent;border:2px solid transparent;border-radius:12px;padding:5px 6px;cursor:pointer;transition:transform .12s,border-color .15s,background .15s;-webkit-tap-highlight-color:transparent;min-width:40px;min-height:40px;display:flex;align-items:center;justify-content:center;filter:grayscale(0.35);opacity:.72;}
+.landing-flag:active{transform:scale(0.9);}
+.landing-flag:focus-visible{outline:3px solid #4ECDC4;outline-offset:1px;}
+.landing-flag.sel{border-color:#FFD700;background:rgba(255,215,0,0.14);filter:none;opacity:1;box-shadow:0 0 14px rgba(255,215,0,0.35);}
+/* GS Telefon-CTA ("Lieber direkt sprechen? Ruf uns an.") */
+.gs-phone-cta{margin:14px 18px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(74,158,255,0.08));border:1px solid rgba(255,215,0,0.3);border-radius:14px;padding:12px 15px;text-decoration:none;cursor:pointer;transition:transform .12s;}
+.gs-phone-cta:active{transform:scale(0.99);}
+.gs-phone-cta:focus-visible{outline:3px solid #4ECDC4;outline-offset:2px;}
+.gs-phone-txt{display:flex;flex-direction:column;line-height:1.35;min-width:0;}
+.gs-phone-txt strong{font-size:13px;font-weight:800;color:#e8edf5;}
+.gs-phone-txt span{font-size:11px;color:rgba(232,237,245,0.5);}
+.gs-phone-num{flex-shrink:0;background:#FFD700;color:#080808;font-weight:900;font-size:13px;border-radius:11px;padding:9px 13px;white-space:nowrap;min-height:42px;display:flex;align-items:center;gap:5px;}
+/* Master-only Admin-Rücksprung (floating, oben links) */
+.admin-return-btn{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:12px;z-index:9998;min-height:40px;padding:0 15px;background:rgba(74,158,255,0.95);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:12px;font-family:'Nunito',sans-serif;font-weight:900;font-size:12.5px;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.45);display:flex;align-items:center;gap:6px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}
+.admin-return-btn:active{transform:scale(0.96);}
+.admin-return-btn:focus-visible{outline:3px solid #FFD700;outline-offset:2px;}
 /* Sehr schmale Phones (≤400px): Padding reduzieren, Rand-Clipping verhindern */
 @media (max-width:400px){
   .landing-half{padding-left:16px;padding-right:16px;}
@@ -818,13 +847,15 @@ button:active{transform:scale(0.97);}
 <div id="bob-aria-live" class="sr-only" aria-live="polite" role="status"></div>
 <!-- Accessibility: audio-unlock button — appears only when the browser blocks autoplay -->
 <button id="audio-unlock-btn" class="audio-unlock-btn" type="button" style="display:none;" aria-label="Ton aktivieren und Begrüßung abspielen" onclick="bobUnlockFromButton()"><span aria-hidden="true">🔊</span> Ton aktivieren</button>
+<!-- Master only: return to the admin hub from a GS/BOB sub-area (shown via JS, never leaks to other roles) -->
+<button id="admin-return-btn" class="admin-return-btn" type="button" style="display:none;" onclick="adminReturnHome()"><span aria-hidden="true">←</span> Zurück zum Admin</button>
 
 <div id="demo-banner" class="demo-banner" style="display:none;">🧪 Demo-Modus — Login kommt vor Launch <span onclick="demoExit()">✕ Beenden</span></div>
 
 <!-- SPLIT-EINSTIEGSSEITE (GS / BOB) — erste Seite für Werbe-Besucher -->
 <div id="landing" class="screen landing">
   <div class="landing-split">
-    <button type="button" class="landing-half landing-gs" onclick="landingGoGS()" aria-label="George Solutions öffnen – Profi-Team auf Abruf buchen">
+    <div class="landing-half landing-gs" role="button" tabindex="0" onclick="if(event.target===this||!event.target.closest('button')){landingGoGS();}" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();landingGoGS();}" aria-label="George Solutions öffnen – Profi-Team auf Abruf buchen">
       <div class="landing-glow"></div>
       <div class="landing-half-inner">
         <div class="landing-logo landing-logo-gs">George <span>Solutions</span></div>
@@ -833,9 +864,10 @@ button:active{transform:scale(0.97);}
         <h2 class="landing-tit">Profi-Team auf Abruf</h2>
         <p class="landing-sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes SHK-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
         <span class="landing-cta landing-cta-gs">SHK-Dienstleistung buchen →</span>
+        <div class="landing-region landing-region-gs" aria-label="Markt: Schweiz"><span class="landing-flag-static" title="Schweiz">🇨🇭</span> <span class="landing-region-lbl">Schweiz</span></div>
       </div>
-    </button>
-    <button type="button" class="landing-half landing-bob" onclick="landingGoBob()" aria-label="Baby BOB öffnen – Problem scannen und Fachmann finden">
+    </div>
+    <div class="landing-half landing-bob" role="button" tabindex="0" onclick="if(event.target===this||!event.target.closest('button')){landingGoBob();}" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();landingGoBob();}" aria-label="Baby BOB öffnen – Problem scannen und Fachmann finden">
       <div class="landing-glow"></div>
       <div class="landing-half-inner">
         <div class="landing-logo landing-logo-bob">Baby <span>BOB</span></div>
@@ -844,8 +876,9 @@ button:active{transform:scale(0.97);}
         <h2 class="landing-tit">Problem scannen &amp; Fachmann finden</h2>
         <p class="landing-sub">Foto machen oder Problem beschreiben – die KI erkennt sofort, welcher Handwerker oder Dienstleister zu dir passt.</p>
         <span class="landing-cta landing-cta-bob">Jetzt scannen →</span>
+        <div class="landing-region landing-region-bob" id="landing-region" role="radiogroup" aria-label="Region wählen – Sprache und Währung"></div>
       </div>
-    </button>
+    </div>
     <div class="landing-or" aria-hidden="true">oder</div>
   </div>
   <div class="landing-foot">George Solutions · Schweizer SHK-Dienstleistung &amp; KI-Fachmann-Finder</div>
@@ -1069,13 +1102,14 @@ button:active{transform:scale(0.97);}
   <!-- AKTIONS-BUTTONS -->
   <div class="r-actions">
     <div class="r-action-tit">Was möchtest du als nächstes?</div>
+    <div class="r-richtpreis" id="r-richtpreis" style="display:none;"></div>
 
-    <!-- Option 0: Kostenlos Handwerker finden -->
-    <button class="r-btn-gratis" onclick="go('contact')">
+    <!-- Option 0: Fachmann/Handwerker finden (Label je Branche) -->
+    <button class="r-btn-gratis" id="r-act-finden" onclick="go('contact')">
       <div class="r-btn-gratis-i">🤝</div>
       <div class="r-btn-gratis-info">
-        <strong>Handwerker finden</strong>
-        <span>BOB sucht den richtigen Fachmann für dich</span>
+        <strong id="r-act-finden-tit">Handwerker finden</strong>
+        <span id="r-act-finden-sub">BOB sucht den richtigen Fachmann für dich</span>
       </div>
       <div class="r-btn-gratis-price">
         <strong>Gratis</strong>
@@ -1083,8 +1117,8 @@ button:active{transform:scale(0.97);}
       </div>
     </button>
 
-    <!-- Option 1: Professionelles Angebot -->
-    <button class="r-btn-angebot" onclick="openAngebotSheet()">
+    <!-- Option 1: Professionelles Angebot (nur Gruppe A = Handwerk/Technik) -->
+    <button class="r-btn-angebot" id="r-act-angebot" onclick="openAngebotSheet()">
       <div class="r-btn-angebot-i">📋</div>
       <div class="r-btn-angebot-info">
         <strong>Professionelles Angebot</strong>
@@ -1092,6 +1126,19 @@ button:active{transform:scale(0.97);}
       </div>
       <div class="r-btn-angebot-price">
         <strong>CHF 39–69</strong>
+        <span>einmalig</span>
+      </div>
+    </button>
+
+    <!-- Option 1b: Anbieter in der Nähe finden (nur Gruppe B = Beauty/Services), CHF 5 -->
+    <button class="r-btn-angebot" id="r-act-finder" style="display:none;" onclick="bobFinderCheckout()">
+      <div class="r-btn-angebot-i">📍</div>
+      <div class="r-btn-angebot-info">
+        <strong>Anbieter in deiner Nähe finden</strong>
+        <span>Wir schicken dir die nächsten passenden Anbieter (z.B. Barbershops, Nagelstudios) per E-Mail.</span>
+      </div>
+      <div class="r-btn-angebot-price">
+        <strong id="r-act-finder-price">CHF 5</strong>
         <span>einmalig</span>
       </div>
     </button>
@@ -1340,6 +1387,10 @@ button:active{transform:scale(0.97);}
       <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">SHK Vollservice</div>
     </div>
   </div>
+  <a class="gs-phone-cta" data-gs-phone href="tel:+41" aria-label="George Solutions anrufen">
+    <div class="gs-phone-txt"><strong>Lieber direkt sprechen?</strong><span>Ruf uns an.</span></div>
+    <span class="gs-phone-num">📞 <span class="gs-phone-number">+41 XX XXX XX XX</span></span>
+  </a>
   <div class="gs-login-link" onclick="showScreen('login')">🔑 Partner / Techniker Login</div>
 </div>
 
@@ -1384,6 +1435,10 @@ button:active{transform:scale(0.97);}
   <button class="gs-btn-primary" id="gs-analyse-btn" onclick="gsStartAnalysis()">
     <span>🧠</span> KI-Analyse starten
   </button>
+  <a class="gs-phone-cta" data-gs-phone href="tel:+41" aria-label="George Solutions anrufen">
+    <div class="gs-phone-txt"><strong>Lieber direkt sprechen?</strong><span>Ruf uns an.</span></div>
+    <span class="gs-phone-num">📞 <span class="gs-phone-number">+41 XX XXX XX XX</span></span>
+  </a>
 </div>
 
 <!-- GS SCREEN 2: PROJEKTDATENBLATT -->
@@ -1581,6 +1636,10 @@ button:active{transform:scale(0.97);}
   <button class="gs-btn-primary" id="gs-send-btn" onclick="gsSubmit()">
     <span>🚀</span> Anfrage jetzt senden
   </button>
+  <a class="gs-phone-cta" data-gs-phone href="tel:+41" aria-label="George Solutions anrufen">
+    <div class="gs-phone-txt"><strong>Lieber direkt sprechen?</strong><span>Ruf uns an.</span></div>
+    <span class="gs-phone-num">📞 <span class="gs-phone-number">+41 XX XXX XX XX</span></span>
+  </a>
   <div style="padding:10px 18px 0;font-size:11px;color:rgba(232,237,245,0.3);text-align:center;">Ihre Daten werden vertraulich behandelt und nur für diese Anfrage verwendet.</div>
 </div>
 
@@ -2054,6 +2113,7 @@ function go(id){
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   var el=document.getElementById(id);
   if(el){el.classList.add('active');el.scrollTop=0;}
+  if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
 }
 
 // ══ SHEETS ══
@@ -2448,6 +2508,9 @@ function renderResult(r){
   bobUpdateVoiceIcon();
   if(bobVoiceOn) bobSpeak(bobResultSpeech(r),{announce:'BOB liest die Diagnose vor.'});
 
+  // Branch-dependent follow-up options (Gruppe A Handwerk/Technik vs B Beauty/Services).
+  bobApplyBranchOptions(r);
+
   // Reset self-learning feedback + conversation for this new result.
   bobResetFeedback();
   bobChatReset();
@@ -2455,6 +2518,57 @@ function renderResult(r){
   var unknown=(r.kategorie==='Unbekannt')||/nicht bestimmbar|nicht möglich|fehlgeschlagen|kein bild/i.test((r.fachmann||'')+(r.erkannt_als||''));
   var ub=document.getElementById('bob-unbekannt');
   if(ub) ub.style.display=unknown?'block':'none';
+}
+
+// ══ BRANCHEN-MAPPING (zentral) — Gruppe A = Handwerk/Technik, Gruppe B = Beauty/Services/Gesundheit ══
+// Erweiterbar: hier Keywords ergänzen, um neue Branchen einer Gruppe zuzuordnen.
+var BOB_BRANCHE_B=/(friseur|coiffeur|barber|barbershop|nagel|man[iü]k[üu]re|pedik[üu]re|kosmetik|beauty|sch[öo]nheit|massage|masseu|wimpern|lash|microblading|waxing|haarentfernung|sugaring|make[\s-]?up|schmink|visagist|tattoo|t[äa]towier|piercing|fusspflege|podolog|solarium|spa|wellness|arzt|[äa]rzt|doktor|mediz|therapeut|physio|psycho|heilprakt|zahn|dental|ern[äa]hrung|coach|frisur|hairstyl|brow|beautician)/i;
+function bobBranchGroup(r){
+  r=r||{};
+  var hay=[r.kategorie,r.fachmann,r.erkannt_als,r.titel,(typeof currentCat!=='undefined'?currentCat:'')].join(' ');
+  return BOB_BRANCHE_B.test(hay)?'B':'A';   // Default = A (Handwerk), wenn unklar
+}
+function bobApplyBranchOptions(r){
+  var grp=bobBranchGroup(r);
+  var fTit=document.getElementById('r-act-finden-tit');
+  var fSub=document.getElementById('r-act-finden-sub');
+  var angebot=document.getElementById('r-act-angebot');
+  var finder=document.getElementById('r-act-finder');
+  var richt=document.getElementById('r-richtpreis');
+  if(grp==='B'){
+    // Beauty/Services: neutraler Begriff, kein "Professionelles Angebot", dafür CHF-5-Finder.
+    if(fTit) fTit.textContent='Fachmann / Anbieter finden';
+    if(fSub) fSub.textContent='BOB findet den passenden Anbieter in deiner Nähe';
+    if(angebot) angebot.style.display='none';
+    if(finder){
+      finder.style.display='flex';
+      var fp=document.getElementById('r-act-finder-price');
+      if(fp) fp.textContent=bbFormatRegion(5);
+    }
+    // BOB gibt direkt Richtpreise für die Region.
+    if(richt){
+      var kp=(r&&r.kosten&&r.kosten!=='–')?r.kosten:null;
+      richt.innerHTML='💡 In deiner Region '+(window.BB_REGIONS&&window.BB_REGIONS[bbRegion]?('('+window.BB_REGIONS[bbRegion].flag+' '+window.BB_REGIONS[bbRegion].name+')'):'')
+        +' kostet das üblicherweise '+(kp?('<strong>'+kp+'</strong>'):'<strong>je nach Anbieter unterschiedlich</strong>')+'.';
+      richt.style.display='block';
+    }
+  }else{
+    // Handwerk/Technik: wie bisher.
+    if(fTit) fTit.textContent='Handwerker finden';
+    if(fSub) fSub.textContent='BOB sucht den richtigen Fachmann für dich';
+    if(angebot) angebot.style.display='';
+    if(finder) finder.style.display='none';
+    if(richt) richt.style.display='none';
+  }
+}
+// Region-Preisformat (formatPrice je Markt; Fallback CHF).
+function bbFormatRegion(amount){
+  try{ if(window.bbFormatPrice) return window.bbFormatPrice(amount,bbRegion); }catch(e){}
+  return 'CHF '+amount;
+}
+// CHF-5-Anbieter-Finder → Stripe-Checkout (Betrag CHF 5).
+function bobFinderCheckout(){
+  if(typeof startCheckout==='function'){ startCheckout('finder'); }
 }
 
 // ══ ANGEBOT SHEET ══
@@ -2594,14 +2708,15 @@ function loadScanCounter(){
   }catch(e){}
 })();
 
-// Aufgabe 2: Stripe checkout (Test-Modus).
+// Aufgabe 2: Stripe checkout (Test-Modus). Region wird mitgesendet (Markt-Kontext).
 function startCheckout(product){
   setMsg('prem-msg','Weiterleitung zu Stripe…','');
-  fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product:product})})
+  try{ toast('Weiterleitung zu Stripe…'); }catch(e){}
+  fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product:product,region:bbRegion})})
     .then(function(r){return r.json();}).then(function(d){
       if(d.url){window.location.href=d.url;}
-      else{setMsg('prem-msg',d.error||'Zahlung momentan nicht verfügbar','err');}
-    }).catch(function(){setMsg('prem-msg','Verbindungsfehler – bitte erneut versuchen','err');});
+      else{var m=d.error||'Zahlung momentan nicht verfügbar';setMsg('prem-msg',m,'err');try{toast('⚠️ '+m);}catch(e){}}
+    }).catch(function(){setMsg('prem-msg','Verbindungsfehler – bitte erneut versuchen','err');try{toast('Verbindungsfehler – bitte erneut versuchen');}catch(e){}});
 }
 // Payment result banner via ?bezahlt=ok | abbruch
 (function bezahltResult(){
@@ -3168,6 +3283,7 @@ function toast(msg){
 // ══════════════════════════════════════════
 
 var appMode='bob';
+var bobLang='de';   // BOB-Sprache (folgt der gewählten Region; default Deutsch)
 var gsData={};
 var gsAiResult=null;
 var gsSelectedTarif=null;
@@ -3206,6 +3322,7 @@ function setMode(mode){
     if(tb2){tb2.classList.remove('act-bob');tb2.classList.remove('act-gs');}
     if(tg2){tg2.classList.add('act-gs');tg2.classList.remove('act-bob');}
   }
+  if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
 }
 
 // ── Split-Einstiegsseite (Landing) ──
@@ -3234,6 +3351,53 @@ function routeAnonymousStart(){
   showLanding();
 }
 
+// ── Region/Markt (BOB-Seite, B2C): 5 Märkte via lib/regions.js, localStorage "bb_region" ──
+var bbRegion='CH';
+function bbRegionData(code){ try{ return (window.BB_REGIONS&&window.BB_REGIONS[code])||window.BB_REGIONS.CH; }catch(e){ return null; } }
+function bbGetRegion(){
+  try{
+    var saved=localStorage.getItem('bb_region');
+    if(saved&&window.BB_REGIONS&&window.BB_REGIONS[saved]) return saved;
+  }catch(e){}
+  try{ if(window.bbDetectRegion){ var d=window.bbDetectRegion(); if(window.BB_REGIONS&&window.BB_REGIONS[d]) return d; } }catch(e){}
+  return 'CH';
+}
+function bbApplyRegion(code){
+  bbRegion=(window.BB_REGIONS&&window.BB_REGIONS[code])?code:'CH';
+  var rd=bbRegionData(bbRegion);
+  if(rd&&rd.language){ bobLang=rd.language; }            // BOB-Sprache folgt der Region (Voice/Greeting)
+  try{ document.documentElement.setAttribute('data-region',bbRegion); }catch(e){}
+}
+function bbSetRegion(code){
+  if(!(window.BB_REGIONS&&window.BB_REGIONS[code])) code='CH';
+  try{ localStorage.setItem('bb_region',code); }catch(e){}
+  bbApplyRegion(code);
+  bbRenderRegionSelector();
+  var rd=bbRegionData(code);
+  try{ toast((rd?rd.flag+' '+rd.name:'Schweiz')+' · '+(rd?rd.currency:'CHF')); }catch(e){}
+}
+function bbRenderRegionSelector(){
+  var box=document.getElementById('landing-region');
+  if(!box||!window.BB_REGION_ORDER) return;
+  box.innerHTML=window.BB_REGION_ORDER.map(function(code){
+    var rd=bbRegionData(code); if(!rd) return '';
+    var sel=(code===bbRegion)?' sel':'';
+    return '<button type="button" class="landing-flag'+sel+'" role="radio" aria-checked="'+(sel?'true':'false')+'"'
+      +' aria-label="'+rd.name+' – '+rd.currency+'" title="'+rd.name+'"'
+      +' onclick="event.stopPropagation();bbSetRegion(\''+code+'\')">'+rd.flag+'</button>';
+  }).join('');
+}
+
+// ── GS Telefon (zentral änderbar) — befüllt alle Telefon-CTAs (Landing/Flow/Bestätigung) ──
+var GS_PHONE='+41 XX XXX XX XX';   // <- hier die echte Nummer eintragen
+function gsInitPhones(){
+  var tel='tel:'+String(GS_PHONE).replace(/[^\d+]/g,'');
+  document.querySelectorAll('a[data-gs-phone]').forEach(function(a){
+    a.setAttribute('href',tel);
+    var n=a.querySelector('.gs-phone-number'); if(n) n.textContent=GS_PHONE;
+  });
+}
+
 // ── GS Navigation ──
 function gsGo(screenId){
   var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
@@ -3243,6 +3407,7 @@ function gsGo(screenId){
   });
   var el=document.getElementById(screenId);
   if(el){el.classList.add('active');el.scrollTop=0;}
+  if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
 }
 
 // ── Chip-Auswahl ──
@@ -3438,6 +3603,14 @@ function gsFmtCHF(n){
   try{ if(typeof window!=='undefined'&&window.bbFormatPrice) return window.bbFormatPrice(n,'CH'); }catch(e){}
   return 'CHF '+n;
 }
+// Herkunfts-Flagge(n) eines Technikers: 'CH'→🇨🇭, 'CH_AT'→🇨🇭🇦🇹 (Punkt 4, ≠ Markt-Flaggen Landing).
+function gsHerkunftFlags(h){
+  return (String(h||'CH').toUpperCase()==='CH_AT') ? '🇨🇭🇦🇹' : '🇨🇭';
+}
+function gsHerkunftHtml(h){
+  var title=(String(h||'CH').toUpperCase()==='CH_AT')?'Herkunft: Schweiz & Österreich':'Herkunft: Schweiz';
+  return '<span class="gs-herkunft" title="'+title+'" aria-label="'+title+'">'+gsHerkunftFlags(h)+'</span>';
+}
 function gsTechById(id){ return gsTechniker.filter(function(t){return t.id===id;})[0]||null; }
 function gsIsEquip(t){
   if(!t) return false;
@@ -3509,7 +3682,7 @@ function gsRenderTeamPartner(){
     panel.style.display='block';
     panel.innerHTML='<div class="gs-team-partner-tit">✓ Equipment-Träger bereits im Team</div>'
       +'<div class="gs-team-partner-row"><div class="gs-team-partner-av">'+(primary.photo_emoji||'🧰')+'</div>'
-      +'<div class="gs-team-partner-info"><div class="gs-team-partner-name">'+gsEsc(primary.name)+'</div>'
+      +'<div class="gs-team-partner-info"><div class="gs-team-partner-name">'+gsEsc(primary.name)+' '+gsHerkunftHtml(primary.herkunft)+'</div>'
       +'<div class="gs-team-partner-tag">Bringt Vollequipment mit · zweiter Partner frei wählbar</div></div></div>';
     if(note) note.textContent='Ihre Wahl bringt bereits das Vollequipment mit – den zweiten Partner teilt das Team passend zu.';
     return;
@@ -3529,7 +3702,7 @@ function gsRenderTeamPartner(){
   panel.style.display='block';
   panel.innerHTML='<div class="gs-team-partner-tit">🧰 Equipment-Träger im 2er-Team</div>'
     +'<div class="gs-team-partner-row"><div class="gs-team-partner-av">'+(anchor.photo_emoji||'🧰')+'</div>'
-    +'<div class="gs-team-partner-info"><div class="gs-team-partner-name">'+gsEsc(anchor.name)+'</div>'
+    +'<div class="gs-team-partner-info"><div class="gs-team-partner-name">'+gsEsc(anchor.name)+' '+gsHerkunftHtml(anchor.herkunft)+'</div>'
     +'<div class="gs-team-partner-tag">Bringt Vollequipment mit (Werkzeug · Fahrzeug · Material)</div></div>'
     +(canSwap?'<button type="button" class="gs-team-partner-swap" aria-label="Equipment-Träger tauschen" onclick="gsSwapEquip()">↔ Tauschen</button>':'')
     +'</div>';
@@ -3630,7 +3803,7 @@ function gsRenderTechniker(){
     return '<div class="gs-tech-card'+sel+matchCls+bookedCls+'"'+onclick+'>'
       +'<div class="gs-tech-avatar">'+(t.photo_emoji||'👷')+'</div>'
       +'<div class="gs-tech-main">'
-        +'<div class="gs-tech-top"><span class="gs-tech-name">'+gsEsc(t.name)+req+'</span>'
+        +'<div class="gs-tech-top"><span class="gs-tech-name">'+gsEsc(t.name)+' '+gsHerkunftHtml(t.herkunft)+req+'</span>'
           +(rating?'<span class="gs-tech-rating">'+rating+'</span>':'')+'</div>'
         +(t.qualification?'<div class="gs-tech-qual">'+gsEsc(t.qualification)+'</div>':'')
         +(isMatch?'<div class="gs-tech-match-badge">✓ Passt zu '+gsEsc(gsData.bereich)+'</div>':'')
@@ -3891,6 +4064,7 @@ function showScreen(id){
   });
   var el=document.getElementById(id);
   if(el){el.classList.add('active');el.scrollTop=0;}
+  if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
 }
 
 // ── Init on page load ──
@@ -3957,6 +4131,10 @@ function routeAfterAuth(token,d){
 
 function applyRole(token,user,role,techName){
   authToken=token;authUser=user;authRole=role;authTechName=techName;
+  // Admin-return button: only ever for a real master; reset for everyone else (no leak).
+  if(role!=='master'){ adminReturnArmed=false; try{ sessionStorage.removeItem('bb_admin_armed'); }catch(e){} }
+  else { try{ if(sessionStorage.getItem('bb_admin_armed')==='1') adminReturnArmed=true; }catch(e){} }
+  if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
   var modeWrap=document.querySelector('.mode-toggle-wrap');
   switch(role){
     case 'master':
@@ -4099,6 +4277,7 @@ function setLoginMsg(msg,type){
 function logout(){
   localStorage.removeItem('bob_auth_token');
   authToken=null;authRole=null;authUser=null;authTechName=null;
+  adminDisarmReturn();
   // Reset mode toggle — keep it visible so the GS Login button shows.
   var modeWrap=document.querySelector('.mode-toggle-wrap');
   if(modeWrap) modeWrap.style.display='';
@@ -4238,7 +4417,37 @@ var cuRole=null,lastTempPw='';
 function enterAdminMode(mode){
   var modeWrap=document.querySelector('.mode-toggle-wrap');
   if(modeWrap) modeWrap.style.display='';
+  adminArmReturn();          // master entered GS/BOB from the admin hub → show return button
   setMode(mode);
+  updateAdminReturnBtn();
+}
+
+// ── Master-only "← Zurück zum Admin" (no leak to partner/techniker/demo, reload-safe) ──
+var adminReturnArmed=false;
+function adminArmReturn(){
+  if(authRole==='master'&&!demoMode){ adminReturnArmed=true; try{ sessionStorage.setItem('bb_admin_armed','1'); }catch(e){} }
+}
+function adminDisarmReturn(){
+  adminReturnArmed=false; try{ sessionStorage.removeItem('bb_admin_armed'); }catch(e){}
+  updateAdminReturnBtn();
+}
+function isMasterContext(){ return authRole==='master' && !demoMode; }
+function adminScreenActive(){
+  var ids=['admin-home','admin-users','admin-projekte','admin-projektblatt','admin-status','admin-dashboard'];
+  for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el&&el.classList.contains('active')) return true; }
+  return false;
+}
+function updateAdminReturnBtn(){
+  var btn=document.getElementById('admin-return-btn');
+  if(!btn) return;
+  var landing=document.getElementById('landing');
+  var onLanding=!!(landing&&landing.classList.contains('active'));
+  var show=adminReturnArmed && isMasterContext() && !adminScreenActive() && !onLanding;
+  btn.style.display=show?'flex':'none';
+}
+function adminReturnHome(){
+  showScreen('admin-home');
+  updateAdminReturnBtn();
 }
 
 function showAdminUsers(){showScreen('admin-users');loadAdminUsers();}
@@ -4620,7 +4829,17 @@ function loadStatus(){
 // ── TECHNIKER: TAGESRAPPORT ──
 var trProjekte=[],trFotosB64=[],trSignCtx=null,trSignHas=false;
 function initTechRapport(){
-  document.getElementById('tr-welcome').textContent='Hallo, '+(authTechName||(authUser&&authUser.email.split('@')[0])||'Techniker');
+  var techName=authTechName||(authUser&&authUser.email&&authUser.email.split('@')[0])||'Techniker';
+  var wel=document.getElementById('tr-welcome');
+  if(wel) wel.textContent='Hallo, '+techName;
+  // Dezent: Herkunfts-Flagge neben dem Namen (best-effort Lookup, blockiert nichts).
+  try{
+    fetch('/api/techniker').then(function(r){return r.json();}).then(function(d){
+      var list=(d&&d.techniker)||[]; var tn=String(techName).toLowerCase();
+      var me=list.filter(function(t){var n=(t.name||'').toLowerCase();return n&&(n.indexOf(tn)>-1||tn.indexOf(n)>-1);})[0];
+      if(me&&wel) wel.innerHTML='Hallo, '+gsEsc(techName)+' '+gsHerkunftHtml(me.herkunft);
+    }).catch(function(){});
+  }catch(e){}
   document.getElementById('tr-datum').value=new Date().toISOString().slice(0,10);
   chipsInto('tr-arbeiten',TR_ARBEITEN,[],true);
   chipsInto('tr-material',TR_MATERIAL,[],true);
@@ -5204,7 +5423,11 @@ function setTechStatus(msg,type){
 
 // ── Boot the audio subsystem once all voice vars/functions are defined (accessibility) ──
 (function bootBobAudio(){
-  function run(){ try{ bobAudioInit(); }catch(e){} }
+  function run(){
+    try{ bbApplyRegion(bbGetRegion()); bbRenderRegionSelector(); }catch(e){}
+    try{ gsInitPhones(); }catch(e){}
+    try{ bobAudioInit(); }catch(e){}
+  }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',run,{once:true});
   else run();
 })();

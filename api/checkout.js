@@ -12,6 +12,7 @@ const PRODUCTS = {
   abo_basic:     { name: 'BOB Abo – Basic',     amount: 499,   type: 'sub' }, // CHF 4.99/Mt
   abo_plus:      { name: 'BOB Abo – Plus',      amount: 990,   type: 'sub' }, // CHF 9.90/Mt
   abo_pro:       { name: 'BOB Abo – Pro',       amount: 2900,  type: 'sub' }, // CHF 29/Mt
+  finder:        { name: 'BOB Anbieter-Finder', amount: 500,   type: 'one' }, // CHF 5 (Beauty/Services: Anbieter per E-Mail)
 };
 
 export default async function handler(req, res) {
