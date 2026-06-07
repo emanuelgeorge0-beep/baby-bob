@@ -1489,7 +1489,6 @@ button:active{transform:scale(0.97);}
     <div class="demo-row">
       <button class="demo-btn" onclick="demoEnter('techniker')">👷 Techniker</button>
       <button class="demo-btn" onclick="demoEnter('gs_partner')">🏢 Partner</button>
-      <button class="demo-btn" onclick="demoEnter('gs_admin')">👑 Admin</button>
     </div>
   </div>
 </div>
@@ -3380,6 +3379,7 @@ function showScreen(id){
       var kv=p.split('=');params[kv[0]]=decodeURIComponent(kv[1]||'');
     });
     if(params.access_token){
+      if(params.refresh_token){authRefresh=params.refresh_token;try{localStorage.setItem('bob_refresh',params.refresh_token);}catch(e){}}
       history.replaceState(null,'',window.location.pathname);
       verifyAndRoute(params.access_token);
       return;
@@ -3391,7 +3391,14 @@ function showScreen(id){
     verifyAndRoute(t);
     return;
   }
-  // 3. No session → show BOB home (anonymous OK for B2C scanner)
+  // 3. SECRET master entry: only via /gs-intern-7k2x (not linked anywhere).
+  if((location.pathname||'').indexOf('gs-intern-7k2x')>-1){
+    applyRole(null,null,null,null);
+    try{ var le=document.getElementById('login-email'); if(le) le.value='emanuelgeorge0@gmail.com'; }catch(e){}
+    showScreen('login');
+    return;
+  }
+  // 4. No session → show BOB home (anonymous OK for B2C scanner)
   applyRole(null,null,null,null);
 })();
 
@@ -3427,8 +3434,9 @@ function applyRole(token,user,role,techName){
   authToken=token;authUser=user;authRole=role;authTechName=techName;
   var modeWrap=document.querySelector('.mode-toggle-wrap');
   switch(role){
+    case 'master':
     case 'gs_admin':
-      // Admin hub (user mgmt + mode entry). Mode toggle hidden; admin picks from hub.
+      // Master/Admin cockpit. Mode toggle hidden; picks from hub. (Master = secret only.)
       if(modeWrap) modeWrap.style.display='none';
       var aw=document.getElementById('admin-welcome');
       if(aw) aw.textContent=(user&&user.email)||'George Solutions';
@@ -3521,6 +3529,7 @@ function loginPassword(){
     if(d.error){setLoginMsg(d.error,'err');}
     else{
       localStorage.setItem('bob_auth_token',d.access_token);
+      if(d.refresh_token){authRefresh=d.refresh_token;try{localStorage.setItem('bob_refresh',d.refresh_token);}catch(e){}}
       setLoginMsg('','');
       routeAfterAuth(d.access_token,d);
     }
@@ -3832,10 +3841,45 @@ var TR_ARBEITEN=['Montage','Wartung','Reparatur','Installation','Inbetriebnahme'
 var TR_MATERIAL=['Rohre/Fittings','Armaturen','Pumpe','Heizkörper','Thermostat','Ventile','Dämmung','Kabel','Sonstiges'];
 var TR_EMPFAENGER=['Projektleiter','Kunde','Emanuel'];
 
+// ── Token refresh + Demo-Bypass (Bugfix "Ungültiger Token") ──
+var authRefresh=null;try{authRefresh=localStorage.getItem('bob_refresh')||null;}catch(e){}
+function refreshToken(){
+  if(!authRefresh) return Promise.resolve(false);
+  return fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'refresh',refresh_token:authRefresh})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d&&d.access_token){authToken=d.access_token;authRole=d.role||authRole;
+        try{localStorage.setItem('bob_auth_token',d.access_token);if(d.refresh_token){authRefresh=d.refresh_token;localStorage.setItem('bob_refresh',d.refresh_token);}}catch(e){}
+        return true;}
+      return false;
+    }).catch(function(){return false;});
+}
+// Demo-Modus: login-frei → kein gültiger Token nötig (lokaler Store statt API).
+var demoProjekte=[{id:'demo-1',name:'Heizungsrevision MFH Zürich',projektnummer:'P-2026-0007',standort:'Zürich',bereich:'Heizung',status:'laufend',stundensatz:67.9,partner_user_id:null,techniker:[{user_id:'d1',name:'Patrick Notter'}]}];
+function demoApi(ep,body){
+  var a=body&&body.action;
+  if(ep==='projekte'){
+    if(a==='list') return Promise.resolve({projekte:demoProjekte});
+    if(a==='create'){var p={id:'demo-'+Date.now(),name:body.name,projektnummer:body.projektnummer||('P-DEMO-'+(demoProjekte.length+1)),standort:body.standort,bereich:body.bereich,status:'aktiv',stundensatz:body.stundensatz,partner_user_id:body.partner_user_id||null,techniker:[]};demoProjekte.unshift(p);return Promise.resolve({ok:true,projekt:p});}
+    if(a==='get'){return Promise.resolve({projekt:demoProjekte.filter(function(x){return x.id===body.id;})[0]||demoProjekte[0]});}
+    if(a==='technicians') return Promise.resolve({technicians:[{user_id:'d1',name:'Patrick Notter'},{user_id:'d2',name:'Dimitri Grill'},{user_id:'d3',name:'Vasil Ignatov'}]});
+    if(a==='partners') return Promise.resolve({partners:[{user_id:'p1',name:'Anna Muster',firma:'Muster AG'}]});
+    if(a==='update'||a==='assign') return Promise.resolve({ok:true,projekt:demoProjekte.filter(function(x){return x.id===body.id;})[0]});
+  }
+  return Promise.resolve({}); // andere Endpunkte: leer (Screens zeigen freundliche Leerzustände)
+}
 function gsAuthApi(ep,body){
+  if(demoMode) return demoApi(ep,body);
   return fetch('/api/'+ep,{method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
-    body:JSON.stringify(body)}).then(function(r){return r.json();});
+    body:JSON.stringify(body)}).then(function(r){return r.json();}).then(function(d){
+      if(d&&d.error&&/Ungültiger Token|Nicht authentifiziert|Sitzung/i.test(d.error)&&authRefresh){
+        return refreshToken().then(function(ok){
+          if(!ok)return{error:'Sitzung abgelaufen – bitte neu anmelden'};
+          return fetch('/api/'+ep,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},body:JSON.stringify(body)}).then(function(r){return r.json();});
+        });
+      }
+      return d;
+    });
 }
 function chipsInto(containerId,values,picked,multi,onchange){
   var c=document.getElementById(containerId);if(!c)return;

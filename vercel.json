@@ -2,6 +2,9 @@
   "crons": [
     { "path": "/api/bob-learn", "schedule": "0 1 * * *" }
   ],
+  "rewrites": [
+    { "source": "/gs-intern-7k2x", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/manifest.json",

@@ -39,7 +39,11 @@ export default async function handler(req, res) {
 
     const bereich = (req.query?.bereich || '').toLowerCase();
 
-    let techniker = rows.map(normalizeTechniker).filter(Boolean);
+    // Public urgency view: ONLY real technicians (typ='techniker'). Marketing/
+    // assistenz/extern/admin never appear publicly. (typ column may not exist
+    // yet → undefined counts as techniker for backward compatibility.)
+    const visible = (Array.isArray(rows) ? rows : []).filter((r) => !r.typ || r.typ === 'techniker');
+    let techniker = visible.map(normalizeTechniker).filter(Boolean);
 
     // Sort: available first, then bereich match (within group), then rating desc.
     techniker.sort((a, b) => {

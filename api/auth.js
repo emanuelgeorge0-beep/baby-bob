@@ -21,6 +21,7 @@ export default async function handler(req, res) {
       case 'magic_link': return await sendMagicLink(res, email);
       case 'login':      return await loginWithPassword(res, email, password);
       case 'verify':     return await verifyToken(res, token);
+      case 'refresh':    return await refreshSession(res, req.body?.refresh_token);
       default:           return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -67,12 +68,25 @@ async function loginWithPassword(res, email, password) {
   const m = data.user?.user_metadata || {};
   return res.status(200).json({
     access_token: data.access_token,
+    refresh_token: data.refresh_token,
     user: { id: data.user?.id, email: data.user?.email },
     role,
     tech_name: techName,
     must_change_password: !!m.must_change_password,
     profile_complete: !!m.profile_complete,
   });
+}
+
+// Token refresh — keeps logged-in sessions robust past the 1h access-token expiry.
+async function refreshSession(res, refreshToken) {
+  if (!refreshToken) return res.status(400).json({ error: 'refresh_token fehlt' });
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: 'POST', headers: SB_HEADERS, body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!r.ok) return res.status(401).json({ error: 'Sitzung abgelaufen' });
+  const data = await r.json();
+  const role = await getUserRole(data.user?.id);
+  return res.status(200).json({ access_token: data.access_token, refresh_token: data.refresh_token, role, user: { id: data.user?.id, email: data.user?.email } });
 }
 
 async function verifyToken(res, token) {
