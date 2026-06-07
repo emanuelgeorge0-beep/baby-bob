@@ -592,6 +592,8 @@ button:active{transform:scale(0.97);}
 .demo-btn:active{transform:scale(0.96);}
 .demo-banner{position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#C9A000,#FFD700);color:#080808;font-size:12px;font-weight:800;text-align:center;padding:7px 12px;display:flex;align-items:center;justify-content:center;gap:14px;}
 .demo-banner span{cursor:pointer;font-weight:900;background:rgba(0,0,0,0.12);border-radius:8px;padding:2px 8px;}
+/* Demo-Banner (fixed, ~36px) darf den Inhalt nicht verdecken → Scroll-Container nach unten schieben */
+body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env(safe-area-inset-top,0px));}
 
 /* ═══ ONBOARDING: PW-CHANGE + PROFILE ═══ */
 .ob-card{width:100%;max-width:400px;}
@@ -602,7 +604,9 @@ button:active{transform:scale(0.97);}
 .ob-hint{font-size:11px;color:rgba(232,237,245,0.35);text-align:center;}
 
 /* ═══ ADMIN SCREENS ═══ */
-.admin-screen{display:none;flex-direction:column;min-height:100dvh;background:#07111f;color:#e8edf5;padding-bottom:32px;}
+/* Scroll-Fix: feste Viewport-Höhe + eigener Scroll-Container (body ist overflow:hidden),
+   großzügiges padding-bottom, damit Felder/Buttons über der Tastatur erreichbar bleiben. */
+.admin-screen{display:none;flex-direction:column;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#07111f;color:#e8edf5;padding-bottom:calc(140px + env(safe-area-inset-bottom,0px));scroll-padding-bottom:160px;}
 .admin-screen.active{display:flex;}
 .admin-hdr{display:flex;align-items:center;justify-content:space-between;padding:52px 20px 0;}
 .admin-hdr-tit{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;}
@@ -699,7 +703,7 @@ button:active{transform:scale(0.97);}
 .pd-dl{font-size:11px;font-weight:800;color:#4a9eff;cursor:pointer;text-decoration:none;}
 
 /* ═══ TECHNIKER SCREENS ═══ */
-.tech-screen{display:none;flex-direction:column;min-height:100dvh;background:#07111f;color:#e8edf5;padding-bottom:32px;}
+.tech-screen{display:none;flex-direction:column;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#07111f;color:#e8edf5;padding-bottom:calc(140px + env(safe-area-inset-bottom,0px));scroll-padding-bottom:160px;}
 .tech-screen.active{display:flex;}
 .tech-hdr{display:flex;align-items:center;justify-content:space-between;padding:52px 20px 0;}
 .tech-hdr-left{display:flex;flex-direction:column;}
@@ -750,6 +754,8 @@ button:active{transform:scale(0.97);}
 /* dvh-Fallback für ältere In-App-Browser (Instagram/TikTok/alte Android) ohne dvh-Support */
 @supports not (height:100dvh){
   .screen.active,.gs-screen.active,.tech-screen.active,.admin-screen.active,.login-screen.active{min-height:calc(var(--vh,1vh)*100);}
+  /* Scroll-Container brauchen eine feste Höhe (setVH() hält --vh aktuell, auch bei offener Tastatur) */
+  .tech-screen.active,.admin-screen.active,.screen.active{height:calc(var(--vh,1vh)*100);}
 }
 /* Solider Hintergrund-Fallback, falls backdrop-filter fehlt (Huawei/alt) */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
@@ -1971,7 +1977,7 @@ button:active{transform:scale(0.97);}
     <select class="login-inp" id="tr-projekt" onchange="trProjektChange()"><option value="">– Projekt wählen –</option></select>
     <div class="tr-row2">
       <div><div class="ob-lbl">Datum</div><input class="login-inp" id="tr-datum" type="date"/></div>
-      <div><div class="ob-lbl">Projektnr.</div><input class="login-inp" id="tr-pnr" type="text" disabled placeholder="–"/></div>
+      <div><div class="ob-lbl">Projektnr.</div><input class="login-inp" id="tr-pnr" type="text" placeholder="Projektnr." inputmode="text" autocomplete="off"/></div>
     </div>
     <div class="tr-row2">
       <div><div class="ob-lbl">Von</div><input class="login-inp" id="tr-von" type="time" value="08:00" onchange="trCalcHours()"/></div>
@@ -2749,6 +2755,18 @@ function setVH(){try{document.documentElement.style.setProperty('--vh',(window.i
 setVH();
 window.addEventListener('resize',setVH);
 window.addEventListener('orientationchange',function(){setTimeout(setVH,250);});
+
+// Bug 1: Fokussiertes Feld über der Tastatur sichtbar halten (iOS+Android).
+(function bindFocusScroll(){
+  try{
+    document.addEventListener('focusin',function(e){
+      var t=e.target;
+      if(!t||!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||'')) return;
+      // kurze Verzögerung, bis die Tastatur offen ist und das Layout sich gesetzt hat
+      setTimeout(function(){ try{ t.scrollIntoView({block:'center',behavior:'smooth'}); }catch(_){ } },300);
+    });
+  }catch(e){}
+})();
 
 // ── In-App-Browser-Erkennung (Mikro oft blockiert) ──
 function isInAppBrowser(){
@@ -4304,6 +4322,7 @@ function demoEnter(role){
   demoMode=true;authToken=null;authRole=role;
   authUser={email:'demo@george-solutions.ch'};authTechName='Demo';
   var b=document.getElementById('demo-banner');if(b)b.style.display='flex';
+  try{ document.body.classList.add('demo-on'); }catch(e){}
   var mw=document.querySelector('.mode-toggle-wrap');if(mw)mw.style.display='none';
   if(role==='techniker'){ initTechRapport(); }
   else if(role==='gs_partner'){ showScreen('partner-dash'); initPartnerDash(); }
@@ -4312,6 +4331,7 @@ function demoEnter(role){
 function demoExit(){
   demoMode=false;authRole=null;authToken=null;authUser=null;authTechName=null;
   var b=document.getElementById('demo-banner');if(b)b.style.display='none';
+  try{ document.body.classList.remove('demo-on'); }catch(e){}
   go('home');showScreen('home');
 }
 
@@ -4975,8 +4995,10 @@ function trLoadWeek(){
 }
 function trSave(status){
   var projekt_id=document.getElementById('tr-projekt').value;
-  if(!projekt_id){setMsg('tr-msg','Bitte Projekt wählen','err');return;}
+  if(!projekt_id){setMsg('tr-msg','Bitte Projekt/Baustelle wählen','err');trShowMsg();return;}
+  var pnr=(document.getElementById('tr-pnr')||{}).value;
   var body={action:'save',projekt_id:projekt_id,datum:document.getElementById('tr-datum').value,
+    projektnummer:(pnr||'').trim()||null,
     zeit_von:document.getElementById('tr-von').value,zeit_bis:document.getElementById('tr-bis').value,
     arbeiten:chipsSelected('tr-arbeiten'),material:chipsSelected('tr-material'),
     team:document.getElementById('tr-team').value.split(',').map(function(s){return s.trim();}).filter(Boolean),
@@ -4985,16 +5007,21 @@ function trSave(status){
   if(trFotosB64.length)body.fotos=trFotosB64;
   if(trSignHas)body.unterschrift=document.getElementById('tr-sign').toDataURL('image/png');
   var btn=document.getElementById('tr-submit');if(btn&&status==='eingereicht'){btn.disabled=true;btn.textContent='Sendet…';}
+  setMsg('tr-msg',status==='eingereicht'?'Sendet…':'Speichert…','');trShowMsg();
   gsAuthApi('tagesrapport',body).then(function(d){
+    d=d||{};
     if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}
-    if(d.error){setMsg('tr-msg',d.error,'err');return;}
+    if(d.error){setMsg('tr-msg','⚠️ '+d.error,'err');trShowMsg();toast('⚠️ '+d.error);return;}
     if(status==='eingereicht'){
       var msg='✓ Rapport gesendet'+(d.invoice?(' · Rechnung CHF '+d.invoice.betrag):'');
       setMsg('tr-msg',msg,'');toast(msg);
-    }else{setMsg('tr-msg','Entwurf gespeichert','');}
-    trLoadWeek();
-  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}setMsg('tr-msg','Verbindungsfehler','err');});
+    }else{setMsg('tr-msg','✓ Entwurf gespeichert','');toast('✓ Entwurf gespeichert');}
+    trShowMsg();
+    try{ trLoadWeek(); }catch(e){}
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Rapport senden →';}setMsg('tr-msg','⚠️ Verbindungsfehler – bitte erneut senden','err');trShowMsg();toast('⚠️ Verbindungsfehler');});
 }
+// Erfolgs-/Fehlermeldung sichtbar machen (Nutzer hat ggf. nach oben gescrollt / Tastatur offen).
+function trShowMsg(){ try{ var m=document.getElementById('tr-msg'); if(m) m.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){} }
 
 // PM-Prototyp: SHK-Textbausteine für den Rapport.
 var SHK_BAUSTEINE=[
@@ -5172,21 +5199,24 @@ function tmDictate(){
 }
 function tmSend(){
   var projekt_id=document.getElementById('tm-projekt').value;
-  if(!projekt_id){setMsg('tm-msg','Bitte Projekt wählen','err');return;}
+  if(!projekt_id){setMsg('tm-msg','Bitte Projekt wählen','err');tmShowMsg();return;}
   var pos=tmCollect();
-  if(!pos.length&&!tmFotoB64){setMsg('tm-msg','Bitte Positionen oder Foto erfassen','err');return;}
+  if(!pos.length&&!tmFotoB64){setMsg('tm-msg','Bitte Positionen oder Foto erfassen','err');tmShowMsg();return;}
   var bobEl=document.getElementById('tm-bob-result');
   var inhalt={positionen:pos,notiz:document.getElementById('tm-notiz').value.trim(),
     foto:tmFotoB64||null,bob_analyse:(bobEl&&bobEl.dataset.summary)||null,
     von_name:authTechName||(authUser&&authUser.email)||'Techniker'};
   var btn=document.getElementById('tm-send');if(btn){btn.disabled=true;btn.textContent='Sendet…';}
+  setMsg('tm-msg','Sendet…','');tmShowMsg();
   gsAuthApi('nachrichten',{action:'send',typ:'materialliste',projekt_id:projekt_id,inhalt:inhalt}).then(function(d){
+    d=d||{};
     if(btn){btn.disabled=false;btn.textContent='📨 An Projektleiter senden';}
-    if(d.error){setMsg('tm-msg',d.error,'err');return;}
-    setMsg('tm-msg','✓ Materialliste gesendet','');toast('Materialliste an Projektleiter gesendet');
-    setTimeout(function(){showScreen('tech-rapport');},1200);
-  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📨 An Projektleiter senden';}setMsg('tm-msg','Verbindungsfehler','err');});
+    if(d.error){setMsg('tm-msg','⚠️ '+d.error,'err');tmShowMsg();toast('⚠️ '+d.error);return;}
+    setMsg('tm-msg','✓ Materialliste gesendet','');toast('✓ Materialliste an Projektleiter gesendet');
+    setTimeout(function(){showScreen('tech-rapport');},1300);
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📨 An Projektleiter senden';}setMsg('tm-msg','⚠️ Verbindungsfehler – bitte erneut senden','err');tmShowMsg();toast('⚠️ Verbindungsfehler');});
 }
+function tmShowMsg(){ try{ var m=document.getElementById('tm-msg'); if(m) m.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){} }
 
 // ── PARTNER DASHBOARD ──
 function initPartnerDash(){
