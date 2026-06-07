@@ -16,7 +16,27 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { kunden, anfrage } = req.body || {};
+    const { kunden, anfrage, action, anfrage_id } = req.body || {};
+
+    const headers0 = {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+    };
+
+    // Lead-Sicherung: Erstgespräch nachträglich anfordern (vom Success-Screen).
+    if (action === 'erstgespraech') {
+      if (!anfrage_id) return res.status(400).json({ error: 'anfrage_id fehlt' });
+      const getR = await fetch(`${SUPABASE_URL}/rest/v1/gs_anfragen?id=eq.${anfrage_id}&select=notiz`, { headers: headers0 });
+      const cur = (await getR.json().catch(() => []))?.[0] || {};
+      const note = '🔔 ERSTGESPRÄCH ANGEFORDERT (Rückruf <2h, werktags). ' + (cur.notiz || '');
+      const upd = await fetch(`${SUPABASE_URL}/rest/v1/gs_anfragen?id=eq.${anfrage_id}`, {
+        method: 'PATCH', headers: { ...headers0, Prefer: 'return=minimal' },
+        body: JSON.stringify({ status: 'Erstgespräch angefordert', notiz: note }),
+      });
+      if (!upd.ok) return res.status(500).json({ error: 'Update fehlgeschlagen' });
+      return res.status(200).json({ success: true });
+    }
 
     if (!kunden?.vorname || !kunden?.nachname) {
       return res.status(400).json({ error: 'Vorname und Nachname sind Pflichtfelder' });
@@ -81,13 +101,13 @@ export default async function handler(req, res) {
       geschaetzte_stunden: anfrage?.geschaetzte_stunden || null,
       umfang: anfrage?.umfang || null,
       gewuenschter_start: anfrage?.gewuenschter_start || null,
-      notiz: anfrage?.notiz || null,
-      status: 'neu',
+      notiz: (anfrage?.erstgespraech ? '🔔 ERSTGESPRÄCH ANGEFORDERT (Rückruf <2h, werktags). ' : '') + (anfrage?.notiz || ''),
+      status: anfrage?.erstgespraech ? 'Erstgespräch angefordert' : 'neu',
     };
 
     const anfragenRes = await fetch(`${SUPABASE_URL}/rest/v1/gs_anfragen`, {
       method: 'POST',
-      headers: { ...headers, Prefer: 'return=minimal' },
+      headers: { ...headers, Prefer: 'return=representation' },
       body: JSON.stringify(anfragenPayload),
     });
 
@@ -95,8 +115,10 @@ export default async function handler(req, res) {
       const errText = await anfragenRes.text();
       throw new Error(`gs_anfragen ${anfragenRes.status}: ${errText}`);
     }
+    const anfrageRows = await anfragenRes.json().catch(() => []);
+    const anfrageId = Array.isArray(anfrageRows) && anfrageRows[0] ? anfrageRows[0].id : null;
 
-    return res.status(200).json({ success: true, kunde_id: kundeId });
+    return res.status(200).json({ success: true, kunde_id: kundeId, anfrage_id: anfrageId });
 
   } catch (err) {
     console.error('GS Submit Error:', err.message);

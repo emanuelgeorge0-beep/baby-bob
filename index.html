@@ -838,6 +838,16 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .gs-phone-txt strong{font-size:13px;font-weight:800;color:#e8edf5;}
 .gs-phone-txt span{font-size:11px;color:rgba(232,237,245,0.5);}
 .gs-phone-num{flex-shrink:0;background:#FFD700;color:#080808;font-weight:900;font-size:13px;border-radius:11px;padding:9px 13px;white-space:nowrap;min-height:42px;display:flex;align-items:center;gap:5px;}
+/* GS Aktions-Badge (Conversion, gold-Akzent, seriös – kein Fake-Countdown) */
+.gs-aktion{margin:12px 18px 0;display:flex;align-items:center;gap:11px;background:linear-gradient(135deg,rgba(255,215,0,0.13),rgba(74,158,255,0.06));border:1px solid rgba(255,215,0,0.4);border-radius:14px;padding:11px 14px;}
+.gs-aktion-i{font-size:21px;flex-shrink:0;}
+.gs-aktion-txt{font-size:12.5px;line-height:1.4;color:#e8edf5;}
+.gs-aktion-txt strong{color:#FFD700;}
+.gs-aktion-txt span{display:block;font-size:10.5px;color:rgba(232,237,245,0.55);margin-top:1px;}
+.gs-erst-cta{margin:16px 0 0;width:100%;background:linear-gradient(135deg,#1e4a8a,#2d6bcc);color:#fff;border:1px solid rgba(255,215,0,0.4);border-radius:14px;padding:14px;font-family:'Nunito',sans-serif;font-weight:900;font-size:14px;cursor:pointer;min-height:52px;box-sizing:border-box;}
+.gs-erst-cta:active{transform:scale(0.98);}
+.gs-erst-sub{font-size:11px;color:rgba(232,237,245,0.55);text-align:center;margin-top:7px;line-height:1.45;}
+.gs-leadhint{font-size:11px;color:rgba(232,237,245,0.5);line-height:1.5;margin:10px 2px 0;padding:9px 12px;background:rgba(74,158,255,0.06);border:1px solid rgba(74,158,255,0.18);border-radius:11px;}
 /* Master-only Admin-Rücksprung (floating, oben links) */
 .admin-return-btn{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:12px;z-index:9998;min-height:40px;padding:0 15px;background:rgba(74,158,255,0.95);color:#fff;border:1px solid rgba(255,255,255,0.25);border-radius:12px;font-family:'Nunito',sans-serif;font-weight:900;font-size:12.5px;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,0.45);display:flex;align-items:center;gap:6px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}
 .admin-return-btn:active{transform:scale(0.96);}
@@ -1395,6 +1405,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="gs-svc">💨 Lüftung</div>
     <div class="gs-svc">❄️ Klima</div>
   </div>
+  <div class="gs-aktion">
+    <span class="gs-aktion-i" aria-hidden="true">🎁</span>
+    <div class="gs-aktion-txt"><strong>Aktion: Erste 2 Stunden gratis</strong><span>Gilt ab Monatsvertrag (nicht beim Pilot) · seriös &amp; unverbindlich</span></div>
+  </div>
   <button class="gs-cta" onclick="gsGo('gs-erfassung')">
     <span>+</span> Neues Projekt erfassen
   </button>
@@ -1431,6 +1445,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="gs-step-chip">1 / 6</div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" id="gp1" style="width:16%"></div></div>
+  <div class="gs-aktion" style="margin-top:14px;">
+    <span class="gs-aktion-i" aria-hidden="true">🎁</span>
+    <div class="gs-aktion-txt"><strong>Erste 2 Stunden gratis</strong><span>ab Monatsvertrag (nicht beim Pilot)</span></div>
+  </div>
   <div class="gs-form">
     <div class="gs-label">Projektname</div>
     <input class="gs-inp" id="gs-proj-name" type="text" placeholder="z.B. Heizungsrevision Objekt Zürich"/>
@@ -1630,9 +1648,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       </div>
     </div>
     <div class="gs-label">Telefon *</div>
-    <input class="gs-inp" id="gs-tel" type="tel" placeholder="Telefon / WhatsApp" autocomplete="tel"/>
+    <input class="gs-inp" id="gs-tel" type="tel" placeholder="Telefon / WhatsApp" autocomplete="tel" inputmode="tel"/>
     <div class="gs-label">E-Mail *</div>
-    <input class="gs-inp" id="gs-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email"/>
+    <input class="gs-inp" id="gs-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" inputmode="email"/>
+    <div class="gs-leadhint">📌 Bitte Telefon <strong>und</strong> E-Mail angeben. Bei einem Tippfehler in der Telefonnummer kontaktieren wir Sie zusätzlich per E-Mail zur Terminvereinbarung.</div>
     <div class="gs-label">Gewünschter Start</div>
     <div class="gs-chips" id="gs-start-chips">
       <div class="gs-chip" data-val="So früh wie möglich" onclick="gsChip(this,'gs-start-chips','gs-start')">⚡ ASAP</div>
@@ -1699,6 +1718,14 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="gs-ticket" style="background:rgba(107,203,119,0.07);border-color:rgba(107,203,119,0.25);">
       <div class="gs-ticket-lbl" style="color:#6bcb77;">Status</div>
       <div class="gs-ticket-val" style="color:#6bcb77;">✅ Anfrage eingegangen</div>
+    </div>
+    <!-- Lead-Sicherung: kostenloses Erstgespräch / Rückruf -->
+    <div class="gs-acct-offer" id="gs-erst-offer">
+      <div class="gs-acct-tit">📞 Lieber schnell persönlich klären?</div>
+      <div class="gs-acct-sub">Kostenloses Erstgespräch – wir rufen Sie innerhalb von 2 Stunden zurück (an Werktagen).</div>
+      <button class="gs-erst-cta" id="gs-erst-btn" onclick="gsRequestErstgespraech()">📞 Kostenloses Erstgespräch anfordern</button>
+      <div class="gs-erst-sub">Unverbindlich &amp; kostenlos.</div>
+      <div class="login-msg" id="gs-erst-msg"></div>
     </div>
     <!-- Optional: account / magic-link after booking (not required) -->
     <div class="gs-acct-offer" id="gs-acct-offer">
@@ -3973,6 +4000,11 @@ function gsVerfuegbarkeitWeiter(){
   if(!ort){toast('Bitte Ort eingeben');document.getElementById('gs-ort').focus();return;}
   if(!tel){toast('Bitte Telefonnummer eingeben');document.getElementById('gs-tel').focus();return;}
   if(!email){toast('Bitte E-Mail eingeben');document.getElementById('gs-email').focus();return;}
+  // Lead-Sicherung: weiche Plausibilität – warnen, aber NICHT blockieren (lieber Lead behalten).
+  var warn=[];
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) warn.push('E-Mail');
+  if(typeof phonePlausible==='function'&&!phonePlausible(tel)) warn.push('Telefonnummer');
+  if(warn.length){ toast('⚠️ '+warn.join(' & ')+' bitte prüfen – wir kontaktieren Sie zur Sicherheit über beide Kanäle.'); }
   gsData.vorname=vorname;
   gsData.nachname=nachname;
   gsData.name=vorname+' '+nachname;
@@ -4078,7 +4110,7 @@ function gsSubmit(){
     clearTimeout(timeout);
     resetBtn();
     if(r.ok){
-      gsShowBuchung();
+      r.json().then(function(d){ gsData.anfrage_id=(d&&d.anfrage_id)||null; }).catch(function(){}).then(function(){ gsShowBuchung(); });
     } else {
       r.json().then(function(d){
         toast('Fehler: '+(d.error||r.status));
@@ -4113,10 +4145,29 @@ function gsShowBuchung(){
   // Reset the optional account offer for this booking.
   var off=document.getElementById('gs-acct-offer');if(off) off.style.display='';
   setMsg('gs-acct-msg','','');
+  // Reset Erstgespräch-CTA für diese Buchung.
+  var eb=document.getElementById('gs-erst-btn');if(eb){eb.disabled=false;eb.textContent='📞 Kostenloses Erstgespräch anfordern';}
+  setMsg('gs-erst-msg','','');
   gsGo('gs-buchung');
 }
 
 // Optional, post-booking: send a magic-link so the customer can track status.
+// Lead-Sicherung: kostenloses Erstgespräch anfordern (markiert den Lead im Dashboard).
+function gsRequestErstgespraech(){
+  var btn=document.getElementById('gs-erst-btn');
+  if(!gsData.anfrage_id){
+    if(btn){btn.disabled=true;btn.textContent='✓ Erstgespräch angefordert';}
+    setMsg('gs-erst-msg','✓ Notiert – wir melden uns innerhalb von 2 Std. (werktags).','');
+    return;
+  }
+  if(btn){btn.disabled=true;btn.textContent='Wird angefordert…';}
+  fetch('/api/gs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'erstgespraech',anfrage_id:gsData.anfrage_id})})
+    .then(function(r){return r.json();}).then(function(d){
+      d=d||{};
+      if(d.success){ if(btn)btn.textContent='✓ Erstgespräch angefordert'; setMsg('gs-erst-msg','✓ Wir rufen Sie innerhalb von 2 Std. (werktags) zurück.','');toast('✓ Erstgespräch angefordert'); }
+      else { if(btn){btn.disabled=false;btn.textContent='📞 Kostenloses Erstgespräch anfordern';} setMsg('gs-erst-msg','⚠️ '+(d.error||'Bitte erneut versuchen'),'err'); }
+    }).catch(function(){ if(btn){btn.disabled=false;btn.textContent='📞 Kostenloses Erstgespräch anfordern';} setMsg('gs-erst-msg','⚠️ Verbindungsfehler – bitte erneut','err'); });
+}
 function gsOfferMagicLink(){
   var email=gsData.email;
   if(!email){setMsg('gs-acct-msg','Keine E-Mail aus der Anfrage gefunden','err');return;}
