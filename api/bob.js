@@ -26,18 +26,19 @@ export default async function handler(req, res) {
     const isGS = mode === 'gs';
     const isBauplan = mode === 'bauplan';
     const isRapport = mode === 'rapport'; // Techniker-Sprachmemo → Rapport strukturieren
-    const imageOnly = !!(imageBase64 && !description && !category && !isGS && !isBauplan && !isRapport);
+    const isMaterial = mode === 'material'; // Techniker-Sprachmemo → Materialliste-Positionen strukturieren
+    const imageOnly = !!(imageBase64 && !description && !category && !isGS && !isBauplan && !isRapport && !isMaterial);
 
-    // ── 1. Wissensdatenbank (für Rapport NICHT nötig – reines Strukturieren) ──
+    // ── 1. Wissensdatenbank (für Rapport/Material NICHT nötig – reines Strukturieren) ──
     let wissen = '';
-    if (!isRapport) {
+    if (!isRapport && !isMaterial) {
       wissen = (isGS || isBauplan)
         ? await fetchGSKnowledge(description, category)
         : await fetchBOBKnowledge(description, category, imageOnly);
     }
 
     // ── 2. System Prompt wählen ──
-    const systemPrompt = isRapport ? buildRapportPrompt() : isBauplan ? buildBauplanPrompt(wissen) : isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
+    const systemPrompt = isRapport ? buildRapportPrompt() : isMaterial ? buildMaterialPrompt() : isBauplan ? buildBauplanPrompt(wissen) : isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
 
     // ── 3. User Content aufbauen ──
     const userContent = [];
@@ -55,6 +56,8 @@ export default async function handler(req, res) {
 
     const userText = isRapport
       ? `Sprachmemo des Technikers (wörtlich strukturieren, NICHTS korrigieren):\n"""${description || ''}"""`
+      : isMaterial
+      ? `Sprachmemo des Technikers zur Materialliste (wörtlich in Positionen zerlegen, NICHTS korrigieren):\n"""${description || ''}"""`
       : [
           description ? (isGS ? `Projektbeschreibung: ${description}` : `Problembeschreibung: ${description}`) : '',
           category    ? `${isGS ? 'Bereich' : 'Kategorie'}: ${category}` : '',
@@ -77,7 +80,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: isRapport ? 800 : isGS ? 1200 : 1000,
+        max_tokens: (isRapport || isMaterial) ? 800 : isGS ? 1200 : 1000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
       }),
@@ -99,6 +102,7 @@ export default async function handler(req, res) {
     const errMode = (req.body && req.body.mode);
     if (errMode === 'gs') return res.status(500).json({ error: err.message });
     if (errMode === 'rapport') return res.status(200).json({ taetigkeiten: [], material: [], notiz: '', error: 'Analyse fehlgeschlagen – bitte erneut versuchen oder Text manuell eintragen.' });
+    if (errMode === 'material') return res.status(200).json({ positionen: [], notiz: '', error: 'Analyse fehlgeschlagen – bitte erneut versuchen oder Positionen manuell eintragen.' });
     return res.status(200).json({
       titel: 'Analyse momentan nicht möglich',
       desc: 'BOB konnte das nicht analysieren. Bitte beschreibe dein Problem kurz in Worten oder versuche ein anderes, gut beleuchtetes Foto.',
@@ -286,6 +290,29 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON, ohne Markdown, ohne Erklärtext:
 {
   "taetigkeiten": ["...", "..."],
   "material": ["...", "..."],
+  "notiz": "..."
+}`;
+}
+
+// Techniker-Materialliste: Sprachmemo NUR in Positionen zerlegen, KEINE fachliche Korrektur.
+function buildMaterialPrompt() {
+  return `Du bist BOB, der Assistent für George-Solutions-Techniker (SHK, Schweiz). Ein Techniker hat ein Sprachmemo zum verbauten/benötigten Material diktiert. Deine EINZIGE Aufgabe: das Diktat in eine saubere Materialliste mit einzelnen Positionen ZERLEGEN.
+
+STRIKTE REGELN:
+- Übernimm AUSSCHLIESSLICH, was gesagt wurde. NICHTS erfinden, NICHTS ergänzen, NICHTS dazudichten.
+- KEINE fachliche Begriffskorrektur. Sagt der Techniker "C-Stahl", schreibe "C-Stahl". Sagt er "DN56", "Optipress", "Seestall" oder eine Mundart-/Markenbezeichnung, übernimm sie GENAU so. Werkstoffe, Marken, Masse, Typen NICHT ändern und NICHT raten.
+- Jede genannte Materialposition = ein Eintrag im Array "positionen".
+- "position": die Artikelbezeichnung, wörtlich (z.B. "C-Stahl Rohr", "Optipress Fitting 22mm", "Eckventil").
+- "menge": die genannte Zahl als String, sonst leerer String "". Nur was gesagt wurde.
+- "einheit": die genannte Einheit/Art (z.B. "m", "Stk", "Stück", "Meter", "Pack"), sonst leerer String "".
+- "notiz": Bemerkung an den Projektleiter, falls eine genannt wurde (1-2 Sätze), sonst leerer String.
+- Was nicht gesagt wurde → weglassen. Lieber leeres Feld als Erfundenes.
+
+Antworte AUSSCHLIESSLICH mit gültigem JSON, ohne Markdown, ohne Erklärtext:
+{
+  "positionen": [
+    { "position": "...", "menge": "...", "einheit": "..." }
+  ],
   "notiz": "..."
 }`;
 }

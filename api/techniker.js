@@ -109,6 +109,11 @@ function normalizeTechniker(row) {
     )
   );
 
+  // Region (Grossraum) für die GS-Partner-Karte. Real column / sidecar win;
+  // sonst aus dem Ort abgeleitet, damit Pins auch vor der Migration korrekt sitzen.
+  const location = side.location || null;
+  const region = row.region || side.region || regionFromOrt(location);
+
   return {
     id: row.id,
     name: row.name || 'Techniker',
@@ -118,12 +123,26 @@ function normalizeTechniker(row) {
     years_experience: years,
     photo_url: row.photo_url || side.photo_url || null,
     photo_emoji: side.photo_emoji || '👷',
-    location: side.location || null,
+    location,
+    region,
     availability: row.availability_status ?? row.verfuegbar ?? true,
     booked_until: side.booked_until || null,
     equipment_traeger,
     herkunft,
   };
+}
+
+// Ort → Schweizer Grossraum (Fallback, falls keine region-Spalte/Sidecar gesetzt ist).
+function regionFromOrt(ort) {
+  const o = String(ort || '').toLowerCase();
+  if (/z(ü|ue)rich|winterthur/.test(o)) return 'Zürich';
+  if (/basel|aarau|baden|olten/.test(o)) return 'Nordwestschweiz';
+  if (/zug|luzern|schwyz|stans/.test(o)) return 'Zentralschweiz';
+  if (/st\.?\s*gallen|schaffhausen|frauenfeld|chur/.test(o)) return 'Ostschweiz';
+  if (/bern|biel|thun/.test(o)) return 'Bern';
+  if (/lausanne|gen(è|e)ve|genf|sion/.test(o)) return 'Westschweiz';
+  if (/lugano|bellinzona|locarno/.test(o)) return 'Tessin';
+  return ort ? 'Zürich' : null;
 }
 
 function normHerkunft(v) {

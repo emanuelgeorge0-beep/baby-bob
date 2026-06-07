@@ -475,7 +475,43 @@ button:active{transform:scale(0.97);}
 .gs-tarif-badge{font-size:9px;font-weight:900;background:linear-gradient(135deg,#1e4a8a,#4a9eff);color:#fff;padding:2px 7px;border-radius:8px;margin-top:4px;display:inline-block;}
 .gs-ai-rec{margin:14px 18px 0;background:rgba(74,158,255,0.06);border:1px solid rgba(74,158,255,0.2);border-radius:12px;padding:12px 15px;font-size:12px;color:rgba(74,158,255,0.9);}
 
-/* GS Techniker-Auswahl */
+/* GS Techniker-Auswahl: simulierte Karte (Uber-Stil, keine Google-Maps-API) */
+.gs-map-wrap{margin:14px 18px 0;}
+.gs-map{position:relative;width:100%;aspect-ratio:155/100;border-radius:18px;overflow:hidden;border:1px solid rgba(74,158,255,0.18);background:#08111d;box-shadow:0 8px 28px rgba(0,0,0,0.35),inset 0 0 0 1px rgba(255,255,255,0.02);}
+.gs-map-svg{position:absolute;inset:0;width:100%;height:100%;}
+.gs-map-ch{fill:rgba(74,158,255,0.10);stroke:rgba(74,158,255,0.55);stroke-width:0.6;stroke-linejoin:round;}
+.gs-map-pins{position:absolute;inset:0;}
+.gs-map-pin{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;cursor:pointer;z-index:2;transition:transform .15s ease;}
+.gs-map-pin:active{transform:translate(-50%,-100%) scale(0.94);}
+.gs-map-pin.bk{cursor:default;opacity:0.8;z-index:1;}
+.gs-map-pin.av{z-index:3;}
+.gs-map-pin.sel{z-index:5;}
+.gs-map-pin-bub{width:30px;height:30px;border-radius:50% 50% 50% 2px;transform:rotate(45deg);background:linear-gradient(135deg,#2c5a8f,#1c3b5e);border:1.5px solid rgba(255,255,255,0.5);box-shadow:0 3px 8px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;}
+.gs-map-pin.av .gs-map-pin-bub{background:linear-gradient(135deg,#3a7fd0,#1e4a8a);border-color:rgba(107,203,119,0.9);}
+.gs-map-pin.sel .gs-map-pin-bub{background:linear-gradient(135deg,#FFD700,#FF8C2B);border-color:#fff;box-shadow:0 0 0 3px rgba(255,215,0,0.3),0 4px 10px rgba(0,0,0,0.55);}
+.gs-map-pin.bk .gs-map-pin-bub{background:linear-gradient(135deg,#5a2c2c,#3b1c1c);border-color:rgba(255,107,107,0.6);}
+.gs-map-pin-em{transform:rotate(-45deg);font-size:14px;line-height:1;}
+.gs-map-pin-status{position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;border:1.5px solid #08111d;transform:rotate(-45deg);}
+.gs-map-pin.av .gs-map-pin-status{background:#6bcb77;box-shadow:0 0 0 0 rgba(107,203,119,0.6);animation:gsPinPulse 2s infinite;}
+.gs-map-pin.bk .gs-map-pin-status{background:#ff6b6b;}
+@keyframes gsPinPulse{0%{box-shadow:0 0 0 0 rgba(107,203,119,0.55);}70%{box-shadow:0 0 0 7px rgba(107,203,119,0);}100%{box-shadow:0 0 0 0 rgba(107,203,119,0);}}
+.gs-map-pin-lbl{margin-top:3px;font-size:8.5px;font-weight:800;color:#cfe0f5;background:rgba(8,17,29,0.82);padding:1px 5px;border-radius:6px;white-space:nowrap;max-width:74px;overflow:hidden;text-overflow:ellipsis;}
+.gs-map-pin.you{z-index:3;}
+.gs-map-pin.you .gs-map-pin-bub{background:linear-gradient(135deg,#6bcb77,#39a14a);border-color:#fff;}
+.gs-map-pin.you .gs-map-pin-lbl{color:#08111d;background:#6bcb77;}
+.gs-map-legend{position:absolute;left:10px;bottom:9px;display:flex;gap:11px;font-size:9.5px;font-weight:700;color:rgba(232,237,245,0.75);background:rgba(8,17,29,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:4px 9px;border-radius:9px;z-index:4;}
+.gs-map-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.gs-map-dot.av{background:#6bcb77;}
+.gs-map-dot.bk{background:#ff6b6b;}
+.gs-near-bar{display:flex;align-items:center;gap:9px;margin-top:11px;background:rgba(255,255,255,0.04);border:1.5px solid rgba(74,158,255,0.2);border-radius:13px;padding:10px 13px;}
+.gs-near-ico{font-size:16px;}
+.gs-near-inp{flex:1;min-width:0;background:transparent;border:none;outline:none;color:#e8edf5;font-size:14px;font-family:'Nunito',sans-serif;}
+.gs-near-inp::placeholder{color:rgba(232,237,245,0.4);}
+.gs-near-region{font-size:10.5px;font-weight:800;color:#6bcb77;white-space:nowrap;}
+.gs-tech-group-lbl{margin:16px 18px 2px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:#4a9eff;}
+.gs-tech-group-lbl.muted{color:rgba(232,237,245,0.4);}
+.gs-cta-spacer{height:78px;}
+.gs-cta-fixed{position:sticky;bottom:0;left:0;right:0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(to top,#07111f 62%,rgba(7,17,31,0));z-index:20;}
 .gs-tech-list{display:flex;flex-direction:column;gap:11px;padding:14px 18px 0;}
 .gs-tech-card{background:rgba(255,255,255,0.04);border:1.5px solid rgba(255,255,255,0.08);border-radius:16px;padding:14px;display:flex;gap:13px;cursor:pointer;transition:all .2s;align-items:flex-start;}
 .gs-tech-card:active{transform:scale(0.98);}
@@ -1605,6 +1641,35 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="gs-step-chip">4 / 7</div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:57%"></div></div>
+  <!-- Simulierte Karte (CSS/SVG – keine Google-Maps-API; echte Integration folgt später) -->
+  <div class="gs-map-wrap">
+    <div class="gs-map" id="gs-map" aria-label="Techniker-Standorte in der Schweiz">
+      <svg class="gs-map-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <radialGradient id="gsMapGlow" cx="55%" cy="22%" r="80%">
+            <stop offset="0%" stop-color="#0e2236"/>
+            <stop offset="100%" stop-color="#08111d"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="100" height="100" fill="url(#gsMapGlow)"/>
+        <path class="gs-map-ch" d="M22.9,15.6 L40,9 L58.3,0.5 L72,5 L81.5,18.1 L92,33 L99.1,45.7 L91.4,65.8 L78,82 L67.1,98.5 L53.9,78.4 L40,90 L22.9,96 L9,88 L0.9,83.4 L9.7,70.9 L16,46 L22.9,23.1 Z"/>
+        <g class="gs-map-grid" stroke="rgba(74,158,255,0.10)" stroke-width="0.3">
+          <line x1="0" y1="33" x2="100" y2="33"/><line x1="0" y1="66" x2="100" y2="66"/>
+          <line x1="33" y1="0" x2="33" y2="100"/><line x1="66" y1="0" x2="66" y2="100"/>
+        </g>
+      </svg>
+      <div class="gs-map-pins" id="gs-map-pins"></div>
+      <div class="gs-map-legend">
+        <span><span class="gs-map-dot av"></span>Verfügbar</span>
+        <span><span class="gs-map-dot bk"></span>Ausgebucht</span>
+      </div>
+    </div>
+    <div class="gs-near-bar">
+      <span class="gs-near-ico" aria-hidden="true">📍</span>
+      <input class="gs-near-inp" id="gs-near-plz" type="text" inputmode="numeric" maxlength="6" placeholder="Ihre PLZ – Techniker in Ihrer Nähe" oninput="gsNearUpdate()" aria-label="Ihre PLZ für Techniker in Ihrer Nähe"/>
+      <span class="gs-near-region" id="gs-near-region"></span>
+    </div>
+  </div>
   <div class="gs-ai-rec" id="gs-tech-hint">👷 Verfügbare Techniker für Ihr Projekt</div>
   <div class="gs-team-toggle" role="radiogroup" aria-label="Team-Grösse wählen">
     <button type="button" class="gs-team-opt sel" id="gs-team-opt-team" role="radio" aria-checked="true" onclick="gsSetTeamMode('team')">
@@ -1626,9 +1691,12 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="gs-tech-empty" id="gs-tech-loading">Techniker werden geladen…</div>
   </div>
   <div class="gs-tech-skip">Optional – Sie können einen Wunsch-Techniker wählen oder dies dem Team überlassen.</div>
-  <button class="gs-btn-primary" onclick="gsTechnikerWeiter()">
-    Weiter →
-  </button>
+  <div class="gs-cta-spacer"></div>
+  <div class="gs-cta-fixed">
+    <button class="gs-btn-primary" style="margin:0;" onclick="gsTechnikerWeiter()">
+      Weiter →
+    </button>
+  </div>
 </div>
 
 <!-- GS SCREEN 5: KONTAKT & VERFÜGBARKEIT -->
@@ -2101,13 +2169,24 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div class="tr-form">
     <div class="ob-lbl">Projekt *</div>
     <select class="login-inp" id="tm-projekt"><option value="">– Projekt wählen –</option></select>
+    <!-- Voice → BOB → Materialliste übernehmen (gleicher Flow wie im Rapport, wörtlich, keine Begriffskorrektur) -->
+    <div class="tr-voice">
+      <div class="ob-lbl" style="margin-top:0;">🎙️ Material diktieren – BOB erstellt die Liste</div>
+      <textarea class="login-inp" id="tm-voice-transcript" rows="2" placeholder="Sprich frei oder tippe – z.B. 'C-Stahl Rohr 5 Meter, 3 Optipress Fittings 22 mm, zwei Eckventile.'"></textarea>
+      <div class="tr-voice-btns">
+        <button type="button" class="login-btn-pw" id="tm-vdictate" onclick="tmVoiceDictate()">🎙️ Diktieren</button>
+        <button type="button" class="login-btn-pw" id="tm-vbob-btn" onclick="tmVoiceAnalyse()">🧠 BOB analysieren</button>
+      </div>
+      <div class="tr-bob-thinking" id="tm-voice-thinking" style="display:none;"><span class="tr-spinner" aria-hidden="true"></span> BOB erstellt deine Materialliste…</div>
+      <div class="tr-bob-result" id="tm-voice-result" style="display:none;"></div>
+    </div>
     <div class="ob-lbl">Positionen</div>
     <div id="tm-positions"></div>
     <button class="admin-act" style="margin-top:8px;" onclick="tmAddRow()">+ Position</button>
-    <div class="ob-lbl">Foto</div>
+    <div class="ob-lbl">Foto (optional)</div>
     <input type="file" id="tm-foto" accept="image/*" capture="environment" onchange="tmFotoPreview()"/>
     <div class="tr-foto-preview" id="tm-foto-preview"></div>
-    <button class="login-btn-pw" style="margin-top:10px;" id="tm-bob-btn" onclick="tmBobAnalyse()">🧠 BOB analysieren</button>
+    <button class="login-btn-pw" style="margin-top:10px;" id="tm-bob-btn" onclick="tmBobAnalyse()">🧠 BOB: Kosten schätzen (Foto/Positionen)</button>
     <div class="tm-bob-result" id="tm-bob-result" style="display:none;"></div>
     <div class="ob-lbl">Notiz / Sprachmemo</div>
     <textarea class="login-inp" id="tm-notiz" rows="2" placeholder="Bemerkung an den Projektleiter…"></textarea>
@@ -3924,54 +4003,150 @@ function gsAgo(ts){
   return m<=0?'gerade eben':('vor '+m+' Min');
 }
 
+// ── Simulierte Karte: Geo-Koordinaten (% auf der Schweiz-Silhouette) ──
+// Reine Frontend-Simulation (CSS/SVG) – KEINE Google-Maps-API. Echte Geo-/Routing-
+// Integration ist bewusst späterer Backlog.
+var GS_CITY_XY={
+  'zürich':[57,22.1],'zurich':[57,22.1],'winterthur':[61.1,15.6],
+  'zug':[56.5,32.2],'luzern':[51.9,38.2],'baden':[51.9,17.1],'aarau':[45.9,21.1],
+  'basel':[36,12.6],'schaffhausen':[58.9,5.5],'st. gallen':[75.5,19.6],'st.gallen':[75.5,19.6],
+  'chur':[78.8,48.2],'bern':[32.9,43.2],'biel':[28,38],'thun':[34,52],
+  'lausanne':[14.8,64.8],'genf':[4,80.9],'genève':[4,80.9],'geneve':[4,80.9],
+  'sion':[30.9,79.4],'neuchâtel':[21.4,40.7],'neuchatel':[21.4,40.7],'lugano':[66,91],'bellinzona':[63,84]
+};
+var GS_REGION_XY={
+  'Zürich':[57,22.1],'Nordwestschweiz':[42,15],'Zentralschweiz':[53,35],
+  'Ostschweiz':[72,16],'Bern':[32.9,43.2],'Westschweiz':[14.8,64.8],'Tessin':[65,88]
+};
+var GS_PLZ_XY={'1':[10,68],'2':[22,40],'3':[33,46],'4':[38,15],'5':[47,20],'6':[57,42],'7':[78,48],'8':[57,22],'9':[74,20]};
+var GS_PLZ_REGION={'1':'Westschweiz','2':'Westschweiz / Jura','3':'Bern / Wallis','4':'Nordwestschweiz','5':'Aargau','6':'Zentralschweiz','7':'Graubünden','8':'Zürich','9':'Ostschweiz'};
+var gsNearXY=null;
+function gsClamp(v){ return Math.max(4,Math.min(96,v)); }
+function gsClampY(v){ return Math.max(14,Math.min(93,v)); }   // mehr Platz oben für Pin-Bubble+Label
+function gsPlzXY(plz){
+  plz=String(plz||'').replace(/\D/g,'');
+  if(!plz) return null;
+  if(plz.slice(0,2)==='69') return [65,88];     // Tessin (Lugano)
+  var t=GS_PLZ_XY[plz[0]];
+  return t?t.slice():null;
+}
+function gsPlzRegion(plz){
+  plz=String(plz||'').replace(/\D/g,'');
+  if(plz.slice(0,2)==='69') return 'Tessin';
+  return GS_PLZ_REGION[plz[0]]||'';
+}
+function gsTechXY(t){
+  var c=t.location&&GS_CITY_XY[String(t.location).toLowerCase().trim()];
+  if(c) return c.slice();
+  var r=t.region&&GS_REGION_XY[t.region];
+  return (r||GS_REGION_XY['Zürich']).slice();
+}
+function gsDist(a,b){ var dx=a[0]-b[0],dy=a[1]-b[1]; return Math.sqrt(dx*dx+dy*dy); }
+function gsNearUpdate(){
+  var inp=document.getElementById('gs-near-plz'), lbl=document.getElementById('gs-near-region');
+  var plz=(inp&&inp.value||'').replace(/\D/g,'');
+  if(inp&&inp.value!==plz) inp.value=plz;
+  gsNearXY=gsPlzXY(plz);
+  if(lbl) lbl.textContent=(gsNearXY&&gsPlzRegion(plz))?('📍 '+gsPlzRegion(plz)):'';
+  if(plz.length>=4){ var gp=document.getElementById('gs-plz'); if(gp&&!gp.value) gp.value=plz; }   // prefill Kontaktformular
+  gsRenderTechniker();
+}
+function gsRenderMap(){
+  var pins=document.getElementById('gs-map-pins'); if(!pins) return;
+  var groups={};
+  gsTechniker.forEach(function(t){ var xy=gsTechXY(t); var k=Math.round(xy[0])+'_'+Math.round(xy[1]); (groups[k]=groups[k]||[]).push({t:t,xy:xy}); });
+  var html='';
+  Object.keys(groups).forEach(function(k){
+    var arr=groups[k], n=arr.length;
+    // Verfügbare Pins zuerst (oben/aussen), damit die wählbaren Profile sichtbar bleiben.
+    arr.sort(function(a,b){ return (b.t.availability!==false?1:0)-(a.t.availability!==false?1:0); });
+    arr.forEach(function(o,i){
+      var t=o.t, base=o.xy, x=base[0], y=base[1];
+      if(n>1){ // kreisförmig um den Ort anordnen (entzerrt überlappende Profile)
+        var r=5+Math.min(n,6)*0.95, ang=(i/n)*2*Math.PI - Math.PI/2;
+        x=base[0]+Math.cos(ang)*r; y=base[1]+Math.sin(ang)*r*0.92;
+      }
+      x=gsClamp(x); y=gsClampY(y);
+      var avail=t.availability!==false, sel=gsSelectedTechniker===t.id;
+      var cls='gs-map-pin '+(sel?'sel ':'')+(avail?'av':'bk');
+      var click=avail?(' onclick="gsSelectTechniker(\''+t.id+'\');gsScrollToTech(\''+t.id+'\')"'):'';
+      // Label nur für verfügbare (wählbare) Profile + Auswahl → weniger Gewirr.
+      var lbl=(avail||sel)?'<div class="gs-map-pin-lbl">'+gsEsc(String(t.name||'').split(' ')[0])+'</div>':'';
+      html+='<div class="'+cls+'" style="left:'+x.toFixed(1)+'%;top:'+y.toFixed(1)+'%"'+click+' title="'+gsEsc(t.name)+(avail?'':' (ausgebucht)')+'">'
+        +'<div class="gs-map-pin-bub"><span class="gs-map-pin-em">'+(t.photo_emoji||'👷')+'</span><span class="gs-map-pin-status"></span></div>'
+        +lbl
+      +'</div>';
+    });
+  });
+  if(gsNearXY){
+    html+='<div class="gs-map-pin you" style="left:'+gsClamp(gsNearXY[0]).toFixed(1)+'%;top:'+gsClampY(gsNearXY[1]).toFixed(1)+'%">'
+      +'<div class="gs-map-pin-bub"><span class="gs-map-pin-em">📍</span></div>'
+      +'<div class="gs-map-pin-lbl">Sie</div></div>';
+  }
+  pins.innerHTML=html;
+}
+function gsScrollToTech(id){
+  try{ var el=document.querySelector('.gs-tech-card[data-tid="'+id+'"]'); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){}
+}
+function gsTechCardHtml(t){
+  var bereich=(gsData.bereich||'').toLowerCase();
+  var avail=t.availability!==false;
+  var isMatch=avail&&(t.specialization||[]).some(function(s){return s.toLowerCase()===bereich;});
+  var sel=gsSelectedTechniker===t.id?' sel-tech':'';
+  var matchCls=isMatch&&!sel?' match':'';
+  var bookedCls=avail?'':' booked';
+  var tags=(t.specialization||[]).map(function(s){
+    var on=s.toLowerCase()===bereich?' on':'';
+    return '<span class="gs-tech-tag'+on+'">'+gsEsc(s)+'</span>';
+  }).join('');
+  var rating=t.rating!=null?('★ '+Number(t.rating).toFixed(1)):'';
+  var years=t.years_experience!=null?(t.years_experience+' J. Erfahrung'):'';
+  var loc=t.location?('📍 '+gsEsc(t.location)):'';
+  var meta=[years,loc].filter(Boolean).map(function(m){return '<span>'+m+'</span>';}).join('');
+  var statusLine=avail?'<span class="gs-tech-avail"><span class="gs-tech-dot live"></span>Verfügbar</span>':'';
+  var req=(avail&&gsTechReq[t.id])?'<span class="gs-tech-req-badge">🔥 Gerade angefragt</span>':'';
+  var onclick=avail?(' onclick="gsSelectTechniker(\''+t.id+'\')"'):'';
+  return '<div class="gs-tech-card'+sel+matchCls+bookedCls+'" data-tid="'+gsEsc(t.id)+'"'+onclick+'>'
+    +'<div class="gs-tech-avatar">'+(t.photo_emoji||'👷')+'</div>'
+    +'<div class="gs-tech-main">'
+      +'<div class="gs-tech-top"><span class="gs-tech-name">'+gsEsc(t.name)+' '+gsHerkunftHtml(t.herkunft)+req+'</span>'
+        +(rating?'<span class="gs-tech-rating">'+rating+'</span>':'')+'</div>'
+      +(t.qualification?'<div class="gs-tech-qual">'+gsEsc(t.qualification)+'</div>':'')
+      +(isMatch?'<div class="gs-tech-match-badge">✓ Passt zu '+gsEsc(gsData.bereich)+'</div>':'')
+      +(avail?'':'<div class="gs-tech-booked-badge">🔴 Ausgebucht bis '+gsFmtDate(t.booked_until)+'</div>')
+      +'<div class="gs-tech-tags">'+tags+'</div>'
+      +'<div class="gs-tech-meta">'+meta+statusLine+'</div>'
+    +'</div>'
+  +'</div>';
+}
 function gsRenderTechniker(){
   var list=document.getElementById('gs-tech-list');
   if(!list) return;
+  gsRenderMap();
   if(!gsTechniker.length){
     list.innerHTML='<div class="gs-tech-empty">Aktuell sind keine Techniker-Profile hinterlegt. Das Team wird Ihrem Projekt passend zugeteilt.</div>';
     gsSyncTeam();
     return;
   }
-  var bereich=(gsData.bereich||'').toLowerCase();
   var hint=document.getElementById('gs-tech-hint');
   if(hint){
     hint.innerHTML='<div class="gs-net-hdr"><span class="gs-net-count"><strong>'+gsTechAvail+' aktuell verfügbar</strong> · '+gsTechTotal+' Techniker im Netzwerk</span>'
       +'<span class="gs-live-ind">Live</span></div>';
   }
-  var cards=gsTechniker.map(function(t){
-    var avail=t.availability!==false;
-    var isMatch=avail&&(t.specialization||[]).some(function(s){return s.toLowerCase()===bereich;});
-    var sel=gsSelectedTechniker===t.id?' sel-tech':'';
-    var matchCls=isMatch&&!sel?' match':'';
-    var bookedCls=avail?'':' booked';
-    var tags=(t.specialization||[]).map(function(s){
-      var on=s.toLowerCase()===bereich?' on':'';
-      return '<span class="gs-tech-tag'+on+'">'+gsEsc(s)+'</span>';
-    }).join('');
-    var rating=t.rating!=null?('★ '+Number(t.rating).toFixed(1)):'';
-    var years=t.years_experience!=null?(t.years_experience+' J. Erfahrung'):'';
-    var loc=t.location?('📍 '+gsEsc(t.location)):'';
-    var meta=[years,loc].filter(Boolean).map(function(m){return '<span>'+m+'</span>';}).join('');
-    var statusLine=avail
-      ?'<span class="gs-tech-avail"><span class="gs-tech-dot live"></span>Verfügbar</span>'
-      :'';
-    var req=(avail&&gsTechReq[t.id])?'<span class="gs-tech-req-badge">🔥 Gerade angefragt</span>':'';
-    var onclick=avail?(' onclick="gsSelectTechniker(\''+t.id+'\')"'):'';
-    return '<div class="gs-tech-card'+sel+matchCls+bookedCls+'"'+onclick+'>'
-      +'<div class="gs-tech-avatar">'+(t.photo_emoji||'👷')+'</div>'
-      +'<div class="gs-tech-main">'
-        +'<div class="gs-tech-top"><span class="gs-tech-name">'+gsEsc(t.name)+' '+gsHerkunftHtml(t.herkunft)+req+'</span>'
-          +(rating?'<span class="gs-tech-rating">'+rating+'</span>':'')+'</div>'
-        +(t.qualification?'<div class="gs-tech-qual">'+gsEsc(t.qualification)+'</div>':'')
-        +(isMatch?'<div class="gs-tech-match-badge">✓ Passt zu '+gsEsc(gsData.bereich)+'</div>':'')
-        +(avail?'':'<div class="gs-tech-booked-badge">🔴 Ausgebucht bis '+gsFmtDate(t.booked_until)+'</div>')
-        +'<div class="gs-tech-tags">'+tags+'</div>'
-        +'<div class="gs-tech-meta">'+meta+statusLine+'</div>'
-      +'</div>'
-    +'</div>';
-  }).join('');
-  list.innerHTML=cards
-    +'<div class="gs-net-updated">Zuletzt aktualisiert: '+gsAgo(gsTechUpdated)+'</div>';
+  var avail=gsTechniker.filter(function(t){return t.availability!==false;});
+  var booked=gsTechniker.filter(function(t){return t.availability===false;});
+  var html='';
+  if(gsNearXY){
+    // "In deiner Nähe": verfügbare Techniker nach Distanz zum Kunden-Standort zuerst.
+    avail=avail.slice().sort(function(a,b){return gsDist(gsTechXY(a),gsNearXY)-gsDist(gsTechXY(b),gsNearXY);});
+    booked=booked.slice().sort(function(a,b){return gsDist(gsTechXY(a),gsNearXY)-gsDist(gsTechXY(b),gsNearXY);});
+    if(avail.length) html+='<div class="gs-tech-group-lbl">📍 In Ihrer Nähe ('+gsPlzRegion((document.getElementById('gs-near-plz')||{}).value||'')+')</div>';
+    html+=avail.map(gsTechCardHtml).join('');
+    if(booked.length) html+='<div class="gs-tech-group-lbl muted">Weitere im Netzwerk</div>'+booked.map(gsTechCardHtml).join('');
+  }else{
+    html=gsTechniker.map(gsTechCardHtml).join('');
+  }
+  list.innerHTML=html+'<div class="gs-net-updated">Zuletzt aktualisiert: '+gsAgo(gsTechUpdated)+'</div>';
   gsSyncTeam(); // keep team price/equipment anchor in sync with the current roster
 }
 
@@ -3997,7 +4172,7 @@ function gsSelectTechniker(id){
   if(t&&t.availability===false) return; // booked profiles not selectable
   gsSelectedTechniker=gsSelectedTechniker===id?null:id;
   gsData.preferred_techniker=(gsSelectedTechniker&&t)?t.name:null;
-  gsRenderTechniker();
+  gsRenderTechniker();   // also re-renders the map pins (highlights selection)
   gsSyncTeam();   // re-evaluate equipment anchor for the new primary pick
 }
 
@@ -5198,6 +5373,21 @@ function trUpdateGrandTotal(){
   el.textContent='Σ Gesamtstunden alle Positionen: '+trGrandTotalHours().toFixed(1)+' h ('+(n+1)+' Positionen)';
 }
 
+// Gemeinsamer BOB-Aufruf mit sichtbarem Timeout (Edge-Case: Hänger / kein Netz).
+function bobAnalyse(body,ms){
+  ms=ms||25000;
+  return new Promise(function(resolve,reject){
+    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+    var done=false;
+    var timer=setTimeout(function(){ if(done)return; done=true; if(ctrl){try{ctrl.abort();}catch(e){}} reject(new Error('timeout')); },ms);
+    fetch('/api/bob',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctrl?ctrl.signal:undefined})
+      .then(function(r){return r.json();})
+      .then(function(d){ if(done)return; done=true; clearTimeout(timer); resolve(d||{}); })
+      .catch(function(e){ if(done)return; done=true; clearTimeout(timer); reject(e); });
+  });
+}
+function bobErrMsg(e){ return (e&&e.message==='timeout')?'⚠️ BOB antwortet nicht – bitte erneut versuchen oder manuell eintragen':'⚠️ BOB-Analyse fehlgeschlagen – bitte erneut versuchen'; }
+
 // ── Voice → BOB → Rapport übernehmen (NUR Strukturierung, keine Begriffskorrektur) ──
 var trRec=null,trRecOn=false,trBobData=null,trActivePos='primary';
 (function trBindActivePos(){
@@ -5232,15 +5422,13 @@ function trBobAnalyse(){
   if(btn)btn.disabled=true;
   if(res)res.style.display='none';
   if(think)think.style.display='flex';
-  fetch('/api/bob',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'rapport',description:text})})
-    .then(function(r){return r.json();}).then(function(d){
-      d=d||{};
+  bobAnalyse({mode:'rapport',description:text}).then(function(d){
       if(think)think.style.display='none';
       if(btn)btn.disabled=false;
       if(d.error){toast('⚠️ '+d.error);return;}
       trBobData={taetigkeiten:Array.isArray(d.taetigkeiten)?d.taetigkeiten.filter(Boolean):[],material:Array.isArray(d.material)?d.material.filter(Boolean):[],notiz:(d.notiz||'').trim()};
       trRenderBobResult();
-    }).catch(function(){if(think)think.style.display='none';if(btn)btn.disabled=false;toast('⚠️ BOB-Analyse fehlgeschlagen – bitte erneut');});
+    }).catch(function(e){if(think)think.style.display='none';if(btn)btn.disabled=false;toast(bobErrMsg(e));});
 }
 function trRenderBobResult(){
   var res=document.getElementById('tr-bob-result'); if(!res||!trBobData) return;
@@ -5486,13 +5674,92 @@ function showTechMaterial(){
   if(!document.getElementById('tm-positions').children.length) tmAddRow();
   tmFotoB64=null;document.getElementById('tm-foto-preview').innerHTML='';
   document.getElementById('tm-bob-result').style.display='none';
+  var vt=document.getElementById('tm-voice-transcript'); if(vt) vt.value='';
+  var vr=document.getElementById('tm-voice-result'); if(vr){ vr.style.display='none'; vr.innerHTML=''; }
+  tmVoiceData=null;
   setMsg('tm-msg','','');
 }
-function tmAddRow(){
+// ── MATERIALLISTE: Voice → BOB → übernehmen (gleicher Flow wie Rapport) ──
+var tmVRec=null,tmVRecOn=false,tmVoiceData=null;
+function tmVoiceDictate(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var btn=document.getElementById('tm-vdictate');
+  if(!SR){toast('Spracherkennung wird nicht unterstützt – bitte tippen');return;}
+  if(tmVRecOn&&tmVRec){tmVRec.stop();return;}
+  tmVRec=new SR();tmVRec.lang='de-CH';tmVRec.interimResults=false;tmVRec.continuous=true;
+  tmVRecOn=true;if(btn){btn.classList.add('rec');btn.textContent='⏺️ Stoppen';}
+  tmVRec.onresult=function(e){
+    var t='';for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;}
+    var ta=document.getElementById('tm-voice-transcript');if(ta)ta.value=(ta.value?ta.value+' ':'')+t.trim();
+  };
+  tmVRec.onend=function(){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}};
+  tmVRec.onerror=function(){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}};
+  try{tmVRec.start();}catch(e){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}}
+}
+function tmVoiceAnalyse(){
+  var ta=document.getElementById('tm-voice-transcript');
+  var text=(ta&&ta.value||'').trim();
+  if(!text){toast('Bitte zuerst diktieren oder Text eingeben');return;}
+  if(tmVRecOn&&tmVRec){try{tmVRec.stop();}catch(e){}}
+  var btn=document.getElementById('tm-vbob-btn'),think=document.getElementById('tm-voice-thinking'),res=document.getElementById('tm-voice-result');
+  if(btn)btn.disabled=true;
+  if(res)res.style.display='none';
+  if(think)think.style.display='flex';
+  bobAnalyse({mode:'material',description:text}).then(function(d){
+    if(think)think.style.display='none';
+    if(btn)btn.disabled=false;
+    if(d.error){toast('⚠️ '+d.error);return;}
+    var pos=Array.isArray(d.positionen)?d.positionen.map(function(p){return {position:String(p&&p.position||'').trim(),menge:String(p&&p.menge||'').trim(),einheit:String(p&&p.einheit||'').trim()};}).filter(function(p){return p.position;}):[];
+    tmVoiceData={positionen:pos,notiz:(d.notiz||'').trim()};
+    tmVoiceRenderResult();
+  }).catch(function(e){if(think)think.style.display='none';if(btn)btn.disabled=false;toast(bobErrMsg(e));});
+}
+function tmVoiceRenderResult(){
+  var res=document.getElementById('tm-voice-result'); if(!res||!tmVoiceData) return;
+  var d=tmVoiceData, html='';
+  if(d.positionen.length){
+    html+='<h4>Erkannte Positionen</h4><ul>'+d.positionen.map(function(p){
+      var q=[p.menge,p.einheit].filter(Boolean).join(' ');
+      return '<li>'+gsEsc(p.position)+(q?' <strong>'+gsEsc(q)+'</strong>':'')+'</li>';
+    }).join('')+'</ul>';
+  }
+  if(d.notiz){ html+='<h4>Notiz</h4><div class="tr-bob-notiz">'+gsEsc(d.notiz)+'</div>'; }
+  if(!d.positionen.length&&!d.notiz){ html='<div class="tr-bob-notiz">BOB hat keine Positionen erkannt – bitte etwas deutlicher diktieren (Artikel + Menge).</div>'; }
+  if(d.positionen.length||d.notiz){ html+='<button type="button" class="tr-bob-apply" onclick="tmApplyVoice()">✓ Übernehmen</button>'; }
+  res.innerHTML=html; res.style.display='block';
+}
+function tmApplyVoice(){
+  if(!tmVoiceData) return;
+  var d=tmVoiceData;
+  d.positionen.forEach(function(p){
+    var row=tmFirstEmptyRow();
+    if(row){ row.querySelector('.tm-pos').value=p.position; row.querySelector('.tm-menge').value=p.menge; row.querySelector('.tm-einheit').value=p.einheit; }
+    else tmAddRow(p.position,p.menge,p.einheit);
+  });
+  if(d.notiz){ var nt=document.getElementById('tm-notiz'); if(nt){ var ex=nt.value.trim(); nt.value=(ex?ex+'\n':'')+d.notiz; } }
+  var res=document.getElementById('tm-voice-result'); if(res) res.style.display='none';
+  var vt=document.getElementById('tm-voice-transcript'); if(vt) vt.value='';
+  tmVoiceData=null;
+  toast(d.positionen.length?('✓ '+d.positionen.length+' Position'+(d.positionen.length>1?'en':'')+' übernommen – jetzt editierbar'):'✓ Übernommen');
+}
+function tmAddRow(pos,menge,einheit){
   var wrap=document.getElementById('tm-positions');
   var row=document.createElement('div');row.className='tm-row';
   row.innerHTML='<input placeholder="Position" class="tm-pos"/><input placeholder="Menge" class="tm-menge" inputmode="decimal"/><input placeholder="Einheit/Art.-Nr." class="tm-einheit"/><button class="tm-del" onclick="this.parentNode.remove()">×</button>';
   wrap.appendChild(row);
+  if(pos!=null) row.querySelector('.tm-pos').value=pos;
+  if(menge!=null) row.querySelector('.tm-menge').value=menge;
+  if(einheit!=null) row.querySelector('.tm-einheit').value=einheit;
+  return row;
+}
+// Eine leere (noch nicht ausgefüllte) Positionszeile finden, sonst null.
+function tmFirstEmptyRow(){
+  var rows=document.querySelectorAll('#tm-positions .tm-row');
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(!r.querySelector('.tm-pos').value.trim()&&!r.querySelector('.tm-menge').value.trim()&&!r.querySelector('.tm-einheit').value.trim()) return r;
+  }
+  return null;
 }
 function tmCollect(){
   return Array.prototype.map.call(document.querySelectorAll('#tm-positions .tm-row'),function(r){
@@ -5521,15 +5788,15 @@ function tmBobAnalyse(){
   if(btn){btn.disabled=true;btn.textContent='BOB analysiert…';}
   var body={description:desc};
   if(tmFotoB64)body.imageBase64=tmFotoB64.split(',')[1];
-  fetch('/api/bob',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-    .then(function(r){return r.json();}).then(function(d){
-      if(btn){btn.disabled=false;btn.textContent='🧠 BOB analysieren';}
+  bobAnalyse(body,35000).then(function(d){
+      if(btn){btn.disabled=false;btn.textContent='🧠 BOB: Kosten schätzen (Foto/Positionen)';}
+      if(d.error){setMsg('tm-msg','⚠️ '+d.error,'err');return;}
       var el=document.getElementById('tm-bob-result');
       var txt='🧠 '+(d.erkannt_als||d.titel||'')+'\n'+(d.desc||'');
       if(d.material_kosten)txt+='\nMaterial ca.: '+d.material_kosten;
       el.textContent=txt;el.style.display='block';
       el.dataset.summary=txt;
-    }).catch(function(){if(btn){btn.disabled=false;btn.textContent='🧠 BOB analysieren';}setMsg('tm-msg','BOB-Analyse fehlgeschlagen','err');});
+    }).catch(function(e){if(btn){btn.disabled=false;btn.textContent='🧠 BOB: Kosten schätzen (Foto/Positionen)';}setMsg('tm-msg',(e&&e.message==='timeout')?'⚠️ BOB antwortet nicht – bitte erneut':'BOB-Analyse fehlgeschlagen','err');});
 }
 var tmRec=null,tmRecOn=false;
 function tmDictate(){
