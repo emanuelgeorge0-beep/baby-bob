@@ -387,7 +387,8 @@ button:active{transform:scale(0.97);}
 /* GS Nav Header (sub-screens) */
 .gs-nav{display:flex;align-items:center;padding:52px 18px 0;gap:10px;}
 .gs-back-btn{width:38px;height:38px;min-width:38px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;color:#e8edf5;}
-.gs-nav-tit{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;flex:1;}
+.gs-nav-tit{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gs-nav-logo{height:20px;width:auto;flex-shrink:0;}
 .gs-step-chip{font-size:11px;font-weight:800;color:#4a9eff;background:rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.2);padding:4px 10px;border-radius:20px;white-space:nowrap;}
 
 /* GS Progress */
@@ -801,6 +802,12 @@ button:active{transform:scale(0.97);}
 .landing-flag:active{transform:scale(0.9);}
 .landing-flag:focus-visible{outline:3px solid #4ECDC4;outline-offset:1px;}
 .landing-flag.sel{border-color:#FFD700;background:rgba(255,215,0,0.14);filter:none;opacity:1;box-shadow:0 0 14px rgba(255,215,0,0.35);}
+/* George Solutions Logo (transparent /lib/logo-gs.png) — nur GS-Bereich, BOB unverändert */
+.landing-logo-img{height:84px;width:auto;max-width:100%;display:block;margin:0 auto;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.45));}
+@media (min-width:840px){ .landing-logo-img{height:104px;} }
+.gs-logo-img{height:30px;width:auto;display:block;}
+.login-logo-img{height:60px;width:auto;max-width:100%;display:block;margin:0 auto 8px;}
+.admin-logo-img{height:26px;width:auto;display:block;margin-bottom:6px;}
 /* GS Telefon-CTA ("Lieber direkt sprechen? Ruf uns an.") */
 .gs-phone-cta{margin:14px 18px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(135deg,rgba(255,215,0,0.1),rgba(74,158,255,0.08));border:1px solid rgba(255,215,0,0.3);border-radius:14px;padding:12px 15px;text-decoration:none;cursor:pointer;transition:transform .12s;}
 .gs-phone-cta:active{transform:scale(0.99);}
@@ -858,9 +865,8 @@ button:active{transform:scale(0.97);}
     <div class="landing-half landing-gs" role="button" tabindex="0" onclick="if(event.target===this||!event.target.closest('button')){landingGoGS();}" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();landingGoGS();}" aria-label="George Solutions öffnen – Profi-Team auf Abruf buchen">
       <div class="landing-glow"></div>
       <div class="landing-half-inner">
-        <div class="landing-logo landing-logo-gs">George <span>Solutions</span></div>
+        <img class="landing-logo-img" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
         <div class="landing-badge landing-badge-gs">SHK-Profi-Team</div>
-        <div class="landing-icon" aria-hidden="true">🏢</div>
         <h2 class="landing-tit">Profi-Team auf Abruf</h2>
         <p class="landing-sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes SHK-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
         <span class="landing-cta landing-cta-gs">SHK-Dienstleistung buchen →</span>
@@ -1350,7 +1356,7 @@ button:active{transform:scale(0.97);}
 <!-- GS HOME -->
 <div id="gs-home" class="gs-screen">
   <div class="gs-hdr">
-    <div class="gs-logo">George <span>Solutions</span></div>
+    <img class="gs-logo-img" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="mode-toggle" style="padding:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:50px;">
       <button class="mt-opt" onclick="setMode('bob')" style="font-size:10px;padding:6px 12px;">👶 BOB</button>
       <button class="mt-opt act-gs" style="font-size:10px;padding:6px 12px;">🏢 GS</button>
@@ -1398,6 +1404,7 @@ button:active{transform:scale(0.97);}
 <div id="gs-erfassung" class="gs-screen">
   <div class="gs-nav">
     <div class="gs-back-btn" onclick="gsGo('gs-home')">←</div>
+    <img class="gs-nav-logo" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit">Projekterfassung</div>
     <div class="gs-step-chip">1 / 6</div>
   </div>
@@ -1445,6 +1452,7 @@ button:active{transform:scale(0.97);}
 <div id="gs-datenblatt" class="gs-screen">
   <div class="gs-nav">
     <div class="gs-back-btn" onclick="gsGo('gs-erfassung')">←</div>
+    <img class="gs-nav-logo" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit">Projektdatenblatt</div>
     <div class="gs-step-chip">2 / 6</div>
   </div>
@@ -1477,6 +1485,7 @@ button:active{transform:scale(0.97);}
 <div id="gs-tarif" class="gs-screen">
   <div class="gs-nav">
     <div class="gs-back-btn" onclick="gsGo('gs-datenblatt')">←</div>
+    <img class="gs-nav-logo" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit">Tarif-Auswahl</div>
     <div class="gs-step-chip">3 / 6</div>
   </div>
@@ -1533,6 +1542,7 @@ button:active{transform:scale(0.97);}
 <div id="gs-techniker" class="gs-screen">
   <div class="gs-nav">
     <div class="gs-back-btn" onclick="gsGo('gs-tarif')">←</div>
+    <img class="gs-nav-logo" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit">Unser Team</div>
     <div class="gs-step-chip">4 / 7</div>
   </div>
@@ -1567,6 +1577,7 @@ button:active{transform:scale(0.97);}
 <div id="gs-verfuegbarkeit" class="gs-screen">
   <div class="gs-nav">
     <div class="gs-back-btn" onclick="gsGo('gs-techniker')">←</div>
+    <img class="gs-nav-logo" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit">Kontakt & Verfügbarkeit</div>
     <div class="gs-step-chip">5 / 7</div>
   </div>
@@ -1620,6 +1631,7 @@ button:active{transform:scale(0.97);}
 <div id="gs-bestaetigung" class="gs-screen">
   <div class="gs-nav">
     <div class="gs-back-btn" onclick="gsGo('gs-verfuegbarkeit')">←</div>
+    <img class="gs-nav-logo" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit">Anfrage bestätigen</div>
     <div class="gs-step-chip">6 / 7</div>
   </div>
@@ -1682,8 +1694,7 @@ button:active{transform:scale(0.97);}
 <div id="login" class="login-screen">
   <div class="login-card">
     <div class="login-logo">
-      <div class="login-logo-icon">👶🏢</div>
-      <div class="login-logo-title">George Solutions</div>
+      <img class="login-logo-img" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
       <div class="login-logo-sub">Partner & Techniker Login</div>
     </div>
     <input class="login-inp" id="login-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" inputmode="email"/>
@@ -1800,6 +1811,7 @@ button:active{transform:scale(0.97);}
 <div id="admin-home" class="admin-screen">
   <div class="admin-hdr">
     <div>
+      <img class="admin-logo-img" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
       <div class="admin-hdr-tit">👑 Admin</div>
       <div class="admin-hdr-sub" id="admin-welcome">George Solutions</div>
     </div>
