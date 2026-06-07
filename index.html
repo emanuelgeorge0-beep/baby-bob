@@ -44,6 +44,7 @@ body{font-family:'Nunito',sans-serif;background:var(--dark);color:var(--text);}
 @keyframes float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-10px) rotate(2deg)}}
 .h1{font-family:'Syne',sans-serif;font-size:25px;font-weight:800;line-height:1.2;margin-bottom:8px;}
 .h1 span{color:var(--y);}
+.h1 .h1-top{color:var(--text);}
 .hsub{font-size:12px;color:var(--muted);line-height:1.65;max-width:300px;}
 .scan-btn{margin:20px 22px 0;background:linear-gradient(135deg,#FFD700,#FF6B35);border:none;border-radius:20px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;font-family:'Nunito',sans-serif;font-size:16px;font-weight:900;color:#0a0a0f;box-shadow:0 8px 32px rgba(255,107,53,0.4);cursor:pointer;transition:transform .15s;width:calc(100% - 44px);}
 .mic-btn{margin:10px 22px 0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,215,0,0.3);border-radius:18px;padding:14px;display:flex;align-items:center;justify-content:center;gap:9px;font-family:'Nunito',sans-serif;font-size:14px;font-weight:800;color:#FFD700;cursor:pointer;transition:all .15s;width:calc(100% - 44px);}
@@ -791,7 +792,9 @@ button:active{transform:scale(0.97);}
 .landing-cta{margin-top:7px;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:54px;padding:0 26px;border-radius:15px;font-size:15.5px;font-weight:900;font-family:'Nunito',sans-serif;width:100%;max-width:300px;box-sizing:border-box;}
 .landing-cta-gs{background:linear-gradient(135deg,#1e4a8a,#2d6bcc);color:#fff;box-shadow:0 8px 26px rgba(30,74,138,0.5);}
 .landing-cta-bob{background:linear-gradient(135deg,#FFD700,#FF6B35);color:#0a0a0f;box-shadow:0 8px 26px rgba(255,170,40,0.4);}
-.landing-or{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:6;width:48px;height:48px;border-radius:50%;background:#07111f;border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;color:rgba(232,237,245,0.65);box-shadow:0 4px 18px rgba(0,0,0,0.5);}
+/* "oder"-Chip: eigenes Flex-Element zwischen den Hälften → überlappt KEINE Inhalte/Flaggen */
+.landing-or{flex-shrink:0;align-self:center;z-index:6;width:46px;height:46px;border-radius:50%;background:#07111f;border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;color:rgba(232,237,245,0.65);box-shadow:0 4px 18px rgba(0,0,0,0.5);margin:6px auto;}
+@media (min-width:840px){ .landing-or{margin:auto 6px;} }
 .landing-foot{flex-shrink:0;text-align:center;font-size:10.5px;color:rgba(232,237,245,0.32);padding:12px 18px calc(12px + var(--safe-bottom));background:#07111f;}
 /* Landing: Markt-Label (GS, statisch) + Regionen-Selektor (BOB, 5 Flaggen) */
 .landing-region{margin-top:12px;display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;}
@@ -866,28 +869,28 @@ button:active{transform:scale(0.97);}
       <div class="landing-glow"></div>
       <div class="landing-half-inner">
         <img class="landing-logo-img" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
-        <div class="landing-badge landing-badge-gs">SHK-Profi-Team</div>
-        <h2 class="landing-tit">Profi-Team auf Abruf</h2>
-        <p class="landing-sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes SHK-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
-        <span class="landing-cta landing-cta-gs">SHK-Dienstleistung buchen →</span>
+        <div class="landing-badge landing-badge-gs" data-i18n="gs_badge">SHK-Profi-Team</div>
+        <h2 class="landing-tit" data-i18n="gs_title">Profi-Team auf Abruf</h2>
+        <p class="landing-sub" data-i18n="gs_sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes SHK-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
+        <span class="landing-cta landing-cta-gs" data-i18n="gs_cta">SHK-Dienstleistung buchen →</span>
         <div class="landing-region landing-region-gs" aria-label="Markt: Schweiz"><span class="landing-flag-static" title="Schweiz">🇨🇭</span> <span class="landing-region-lbl">Schweiz</span></div>
       </div>
     </div>
+    <div class="landing-or" aria-hidden="true" data-i18n="landing_or">oder</div>
     <div class="landing-half landing-bob" role="button" tabindex="0" onclick="if(event.target===this||!event.target.closest('button')){landingGoBob();}" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();landingGoBob();}" aria-label="Baby BOB öffnen – Problem scannen und Fachmann finden">
       <div class="landing-glow"></div>
       <div class="landing-half-inner">
         <div class="landing-logo landing-logo-bob">Baby <span>BOB</span></div>
-        <div class="landing-badge landing-badge-bob">KI-Scanner</div>
+        <div class="landing-badge landing-badge-bob" data-i18n="bob_badge">KI-Scanner</div>
         <div class="landing-icon" aria-hidden="true">👶</div>
-        <h2 class="landing-tit">Problem scannen &amp; Fachmann finden</h2>
-        <p class="landing-sub">Foto machen oder Problem beschreiben – die KI erkennt sofort, welcher Handwerker oder Dienstleister zu dir passt.</p>
-        <span class="landing-cta landing-cta-bob">Jetzt scannen →</span>
+        <h2 class="landing-tit" data-i18n="bob_title">Problem scannen &amp; Fachmann finden</h2>
+        <p class="landing-sub" data-i18n="bob_sub">Foto machen oder Problem beschreiben – die KI erkennt sofort, welcher Handwerker oder Dienstleister zu dir passt.</p>
+        <span class="landing-cta landing-cta-bob" data-i18n="bob_cta">Jetzt scannen →</span>
         <div class="landing-region landing-region-bob" id="landing-region" role="radiogroup" aria-label="Region wählen – Sprache und Währung"></div>
       </div>
     </div>
-    <div class="landing-or" aria-hidden="true">oder</div>
   </div>
-  <div class="landing-foot">George Solutions · Schweizer SHK-Dienstleistung &amp; KI-Fachmann-Finder</div>
+  <div class="landing-foot" data-i18n="landing_foot">George Solutions · Schweizer SHK-Dienstleistung &amp; KI-Fachmann-Finder</div>
 </div>
 
 <!-- HOME -->
@@ -907,13 +910,13 @@ button:active{transform:scale(0.97);}
       <div class="bob-glow"></div>
       <div class="bob-face">👶</div>
     </div>
-    <h1 class="h1">Dein smarter<br><span>Allround-Finder</span></h1>
-    <p class="hsub">Foto machen oder Problem beschreiben – BOB findet dir den richtigen Fachmann in deiner Nähe mit dem besten Preis-Leistungs-Verhältnis.</p>
+    <h1 class="h1"><span class="h1-top" data-i18n="hero_title">Dein smarter</span><br><span data-i18n="hero_sub2">Allround-Finder</span></h1>
+    <p class="hsub" data-i18n="hero_p">Foto machen oder Problem beschreiben – BOB findet dir den richtigen Fachmann in deiner Nähe mit dem besten Preis-Leistungs-Verhältnis.</p>
   </div>
   <div class="scan-counter" id="scan-counter" style="display:none;"><span class="sc-dot"></span><strong id="scan-counter-n">0</strong> Scans · BOB lernt täglich dazu 🧠</div>
-  <button class="scan-btn" onclick="openSheet()"><span>🔍</span> Problem scannen</button>
-  <button class="mic-btn" id="bob-mic-btn" onclick="startListening()"><span>🎙️</span> Mit BOB sprechen</button>
-  <button class="mic-btn" onclick="go('premium')" style="border-color:rgba(255,215,0,0.45);"><span>⭐</span> BOB Premium &amp; Reports</button>
+  <button class="scan-btn" onclick="openSheet()"><span>🔍</span> <span data-i18n="scan_btn">Problem scannen</span></button>
+  <button class="mic-btn" id="bob-mic-btn" onclick="startListening()"><span>🎙️</span> <span data-i18n="mic_btn">Mit BOB sprechen</span></button>
+  <button class="mic-btn" onclick="go('premium')" style="border-color:rgba(255,215,0,0.45);"><span>⭐</span> <span data-i18n="premium_btn">BOB Premium &amp; Reports</span></button>
   <div class="inapp-hint" id="inapp-hint" style="display:none;">
     📱 Du bist in einem In-App-Browser (z.B. Instagram/TikTok). Für die <strong>Sprachfunktion (Mikrofon)</strong> öffne BOB bitte in Safari oder Chrome.
     <button onclick="openInRealBrowser()">🌐 Im Browser öffnen / Link kopieren</button>
@@ -922,13 +925,13 @@ button:active{transform:scale(0.97);}
   <div class="cat-main">
     <button class="cat-main-btn handwerk" onclick="openCatSheet('handwerk')">
       <div class="cat-main-icon">🔧</div>
-      <div class="cat-main-title">Handwerk</div>
-      <div class="cat-main-sub">Sanitär · Elektro · Garten · Reinigung · uvm.</div>
+      <div class="cat-main-title" data-i18n="cat_handwerk">Handwerk</div>
+      <div class="cat-main-sub" data-i18n="cat_handwerk_sub">Sanitär · Elektro · Garten · Reinigung · uvm.</div>
     </button>
     <button class="cat-main-btn beauty" onclick="openCatSheet('beauty')">
       <div class="cat-main-icon">💅</div>
-      <div class="cat-main-title">Beauty</div>
-      <div class="cat-main-sub">Friseur · Nägel · Massage · Barber · uvm.</div>
+      <div class="cat-main-title" data-i18n="cat_beauty">Beauty</div>
+      <div class="cat-main-sub" data-i18n="cat_beauty_sub">Friseur · Nägel · Massage · Barber · uvm.</div>
     </button>
   </div>
 
@@ -972,9 +975,9 @@ button:active{transform:scale(0.97);}
   </div>
 
   <div class="bnav">
-    <div class="bni on"><span class="bni-i">🏠</span><span class="bni-l">Home</span></div>
-    <div class="bni" onclick="openSheet()"><span class="bni-i">📸</span><span class="bni-l">Scannen</span></div>
-    <div class="bni" onclick="go('about')"><span class="bni-i">👶</span><span class="bni-l">Über BOB</span></div>
+    <div class="bni on"><span class="bni-i">🏠</span><span class="bni-l" data-i18n="nav_home">Home</span></div>
+    <div class="bni" onclick="openSheet()"><span class="bni-i">📸</span><span class="bni-l" data-i18n="nav_scan">Scannen</span></div>
+    <div class="bni" onclick="go('about')"><span class="bni-i">👶</span><span class="bni-l" data-i18n="nav_about">Über BOB</span></div>
   </div>
 </div>
 
@@ -995,15 +998,15 @@ button:active{transform:scale(0.97);}
   <div class="v-wrap">
     <button class="v-btn" id="v-btn" onclick="toggleVoice('v-btn','v-txt','v-tmr','v-tr','d-inp')">
       <span style="font-size:22px;flex-shrink:0">🎤</span>
-      <span id="v-txt">Sprachmemo aufnehmen</span>
+      <span id="v-txt" data-i18n="scan_voice">Sprachmemo aufnehmen</span>
       <span class="v-tmr" id="v-tmr">0:00</span>
     </button>
     <div class="v-tr" id="v-tr"></div>
   </div>
   <div class="d-wrap">
-    <textarea class="d-inp" id="d-inp" placeholder="Oder Problem tippen... z.B. 'Wasserhahn tropft' oder 'Haare schneiden'" rows="3"></textarea>
+    <textarea class="d-inp" id="d-inp" data-i18n-ph="scan_ph" placeholder="Oder Problem tippen... z.B. 'Wasserhahn tropft' oder 'Haare schneiden'" rows="3"></textarea>
   </div>
-  <button class="ask-btn" id="ask-btn" onclick="startAnalysis()"><span>🧠</span> BOB fragen</button>
+  <button class="ask-btn" id="ask-btn" onclick="startAnalysis()"><span>🧠</span> <span data-i18n="ask_btn">BOB fragen</span></button>
   <input type="file" id="file-inp" accept="image/*" onchange="onFile(event)"/>
 </div>
 
@@ -1021,12 +1024,12 @@ button:active{transform:scale(0.97);}
 <div id="result" class="screen">
   <div class="r-hdr">
     <div class="back" onclick="go('scan')">←</div>
-    <div class="scan-tit">BOBs Diagnose</div>
+    <div class="scan-tit" data-i18n="res_title">BOBs Diagnose</div>
     <div class="r-voice" id="r-voice" role="button" tabindex="0" aria-label="Diagnose vorlesen – Ton an" aria-pressed="true" onclick="toggleVoice()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleVoice();}" title="Vorlesen">🔊</div>
   </div>
   <div class="r-bob-wrap">
     <div class="r-bob" id="r-bob">👷</div>
-    <div class="r-lbl">Diagnose abgeschlossen</div>
+    <div class="r-lbl" data-i18n="res_lbl">Diagnose abgeschlossen</div>
     <div class="r-fach" id="r-fach"></div>
   </div>
   <div class="r-notfall" id="r-notfall" style="display:none;">
@@ -1039,13 +1042,13 @@ button:active{transform:scale(0.97);}
     <div class="r-desc" id="r-desc">–</div>
   </div>
   <div class="r-grid">
-    <div class="r-meta"><div class="r-ml">Kategorie</div><div class="r-mv" id="r-kat">–</div></div>
-    <div class="r-meta"><div class="r-ml">Dringlichkeit</div><div class="r-mv" id="r-dring">–</div></div>
-    <div class="r-meta"><div class="r-ml">Kosten ca.</div><div class="r-mv" id="r-kost">–</div></div>
-    <div class="r-meta"><div class="r-ml">Zeitraum</div><div class="r-mv" id="r-zeit">–</div></div>
+    <div class="r-meta"><div class="r-ml" data-i18n="meta_kat">Kategorie</div><div class="r-mv" id="r-kat">–</div></div>
+    <div class="r-meta"><div class="r-ml" data-i18n="meta_dring">Dringlichkeit</div><div class="r-mv" id="r-dring">–</div></div>
+    <div class="r-meta"><div class="r-ml" data-i18n="meta_kost">Kosten ca.</div><div class="r-mv" id="r-kost">–</div></div>
+    <div class="r-meta"><div class="r-ml" data-i18n="meta_zeit">Zeitraum</div><div class="r-mv" id="r-zeit">–</div></div>
   </div>
   <div class="r-tips">
-    <div class="r-tips-tit"><span>💡</span> BOBs Tipps</div>
+    <div class="r-tips-tit"><span>💡</span> <span data-i18n="tips_title">BOBs Tipps</span></div>
     <div id="r-tipps"></div>
     <div class="r-saison" id="r-saison" style="display:none;"></div>
   </div>
@@ -1060,11 +1063,11 @@ button:active{transform:scale(0.97);}
     <div class="r-gs-cta-arrow">→</div>
   </div>
   <div class="fb-row" id="bob-fb-row">
-    <div class="fb-lbl">War diese Antwort hilfreich?</div>
+    <div class="fb-lbl" data-i18n="fb_q">War diese Antwort hilfreich?</div>
     <div class="fb-btns">
-      <button class="fb-btn fb-good" onclick="bobFeedback('correct')"><span class="fb-icon">✅</span><span class="fb-txt">Ja</span></button>
-      <button class="fb-btn fb-bad" onclick="bobFeedback('wrong')"><span class="fb-icon">❌</span><span class="fb-txt">Nein</span></button>
-      <button class="fb-btn fb-partial" onclick="bobFeedback('corrected')"><span class="fb-icon">✏️</span><span class="fb-txt">Korrigieren</span></button>
+      <button class="fb-btn fb-good" onclick="bobFeedback('correct')"><span class="fb-icon">✅</span><span class="fb-txt" data-i18n="fb_yes">Ja</span></button>
+      <button class="fb-btn fb-bad" onclick="bobFeedback('wrong')"><span class="fb-icon">❌</span><span class="fb-txt" data-i18n="fb_no">Nein</span></button>
+      <button class="fb-btn fb-partial" onclick="bobFeedback('corrected')"><span class="fb-icon">✏️</span><span class="fb-txt" data-i18n="fb_correct">Korrigieren</span></button>
     </div>
     <div class="bob-fb-correct" id="bob-fb-correct">
       <div class="fb-lbl" id="bob-fb-q">Was wäre richtig gewesen? (optional)</div>
@@ -1086,7 +1089,7 @@ button:active{transform:scale(0.97);}
   <!-- Conversational follow-up -->
   <div class="bob-chat" id="bob-chat">
     <div class="bob-chat-head">
-      <div class="bob-chat-tit">💬 Noch Fragen? Frag BOB!</div>
+      <div class="bob-chat-tit" data-i18n="chat_title">💬 Noch Fragen? Frag BOB!</div>
       <div class="bob-accent" id="bob-accent">
         <span class="bob-acc-opt sel" data-a="de" onclick="setAccent('de')" title="Deutsch">🇩🇪</span>
         <span class="bob-acc-opt" data-a="ch" onclick="setAccent('ch')" title="Schweizerdeutsch">🇨🇭</span>
@@ -1096,21 +1099,21 @@ button:active{transform:scale(0.97);}
     <div class="bob-chat-msgs" id="bob-chat-msgs"></div>
     <div class="bob-chat-input-row">
       <button class="bob-chat-mic" id="bob-chat-mic" onclick="bobChatMic()" title="Sprachmemo">🎙️</button>
-      <input class="bob-chat-input" id="bob-chat-input" type="text" placeholder="Frag BOB etwas…" onkeydown="if(event.key==='Enter')bobChatSend()"/>
+      <input class="bob-chat-input" id="bob-chat-input" type="text" data-i18n-ph="chat_ph" placeholder="Frag BOB etwas…" onkeydown="if(event.key==='Enter')bobChatSend()"/>
       <button class="bob-chat-send" id="bob-chat-send" onclick="bobChatSend()">➤</button>
     </div>
   </div>
   <div class="r-maps">
     <div class="r-maps-i">📍</div>
-    <div class="r-maps-info"><strong>Fachmann in deiner Nähe</strong><span>Google Maps Integration kommt bald</span></div>
+    <div class="r-maps-info"><strong data-i18n="maps_title">Fachmann in deiner Nähe</strong><span data-i18n="maps_sub">Google Maps Integration kommt bald</span></div>
   </div>
 
   <!-- AKTIONS-BUTTONS -->
   <div class="r-actions">
-    <div class="r-action-tit">Was möchtest du als nächstes?</div>
+    <div class="r-action-tit" data-i18n="act_title">Was möchtest du als nächstes?</div>
     <div class="r-richtpreis" id="r-richtpreis" style="display:none;"></div>
 
-    <!-- Option 0: Fachmann/Handwerker finden (Label je Branche) -->
+    <!-- Option 0: Fachmann/Handwerker finden (Label je Branche, in JS lokalisiert) -->
     <button class="r-btn-gratis" id="r-act-finden" onclick="go('contact')">
       <div class="r-btn-gratis-i">🤝</div>
       <div class="r-btn-gratis-info">
@@ -1118,8 +1121,8 @@ button:active{transform:scale(0.97);}
         <span id="r-act-finden-sub">BOB sucht den richtigen Fachmann für dich</span>
       </div>
       <div class="r-btn-gratis-price">
-        <strong>Gratis</strong>
-        <span>bei Auftragserteilung</span>
+        <strong data-i18n="price_free">Gratis</strong>
+        <span data-i18n="price_on_order">bei Auftragserteilung</span>
       </div>
     </button>
 
@@ -1127,12 +1130,12 @@ button:active{transform:scale(0.97);}
     <button class="r-btn-angebot" id="r-act-angebot" onclick="openAngebotSheet()">
       <div class="r-btn-angebot-i">📋</div>
       <div class="r-btn-angebot-info">
-        <strong>Professionelles Angebot</strong>
-        <span>Verbindliches Angebot vom Fachmann in 24h</span>
+        <strong data-i18n="act_angebot">Professionelles Angebot</strong>
+        <span data-i18n="act_angebot_sub">Verbindliches Angebot vom Fachmann in 24h</span>
       </div>
       <div class="r-btn-angebot-price">
         <strong>CHF 39–69</strong>
-        <span>einmalig</span>
+        <span data-i18n="price_once">einmalig</span>
       </div>
     </button>
 
@@ -1140,12 +1143,12 @@ button:active{transform:scale(0.97);}
     <button class="r-btn-angebot" id="r-act-finder" style="display:none;" onclick="bobFinderCheckout()">
       <div class="r-btn-angebot-i">📍</div>
       <div class="r-btn-angebot-info">
-        <strong>Anbieter in deiner Nähe finden</strong>
-        <span>Wir schicken dir die nächsten passenden Anbieter (z.B. Barbershops, Nagelstudios) per E-Mail.</span>
+        <strong data-i18n="act_finder">Anbieter in deiner Nähe finden</strong>
+        <span data-i18n="act_finder_sub">Wir schicken dir die nächsten passenden Anbieter (z.B. Barbershops, Nagelstudios) per E-Mail.</span>
       </div>
       <div class="r-btn-angebot-price">
         <strong id="r-act-finder-price">CHF 5</strong>
-        <span>einmalig</span>
+        <span data-i18n="price_once">einmalig</span>
       </div>
     </button>
 
@@ -1154,17 +1157,17 @@ button:active{transform:scale(0.97);}
       <div class="r-btn-pro-badge">PRO</div>
       <div class="r-btn-pro-i">🧠</div>
       <div class="r-btn-pro-info">
-        <strong>BOBs Profi-Rat</strong>
-        <span>Detaillierte Experteneinschätzung</span>
+        <strong data-i18n="act_pro">BOBs Profi-Rat</strong>
+        <span data-i18n="act_pro_sub">Detaillierte Experteneinschätzung</span>
       </div>
       <div class="r-btn-pro-price">
-        <strong>Gratis</strong>
-        <span>basic</span>
+        <strong data-i18n="price_free">Gratis</strong>
+        <span data-i18n="act_pro_basic">basic</span>
       </div>
     </button>
   </div>
 
-  <button class="r-new" onclick="resetAll()">🔄 Neuen Scan starten</button>
+  <button class="r-new" onclick="resetAll()" data-i18n="new_scan">🔄 Neuen Scan starten</button>
 </div>
 
 <!-- ANGEBOT SHEET -->
@@ -1308,9 +1311,9 @@ button:active{transform:scale(0.97);}
   <div class="a-card"><h3>📍 Handwerker-Netzwerk</h3><p>Bald: Google Maps zeigt Partner in deiner unmittelbaren Umgebung mit Kosten, Verfügbarkeit und Direktkontakt.</p></div>
   <div class="a-card"><h3>⚡ Von George Solutions</h3><p>Baby BOB ist ein Produkt von George Solutions – SHK-Spezialist aus Zürich.</p></div>
   <div class="bnav">
-    <div class="bni" onclick="go('home')"><span class="bni-i">🏠</span><span class="bni-l">Home</span></div>
-    <div class="bni" onclick="go('home');openSheet()"><span class="bni-i">📸</span><span class="bni-l">Scannen</span></div>
-    <div class="bni on"><span class="bni-i">👶</span><span class="bni-l">Über BOB</span></div>
+    <div class="bni" onclick="go('home')"><span class="bni-i">🏠</span><span class="bni-l" data-i18n="nav_home">Home</span></div>
+    <div class="bni" onclick="go('home');openSheet()"><span class="bni-i">📸</span><span class="bni-l" data-i18n="nav_scan">Scannen</span></div>
+    <div class="bni on"><span class="bni-i">👶</span><span class="bni-l" data-i18n="nav_about">Über BOB</span></div>
   </div>
 </div>
 
@@ -2111,6 +2114,7 @@ var OUTFITS=[
 
 // ══ NAVIGATION ══
 function go(id){
+  if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop any voice when navigating
   if(id!=='think'){
     var ts=document.getElementById('think');
     if(ts&&ts.style.display==='flex'){
@@ -2340,8 +2344,8 @@ function finish(result){
   setTimeout(function(){
     busy=false;
     document.getElementById('ask-btn').disabled=false;
+    go('result');          // navigate FIRST (clears any speech), then render+speak the diagnosis
     renderResult(result);
-    go('result');
   },1000);
 }
 
@@ -2549,25 +2553,25 @@ function bobApplyBranchOptions(r){
   var richt=document.getElementById('r-richtpreis');
   if(grp==='B'){
     // Beauty/Services: neutraler Begriff, kein "Professionelles Angebot", dafür CHF-5-Finder.
-    if(fTit) fTit.textContent='Fachmann / Anbieter finden';
-    if(fSub) fSub.textContent='BOB findet den passenden Anbieter in deiner Nähe';
+    if(fTit) fTit.textContent=bbTr('act_find_b');
+    if(fSub) fSub.textContent=bbTr('act_find_b_sub');
     if(angebot) angebot.style.display='none';
     if(finder){
       finder.style.display='flex';
       var fp=document.getElementById('r-act-finder-price');
       if(fp) fp.textContent=bbFormatRegion(5);
     }
-    // BOB gibt direkt Richtpreise für die Region.
+    // BOB gibt direkt Richtpreise für die Region (lokalisiert).
     if(richt){
       var kp=(r&&r.kosten&&r.kosten!=='–')?r.kosten:null;
-      richt.innerHTML='💡 In deiner Region '+(window.BB_REGIONS&&window.BB_REGIONS[bbRegion]?('('+window.BB_REGIONS[bbRegion].flag+' '+window.BB_REGIONS[bbRegion].name+')'):'')
-        +' kostet das üblicherweise '+(kp?('<strong>'+kp+'</strong>'):'<strong>je nach Anbieter unterschiedlich</strong>')+'.';
+      var rgn=(window.BB_REGIONS&&window.BB_REGIONS[bbRegion])?(' ('+window.BB_REGIONS[bbRegion].flag+' '+window.BB_REGIONS[bbRegion].name+')'):'';
+      richt.innerHTML=bbTr('richt_prefix')+rgn+' '+bbTr('richt_mid')+' '+(kp?('<strong>'+gsEsc(kp)+'</strong>'):('<strong>'+bbTr('richt_var')+'</strong>'))+'.';
       richt.style.display='block';
     }
   }else{
     // Handwerk/Technik: wie bisher.
-    if(fTit) fTit.textContent='Handwerker finden';
-    if(fSub) fSub.textContent='BOB sucht den richtigen Fachmann für dich';
+    if(fTit) fTit.textContent=bbTr('act_find_a');
+    if(fSub) fSub.textContent=bbTr('act_find_a_sub');
     if(angebot) angebot.style.display='';
     if(finder) finder.style.display='none';
     if(richt) richt.style.display='none';
@@ -2696,7 +2700,7 @@ function bauplanAnalyse(){
   var bp=document.getElementById('r-bauplan-cta');if(bp)bp.style.display='none';
   callAPI(null,imgB64).then(function(data){
     window.__bauplanMode=false;
-    if(data){lastResult=data;renderResult(data);go('result');}
+    if(data){lastResult=data;go('result');renderResult(data);}
   }).catch(function(){window.__bauplanMode=false;toast('Bauplan-Analyse fehlgeschlagen – bitte erneut versuchen');});
 }
 
@@ -2875,7 +2879,7 @@ function bobChatSend(){
     var reply=bobStripMd(d.reply||(d.error?('Hoppla: '+d.error):'Entschuldigung, da ist etwas schiefgelaufen.'));
     bobChatAppend('bob',reply);
     bobChatHistory.push({role:'assistant',content:reply});
-    if(bobVoiceOn)bobSpeak(reply);
+    // FIX 1: BOB spricht NUR bei Begrüßung + Diagnose — Chat-Antworten werden NICHT vorgelesen.
   }).catch(function(){
     if(typing&&typing.parentNode)typing.parentNode.removeChild(typing);
     bobChatAppend('bob','Verbindungsfehler – bitte nochmal versuchen.');
@@ -2911,27 +2915,19 @@ function toggleVoice(){
     bobAnnounce('Vorlesen stummgeschaltet.');
   }
 }
-// Full diagnosis read-aloud — complete, NOT shortened (accessibility for blind users):
-// recognised problem, details, assessment, costs, timeframe and tips.
+// FIX 1: SHORT diagnosis read-aloud — only the core (recognised problem + key
+// recommendation + rough price). No long blabbering, no repetition. Localised framing (FIX 2).
 function bobResultSpeech(r){
   if(!r) return '';
+  var L=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
+  function T(de,es,en){ return L==='es'?es:(L==='en'?en:de); }
   var p=[];
-  if(r.notfall) p.push('Achtung, Notfall erkannt – bitte schnell handeln.');
-  p.push('Diagnose abgeschlossen.');
-  var erk=r.erkannt_als||r.titel;
-  if(erk) p.push('Erkannt als: '+erk+'.');
-  else if(r.titel) p.push(r.titel+'.');
-  var desc=r.desc||r.beschreibung;
-  if(desc) p.push(String(desc).trim().replace(/\s+/g,' '));
-  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') p.push('Empfohlener Fachmann: '+r.fachmann+'.');
-  if(r.kategorie&&r.kategorie!=='–') p.push('Kategorie: '+r.kategorie+'.');
-  if(r.dringlichkeit&&r.dringlichkeit!=='–') p.push('Dringlichkeit: '+r.dringlichkeit+'.');
-  var hasKost=r.kosten&&['CHF --','n/a','–','CHF –'].indexOf(r.kosten)===-1;
-  if(hasKost) p.push('Geschätzte Kosten: '+r.kosten+(r.material_kosten?(', plus Material '+r.material_kosten):'')+'.');
-  if(r.zeitraum&&r.zeitraum!=='–') p.push('Zeitraum: '+r.zeitraum+'.');
-  var tips=r.tipps||r.tips||[];
-  if(tips.length){ p.push('Meine Tipps:'); tips.forEach(function(t){ if(t) p.push(String(t).trim().replace(/[.;]?$/,'.')); }); }
-  if(r.saison_tipp) p.push('Saisontipp: '+r.saison_tipp);
+  if(r.notfall) p.push(T('Achtung, Notfall.','Atención, urgencia.','Attention, emergency.'));
+  var prob=r.erkannt_als||r.titel;
+  if(prob) p.push(String(prob).trim().replace(/[.\s]+$/,'')+'.');
+  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') p.push(T('Empfehlung: ','Recomendación: ','Recommendation: ')+r.fachmann+'.');
+  var hasKost=r.kosten&&['CHF --','n/a','–','CHF –','-'].indexOf(r.kosten)===-1;
+  if(hasKost) p.push(T('Kosten etwa ','Coste aproximado ','Cost approximately ')+r.kosten+'.');
   return p.join(' ');
 }
 // JARVIS-style voice: deep, calm, confident male. British-English preference.
@@ -3121,6 +3117,13 @@ function _chfInWorte(num){
 function sanitizeForSpeech(text){
   if(!text) return text;
   var s=String(text);
+  // German number-to-words only for German voice. For ES/EN keep digits (ElevenLabs
+  // multilingual reads them in-language); just expand a couple of symbols lightly.
+  var L=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
+  if(L!=='de'&&L!=='ch'){
+    s=s.replace(/m²/g,'m2');
+    return s.replace(/\s{2,}/g,' ').trim();
+  }
   s=s.replace(/m²|m2\b/gi,' Quadratmeter');
   s=s.replace(/%/g,' Prozent');
   s=s.replace(/\s*\/\s*h\b/gi,' pro Stunde');
@@ -3199,10 +3202,20 @@ function bobSpeakFallback(text){
 }
 function bobStopSpeak(){
   __bobSpeakSeq++; // invalidate any in-flight TTS fetch so it won't auto-play after stop
+  __bobPendingSpeak=null; // drop any queued (blocked) speech so it can't resume later
   if(__bobAudioEl){ try{ __bobAudioEl.pause(); }catch(e){} }
   if(bobAudio){ try{bobAudio.pause();}catch(e){} bobAudio=null; }
   if('speechSynthesis' in window){ try{window.speechSynthesis.cancel();}catch(e){} }
+  try{ bobAnnounce(''); }catch(e){}
 }
+// FIX 1: stop voice the instant the user leaves (tab/app switch, background, page unload).
+(function bobBindStopOnLeave(){
+  try{
+    document.addEventListener('visibilitychange',function(){ if(document.hidden) bobStopSpeak(); });
+    window.addEventListener('pagehide',function(){ bobStopSpeak(); });
+    window.addEventListener('blur',function(){ if(document.hidden) bobStopSpeak(); });
+  }catch(e){}
+})();
 function bobVoiceLang(){
   var l=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
   if(l==='de'||l==='ch'){return bobAccent==='at'?'de-AT':(bobAccent==='ch'?'de-CH':'de-DE');}
@@ -3303,6 +3316,7 @@ var gsSelectedTarifPrice=null;
 
 // ── Mode Switch ──
 function setMode(mode){
+  if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop voice on mode switch
   appMode=mode;
   var bobScreens=['home','scan','result','contact','success','feedback','about'];
   var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
@@ -3379,6 +3393,26 @@ function bbApplyRegion(code){
   var rd=bbRegionData(bbRegion);
   if(rd&&rd.language){ bobLang=rd.language; }            // BOB-Sprache folgt der Region (Voice/Greeting)
   try{ document.documentElement.setAttribute('data-region',bbRegion); }catch(e){}
+  applyI18n();                                            // FIX 2: gesamte sichtbare B2C-UI übersetzen
+}
+// FIX 2: i18n-Engine — übersetzt alle [data-i18n] / [data-i18n-ph] Elemente in die aktuelle Sprache.
+function bbTr(key){ try{ return window.bbT?window.bbT(key,bobLang):key; }catch(e){ return key; } }
+function applyI18n(){
+  try{
+    var L=bobLang||'de';
+    try{ document.documentElement.setAttribute('lang', L==='ch'?'de':L); }catch(e){}
+    document.querySelectorAll('[data-i18n]').forEach(function(el){
+      var v=bbTr(el.getAttribute('data-i18n')); if(v!=null) el.textContent=v;
+    });
+    document.querySelectorAll('[data-i18n-ph]').forEach(function(el){
+      var v=bbTr(el.getAttribute('data-i18n-ph')); if(v!=null) el.setAttribute('placeholder',v);
+    });
+    document.querySelectorAll('[data-i18n-aria]').forEach(function(el){
+      var v=bbTr(el.getAttribute('data-i18n-aria')); if(v!=null) el.setAttribute('aria-label',v);
+    });
+    // dynamische Folge-Optionen + ggf. sichtbare Diagnose neu beschriften
+    if(typeof lastResult!=='undefined'&&lastResult&&typeof bobApplyBranchOptions==='function'){ bobApplyBranchOptions(lastResult); }
+  }catch(e){}
 }
 function bbSetRegion(code){
   if(!(window.BB_REGIONS&&window.BB_REGIONS[code])) code='CH';
@@ -3412,6 +3446,7 @@ function gsInitPhones(){
 
 // ── GS Navigation ──
 function gsGo(screenId){
+  if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop voice when navigating in GS
   var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
   gsScreens.forEach(function(id){
     var el=document.getElementById(id);
@@ -4071,6 +4106,7 @@ function gsReset(){
 var authToken=null,authRole=null,authUser=null,authTechName=null;
 
 function showScreen(id){
+  if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop voice when switching screens
   document.querySelectorAll('.screen,.gs-screen,.login-screen,.tech-screen,.admin-screen').forEach(function(s){
     s.classList.remove('active');
   });
