@@ -749,6 +749,67 @@ button:active{transform:scale(0.97);}
 /* In-App-Browser Hinweis-Banner */
 .inapp-hint{margin:10px 22px 0;background:rgba(255,193,7,0.1);border:1px solid rgba(255,193,7,0.35);border-radius:14px;padding:13px;font-size:12.5px;color:#ffd454;line-height:1.5;}
 .inapp-hint button{margin-top:9px;width:100%;background:#FFD700;color:#080808;border:none;border-radius:11px;padding:11px;font-family:'Nunito',sans-serif;font-weight:900;font-size:13px;cursor:pointer;min-height:44px;}
+
+/* ═══════════ SPLIT-EINSTIEGSSEITE (GS / BOB) ═══════════ */
+/* #landing trägt zusätzlich .screen → wird vom bestehenden Screen-System ein-/ausgeblendet. */
+.landing{background:#07111f;}
+.landing-split{flex:1;display:flex;flex-direction:column;min-height:0;position:relative;}
+.landing-half{flex:1 1 0;min-height:46vh;border:none;margin:0;cursor:pointer;position:relative;display:flex;align-items:center;justify-content:center;text-align:center;padding:calc(34px + var(--safe-top)) 22px 34px;font-family:'Nunito',sans-serif;overflow:hidden;transition:filter .2s ease;-webkit-tap-highlight-color:transparent;}
+.landing-half:last-child{padding-bottom:calc(34px + var(--safe-bottom));}
+.landing-half:active{filter:brightness(1.07);}
+.landing-half:focus-visible{outline:4px solid #4ECDC4;outline-offset:-6px;}
+.landing-gs{background:radial-gradient(120% 90% at 50% 30%,#194079 0%,#0c2244 55%,#081a36 100%);color:#eaf1fb;}
+.landing-bob{background:radial-gradient(120% 90% at 50% 32%,#3a2f0e 0%,#171205 52%,#0a0a0f 100%);color:#fff;}
+.landing-half-inner{display:flex;flex-direction:column;align-items:center;gap:11px;max-width:340px;width:100%;min-width:0;box-sizing:border-box;}
+.landing-glow{position:absolute;width:240px;height:240px;border-radius:50%;filter:blur(60px);opacity:.5;pointer-events:none;top:8%;}
+.landing-gs .landing-glow{background:radial-gradient(circle,#2d6bcc,transparent 70%);}
+.landing-bob .landing-glow{background:radial-gradient(circle,#FFD700,transparent 70%);}
+.landing-logo{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;letter-spacing:.2px;max-width:100%;white-space:nowrap;}
+.landing-logo-gs{color:#eaf1fb;}
+.landing-logo-gs span{color:#FFD700;}
+.landing-logo-bob{color:#fff;}
+.landing-logo-bob span{background:linear-gradient(135deg,#FFD700,#FF6B35);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.landing-badge{font-size:9.5px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;padding:4px 11px;border-radius:50px;}
+.landing-badge-gs{background:rgba(74,158,255,0.16);color:#9cc6ff;border:1px solid rgba(74,158,255,0.35);}
+.landing-badge-bob{background:rgba(255,215,0,0.14);color:#FFD700;border:1px solid rgba(255,215,0,0.4);}
+.landing-icon{font-size:58px;line-height:1;margin:2px 0;}
+.landing-gs .landing-icon{filter:drop-shadow(0 6px 22px rgba(45,107,204,0.55));}
+.landing-bob .landing-icon{filter:drop-shadow(0 6px 22px rgba(255,215,0,0.45));}
+.landing-tit{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;line-height:1.2;margin:0;overflow-wrap:break-word;}
+.landing-sub{font-size:13px;line-height:1.6;margin:0;max-width:300px;}
+.landing-gs .landing-sub{color:rgba(234,241,251,0.62);}
+.landing-bob .landing-sub{color:rgba(255,255,255,0.6);}
+.landing-cta{margin-top:7px;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:54px;padding:0 26px;border-radius:15px;font-size:15.5px;font-weight:900;font-family:'Nunito',sans-serif;width:100%;max-width:300px;box-sizing:border-box;}
+.landing-cta-gs{background:linear-gradient(135deg,#1e4a8a,#2d6bcc);color:#fff;box-shadow:0 8px 26px rgba(30,74,138,0.5);}
+.landing-cta-bob{background:linear-gradient(135deg,#FFD700,#FF6B35);color:#0a0a0f;box-shadow:0 8px 26px rgba(255,170,40,0.4);}
+.landing-or{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:6;width:48px;height:48px;border-radius:50%;background:#07111f;border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;color:rgba(232,237,245,0.65);box-shadow:0 4px 18px rgba(0,0,0,0.5);}
+.landing-foot{flex-shrink:0;text-align:center;font-size:10.5px;color:rgba(232,237,245,0.32);padding:12px 18px calc(12px + var(--safe-bottom));background:#07111f;}
+/* Sehr schmale Phones (≤400px): Padding reduzieren, Rand-Clipping verhindern */
+@media (max-width:400px){
+  .landing-half{padding-left:16px;padding-right:16px;}
+  .landing-tit{font-size:19px;}
+  .landing-logo{font-size:17px;}
+}
+/* Desktop / Laptop: vollwertige Side-by-Side-Ansicht (nicht nur skalierte App) */
+@media (min-width:840px){
+  .landing-split{flex-direction:row;}
+  .landing-half{min-height:100%;padding:48px 40px;}
+  .landing-half:last-child{padding-bottom:48px;}
+  .landing-half-inner{max-width:400px;gap:15px;}
+  .landing-logo{font-size:28px;}
+  .landing-icon{font-size:74px;}
+  .landing-tit{font-size:27px;}
+  .landing-sub{font-size:15px;max-width:360px;}
+  .landing-cta{font-size:16.5px;min-height:58px;}
+  .landing-glow{width:340px;height:340px;}
+  .landing-foot{font-size:12px;}
+}
+@media (min-width:840px) and (hover:hover){
+  .landing-half{transition:flex-grow .35s ease,filter .25s ease;}
+  .landing-half:hover{filter:brightness(1.06);flex-grow:1.18;}
+  .landing-cta-gs:hover{box-shadow:0 10px 32px rgba(30,74,138,0.7);}
+  .landing-cta-bob:hover{box-shadow:0 10px 32px rgba(255,170,40,0.6);}
+}
 </style>
 </head>
 <body>
@@ -759,6 +820,36 @@ button:active{transform:scale(0.97);}
 <button id="audio-unlock-btn" class="audio-unlock-btn" type="button" style="display:none;" aria-label="Ton aktivieren und Begrüßung abspielen" onclick="bobUnlockFromButton()"><span aria-hidden="true">🔊</span> Ton aktivieren</button>
 
 <div id="demo-banner" class="demo-banner" style="display:none;">🧪 Demo-Modus — Login kommt vor Launch <span onclick="demoExit()">✕ Beenden</span></div>
+
+<!-- SPLIT-EINSTIEGSSEITE (GS / BOB) — erste Seite für Werbe-Besucher -->
+<div id="landing" class="screen landing">
+  <div class="landing-split">
+    <button type="button" class="landing-half landing-gs" onclick="landingGoGS()" aria-label="George Solutions öffnen – Profi-Team auf Abruf buchen">
+      <div class="landing-glow"></div>
+      <div class="landing-half-inner">
+        <div class="landing-logo landing-logo-gs">George <span>Solutions</span></div>
+        <div class="landing-badge landing-badge-gs">SHK-Profi-Team</div>
+        <div class="landing-icon" aria-hidden="true">🏢</div>
+        <h2 class="landing-tit">Profi-Team auf Abruf</h2>
+        <p class="landing-sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes SHK-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
+        <span class="landing-cta landing-cta-gs">SHK-Dienstleistung buchen →</span>
+      </div>
+    </button>
+    <button type="button" class="landing-half landing-bob" onclick="landingGoBob()" aria-label="Baby BOB öffnen – Problem scannen und Fachmann finden">
+      <div class="landing-glow"></div>
+      <div class="landing-half-inner">
+        <div class="landing-logo landing-logo-bob">Baby <span>BOB</span></div>
+        <div class="landing-badge landing-badge-bob">KI-Scanner</div>
+        <div class="landing-icon" aria-hidden="true">👶</div>
+        <h2 class="landing-tit">Problem scannen &amp; Fachmann finden</h2>
+        <p class="landing-sub">Foto machen oder Problem beschreiben – die KI erkennt sofort, welcher Handwerker oder Dienstleister zu dir passt.</p>
+        <span class="landing-cta landing-cta-bob">Jetzt scannen →</span>
+      </div>
+    </button>
+    <div class="landing-or" aria-hidden="true">oder</div>
+  </div>
+  <div class="landing-foot">George Solutions · Schweizer SHK-Dienstleistung &amp; KI-Fachmann-Finder</div>
+</div>
 
 <!-- HOME -->
 <div id="home" class="screen active">
@@ -3117,6 +3208,32 @@ function setMode(mode){
   }
 }
 
+// ── Split-Einstiegsseite (Landing) ──
+// #landing trägt .screen → wird von setMode/go/showScreen sauber ausgeblendet.
+function showLanding(){
+  document.querySelectorAll('.screen,.gs-screen,.login-screen,.tech-screen,.admin-screen').forEach(function(s){s.classList.remove('active');});
+  var l=document.getElementById('landing'); if(l) l.classList.add('active');
+  try{ window.scrollTo(0,0); }catch(e){}
+}
+function landingGoGS(){
+  try{ setMode('gs'); }catch(e){}
+  try{ window.scrollTo(0,0); }catch(e){}
+}
+function landingGoBob(){
+  try{ setMode('bob'); }catch(e){}     // zeigt BOB-Home inkl. Mode-Toggle
+  try{ bobTryGreeting(); }catch(e){}    // Begrüßung beim Eintritt (Klick entsperrt Audio)
+  try{ window.scrollTo(0,0); }catch(e){}
+}
+// URL-Param-Routing für anonyme Werbe-Besucher: ?start=gs | ?start=bob | sonst Landing.
+function routeAnonymousStart(){
+  var qp=null; try{ qp=new URLSearchParams(location.search); }catch(e){}
+  var start=((qp&&qp.get('start'))||'').toLowerCase();
+  if(start==='gs'){ setMode('gs'); return; }
+  if(start==='bob'){ setMode('bob'); return; }   // Begrüßung übernimmt bobAudioInit (Home aktiv)
+  if(qp&&qp.get('bezahlt')){ setMode('bob'); return; } // Rückkehr von Stripe → direkt BOB
+  showLanding();
+}
+
 // ── GS Navigation ──
 function gsGo(screenId){
   var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
@@ -3805,8 +3922,9 @@ function showScreen(id){
     showScreen('login');
     return;
   }
-  // 4. No session → show BOB home (anonymous OK for B2C scanner)
-  applyRole(null,null,null,null);
+  // 4. No session → split landing (GS / BOB) or ?start= deep-link (anonymous OK).
+  applyRole(null,null,null,null);   // anonymous state (mode toggle + handlers ready)
+  routeAnonymousStart();            // then route: ?start=gs|bob, else show landing
 })();
 
 function verifyAndRoute(token){
