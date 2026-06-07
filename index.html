@@ -678,6 +678,24 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .tr-pos-card .tr-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .tr-pos-card .login-inp{padding:10px 12px;font-size:14px;}
 .tr-grandtotal{margin-top:12px;background:rgba(255,215,0,0.08);border:1px solid rgba(255,215,0,0.3);border-radius:12px;padding:11px 14px;font-size:14px;font-weight:800;color:#FFD700;text-align:center;}
+/* Voice → BOB → Rapport übernehmen */
+.tr-voice{background:rgba(74,158,255,0.06);border:1px solid rgba(74,158,255,0.22);border-radius:14px;padding:12px;margin:10px 0 4px;}
+.tr-voice-btns{display:flex;gap:8px;margin-top:8px;}
+.tr-voice-btns .login-btn-pw{flex:1;margin:0;}
+.tr-voice-btns .login-btn-pw.rec{background:rgba(255,107,53,0.18);border-color:#ff6b35;color:#ffb38f;}
+.tr-bob-thinking{display:flex;align-items:center;gap:9px;margin-top:10px;font-size:13px;color:#9cc6ff;font-weight:700;}
+.tr-spinner{width:16px;height:16px;min-width:16px;border:2px solid rgba(156,198,255,0.3);border-top-color:#4a9eff;border-radius:50%;animation:trspin .7s linear infinite;display:inline-block;}
+@keyframes trspin{to{transform:rotate(360deg);}}
+.tr-bob-result{margin-top:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(74,158,255,0.25);border-radius:12px;padding:12px;}
+.tr-bob-result h4{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#9cc6ff;margin:10px 0 5px;}
+.tr-bob-result h4:first-child{margin-top:0;}
+.tr-bob-result ul{margin:0;padding-left:18px;}
+.tr-bob-result li{font-size:13px;color:#e8edf5;line-height:1.5;margin-bottom:3px;}
+.tr-bob-notiz{font-size:12.5px;color:rgba(232,237,245,0.75);line-height:1.5;}
+.tr-bob-apply{width:100%;margin-top:12px;background:linear-gradient(135deg,#1e4a8a,#2d6bcc);color:#fff;border:1px solid rgba(255,215,0,0.4);border-radius:12px;padding:13px;font-family:'Nunito',sans-serif;font-weight:900;font-size:14px;cursor:pointer;min-height:50px;}
+.tr-bob-apply:active{transform:scale(0.98);}
+.tr-bob-target{width:100%;margin-top:10px;}
+.tr-bob-target-lbl{font-size:11px;color:rgba(232,237,245,0.55);margin-top:10px;}
 .tr-actions{display:flex;gap:9px;margin-top:16px;}
 .tr-actions .admin-act{flex:0 0 auto;padding:14px 16px;}
 .tr-actions .login-btn-magic{flex:1;margin:0;}
@@ -2024,6 +2042,17 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       <div><div class="ob-lbl">Bis</div><input class="login-inp" id="tr-bis" type="time" value="17:00" onchange="trCalcHours()"/></div>
     </div>
     <div class="tr-hours">Gesamtstunden: <strong id="tr-hours">9.0</strong> h</div>
+    <!-- Voice → BOB → Rapport übernehmen -->
+    <div class="tr-voice">
+      <div class="ob-lbl" style="margin-top:0;">🎙️ Rapport diktieren – BOB formuliert</div>
+      <textarea class="login-inp" id="tr-voice-transcript" rows="2" placeholder="Sprich frei oder tippe – z.B. 'Heizungssanierung, C-Stahl Rohr 5 Meter installiert, Druckprobe gemacht, Kunde war zufrieden.'"></textarea>
+      <div class="tr-voice-btns">
+        <button type="button" class="login-btn-pw" id="tr-dictate" onclick="trDictate()">🎙️ Diktieren</button>
+        <button type="button" class="login-btn-pw" id="tr-bob-btn" onclick="trBobAnalyse()">🧠 BOB analysieren</button>
+      </div>
+      <div class="tr-bob-thinking" id="tr-bob-thinking" style="display:none;"><span class="tr-spinner" aria-hidden="true"></span> BOB strukturiert deinen Rapport…</div>
+      <div class="tr-bob-result" id="tr-bob-result" style="display:none;"></div>
+    </div>
     <div class="ob-lbl">Ausgeführte Arbeiten</div>
     <div class="ob-chips" id="tr-arbeiten"></div>
     <div class="tr-addrow">
@@ -5053,6 +5082,11 @@ function initTechRapport(){
   chipsInto('tr-empfaenger',TR_EMPFAENGER,[],true);
   trRenderBausteine();
   var ep=document.getElementById('tr-extra-positions');if(ep)ep.innerHTML='';  // Block 1: frischer Tag
+  // Voice→BOB zurücksetzen
+  trBobData=null;trActivePos='primary';
+  var vt=document.getElementById('tr-voice-transcript');if(vt)vt.value='';
+  var vr=document.getElementById('tr-bob-result');if(vr){vr.style.display='none';vr.innerHTML='';}
+  var vth=document.getElementById('tr-bob-thinking');if(vth)vth.style.display='none';
   trFotosB64=[];document.getElementById('tr-foto-preview').innerHTML='';
   trInitSign();trCalcHours();
   showScreen('tech-rapport');
@@ -5162,6 +5196,103 @@ function trUpdateGrandTotal(){
   if(!n){ el.style.display='none'; return; }
   el.style.display='block';
   el.textContent='Σ Gesamtstunden alle Positionen: '+trGrandTotalHours().toFixed(1)+' h ('+(n+1)+' Positionen)';
+}
+
+// ── Voice → BOB → Rapport übernehmen (NUR Strukturierung, keine Begriffskorrektur) ──
+var trRec=null,trRecOn=false,trBobData=null,trActivePos='primary';
+(function trBindActivePos(){
+  try{ document.addEventListener('focusin',function(e){
+    var t=e.target; if(!t||!t.closest) return;
+    var card=t.closest('.tr-pos-card');
+    if(card){ var cards=Array.prototype.slice.call(document.querySelectorAll('#tr-extra-positions .tr-pos-card')); var idx=cards.indexOf(card); if(idx>-1) trActivePos=String(idx); }
+    else if(t.closest('#tech-rapport .tr-form') && !t.closest('.tr-voice')) { trActivePos='primary'; }
+  }); }catch(e){}
+})();
+function trDictate(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var btn=document.getElementById('tr-dictate');
+  if(!SR){toast('Spracherkennung wird nicht unterstützt – bitte tippen');return;}
+  if(trRecOn&&trRec){trRec.stop();return;}
+  trRec=new SR();trRec.lang='de-CH';trRec.interimResults=false;trRec.continuous=true;
+  trRecOn=true;if(btn){btn.classList.add('rec');btn.textContent='⏺️ Stoppen';}
+  trRec.onresult=function(e){
+    var t='';for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;}
+    var ta=document.getElementById('tr-voice-transcript');if(ta)ta.value=(ta.value?ta.value+' ':'')+t.trim();
+  };
+  trRec.onend=function(){trRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}};
+  trRec.onerror=function(){trRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}};
+  try{trRec.start();}catch(e){trRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}}
+}
+function trBobAnalyse(){
+  var ta=document.getElementById('tr-voice-transcript');
+  var text=(ta&&ta.value||'').trim();
+  if(!text){toast('Bitte zuerst diktieren oder Text eingeben');return;}
+  if(trRecOn&&trRec){try{trRec.stop();}catch(e){}}
+  var btn=document.getElementById('tr-bob-btn'),think=document.getElementById('tr-bob-thinking'),res=document.getElementById('tr-bob-result');
+  if(btn)btn.disabled=true;
+  if(res)res.style.display='none';
+  if(think)think.style.display='flex';
+  fetch('/api/bob',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'rapport',description:text})})
+    .then(function(r){return r.json();}).then(function(d){
+      d=d||{};
+      if(think)think.style.display='none';
+      if(btn)btn.disabled=false;
+      if(d.error){toast('⚠️ '+d.error);return;}
+      trBobData={taetigkeiten:Array.isArray(d.taetigkeiten)?d.taetigkeiten.filter(Boolean):[],material:Array.isArray(d.material)?d.material.filter(Boolean):[],notiz:(d.notiz||'').trim()};
+      trRenderBobResult();
+    }).catch(function(){if(think)think.style.display='none';if(btn)btn.disabled=false;toast('⚠️ BOB-Analyse fehlgeschlagen – bitte erneut');});
+}
+function trRenderBobResult(){
+  var res=document.getElementById('tr-bob-result'); if(!res||!trBobData) return;
+  var d=trBobData, html='';
+  if(d.taetigkeiten.length){ html+='<h4>Tätigkeiten</h4><ul>'+d.taetigkeiten.map(function(t){return '<li>'+gsEsc(t)+'</li>';}).join('')+'</ul>'; }
+  if(d.material.length){ html+='<h4>Material</h4><ul>'+d.material.map(function(m){return '<li>'+gsEsc(m)+'</li>';}).join('')+'</ul>'; }
+  if(d.notiz){ html+='<h4>Notiz</h4><div class="tr-bob-notiz">'+gsEsc(d.notiz)+'</div>'; }
+  if(!html){ html='<div class="tr-bob-notiz">BOB hat keine Inhalte erkannt – bitte etwas ausführlicher diktieren.</div>'; }
+  var cards=document.querySelectorAll('#tr-extra-positions .tr-pos-card');
+  if(cards.length){
+    var opts='<option value="primary">Hauptposition</option>';
+    for(var i=0;i<cards.length;i++){ opts+='<option value="'+i+'"'+(String(i)===trActivePos?' selected':'')+'>Position '+(i+2)+'</option>'; }
+    html+='<div class="tr-bob-target-lbl">Übernehmen in:</div><select class="login-inp tr-bob-target" id="tr-bob-target">'+opts+'</select>';
+  }
+  html+='<button type="button" class="tr-bob-apply" onclick="trApplyBobReport()">✓ Bericht übernehmen</button>';
+  res.innerHTML=html; res.style.display='block';
+  // wenn aktive Position primär ist, Default-Select bleibt "primary"
+  var sel=document.getElementById('tr-bob-target');
+  if(sel&&trActivePos!=='primary') sel.value=trActivePos;
+}
+function trMergeCsv(existing,arr){
+  var parts=(existing||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  (arr||[]).forEach(function(x){ if(parts.indexOf(x)<0) parts.push(x); });
+  return parts.join(', ');
+}
+function trApplyBobReport(){
+  if(!trBobData) return;
+  var d=trBobData, target='primary';
+  var sel=document.getElementById('tr-bob-target'); if(sel) target=sel.value;
+  if(target==='primary'){
+    var cur=chipsSelected('tr-arbeiten');
+    d.taetigkeiten.forEach(function(t){ if(TR_ARBEITEN.indexOf(t)<0&&TR_ARBEITEN_CUSTOM.indexOf(t)<0) TR_ARBEITEN_CUSTOM.push(t); if(cur.indexOf(t)<0) cur.push(t); });
+    chipsInto('tr-arbeiten',trArbeitenAll(),cur,true);
+    // Freies Material (passt nicht in die feste Chip-Liste) verlustfrei in die Notiz übernehmen.
+    var add=[];
+    if(d.notiz) add.push(d.notiz);
+    if(d.material.length) add.push('Material: '+d.material.join(', '));
+    var nt=document.getElementById('tr-notiz');
+    if(nt&&add.length){ var ex=nt.value.trim(); nt.value=(ex?ex+'\n':'')+add.join('\n'); }
+    toast('✓ In Hauptposition übernommen – jetzt editierbar');
+  }else{
+    var card=document.querySelectorAll('#tr-extra-positions .tr-pos-card')[parseInt(target,10)];
+    if(card){
+      var a=card.querySelector('.tr-pos-arbeiten'),m=card.querySelector('.tr-pos-material'),n=card.querySelector('.tr-pos-notiz');
+      if(a) a.value=trMergeCsv(a.value,d.taetigkeiten);
+      if(m) m.value=trMergeCsv(m.value,d.material);
+      if(n&&d.notiz) n.value=(n.value?n.value+' ':'')+d.notiz;
+      trUpdateGrandTotal();
+      toast('✓ In Position übernommen – jetzt editierbar');
+    }
+  }
+  var res=document.getElementById('tr-bob-result'); if(res) res.style.display='none';
 }
 function trFotoPreview(){
   var files=document.getElementById('tr-fotos').files;

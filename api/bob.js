@@ -25,16 +25,19 @@ export default async function handler(req, res) {
     const { description, imageBase64, category, mode } = req.body || {};
     const isGS = mode === 'gs';
     const isBauplan = mode === 'bauplan';
-    const imageOnly = !!(imageBase64 && !description && !category && !isGS && !isBauplan);
+    const isRapport = mode === 'rapport'; // Techniker-Sprachmemo → Rapport strukturieren
+    const imageOnly = !!(imageBase64 && !description && !category && !isGS && !isBauplan && !isRapport);
 
-    // ── 1. Wissensdatenbank ──
+    // ── 1. Wissensdatenbank (für Rapport NICHT nötig – reines Strukturieren) ──
     let wissen = '';
-    wissen = (isGS || isBauplan)
-      ? await fetchGSKnowledge(description, category)
-      : await fetchBOBKnowledge(description, category, imageOnly);
+    if (!isRapport) {
+      wissen = (isGS || isBauplan)
+        ? await fetchGSKnowledge(description, category)
+        : await fetchBOBKnowledge(description, category, imageOnly);
+    }
 
     // ── 2. System Prompt wählen ──
-    const systemPrompt = isBauplan ? buildBauplanPrompt(wissen) : isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
+    const systemPrompt = isRapport ? buildRapportPrompt() : isBauplan ? buildBauplanPrompt(wissen) : isGS ? buildGSPrompt(wissen) : buildBOBPrompt(wissen);
 
     // ── 3. User Content aufbauen ──
     const userContent = [];
@@ -50,10 +53,12 @@ export default async function handler(req, res) {
       });
     }
 
-    const userText = [
-      description ? (isGS ? `Projektbeschreibung: ${description}` : `Problembeschreibung: ${description}`) : '',
-      category    ? `${isGS ? 'Bereich' : 'Kategorie'}: ${category}` : '',
-    ].filter(Boolean).join('\n');
+    const userText = isRapport
+      ? `Sprachmemo des Technikers (wörtlich strukturieren, NICHTS korrigieren):\n"""${description || ''}"""`
+      : [
+          description ? (isGS ? `Projektbeschreibung: ${description}` : `Problembeschreibung: ${description}`) : '',
+          category    ? `${isGS ? 'Bereich' : 'Kategorie'}: ${category}` : '',
+        ].filter(Boolean).join('\n');
 
     userContent.push({
       type: 'text',
@@ -72,7 +77,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: isGS ? 1200 : 1000,
+        max_tokens: isRapport ? 800 : isGS ? 1200 : 1000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
       }),
@@ -91,8 +96,9 @@ export default async function handler(req, res) {
     console.error('BOB API Error:', err.message);
     // Graceful degradation: BOB always returns a usable result screen.
     // (GS mode has its own client-side fallback, so let it see the error.)
-    const isGSerr = (req.body && req.body.mode) === 'gs';
-    if (isGSerr) return res.status(500).json({ error: err.message });
+    const errMode = (req.body && req.body.mode);
+    if (errMode === 'gs') return res.status(500).json({ error: err.message });
+    if (errMode === 'rapport') return res.status(200).json({ taetigkeiten: [], material: [], notiz: '', error: 'Analyse fehlgeschlagen – bitte erneut versuchen oder Text manuell eintragen.' });
     return res.status(200).json({
       titel: 'Analyse momentan nicht möglich',
       desc: 'BOB konnte das nicht analysieren. Bitte beschreibe dein Problem kurz in Worten oder versuche ein anderes, gut beleuchtetes Foto.',
@@ -263,6 +269,27 @@ function extractKeywords(description, category) {
 }
 
 // ── GS System Prompt (B2B, SHK-Fachmann) ──
+// Techniker-Rapport: Sprachmemo NUR strukturieren, KEINE fachliche Korrektur.
+function buildRapportPrompt() {
+  return `Du bist BOB, der Assistent für George-Solutions-Techniker (SHK, Schweiz). Ein Techniker hat ein Sprachmemo zu seinem heutigen Einsatz diktiert. Deine EINZIGE Aufgabe: das Diktat in einen sauberen, rechnungsreifen Tagesrapport-Vorschlag STRUKTURIEREN.
+
+STRIKTE REGELN:
+- Übernimm AUSSCHLIESSLICH, was gesagt wurde. NICHTS erfinden, NICHTS ergänzen, NICHTS dazudichten.
+- KEINE fachliche Begriffskorrektur. Sagt der Techniker "C-Stahl", schreibe "C-Stahl". Sagt er "DN56" oder "Seestall", übernimm es genau so. Werkstoffe, Marken, Masse, Mundart NICHT ändern und NICHT raten.
+- Nur Grammatik/Formulierung leicht glätten, damit es professionell auf einer Rechnung steht. Inhalt bleibt 1:1.
+- "taetigkeiten": kurze, klare Stichpunkte – eine ausgeführte Tätigkeit pro Eintrag.
+- "material": NUR explizit genannte Materialien; Menge/Einheit anhängen, falls genannt (z.B. "C-Stahl Rohr (5 m)").
+- "notiz": Besonderheiten/Kontext (z.B. Zugang, Probleme, Kundenhinweis) in 1–2 Sätzen, sonst leerer String.
+- Was nicht gesagt wurde → weglassen. Lieber leeres Array als Erfundenes.
+
+Antworte AUSSCHLIESSLICH mit gültigem JSON, ohne Markdown, ohne Erklärtext:
+{
+  "taetigkeiten": ["...", "..."],
+  "material": ["...", "..."],
+  "notiz": "..."
+}`;
+}
+
 function buildGSPrompt(wissen) {
   return `Du bist der KI-Projektassistent von George Solutions – SHK-Spezialist (Sanitär, Heizung, Klima, Lüftung) aus Zürich, Schweiz.
 
