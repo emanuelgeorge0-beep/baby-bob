@@ -576,6 +576,7 @@ button:active{transform:scale(0.97);}
 .login-sep{display:flex;align-items:center;gap:10px;color:rgba(232,237,245,0.25);font-size:11px;}
 .login-sep::before,.login-sep::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.08);}
 .login-inp{width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:13px;padding:13px 15px;font-family:'Nunito',sans-serif;font-size:15px;color:#e8edf5;outline:none;transition:border-color .2s;box-sizing:border-box;}
+.login-inp.inp-invalid{border-color:#ff6b6b;background:rgba(255,107,107,0.08);}
 .login-inp:focus{border-color:rgba(74,158,255,0.5);}
 .login-inp::placeholder{color:rgba(232,237,245,0.3);}
 .login-btn-magic{width:100%;background:linear-gradient(135deg,#C9A000,#FFD700);border:none;border-radius:14px;padding:15px;font-family:'Nunito',sans-serif;font-size:15px;font-weight:900;color:#080808;cursor:pointer;transition:transform .15s;display:flex;align-items:center;justify-content:center;gap:8px;}
@@ -4392,6 +4393,20 @@ function setMsg(id,msg,type){
   el.textContent=msg;el.className='login-msg'+(type?' '+type:'');
 }
 
+// Block 8: IBAN-Validierung (Format + Länge + Mod-97-Prüfziffer) und Telefon-Plausibilität.
+function ibanValid(raw){
+  var s=String(raw||'').replace(/\s+/g,'').toUpperCase();
+  if(!/^[A-Z]{2}[0-9A-Z]{13,32}$/.test(s)) return false;        // 2 Länderbuchstaben + 13–32 Zeichen
+  var CH_LEN={CH:21,LI:21,AT:20,DE:22,FR:27,IT:27,ES:24,GB:22,NL:18,BE:16}; // bekannte Längen
+  var cc=s.slice(0,2); if(CH_LEN[cc]&&s.length!==CH_LEN[cc]) return false;
+  var re=s.slice(4)+s.slice(0,4), exp='';
+  for(var i=0;i<re.length;i++){ var c=re.charCodeAt(i); exp+=(c>=65&&c<=90)?(c-55):re.charAt(i); }
+  var rem=0; for(var j=0;j<exp.length;j++){ rem=(rem*10+(exp.charCodeAt(j)-48))%97; }
+  return rem===1;
+}
+function ibanFormat(raw){ return String(raw||'').replace(/\s+/g,'').toUpperCase().replace(/(.{4})/g,'$1 ').trim(); }
+function phonePlausible(raw){ var d=String(raw||'').replace(/[^\d]/g,''); return d.length>=7&&d.length<=15; }
+
 function submitPwChange(){
   var p1=(document.getElementById('pwc-new')||{}).value||'';
   var p2=(document.getElementById('pwc-confirm')||{}).value||'';
@@ -4472,6 +4487,7 @@ function submitProfile(){
     telefon:(document.getElementById('prof-tel')||{}).value.trim()
   };
   if(!profile.vorname||!profile.nachname||!profile.telefon){setMsg('prof-msg','Bitte Vorname, Nachname und Telefon ausfüllen','err');return;}
+  if(!phonePlausible(profile.telefon)){var pt=document.getElementById('prof-tel');if(pt)pt.classList.add('inp-invalid');setMsg('prof-msg','⚠️ Telefonnummer unplausibel – bitte prüfen','err');return;}
   if(authRole==='gs_partner'){
     profile.firma=(document.getElementById('prof-firma')||{}).value.trim();
     profile.position=profPosition;
@@ -4480,7 +4496,9 @@ function submitProfile(){
   }else{
     profile.qualifikation=profQual;
     profile.spezialisierung=profSpez;
-    profile.iban=(document.getElementById('prof-iban')||{}).value.trim()||null;
+    var ibanRaw=(document.getElementById('prof-iban')||{}).value.trim();
+    if(ibanRaw&&!ibanValid(ibanRaw)){var ie=document.getElementById('prof-iban');if(ie){ie.classList.add('inp-invalid');ie.focus();}setMsg('prof-msg','⚠️ IBAN ungültig – bitte prüfen (z.B. CH93 0076 2011 6238 5295 7)','err');return;}
+    profile.iban=ibanRaw?ibanFormat(ibanRaw):null;
     if(!profile.qualifikation){setMsg('prof-msg','Bitte Qualifikation wählen','err');return;}
     if(!profile.spezialisierung.length){setMsg('prof-msg','Bitte mindestens eine Spezialisierung wählen','err');return;}
   }
@@ -5187,10 +5205,15 @@ function showTechProfil(){
   });
 }
 function tpSave(){
-  gsAuthApi('account',{action:'update_settings',
-    telefon:(document.getElementById('tp-tel')||{}).value.trim(),
-    iban:(document.getElementById('tp-iban')||{}).value.trim()
-  }).then(function(d){setMsg('tp-msg',d.error?d.error:'✓ Gespeichert',d.error?'err':'');});
+  var ibanEl=document.getElementById('tp-iban'), telEl=document.getElementById('tp-tel');
+  var iban=(ibanEl&&ibanEl.value||'').trim(), tel=(telEl&&telEl.value||'').trim();
+  if(iban&&!ibanValid(iban)){ if(ibanEl){ibanEl.classList.add('inp-invalid');ibanEl.focus();} setMsg('tp-msg','⚠️ IBAN ungültig – bitte prüfen (z.B. CH93 0076 2011 6238 5295 7)','err'); return; }
+  if(ibanEl) ibanEl.classList.remove('inp-invalid');
+  if(tel&&!phonePlausible(tel)){ if(telEl)telEl.classList.add('inp-invalid'); setMsg('tp-msg','⚠️ Telefonnummer unplausibel – bitte prüfen','err'); return; }
+  if(telEl) telEl.classList.remove('inp-invalid');
+  setMsg('tp-msg','Speichert…','');
+  gsAuthApi('account',{action:'update_settings',telefon:tel,iban:iban?ibanFormat(iban):''
+  }).then(function(d){d=d||{};setMsg('tp-msg',d.error?('⚠️ '+d.error):'✓ Gespeichert',d.error?'err':'');});
 }
 
 // ── TECHNIKER: MATERIALLISTE → Projektleiter ──
