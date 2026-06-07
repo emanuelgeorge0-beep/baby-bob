@@ -164,9 +164,16 @@ button:active{transform:scale(0.97);}
 .r-gs-cta-info strong{display:block;font-size:13px;font-weight:800;color:#FFD700;}
 .r-gs-cta-info span{font-size:11px;color:var(--muted);}
 .r-gs-cta-arrow{font-size:20px;color:#FFD700;font-weight:900;}
-.r-voice{margin-left:auto;font-size:20px;cursor:pointer;opacity:0.85;user-select:none;transition:transform .15s;}
+.r-voice{margin-left:auto;font-size:20px;cursor:pointer;opacity:0.85;user-select:none;transition:transform .15s;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;}
 .r-voice:active{transform:scale(0.9);}
 .r-voice.off{opacity:0.35;filter:grayscale(1);}
+.r-voice:focus-visible{outline:3px solid #4ECDC4;outline-offset:2px;}
+/* Accessibility: audio unlock + screen-reader live region (critical for blind users) */
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.audio-unlock-btn{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:99999;min-height:56px;padding:0 28px;background:#FFD700;color:#080808;border:3px solid #080808;border-radius:16px;font-family:'Nunito',sans-serif;font-weight:900;font-size:17px;cursor:pointer;box-shadow:0 6px 30px rgba(255,215,0,0.45);display:flex;align-items:center;gap:9px;animation:audioPulse 1.7s ease-in-out infinite;}
+.audio-unlock-btn:active{transform:translateX(-50%) scale(0.96);}
+.audio-unlock-btn:focus-visible{outline:4px solid #4ECDC4;outline-offset:3px;}
+@keyframes audioPulse{0%,100%{box-shadow:0 6px 26px rgba(255,215,0,0.35);}50%{box-shadow:0 8px 44px rgba(255,215,0,0.8);}}
 .r-bob-wrap{display:flex;flex-direction:column;align-items:center;padding:0 22px 14px;gap:5px;}
 .r-bob{font-size:80px;animation:float 3s ease-in-out infinite;}
 .r-lbl{font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--b);}
@@ -717,6 +724,11 @@ button:active{transform:scale(0.97);}
 </head>
 <body>
 
+<!-- Accessibility: screen-reader live region for voice status (blind users) -->
+<div id="bob-aria-live" class="sr-only" aria-live="polite" role="status"></div>
+<!-- Accessibility: audio-unlock button — appears only when the browser blocks autoplay -->
+<button id="audio-unlock-btn" class="audio-unlock-btn" type="button" style="display:none;" aria-label="Ton aktivieren und Begrüßung abspielen" onclick="bobUnlockFromButton()"><span aria-hidden="true">🔊</span> Ton aktivieren</button>
+
 <div id="demo-banner" class="demo-banner" style="display:none;">🧪 Demo-Modus — Login kommt vor Launch <span onclick="demoExit()">✕ Beenden</span></div>
 
 <!-- HOME -->
@@ -851,7 +863,7 @@ button:active{transform:scale(0.97);}
   <div class="r-hdr">
     <div class="back" onclick="go('scan')">←</div>
     <div class="scan-tit">BOBs Diagnose</div>
-    <div class="r-voice" id="r-voice" onclick="toggleVoice()" title="Vorlesen">🔊</div>
+    <div class="r-voice" id="r-voice" role="button" tabindex="0" aria-label="Diagnose vorlesen – Ton an" aria-pressed="true" onclick="toggleVoice()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleVoice();}" title="Vorlesen">🔊</div>
   </div>
   <div class="r-bob-wrap">
     <div class="r-bob" id="r-bob">👷</div>
@@ -2292,9 +2304,9 @@ function renderResult(r){
   document.getElementById('con-bob').textContent=r.fachmann_emoji||r.emoji||'👷';
   document.getElementById('con-sum').textContent='📋 '+(r.titel||'Anfrage')+' – '+(r.fachmann||'Fachmann')+' wird benötigt';
 
-  // Voice: read the diagnosis aloud if enabled.
+  // Voice: read the COMPLETE diagnosis aloud if not muted (stops any running playback first).
   bobUpdateVoiceIcon();
-  if(bobVoiceOn) bobSpeak(bobResultSpeech(r));
+  if(bobVoiceOn) bobSpeak(bobResultSpeech(r),{announce:'BOB liest die Diagnose vor.'});
 
   // Reset self-learning feedback + conversation for this new result.
   bobResetFeedback();
@@ -2434,22 +2446,10 @@ function loadScanCounter(){
       var iv=setInterval(function(){cur+=step;if(cur>=target){cur=target;clearInterval(iv);}num.textContent=cur.toLocaleString('de-CH');},30);
     }).catch(function(){});
 }
-// BOB greeting on the FIRST tap per session (sessionStorage flag → saves voice credits).
-var bobGreeted=false;
-function bobGreetOnce(){
-  if(bobGreeted)return;bobGreeted=true;
-  document.removeEventListener('pointerdown',bobGreetOnce);
-  try{ if(sessionStorage.getItem('bob_greeted')==='1') return; }catch(e){}
-  try{ sessionStorage.setItem('bob_greeted','1'); }catch(e){}
-  var home=document.getElementById('home');
-  if(bobVoiceOn&&home&&home.classList.contains('active')){
-    bobSpeak('Hey, mein Name ist Bob! Ich helfe dir bei jedem Problem – egal ob Handwerk oder Beauty. Wie kann ich dir helfen?');
-  }
-}
+// Greeting is handled by the audio subsystem (bobAudioInit → bobTryGreeting) further below.
 (function initHome(){
   try{
     loadScanCounter();
-    document.addEventListener('pointerdown',bobGreetOnce,{once:true});
     if(isInAppBrowser()){var h=document.getElementById('inapp-hint');if(h)h.style.display='block';}
   }catch(e){}
 })();
@@ -2616,26 +2616,56 @@ function bobChatSend(){
 }
 
 // ══ BOB VOICE MODE (SpeechSynthesis) ══
-var bobVoiceOn=(localStorage.getItem('bob_voice')!=='0'); // default ON → BOB reads diagnosis aloud
+// Mute state: localStorage 'bob_voice' is the durable preference (default ON), mirrored to
+// sessionStorage so a mute holds for the whole session. Either being "0" means muted.
+var bobVoiceOn=(function(){
+  try{ var s=sessionStorage.getItem('bob_voice'); if(s!==null) return s!=='0'; }catch(e){}
+  return localStorage.getItem('bob_voice')!=='0';
+})();
 function bobUpdateVoiceIcon(){
   var el=document.getElementById('r-voice');
-  if(el){el.textContent=bobVoiceOn?'🔊':'🔇';el.classList.toggle('off',!bobVoiceOn);}
+  if(el){
+    el.textContent=bobVoiceOn?'🔊':'🔇';
+    el.classList.toggle('off',!bobVoiceOn);
+    el.setAttribute('aria-pressed',bobVoiceOn?'true':'false');
+    el.setAttribute('aria-label',bobVoiceOn?'Diagnose vorlesen – Ton an, zum Stummschalten tippen':'Vorlesen stummgeschaltet – zum Aktivieren tippen');
+  }
 }
 function toggleVoice(){
   bobVoiceOn=!bobVoiceOn;
-  localStorage.setItem('bob_voice',bobVoiceOn?'1':'0');
+  try{ localStorage.setItem('bob_voice',bobVoiceOn?'1':'0'); }catch(e){}
+  try{ sessionStorage.setItem('bob_voice',bobVoiceOn?'1':'0'); }catch(e){}
   bobUpdateVoiceIcon();
-  if(bobVoiceOn&&lastResult){bobSpeak(bobResultSpeech(lastResult));}
-  else{bobStopSpeak();}
+  if(bobVoiceOn){
+    // user gesture → safe to (re)read the diagnosis aloud
+    if(lastResult){bobSpeak(bobResultSpeech(lastResult),{announce:'BOB liest die Diagnose vor.'});}
+  }else{
+    bobStopSpeak();
+    bobAnnounce('Vorlesen stummgeschaltet.');
+  }
 }
+// Full diagnosis read-aloud — complete, NOT shortened (accessibility for blind users):
+// recognised problem, details, assessment, costs, timeframe and tips.
 function bobResultSpeech(r){
   if(!r) return '';
-  // JARVIS-style: short, confident, Sie-form.
-  var parts=['Analyse abgeschlossen.'];
-  if(r.titel) parts.push(r.titel+'.');
-  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') parts.push('Meine Empfehlung: '+r.fachmann+'.');
-  if(r.kosten&&r.kosten!=='CHF --'&&r.kosten!=='n/a') parts.push('Geschätzte Kosten: '+r.kosten+'.');
-  return parts.join(' ');
+  var p=[];
+  if(r.notfall) p.push('Achtung, Notfall erkannt – bitte schnell handeln.');
+  p.push('Diagnose abgeschlossen.');
+  var erk=r.erkannt_als||r.titel;
+  if(erk) p.push('Erkannt als: '+erk+'.');
+  else if(r.titel) p.push(r.titel+'.');
+  var desc=r.desc||r.beschreibung;
+  if(desc) p.push(String(desc).trim().replace(/\s+/g,' '));
+  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') p.push('Empfohlener Fachmann: '+r.fachmann+'.');
+  if(r.kategorie&&r.kategorie!=='–') p.push('Kategorie: '+r.kategorie+'.');
+  if(r.dringlichkeit&&r.dringlichkeit!=='–') p.push('Dringlichkeit: '+r.dringlichkeit+'.');
+  var hasKost=r.kosten&&['CHF --','n/a','–','CHF –'].indexOf(r.kosten)===-1;
+  if(hasKost) p.push('Geschätzte Kosten: '+r.kosten+(r.material_kosten?(', plus Material '+r.material_kosten):'')+'.');
+  if(r.zeitraum&&r.zeitraum!=='–') p.push('Zeitraum: '+r.zeitraum+'.');
+  var tips=r.tipps||r.tips||[];
+  if(tips.length){ p.push('Meine Tipps:'); tips.forEach(function(t){ if(t) p.push(String(t).trim().replace(/[.;]?$/,'.')); }); }
+  if(r.saison_tipp) p.push('Saisontipp: '+r.saison_tipp);
+  return p.join(' ');
 }
 // JARVIS-style voice: deep, calm, confident male. British-English preference.
 var bobVoices=[];
@@ -2658,8 +2688,147 @@ function bobBestVoice(lang){
     ||byLang.filter(function(v){return v.lang.toLowerCase()===pre;})[0]
     ||byLang[0]||null;
 }
-// BOB voice: ElevenLabs TTS first, SpeechSynthesis as fallback.
-var bobAudio=null;
+// ══ AUDIO UNLOCK & RELIABILITY (accessibility-critical for blind users) ══
+// One persistent <audio> element gets "blessed" on the first user gesture so that all later
+// programmatic play() calls work on iOS Safari / Chrome / Samsung Internet. A shared
+// AudioContext is resumed before every play. window.__audioUnlocked persists for the session.
+if(typeof window.__audioUnlocked==='undefined') window.__audioUnlocked=false;
+var __bobAudioEl=null, __bobAudioCtx=null, __bobSilentURI=null, __bobPendingSpeak=null, __bobCurUrl=null;
+var bobGreetDone=false, __bobGestureArmed=false;
+
+function bobGetAudioEl(){
+  if(!__bobAudioEl){
+    try{
+      __bobAudioEl=new Audio();
+      __bobAudioEl.setAttribute('playsinline','');
+      __bobAudioEl.setAttribute('webkit-playsinline','');
+      __bobAudioEl.preload='auto';
+    }catch(e){}
+  }
+  return __bobAudioEl;
+}
+function bobGetCtx(){
+  try{
+    if(!__bobAudioCtx){ var AC=window.AudioContext||window.webkitAudioContext; if(AC) __bobAudioCtx=new AC(); }
+  }catch(e){}
+  return __bobAudioCtx;
+}
+function bobResumeCtx(){
+  var ctx=bobGetCtx();
+  if(ctx&&ctx.state==='suspended'){ try{ctx.resume();}catch(e){} }
+  return ctx;
+}
+// Build a tiny valid silent WAV (no hard-coded base64) to "bless" the audio element on iOS.
+function bobSilentURI(){
+  if(__bobSilentURI) return __bobSilentURI;
+  try{
+    var sr=8000, n=Math.floor(sr*0.05), bytes=44+n*2, buf=new ArrayBuffer(bytes), v=new DataView(buf);
+    function ws(o,s){for(var i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));}
+    ws(0,'RIFF'); v.setUint32(4,36+n*2,true); ws(8,'WAVE'); ws(12,'fmt ');
+    v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+    v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+    ws(36,'data'); v.setUint32(40,n*2,true);
+    var b=new Uint8Array(buf), bin=''; for(var i=0;i<b.length;i++) bin+=String.fromCharCode(b[i]);
+    __bobSilentURI='data:audio/wav;base64,'+btoa(bin);
+  }catch(e){ __bobSilentURI=''; }
+  return __bobSilentURI;
+}
+function bobAnnounce(msg){ var el=document.getElementById('bob-aria-live'); if(el) el.textContent=msg||''; }
+function bobShowUnlockBtn(){
+  var b=document.getElementById('audio-unlock-btn'); if(b) b.style.display='flex';
+  if(isInAppBrowser()){ var h=document.getElementById('inapp-hint'); if(h) h.style.display='block'; }
+}
+function bobHideUnlockBtn(){ var b=document.getElementById('audio-unlock-btn'); if(b) b.style.display='none'; }
+function bobMarkUnlocked(){
+  window.__audioUnlocked=true;
+  try{ sessionStorage.setItem('bob_audio_unlocked','1'); }catch(e){}
+  bobHideUnlockBtn();
+}
+// Prime audio within a user gesture: resume ctx + push a silent buffer + bless the <audio> element.
+function bobUnlockAudio(then){
+  bobResumeCtx();
+  try{
+    var ctx=__bobAudioCtx;
+    if(ctx){ var bb=ctx.createBuffer(1,1,22050), src=ctx.createBufferSource(); src.buffer=bb; src.connect(ctx.destination); if(src.start)src.start(0); else if(src.noteOn)src.noteOn(0); }
+  }catch(e){}
+  var el=bobGetAudioEl();
+  if(!el){ if(then)then(); return; }
+  try{
+    el.muted=true; el.src=bobSilentURI();
+    var p=el.play();
+    if(p&&p.then){
+      p.then(function(){
+        try{ el.pause(); el.currentTime=0; }catch(e){}
+        try{ el.muted=false; }catch(e){}
+        bobMarkUnlocked();
+        if(then)then();
+      }).catch(function(){
+        try{ el.muted=false; }catch(e){}
+        // Could not bless even within gesture (e.g. some in-app browsers) → keep button + hint.
+        bobShowUnlockBtn();
+        if(then)then();
+      });
+    }else{
+      try{ el.pause(); el.muted=false; }catch(e){}
+      bobMarkUnlocked();
+      if(then)then();
+    }
+  }catch(e){ try{el.muted=false;}catch(_){} bobShowUnlockBtn(); if(then)then(); }
+}
+// First tap/click/key anywhere unlocks audio for the session (capture so nothing swallows it).
+function bobArmGestureUnlock(){
+  if(__bobGestureArmed) return; __bobGestureArmed=true;
+  function onFirst(){
+    document.removeEventListener('pointerdown',onFirst,true);
+    document.removeEventListener('touchstart',onFirst,true);
+    document.removeEventListener('click',onFirst,true);
+    document.removeEventListener('keydown',onFirst,true);
+    bobUnlockAudio(function(){
+      if(window.__audioUnlocked){
+        if(__bobPendingSpeak){ var t=__bobPendingSpeak; __bobPendingSpeak=null; bobSpeak(t.text,t.opts); }
+        else bobTryGreeting();
+      }
+    });
+  }
+  document.addEventListener('pointerdown',onFirst,true);
+  document.addEventListener('touchstart',onFirst,true);
+  document.addEventListener('click',onFirst,true);
+  document.addEventListener('keydown',onFirst,true);
+}
+// Big visible button → guaranteed user gesture → unlock + play pending speech or greeting.
+// (Does NOT reset bobGreetDone, so it can't double up with the document-gesture handler.)
+function bobUnlockFromButton(){
+  bobHideUnlockBtn();
+  bobUnlockAudio(function(){
+    if(__bobPendingSpeak){ var t=__bobPendingSpeak; __bobPendingSpeak=null; bobSpeak(t.text,t.opts); }
+    else bobTryGreeting();
+  });
+}
+function bobGreetingText(){
+  var l=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
+  if(l==='es') return 'Hola, me llamo Bob. Te ayudo con cualquier problema, ya sea de oficios o de belleza. ¿Cómo puedo ayudarte?';
+  if(l==='en') return 'Hey, my name is Bob! I help you with any problem, whether trades or beauty. How can I help you?';
+  return 'Hey, mein Name ist Bob! Ich helfe dir bei jedem Problem – egal ob Handwerk oder Beauty. Wie kann ich dir helfen?';
+}
+// Greeting once per page load (guarded against fast-reload double / overlapping triggers).
+function bobTryGreeting(){
+  if(bobGreetDone) return;
+  if(!bobVoiceOn) return;          // muted → no auto greeting
+  var home=document.getElementById('home');
+  if(!(home&&home.classList.contains('active'))) return;
+  bobGreetDone=true;
+  bobSpeak(bobGreetingText(),{greeting:true});
+}
+// Init: mirror session unlock flag, arm gesture unlock, optimistically try the greeting.
+function bobAudioInit(){
+  try{ if(sessionStorage.getItem('bob_audio_unlocked')==='1') window.__audioUnlocked=true; }catch(e){}
+  bobArmGestureUnlock();
+  // Optimistic: if already unlocked this session, greet immediately without a button.
+  // Otherwise this attempt will gracefully reveal the unlock button on failure.
+  bobTryGreeting();
+}
+
+var bobAudio=null; // legacy ref (kept for safety; playback uses the persistent element)
 // Aufgabe Voice-2: Preise/Zahlen sprechbar machen (NUR der vorgelesene Text).
 function _zahlInWorte(n){
   n=Math.floor(Math.abs(n));
@@ -2706,11 +2875,23 @@ function _numStr(m){
   if(p[1]&&parseInt(p[1],10)>0) w+=' Komma '+p[1].split('').map(function(d){return _zahlInWorte(parseInt(d,10)||0);}).join(' ');
   return w;
 }
-function bobSpeak(rawText){
+var __bobSpeakSeq=0;
+function bobSpeak(rawText,opts){
+  opts=opts||{};
   if(!rawText) return;
   var text=sanitizeForSpeech(rawText); // nur der gesprochene Text wird verändert
   if(!text) return;
-  bobStopSpeak();
+  bobStopSpeak();                       // stop any running/overlapping playback
+  bobResumeCtx();                       // resume a suspended AudioContext before playing
+  var seq=++__bobSpeakSeq;              // guard: ignore late responses from superseded calls
+  if(opts.announce) bobAnnounce(opts.announce);
+  function blocked(){
+    // Autoplay blocked: remember what to say so the unlock button/gesture replays it.
+    // No speechSynthesis here — it needs the same gesture and would double up on unlock.
+    __bobPendingSpeak={text:rawText,opts:opts};
+    if(opts.announce) bobAnnounce('Ton ist blockiert. Bitte den Button „Ton aktivieren“ drücken.');
+    bobShowUnlockBtn();
+  }
   fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
     .then(function(r){
       if(!r.ok) return null;
@@ -2718,16 +2899,25 @@ function bobSpeak(rawText){
       return ct.indexOf('audio')>-1?r.blob():null;
     })
     .then(function(blob){
-      if(!blob){bobSpeakFallback(text);return;}
+      if(seq!==__bobSpeakSeq){ return; }  // a newer bobSpeak took over → drop this one
+      if(!blob){ bobSpeakFallback(text); return; }
+      var url;
       try{
-        var url=URL.createObjectURL(blob);
-        bobAudio=new Audio(url);
-        bobAudio.onended=function(){try{URL.revokeObjectURL(url);}catch(e){}};
-        var p=bobAudio.play();
-        if(p&&p.catch)p.catch(function(){bobSpeakFallback(text);});
-      }catch(e){bobSpeakFallback(text);}
+        if(__bobCurUrl){ try{URL.revokeObjectURL(__bobCurUrl);}catch(e){} __bobCurUrl=null; }
+        url=URL.createObjectURL(blob); __bobCurUrl=url;
+        var el=bobGetAudioEl();
+        if(!el){ bobSpeakFallback(text); return; }
+        el.onended=function(){ try{URL.revokeObjectURL(url);}catch(e){} if(__bobCurUrl===url)__bobCurUrl=null; if(opts.announce) bobAnnounce(''); };
+        el.onerror=function(){ try{URL.revokeObjectURL(url);}catch(e){} if(__bobCurUrl===url)__bobCurUrl=null; };
+        el.muted=false; el.src=url;
+        var p=el.play();
+        if(p&&p.then){
+          p.then(function(){ bobMarkUnlocked(); })
+           .catch(function(){ try{URL.revokeObjectURL(url);}catch(e){} if(__bobCurUrl===url)__bobCurUrl=null; blocked(); });
+        }else{ bobMarkUnlocked(); }
+      }catch(e){ try{if(url)URL.revokeObjectURL(url);}catch(_){} blocked(); }
     })
-    .catch(function(){bobSpeakFallback(text);});
+    .catch(function(){ if(seq===__bobSpeakSeq) bobSpeakFallback(text); });
 }
 function bobSpeakFallback(text){
   if(!text||!('speechSynthesis' in window)) return;
@@ -2741,8 +2931,10 @@ function bobSpeakFallback(text){
   }catch(e){}
 }
 function bobStopSpeak(){
-  if(bobAudio){try{bobAudio.pause();}catch(e){}bobAudio=null;}
-  if('speechSynthesis' in window){try{window.speechSynthesis.cancel();}catch(e){}}
+  __bobSpeakSeq++; // invalidate any in-flight TTS fetch so it won't auto-play after stop
+  if(__bobAudioEl){ try{ __bobAudioEl.pause(); }catch(e){} }
+  if(bobAudio){ try{bobAudio.pause();}catch(e){} bobAudio=null; }
+  if('speechSynthesis' in window){ try{window.speechSynthesis.cancel();}catch(e){} }
 }
 function bobVoiceLang(){
   var l=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
@@ -4676,6 +4868,13 @@ function setTechStatus(msg,type){
   el.className='tech-status'+(type?' '+type:'');
   setTimeout(function(){if(el.textContent===msg) el.textContent='';},5000);
 }
+
+// ── Boot the audio subsystem once all voice vars/functions are defined (accessibility) ──
+(function bootBobAudio(){
+  function run(){ try{ bobAudioInit(); }catch(e){} }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',run,{once:true});
+  else run();
+})();
 </script>
 </body>
 </html>
