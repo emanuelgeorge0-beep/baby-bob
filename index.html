@@ -665,6 +665,12 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .tr-foto-preview img{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.15);}
 .tr-sign{width:100%;background:rgba(255,255,255,0.95);border-radius:11px;touch-action:none;margin-top:4px;}
 .tr-sign-clear{font-size:11px;color:rgba(232,237,245,0.4);text-align:right;padding:4px 2px;cursor:pointer;text-decoration:underline;}
+.tr-addrow{display:flex;gap:8px;margin-top:8px;align-items:stretch;}
+.tr-addrow .login-inp{flex:1;}
+.tr-addrow .admin-act{flex:0 0 auto;white-space:nowrap;}
+.tr-matqty{display:flex;align-items:center;gap:8px;margin-top:8px;}
+.tr-matqty-name{font-size:13px;font-weight:700;color:#e8edf5;flex:0 0 40%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tr-matqty .login-inp{flex:1;padding:9px 12px;font-size:14px;}
 .tr-actions{display:flex;gap:9px;margin-top:16px;}
 .tr-actions .admin-act{flex:0 0 auto;padding:14px 16px;}
 .tr-actions .login-btn-magic{flex:1;margin:0;}
@@ -1986,8 +1992,13 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="tr-hours">Gesamtstunden: <strong id="tr-hours">9.0</strong> h</div>
     <div class="ob-lbl">Ausgeführte Arbeiten</div>
     <div class="ob-chips" id="tr-arbeiten"></div>
+    <div class="tr-addrow">
+      <input class="login-inp" id="tr-arbeit-custom" type="text" placeholder="Weitere Tätigkeit hinzufügen…" onkeydown="if(event.key==='Enter'){event.preventDefault();trAddCustomArbeit();}"/>
+      <button type="button" class="admin-act" onclick="trAddCustomArbeit()">+ Hinzufügen</button>
+    </div>
     <div class="ob-lbl">Material</div>
     <div class="ob-chips" id="tr-material"></div>
+    <div id="tr-material-qty"></div>
     <div class="ob-lbl">Team (weitere Personen)</div>
     <input class="login-inp" id="tr-team" type="text" placeholder="Namen, kommagetrennt"/>
     <div class="ob-lbl">Besonderheiten</div>
@@ -3164,9 +3175,22 @@ function _numStr(m){
   return w;
 }
 var __bobSpeakSeq=0;
+// Voice is bound to the FUNCTION (BOB scanner: greeting + diagnosis), NOT the account type.
+// Everywhere else (admin, all techniker + partner views) BOB is completely muted.
+// FUTURE: when the in-app AI assistant ships (techniker/partner), set
+// window.__bobAssistantActive=true while it's open — the assistant IS BOB and may speak,
+// without weakening the mute rule anywhere else.
+function bobVoiceAllowed(){
+  if(window.__bobAssistantActive) return true;                 // reserved for the later assistant
+  if(typeof appMode!=='undefined'&&appMode!=='bob') return false;
+  // any non-scanner surface active → muted
+  if(document.querySelector('.gs-screen.active,.admin-screen.active,.tech-screen.active,.login-screen.active')) return false;
+  return !!document.querySelector('.screen.active'); // a BOB scanner screen must be active
+}
 function bobSpeak(rawText,opts){
   opts=opts||{};
   if(!rawText) return;
+  if(!bobVoiceAllowed()){ return; }     // FIX 4: never speak outside the BOB scanner
   var text=sanitizeForSpeech(rawText); // nur der gesprochene Text wird verändert
   if(!text) return;
   bobStopSpeak();                       // stop any running/overlapping playback
@@ -4639,9 +4663,43 @@ function copyTempPw(){
 // ══════════════════════════════════════════════════════════
 
 var BEREICHE=['Heizung','Sanitär','Lüftung','Klima','Kombiniert'];
-var TR_ARBEITEN=['Montage','Wartung','Reparatur','Installation','Inbetriebnahme','Demontage','Service','Besprechung','Fahrt'];
+// Block 2: feste, rechnungsreife HKLS-Tätigkeiten (Mehrfachauswahl, KEINE KI-Generierung).
+var TR_ARBEITEN=['Montage','Wartung','Reparatur','Installation','Inbetriebnahme','Demontage','Service','Besprechung','Fahrt',
+  'Fertigmontage','Ablaufleitung DN56 installiert','Ablaufleitung DN63 installiert','Ablaufleitung DN75 installiert','Ablaufleitung DN110 installiert',
+  'Aluverbundrohr installiert','C-Stahl Heizungsinstallation','Edelstahl Wasserinstallation','Rohrisolation','Druckprobe durchgeführt'];
+// vom Techniker per Freitext ergänzte Tätigkeiten (Session) + Auswahl-Status bleibt erhalten
+var TR_ARBEITEN_CUSTOM=[];
 var TR_MATERIAL=['Rohre/Fittings','Armaturen','Pumpe','Heizkörper','Thermostat','Ventile','Dämmung','Kabel','Sonstiges'];
 var TR_EMPFAENGER=['Projektleiter','Kunde','Emanuel'];
+
+// Block 2: Tätigkeiten inkl. selbst hinzugefügter (Freitext) + Material-Mengen pro Position.
+function trArbeitenAll(){ return TR_ARBEITEN.concat(TR_ARBEITEN_CUSTOM); }
+function trAddCustomArbeit(){
+  var inp=document.getElementById('tr-arbeit-custom'); if(!inp) return;
+  var v=(inp.value||'').trim(); if(!v) return;
+  var sel=chipsSelected('tr-arbeiten');
+  if(TR_ARBEITEN.indexOf(v)<0 && TR_ARBEITEN_CUSTOM.indexOf(v)<0) TR_ARBEITEN_CUSTOM.push(v);
+  if(sel.indexOf(v)<0) sel.push(v);
+  chipsInto('tr-arbeiten',trArbeitenAll(),sel,true);
+  inp.value='';
+}
+function trRenderMaterialQty(){
+  var box=document.getElementById('tr-material-qty'); if(!box) return;
+  var sel=chipsSelected('tr-material');
+  var prev={}; box.querySelectorAll('input[data-mat]').forEach(function(i){ prev[i.getAttribute('data-mat')]=i.value; });
+  box.innerHTML=sel.map(function(m){
+    var v=prev[m]!=null?prev[m]:'';
+    return '<div class="tr-matqty"><span class="tr-matqty-name">'+gsEsc(m)+'</span>'
+      +'<input class="login-inp" data-mat="'+gsEsc(m)+'" type="text" placeholder="Menge / Artikel (z.B. 5 m, 2 Stk)" value="'+gsEsc(v)+'"/></div>';
+  }).join('');
+}
+function trCollectMaterial(){
+  var sel=chipsSelected('tr-material');
+  var box=document.getElementById('tr-material-qty');
+  var qty={};
+  if(box) box.querySelectorAll('input[data-mat]').forEach(function(i){ qty[i.getAttribute('data-mat')]=(i.value||'').trim(); });
+  return sel.map(function(m){ return qty[m]?(m+' ('+qty[m]+')'):m; });
+}
 
 // ── Token refresh + Demo-Bypass (Bugfix "Ungültiger Token") ──
 var authRefresh=null;try{authRefresh=localStorage.getItem('bob_refresh')||null;}catch(e){}
@@ -4909,8 +4967,9 @@ function initTechRapport(){
     }).catch(function(){});
   }catch(e){}
   document.getElementById('tr-datum').value=new Date().toISOString().slice(0,10);
-  chipsInto('tr-arbeiten',TR_ARBEITEN,[],true);
-  chipsInto('tr-material',TR_MATERIAL,[],true);
+  chipsInto('tr-arbeiten',trArbeitenAll(),[],true);
+  chipsInto('tr-material',TR_MATERIAL,[],true,trRenderMaterialQty);
+  trRenderMaterialQty();
   chipsInto('tr-empfaenger',TR_EMPFAENGER,[],true);
   trRenderBausteine();
   trFotosB64=[];document.getElementById('tr-foto-preview').innerHTML='';
@@ -4931,7 +4990,7 @@ function trProjektChange(){
   if(!id)return;
   gsAuthApi('tagesrapport',{action:'today',projekt_id:id,datum:document.getElementById('tr-datum').value}).then(function(d){
     var sug=d.suggestions||[];
-    if(sug.length){chipsInto('tr-arbeiten',TR_ARBEITEN.concat(sug.filter(function(s){return TR_ARBEITEN.indexOf(s)<0;})),sug,true);}
+    if(sug.length){var base=trArbeitenAll();chipsInto('tr-arbeiten',base.concat(sug.filter(function(s){return base.indexOf(s)<0;})),sug,true);}
     if(d.rapport){trFillFrom(d.rapport);}
   });
 }
@@ -4940,8 +4999,15 @@ function trFillFrom(r){
   document.getElementById('tr-bis').value=(r.zeit_bis||'17:00').slice(0,5);
   document.getElementById('tr-team').value=(r.team||[]).join(', ');
   document.getElementById('tr-notiz').value=r.besonderheiten||'';
-  chipsInto('tr-arbeiten',TR_ARBEITEN,r.arbeiten||[],true);
-  chipsInto('tr-material',TR_MATERIAL,r.material||[],true);
+  // Block 2: gespeicherte Custom-Tätigkeiten in die Liste übernehmen
+  (r.arbeiten||[]).forEach(function(a){ if(TR_ARBEITEN.indexOf(a)<0&&TR_ARBEITEN_CUSTOM.indexOf(a)<0) TR_ARBEITEN_CUSTOM.push(a); });
+  chipsInto('tr-arbeiten',trArbeitenAll(),r.arbeiten||[],true);
+  // Material "Name (Menge)" zurück in Auswahl + Mengenfeld parsen
+  var matSel=[],matQty={};
+  (r.material||[]).forEach(function(s){ var mm=String(s).match(/^(.*?)\s*\((.*)\)\s*$/); if(mm){matSel.push(mm[1].trim());matQty[mm[1].trim()]=mm[2].trim();}else{matSel.push(s);} });
+  chipsInto('tr-material',TR_MATERIAL.concat(matSel.filter(function(x){return TR_MATERIAL.indexOf(x)<0;})),matSel,true,trRenderMaterialQty);
+  trRenderMaterialQty();
+  Object.keys(matQty).forEach(function(k){ var i=document.querySelector('#tr-material-qty input[data-mat="'+k.replace(/"/g,'\\"')+'"]'); if(i)i.value=matQty[k]; });
   trCalcHours();
 }
 function trCalcHours(){
@@ -5000,7 +5066,7 @@ function trSave(status){
   var body={action:'save',projekt_id:projekt_id,datum:document.getElementById('tr-datum').value,
     projektnummer:(pnr||'').trim()||null,
     zeit_von:document.getElementById('tr-von').value,zeit_bis:document.getElementById('tr-bis').value,
-    arbeiten:chipsSelected('tr-arbeiten'),material:chipsSelected('tr-material'),
+    arbeiten:chipsSelected('tr-arbeiten'),material:trCollectMaterial(),
     team:document.getElementById('tr-team').value.split(',').map(function(s){return s.trim();}).filter(Boolean),
     besonderheiten:document.getElementById('tr-notiz').value.trim(),
     empfaenger:chipsSelected('tr-empfaenger'),status:status};
