@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { kunden, anfrage, action, anfrage_id, tracking } = req.body || {};
+    const { kunden, anfrage, action, anfrage_id, tracking, team } = req.body || {};
 
     const headers0 = {
       'Content-Type': 'application/json',
@@ -152,6 +152,9 @@ export default async function handler(req, res) {
         projekt: anfrage?.projekt_name || null,
         erstgespraech: !!anfrage?.erstgespraech,
         quelle,
+        team: team && typeof team === 'object' ? team : null,
+        tarif: anfrage?.tarif || (team && team.tarif) || null,
+        tarif_preis: anfrage?.tarif_preis || null,
       });
     } catch (mailErr) {
       console.error('GS Mailversand (nicht-blockierend) fehlgeschlagen:', mailErr.message);
@@ -262,6 +265,15 @@ async function sendLeadEmails(d) {
     ? `<a href="mailto:${esc(d.email)}" style="color:#4A9EFF;font-weight:700;text-decoration:none;">${esc(d.email)}</a>`
     : '<span style="color:rgba(232,237,245,0.4);">—</span>';
 
+  // Team / Personen (Block 7) – für Account-Einrichtung + Vorbereitung.
+  const t = d.team || {};
+  const teamMembers = Array.isArray(t.members) ? t.members.filter(Boolean) : [];
+  const teamLabel = t.mode === 'single'
+    ? 'Einzel-Techniker'
+    : ('2er-Team' + (t.name ? ' · ' + t.name : ''));
+  const teamValue = [teamLabel, teamMembers.length ? '👥 ' + teamMembers.join(' & ') : ''].filter(Boolean).map(esc).join(' — ');
+  const tarifValue = [d.tarif, d.tarif_preis, (t.stundensatz ? 'CHF ' + t.stundensatz + '/h' : '')].filter(Boolean).map(esc).join(' · ');
+
   const leadInner = `
     <div style="display:inline-block;background:#FFD24A;color:#0a1628;font-weight:800;font-size:12px;padding:4px 12px;border-radius:50px;margin-bottom:14px;">🔔 NEUER GS-LEAD · ${esc(quelleLabel)}</div>
     <h2 style="margin:0 0 4px;font-size:20px;color:#fff;">${esc(d.name)}</h2>
@@ -272,6 +284,8 @@ async function sendLeadEmails(d) {
       ${row('Firma', d.firma ? esc(d.firma) : '')}
       ${row('Ort', d.ort ? esc(d.ort) : '')}
       ${row('Anliegen', [d.bereich, d.projekt].filter(Boolean).map(esc).join(' · '))}
+      ${row('Team / Personen', teamValue)}
+      ${row('Tarif', tarifValue)}
       ${row('Quelle', esc(quelleLabel))}
       ${row('Eingegangen', esc(ts))}
     </table>
