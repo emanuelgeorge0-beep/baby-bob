@@ -42,7 +42,12 @@ export default async function handler(req, res) {
   try {
     const [s1, s2] = await Promise.all([
       fetchRows('anfragen', 'id,created_at,name,problem_titel,fachmann,kategorie,status,ort'),
-      fetchRows('gs_anfragen', 'id,erstellt_am,projekt_name,bereich,tarif,status,notiz,kunde_id'),
+      // Mit quelle versuchen; falls Spalte fehlt (Migration noch nicht gelaufen), ohne quelle.
+      fetchRowsWithFallback(
+        'gs_anfragen',
+        'id,erstellt_am,projekt_name,bereich,tarif,status,notiz,kunde_id,quelle',
+        'id,erstellt_am,projekt_name,bereich,tarif,status,notiz,kunde_id'
+      ),
     ]);
 
     const s1Leads = s1.map((r) => ({
@@ -54,6 +59,7 @@ export default async function handler(req, res) {
       detail: [r.name, r.ort].filter(Boolean).join(' · '),
       status: r.status || 'neu',
       partner: r.fachmann || null,
+      quelle: 'bob',
     }));
 
     const s2Leads = s2.map((r) => ({
@@ -65,6 +71,7 @@ export default async function handler(req, res) {
       detail: [r.bereich, r.tarif].filter(Boolean).join(' · '),
       status: r.status || 'neu',
       partner: extractPartner(r.notiz),
+      quelle: r.quelle || 'direkt',
     }));
 
     const sources = {
@@ -97,6 +104,15 @@ async function fetchRows(table, select) {
     return [];
   }
   return r.json();
+}
+
+// Versucht `select`; bei Schema-/Spaltenfehler (z.B. quelle fehlt) Fallback auf `selectFallback`.
+async function fetchRowsWithFallback(table, select, selectFallback) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${select}&order=id`, { headers: SB });
+  if (r.ok) return r.json();
+  const errText = await r.text().catch(() => '');
+  console.warn(`dashboard fetch ${table} (Fallback):`, r.status, errText);
+  return fetchRows(table, selectFallback);
 }
 
 function sortByDate(arr) {

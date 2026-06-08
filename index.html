@@ -874,6 +874,14 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .landing-region-gs{font-size:13px;font-weight:800;color:rgba(234,241,251,0.7);}
 .landing-flag-static{font-size:20px;}
 .landing-region-lbl{font-size:12px;}
+/* Sprachumschalter DE/EN/ES (GS-Branding: dunkel/blau/gold) */
+.lang-switch{display:inline-flex;gap:4px;padding:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(74,158,255,0.22);border-radius:50px;-webkit-tap-highlight-color:transparent;}
+.lang-switch-gs{margin-top:12px;}
+.lang-opt{font-size:11px;font-weight:800;letter-spacing:.04em;color:rgba(234,241,251,0.62);background:transparent;border:none;border-radius:50px;padding:6px 11px;cursor:pointer;min-width:40px;min-height:34px;transition:background .15s,color .15s,transform .1s;}
+.lang-opt:active{transform:scale(0.93);}
+.lang-opt:focus-visible{outline:2px solid #4A9EFF;outline-offset:1px;}
+.lang-opt.on{background:linear-gradient(135deg,#4A9EFF,#2d7fe0);color:#fff;box-shadow:0 2px 8px rgba(74,158,255,0.35);}
+.lang-opt.on[data-lang]{color:#fff;}
 .landing-flag{font-size:22px;line-height:1;background:transparent;border:2px solid transparent;border-radius:12px;padding:5px 6px;cursor:pointer;transition:transform .12s,border-color .15s,background .15s;-webkit-tap-highlight-color:transparent;min-width:40px;min-height:40px;display:flex;align-items:center;justify-content:center;filter:grayscale(0.35);opacity:.72;}
 .landing-flag:active{transform:scale(0.9);}
 .landing-flag:focus-visible{outline:3px solid #4ECDC4;outline-offset:1px;}
@@ -956,7 +964,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
         <h2 class="landing-tit" data-i18n="gs_title">Profi-Team auf Abruf</h2>
         <p class="landing-sub" data-i18n="gs_sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes SHK-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
         <span class="landing-cta landing-cta-gs" data-i18n="gs_cta">SHK-Dienstleistung buchen →</span>
-        <div class="landing-region landing-region-gs" aria-label="Markt: Schweiz"><span class="landing-flag-static" title="Schweiz">🇨🇭</span> <span class="landing-region-lbl">Schweiz</span></div>
+        <div class="lang-switch lang-switch-gs" role="radiogroup" aria-label="Sprache wählen / Choose language / Elegir idioma"></div>
       </div>
     </div>
     <div class="landing-or" aria-hidden="true" data-i18n="landing_or">oder</div>
@@ -1443,9 +1451,12 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 <div id="gs-home" class="gs-screen">
   <div class="gs-hdr">
     <img class="gs-logo-img" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
-    <div class="mode-toggle" style="padding:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:50px;">
-      <button class="mt-opt" onclick="setMode('bob')" style="font-size:10px;padding:6px 12px;">👶 BOB</button>
-      <button class="mt-opt act-gs" style="font-size:10px;padding:6px 12px;">🏢 GS</button>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+      <div class="lang-switch" role="radiogroup" aria-label="Sprache wählen"></div>
+      <div class="mode-toggle" style="padding:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:50px;">
+        <button class="mt-opt" onclick="setMode('bob')" style="font-size:10px;padding:6px 12px;">👶 BOB</button>
+        <button class="mt-opt act-gs" style="font-size:10px;padding:6px 12px;">🏢 GS</button>
+      </div>
     </div>
   </div>
   <div class="gs-hero">
@@ -3574,16 +3585,62 @@ function bbGetRegion(){
     var saved=localStorage.getItem('bb_region');
     if(saved&&window.BB_REGIONS&&window.BB_REGIONS[saved]) return saved;
   }catch(e){}
-  try{ if(window.bbDetectRegion){ var d=window.bbDetectRegion(); if(window.BB_REGIONS&&window.BB_REGIONS[d]) return d; } }catch(e){}
-  return 'CH';
+  return 'CH';   // Standard: Schweiz. Kein Geo-/navigator-Auto-Detect (siehe Sprach-Bug-Fix).
 }
 function bbApplyRegion(code){
+  // Region steuert NUR noch Währung/PLZ-Format. Sprache ist davon entkoppelt
+  // (siehe bbSetLang / bbGetLang) und folgt NICHT mehr automatisch der Region/Geo.
   bbRegion=(window.BB_REGIONS&&window.BB_REGIONS[code])?code:'CH';
-  var rd=bbRegionData(bbRegion);
-  if(rd&&rd.language){ bobLang=rd.language; }            // BOB-Sprache folgt der Region (Voice/Greeting)
   try{ document.documentElement.setAttribute('data-region',bbRegion); }catch(e){}
-  applyI18n();                                            // FIX 2: gesamte sichtbare B2C-UI übersetzen
+  applyI18n();                                            // sichtbare B2C-UI in aktueller Sprache
 }
+
+// ── SPRACHE (DE/EN/ES) — Standard IMMER Deutsch, kein Auto-Detect, persistiert in localStorage ──
+var BB_LANGS=['de','en','es'];
+var BB_LANG_NAME={de:'Deutsch',en:'English',es:'Español'};
+function bbGetLang(){
+  try{ var s=localStorage.getItem('bb_lang'); if(s&&BB_LANGS.indexOf(s)>=0) return s; }catch(e){}
+  return 'de';   // Standardsprache IMMER Deutsch – egal welche Browser-/Geräte-/IP-Sprache
+}
+function bbSetLang(l,silent){
+  if(BB_LANGS.indexOf(l)<0) l='de';
+  bobLang=l;
+  try{ localStorage.setItem('bb_lang',l); }catch(e){}
+  applyI18n();
+  bbRenderLangSwitch();
+  if(!silent){ try{ toast('🌐 '+BB_LANG_NAME[l]); }catch(e){} }
+}
+function bbRenderLangSwitch(){
+  var cur=(BB_LANGS.indexOf(bobLang)>=0)?bobLang:'de';
+  document.querySelectorAll('.lang-switch').forEach(function(box){
+    box.innerHTML=BB_LANGS.map(function(l){
+      var on=(l===cur)?' on':'';
+      return '<button type="button" class="lang-opt'+on+'" role="radio" aria-checked="'+(l===cur?'true':'false')
+        +'" data-lang="'+l+'" title="'+BB_LANG_NAME[l]+'" onclick="event.stopPropagation();bbSetLang(\''+l+'\')">'+l.toUpperCase()+'</button>';
+    }).join('');
+  });
+}
+
+// ── QUELLEN-TRACKING (UTM + Referrer) — beim Laden auslesen, bis Absenden in localStorage halten ──
+function bbCaptureUTM(){
+  try{
+    var qp=new URLSearchParams(location.search);
+    var keys=['utm_source','utm_medium','utm_campaign','utm_term','utm_content'];
+    var found={},has=false;
+    keys.forEach(function(k){ var v=qp.get(k); if(v){ found[k]=String(v).slice(0,200); has=true; } });
+    var existing={}; try{ existing=JSON.parse(localStorage.getItem('bb_utm')||'{}'); }catch(e){ existing={}; }
+    if(has){
+      found.referrer=(document.referrer||'').slice(0,400);
+      found.landing_ts=new Date().toISOString();
+      localStorage.setItem('bb_utm',JSON.stringify(found));   // neuer Kampagnen-Klick = last-touch gewinnt
+    } else if(!existing.referrer && document.referrer){
+      existing.referrer=(document.referrer||'').slice(0,400);
+      if(!existing.landing_ts) existing.landing_ts=new Date().toISOString();
+      try{ localStorage.setItem('bb_utm',JSON.stringify(existing)); }catch(e){}
+    }
+  }catch(e){}
+}
+function bbGetUTM(){ try{ return JSON.parse(localStorage.getItem('bb_utm')||'{}')||{}; }catch(e){ return {}; } }
 // FIX 2: i18n-Engine — übersetzt alle [data-i18n] / [data-i18n-ph] Elemente in die aktuelle Sprache.
 function bbTr(key){ try{ return window.bbT?window.bbT(key,bobLang):key; }catch(e){ return key; } }
 function applyI18n(){
@@ -3606,9 +3663,11 @@ function applyI18n(){
 function bbSetRegion(code){
   if(!(window.BB_REGIONS&&window.BB_REGIONS[code])) code='CH';
   try{ localStorage.setItem('bb_region',code); }catch(e){}
+  var rd=bbRegionData(code);
+  // Manueller Flaggen-Klick wechselt bewusst auch die UI-Sprache (wird persistiert).
+  if(rd&&rd.language){ bbSetLang(rd.language,true); }
   bbApplyRegion(code);
   bbRenderRegionSelector();
-  var rd=bbRegionData(code);
   try{ toast((rd?rd.flag+' '+rd.name:'Schweiz')+' · '+(rd?rd.currency:'CHF')); }catch(e){}
 }
 function bbRenderRegionSelector(){
@@ -4294,7 +4353,8 @@ function gsSubmit(){
         ].filter(Boolean);
         return parts.join(' · ')||null;
       })()
-    }
+    },
+    tracking: (typeof bbGetUTM==='function'?bbGetUTM():{})   // UTM-Quellen + Referrer (Quellen-Tracking)
   };
 
   function resetBtn(){
@@ -5200,6 +5260,13 @@ function pbRenderDemo(){
 }
 
 // ── ADMIN: RAPPORT-STATUS ──
+// Quelle-Badge (Google/Meta/Direkt/BOB/…) für jeden Lead im Dashboard.
+function adminQuelleBadge(q){
+  q=String(q||'direkt').toLowerCase();
+  var map={google:['Google','#4285F4'],meta:['Meta','#0866FF'],facebook:['Meta','#0866FF'],instagram:['Meta','#E1306C'],bing:['Bing','#00897B'],bob:['BOB','#FF8A3D'],direkt:['Direkt','#6b7a90']};
+  var m=map[q]||[q.charAt(0).toUpperCase()+q.slice(1),'#6b7a90'];
+  return '<span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.03em;color:#fff;background:'+m[1]+';padding:1px 7px;border-radius:50px;margin-right:6px;vertical-align:middle;">'+gsEsc(m[0])+'</span>';
+}
 function showAdminDashboard(){showScreen('admin-dashboard');loadAdminDashboard();}
 function loadAdminDashboard(){
   var l=document.getElementById('admin-dash-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';
@@ -5215,7 +5282,7 @@ function loadAdminDashboard(){
     if(l)l.innerHTML=leads.length?leads.slice(0,60).map(function(x){
       return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(x.title||'–')+'</div>'
         +'<span class="admin-role-tag">'+gsEsc(x.source||'')+'</span></div>'
-        +'<div class="pd-item-meta">'+(x.date?gsEsc(String(x.date).slice(0,10)):'')+(x.detail?(' · '+gsEsc(x.detail)):'')+' · '+gsEsc(x.status||'')+(x.partner?(' · 👤 '+gsEsc(x.partner)):'')+'</div></div>';
+        +'<div class="pd-item-meta">'+adminQuelleBadge(x.quelle)+(x.date?gsEsc(String(x.date).slice(0,10)):'')+(x.detail?(' · '+gsEsc(x.detail)):'')+' · '+gsEsc(x.status||'')+(x.partner?(' · 👤 '+gsEsc(x.partner)):'')+'</div></div>';
     }).join(''):'<div class="admin-empty">Keine Leads.</div>';
   }).catch(function(){if(l)l.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
 }
@@ -6119,7 +6186,10 @@ function setTechStatus(msg,type){
 // ── Boot the audio subsystem once all voice vars/functions are defined (accessibility) ──
 (function bootBobAudio(){
   function run(){
+    try{ bbCaptureUTM(); }catch(e){}                        // Quellen-Tracking (UTM + Referrer) sichern
+    try{ bobLang=bbGetLang(); }catch(e){ bobLang='de'; }    // Sprache: IMMER Deutsch-Default, persistiert
     try{ bbApplyRegion(bbGetRegion()); bbRenderRegionSelector(); }catch(e){}
+    try{ bbRenderLangSwitch(); }catch(e){}                  // Sprachumschalter DE/EN/ES rendern
     try{ gsInitPhones(); }catch(e){}
     try{ bobAudioInit(); }catch(e){}
   }
