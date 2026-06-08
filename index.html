@@ -889,9 +889,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .landing-flag-static{font-size:20px;}
 .landing-region-lbl{font-size:12px;}
 /* Sprachumschalter DE/EN/ES (GS-Branding: dunkel/blau/gold) */
-.lang-switch{display:inline-flex;gap:4px;padding:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(74,158,255,0.22);border-radius:50px;-webkit-tap-highlight-color:transparent;}
+.lang-switch{display:inline-flex;gap:3px;padding:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(74,158,255,0.22);border-radius:50px;-webkit-tap-highlight-color:transparent;flex-wrap:wrap;justify-content:center;}
 .lang-switch-gs{margin-top:12px;}
-.lang-opt{font-size:11px;font-weight:800;letter-spacing:.04em;color:rgba(234,241,251,0.62);background:transparent;border:none;border-radius:50px;padding:6px 11px;cursor:pointer;min-width:40px;min-height:34px;transition:background .15s,color .15s,transform .1s;}
+.lang-opt{font-size:10.5px;font-weight:800;letter-spacing:.02em;color:rgba(234,241,251,0.62);background:transparent;border:none;border-radius:50px;padding:5px 8px;cursor:pointer;min-width:34px;min-height:32px;display:inline-flex;align-items:center;gap:3px;transition:background .15s,color .15s,transform .1s;}
+.lang-flag{font-size:12px;line-height:1;}
 .lang-opt:active{transform:scale(0.93);}
 .lang-opt:focus-visible{outline:2px solid #4A9EFF;outline-offset:1px;}
 .lang-opt.on{background:linear-gradient(135deg,#4A9EFF,#2d7fe0);color:#fff;box-shadow:0 2px 8px rgba(74,158,255,0.35);}
@@ -974,10 +975,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       <div class="landing-glow"></div>
       <div class="landing-half-inner">
         <img class="landing-logo-img" src="lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
-        <div class="landing-badge landing-badge-gs" data-i18n="gs_badge">SHK-Profi-Team</div>
+        <div class="landing-badge landing-badge-gs" data-i18n="gs_badge">HKLS-Profi-Team</div>
         <h2 class="landing-tit" data-i18n="gs_title">Profi-Team auf Abruf</h2>
-        <p class="landing-sub" data-i18n="gs_sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes SHK-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
-        <span class="landing-cta landing-cta-gs" data-i18n="gs_cta">SHK-Dienstleistung buchen →</span>
+        <p class="landing-sub" data-i18n="gs_sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes HKLS-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
+        <span class="landing-cta landing-cta-gs" data-i18n="gs_cta">HKLS-Dienstleistung buchen →</span>
         <div class="lang-switch lang-switch-gs" role="radiogroup" aria-label="Sprache wählen / Choose language / Elegir idioma"></div>
       </div>
     </div>
@@ -995,7 +996,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       </div>
     </div>
   </div>
-  <div class="landing-foot" data-i18n="landing_foot">George Solutions · Schweizer SHK-Dienstleistung &amp; KI-Fachmann-Finder</div>
+  <div class="landing-foot" data-i18n="landing_foot">George Solutions · Schweizer HKLS-Dienstleistung &amp; KI-Fachmann-Finder</div>
 </div>
 
 <!-- HOME -->
@@ -1164,7 +1165,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   </div>
   <div class="r-gs-cta" id="r-gs-cta" style="display:none;" onclick="bobToGS()">
     <div class="r-gs-cta-i">🏢</div>
-    <div class="r-gs-cta-info"><strong>George Solutions kann das für Sie lösen</strong><span>SHK-Profis auf Abruf – in 24h ein Angebot</span></div>
+    <div class="r-gs-cta-info"><strong>George Solutions kann das für Sie lösen</strong><span>HKLS-Profis auf Abruf – in 24h ein Angebot</span></div>
     <div class="r-gs-cta-arrow">→</div>
   </div>
   <div class="fb-row" id="bob-fb-row">
@@ -1414,7 +1415,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div class="a-card"><h3>💅 Beauty & Lifestyle</h3><p>Friseur, Barber, Nagelstudio, Microblading, Haarentfernung, Massage, Kosmetik, Wimpern, Make-up, Waxing, Tattoo, Piercing.</p></div>
   <div class="a-card"><h3>🧠 KI-Analyse</h3><p>BOB analysiert Fotos, Sprache und Text sofort mit 316+ Wissenseinträgen und findet den richtigen Fachmann mit bestem Preis-Leistungs-Verhältnis.</p></div>
   <div class="a-card"><h3>📍 Handwerker-Netzwerk</h3><p>Bald: Google Maps zeigt Partner in deiner unmittelbaren Umgebung mit Kosten, Verfügbarkeit und Direktkontakt.</p></div>
-  <div class="a-card"><h3>⚡ Von George Solutions</h3><p>Baby BOB ist ein Produkt von George Solutions – SHK-Spezialist aus Zürich.</p></div>
+  <div class="a-card"><h3>⚡ Von George Solutions</h3><p>Baby BOB ist ein Produkt von George Solutions – HKLS-Spezialist aus Zürich.</p></div>
   <div class="bnav">
     <div class="bni" onclick="go('home')"><span class="bni-i">🏠</span><span class="bni-l" data-i18n="nav_home">Home</span></div>
     <div class="bni" onclick="go('home');openSheet()"><span class="bni-i">📸</span><span class="bni-l" data-i18n="nav_scan">Scannen</span></div>
@@ -1475,7 +1476,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   </div>
   <div class="gs-hero">
     <div class="gs-hero-icon">🏗️</div>
-    <div class="gs-hero-tit">SHK-<span>Expertise</span><br>auf Abruf</div>
+    <div class="gs-hero-tit">HKLS-<span>Expertise</span><br>auf Abruf</div>
     <p class="gs-hero-sub">Professionelle Gebäudetechnik-Dienstleistungen für Unternehmen, Liegenschaftsverwaltungen und Facility Manager.</p>
   </div>
   <div class="gs-services">
@@ -1505,7 +1506,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     </div>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;">
       <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">4 Bereiche</div>
-      <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">SHK Vollservice</div>
+      <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">HKLS Vollservice</div>
     </div>
   </div>
   <a class="gs-phone-cta" data-gs-phone href="tel:+41" aria-label="George Solutions anrufen">
@@ -2135,7 +2136,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="ob-lbl">Team (weitere Personen)</div>
     <input class="login-inp" id="tr-team" type="text" placeholder="Namen, kommagetrennt"/>
     <div class="ob-lbl">Besonderheiten</div>
-    <div class="ob-lbl" style="margin-top:0;font-weight:600;text-transform:none;color:rgba(232,237,245,0.4);">SHK-Textbausteine (tippen zum Einfügen):</div>
+    <div class="ob-lbl" style="margin-top:0;font-weight:600;text-transform:none;color:rgba(232,237,245,0.4);">HKLS-Textbausteine (tippen zum Einfügen):</div>
     <div class="ob-chips" id="tr-bausteine"></div>
     <textarea class="login-inp" id="tr-notiz" rows="3" placeholder="Besonderheiten / Notizen..."></textarea>
     <div class="ob-lbl">Fotos</div>
@@ -2974,7 +2975,7 @@ function startListening(){
   try{bobRec.start();}catch(e){bobRecOn=false;if(btn){btn.classList.remove('rec');btn.innerHTML='<span>🎙️</span> Mit BOB sprechen';}}
 }
 
-// Task 8: BOB → George Solutions handover (SHK problems)
+// Task 8: BOB → George Solutions handover (HKLS problems)
 function bobToGS(){
   try{ if(lastResult&&lastResult.desc){ /* carry context into GS if needed */ } }catch(e){}
   setMode('gs');
@@ -3587,8 +3588,9 @@ function bbApplyRegion(code){
 }
 
 // ── SPRACHE (DE/EN/ES) — Standard IMMER Deutsch, kein Auto-Detect, persistiert in localStorage ──
-var BB_LANGS=['de','en','es'];
-var BB_LANG_NAME={de:'Deutsch',en:'English',es:'Español'};
+var BB_LANGS=['de','en','fr','it','es'];
+var BB_LANG_NAME={de:'Deutsch',en:'English',fr:'Français',it:'Italiano',es:'Español'};
+var BB_LANG_FLAG={de:'🇩🇪',en:'🇬🇧',fr:'🇫🇷',it:'🇮🇹',es:'🇪🇸'};
 function bbGetLang(){
   try{ var s=localStorage.getItem('bb_lang'); if(s&&BB_LANGS.indexOf(s)>=0) return s; }catch(e){}
   return 'de';   // Standardsprache IMMER Deutsch – egal welche Browser-/Geräte-/IP-Sprache
@@ -3607,7 +3609,7 @@ function bbRenderLangSwitch(){
     box.innerHTML=BB_LANGS.map(function(l){
       var on=(l===cur)?' on':'';
       return '<button type="button" class="lang-opt'+on+'" role="radio" aria-checked="'+(l===cur?'true':'false')
-        +'" data-lang="'+l+'" title="'+BB_LANG_NAME[l]+'" onclick="event.stopPropagation();bbSetLang(\''+l+'\')">'+l.toUpperCase()+'</button>';
+        +'" data-lang="'+l+'" title="'+BB_LANG_NAME[l]+'" aria-label="'+BB_LANG_NAME[l]+'" onclick="event.stopPropagation();bbSetLang(\''+l+'\')"><span class="lang-flag" aria-hidden="true">'+(BB_LANG_FLAG[l]||'')+'</span>'+l.toUpperCase()+'</button>';
     }).join('');
   });
 }
@@ -3727,7 +3729,7 @@ function gsStartAnalysis(){
     think.style.display='flex';think.classList.add('on');
     document.getElementById('t-body').textContent='🏗️';
     document.getElementById('t-badge').textContent='GS analysiert...';
-    document.getElementById('t-sub').textContent='SHK-Expertise wird eingeholt...';
+    document.getElementById('t-sub').textContent='HKLS-Expertise wird eingeholt...';
     document.getElementById('t-bar').style.width='0%';
     document.getElementById('t-timer').textContent='';
     var prog=0;
@@ -3766,19 +3768,19 @@ function gsStartAnalysis(){
 // ── GS Lokal-Fallback ──
 function gsLocalFallback(bereich,dring){
   var map={
-    'Heizung':{typ:'Heizungsarbeit',desc:'Professionelle Heizungsarbeit im SHK-Bereich. George Solutions verfügt über umfassende Expertise in Heizungsanlagen aller Art.',std:'8-24h',tarif:'Single'},
+    'Heizung':{typ:'Heizungsarbeit',desc:'Professionelle Heizungsarbeit im HKLS-Bereich. George Solutions verfügt über umfassende Expertise in Heizungsanlagen aller Art.',std:'8-24h',tarif:'Single'},
     'Sanitär':{typ:'Sanitärinstallation',desc:'Fachgerechte Sanitärinstallation und -revision. Unser Team kennt alle gängigen Systeme und Normen.',std:'8-20h',tarif:'Single'},
     'Lüftung':{typ:'Lüftungsarbeit',desc:'Planung und Installation von Komfortlüftungsanlagen (KWL) und Absaugsystemen nach SWKI-Normen.',std:'12-32h',tarif:'Monthly'},
     'Klima':{typ:'Klimaanlage/Kältetechnik',desc:'Installation und Wartung von Split-Anlagen und VRF-Systemen. Zertifizierter F-Gas-Betrieb.',std:'8-24h',tarif:'Single'},
   };
-  var m=map[bereich]||{typ:'SHK-Projekt',desc:'Professionelle Gebäudetechnik-Dienstleistung durch George Solutions.',std:'8-32h',tarif:'Single'};
+  var m=map[bereich]||{typ:'HKLS-Projekt',desc:'Professionelle Gebäudetechnik-Dienstleistung durch George Solutions.',std:'8-32h',tarif:'Single'};
   return {
     projekt_typ:m.typ,bereich:bereich,beschreibung:m.desc,
     umfang:'Mittel (16-60h)',geschaetzte_stunden:m.std,
     empfohlener_tarif:m.tarif,tarif_begruendung:'Basierend auf Projektgrösse empfohlen.',
     prioritaet:dring||'Normal',normen:'SIA / SWKI / EN-Normen',
-    naechste_schritte:['Begehung vor Ort vereinbaren','Offerte erstellen','Zeitplan festlegen'],
-    technische_hinweise:'Für eine genaue Einschätzung wird eine Begehung vor Ort empfohlen.'
+    naechste_schritte:['Erstgespräch buchen','Offerte erstellen','Zeitplan festlegen'],
+    technische_hinweise:'Anfrage abschicken – unsere Dispo-Abteilung meldet sich innerhalb von 2 Stunden (werktags) für einen schnellstmöglichen Termin.'
   };
 }
 
@@ -3786,7 +3788,7 @@ function gsLocalFallback(bereich,dring){
 function gsRenderDatenblatt(r){
   if(!r)return;
   document.getElementById('gs-res-lbl').textContent='📊 '+( r.projekt_typ||r.titel||'Projektdatenblatt');
-  document.getElementById('gs-res-tit').textContent=r.projekt_typ||r.titel||'SHK-Projekt';
+  document.getElementById('gs-res-tit').textContent=r.projekt_typ||r.titel||'HKLS-Projekt';
   document.getElementById('gs-res-desc').textContent=r.beschreibung||r.desc||'–';
   document.getElementById('gs-res-bereich').textContent=r.bereich||gsData.bereich||'–';
   document.getElementById('gs-res-umfang').textContent=r.umfang||'–';
@@ -5606,7 +5608,7 @@ function trSave(status){
 // Erfolgs-/Fehlermeldung sichtbar machen (Nutzer hat ggf. nach oben gescrollt / Tastatur offen).
 function trShowMsg(){ try{ var m=document.getElementById('tr-msg'); if(m) m.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){} }
 
-// PM-Prototyp: SHK-Textbausteine für den Rapport.
+// PM-Prototyp: HKLS-Textbausteine für den Rapport.
 var SHK_BAUSTEINE=[
   'Heizkörper demontiert und neuen montiert.',
   'Thermostatventil ersetzt und Anlage entlüftet.',

@@ -66,7 +66,7 @@ export default async function handler(req, res) {
     userContent.push({
       type: 'text',
       text: userText || (isGS
-        ? 'Erstelle eine professionelle SHK-Projekteinschätzung.'
+        ? 'Erstelle eine professionelle HKLS-Projekteinschätzung.'
         : 'Analysiere das Bild und erkenne was abgebildet ist und welcher Fachmann benötigt wird.'),
     });
 
@@ -272,10 +272,10 @@ function extractKeywords(description, category) {
   return Array.from(keywords).slice(0, 6);
 }
 
-// ── GS System Prompt (B2B, SHK-Fachmann) ──
+// ── GS System Prompt (B2B, HKLS-Fachmann) ──
 // Techniker-Rapport: Sprachmemo NUR strukturieren, KEINE fachliche Korrektur.
 function buildRapportPrompt() {
-  return `Du bist BOB, der Assistent für George-Solutions-Techniker (SHK, Schweiz). Ein Techniker hat ein Sprachmemo zu seinem heutigen Einsatz diktiert. Deine EINZIGE Aufgabe: das Diktat in einen sauberen, rechnungsreifen Tagesrapport-Vorschlag STRUKTURIEREN.
+  return `Du bist BOB, der Assistent für George-Solutions-Techniker (HKLS, Schweiz). Ein Techniker hat ein Sprachmemo zu seinem heutigen Einsatz diktiert. Deine EINZIGE Aufgabe: das Diktat in einen sauberen, rechnungsreifen Tagesrapport-Vorschlag STRUKTURIEREN.
 
 STRIKTE REGELN:
 - Übernimm AUSSCHLIESSLICH, was gesagt wurde. NICHTS erfinden, NICHTS ergänzen, NICHTS dazudichten.
@@ -296,7 +296,7 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON, ohne Markdown, ohne Erklärtext:
 
 // Techniker-Materialliste: Sprachmemo NUR in Positionen zerlegen, KEINE fachliche Korrektur.
 function buildMaterialPrompt() {
-  return `Du bist BOB, der Assistent für George-Solutions-Techniker (SHK, Schweiz). Ein Techniker hat ein Sprachmemo zum verbauten/benötigten Material diktiert. Deine EINZIGE Aufgabe: das Diktat in eine saubere Materialliste mit einzelnen Positionen ZERLEGEN.
+  return `Du bist BOB, der Assistent für George-Solutions-Techniker (HKLS, Schweiz). Ein Techniker hat ein Sprachmemo zum verbauten/benötigten Material diktiert. Deine EINZIGE Aufgabe: das Diktat in eine saubere Materialliste mit einzelnen Positionen ZERLEGEN.
 
 STRIKTE REGELN:
 - Übernimm AUSSCHLIESSLICH, was gesagt wurde. NICHTS erfinden, NICHTS ergänzen, NICHTS dazudichten.
@@ -318,7 +318,7 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON, ohne Markdown, ohne Erklärtext:
 }
 
 function buildGSPrompt(wissen) {
-  return `Du bist der KI-Projektassistent von George Solutions – SHK-Spezialist (Sanitär, Heizung, Klima, Lüftung) aus Zürich, Schweiz.
+  return `Du bist der KI-Projektassistent von George Solutions – HKLS-Spezialist (Sanitär, Heizung, Klima, Lüftung) aus Zürich, Schweiz.
 
 KONTEXT: George Solutions bietet professionelle B2B-Dienstleistungen für Gebäudetechnik. Kunden sind Liegenschaftsverwaltungen, Bauunternehmen, Immobilieneigentümer und Facility Manager.
 
@@ -330,7 +330,7 @@ STUNDENTARIFE von George Solutions:
 - Annual: CHF 65/h (Jahresvertrag, strategische Partnerschaft)
 
 AUFGABE:
-1. Analysiere das SHK-Projekt professionell und technisch präzise
+1. Analysiere das HKLS-Projekt professionell und technisch präzise
 2. Schätze Umfang und Stundenbedarf realistisch ein
 3. Empfehle den passenden Tarif basierend auf Projektvolumen und Häufigkeit
 4. Gib relevante Schweizer Normen (SIA, SWKI, EN) und technische Hinweise
@@ -338,7 +338,7 @@ AUFGABE:
 
 BEREICHE: Heizung (Wärmepumpen, Heizkörper, Fussbodenheizung, Boiler, Pellets/Gas/Öl/Solar), Sanitär (Installation, Armaturen, Rohrleitungen, Badezimmer, Entwässerung), Lüftung (KWL, Komfortlüftung, Absaugungen, Wohnraumlüftung), Klima (Split-Anlagen, VRF-Systeme, Kältetechnik)
 
-${wissen ? `WISSENSDATENBANK (GS-relevante Fachinfos – Heizung/Sanitär/Lüftung/Klima):\n${wissen}` : 'Antworte aus deinem SHK-Fachwissen.'}
+${wissen ? `WISSENSDATENBANK (GS-relevante Fachinfos – Heizung/Sanitär/Lüftung/Klima):\n${wissen}` : 'Antworte aus deinem HKLS-Fachwissen.'}
 
 ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
 {
@@ -429,7 +429,7 @@ NOTFALL-ERKENNUNG:
 
 SAISON: Heute ist ${new Date().toLocaleDateString('de-CH', { month: 'long' })} (Monat ${new Date().getMonth() + 1}). Gib in "saison_tipp" einen passenden saisonalen Hinweis (Winter→Heizung/Frost, Frühling→Garten/Lüftung-Filter, Sommer→Klima, Herbst→Heizung-Service/Dach-Check). Kurz, 1 Satz.
 
-GEORGE SOLUTIONS: "gs_passend": true wenn das Problem im SHK-Bereich liegt (Heizung, Sanitär, Lüftung, Klima) – dann kann George Solutions das direkt lösen. Sonst false.
+GEORGE SOLUTIONS: "gs_passend": true wenn das Problem im HKLS-Bereich liegt (Heizung, Sanitär, Lüftung, Klima) – dann kann George Solutions das direkt lösen. Sonst false.
 
 ${wissen ? `WISSENSDATENBANK (nutze diese Infos für präzise Antworten):\n${wissen}` : 'Keine Datenbankeinträge gefunden – antworte aus deinem Allgemeinwissen.'}
 

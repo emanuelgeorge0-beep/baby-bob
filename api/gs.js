@@ -245,7 +245,7 @@ function gsMailShell(innerHtml) {
       </div>
       <div style="padding:26px;color:#e8edf5;font-size:15px;line-height:1.55;">${innerHtml}</div>
       <div style="padding:16px 26px;border-top:1px solid rgba(255,255,255,0.07);color:rgba(232,237,245,0.45);font-size:12px;">
-        George Solutions · Schweizer SHK-Dienstleistung &amp; KI-Fachmann-Finder
+        George Solutions · Schweizer HKLS-Dienstleistung &amp; KI-Fachmann-Finder
       </div>
     </div>
   </div>`;
