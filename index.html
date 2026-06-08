@@ -782,6 +782,25 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .pd-item-tit{font-size:14px;font-weight:800;}
 .pd-item-meta{font-size:11px;color:rgba(232,237,245,0.45);margin-top:3px;}
 .pd-dl{font-size:11px;font-weight:800;color:#4a9eff;cursor:pointer;text-decoration:none;}
+.pd-item-click{cursor:pointer;transition:border-color .15s,background .15s;-webkit-tap-highlight-color:transparent;}
+.pd-item-click:hover,.pd-item-click:focus-visible{border-color:rgba(74,158,255,0.4);background:rgba(74,158,255,0.06);outline:none;}
+.pd-item-arrow{float:right;color:rgba(74,158,255,0.7);font-weight:900;font-size:14px;}
+/* BLOCK 6: Lead-Detailansicht (Overlay) */
+.lead-ov{display:none;position:fixed;inset:0;z-index:2000;background:rgba(4,9,17,0.78);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;}
+@media (min-width:560px){ .lead-ov{align-items:center;} }
+.lead-card{width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;background:#0d1b2e;border:1px solid rgba(74,158,255,0.25);border-radius:18px 18px 0 0;overflow:hidden;}
+@media (min-width:560px){ .lead-card{border-radius:18px;} }
+.lead-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.08);background:linear-gradient(135deg,#0a1628,#13294a);}
+.lead-hd-tit{font-size:15px;font-weight:900;color:#fff;}
+.lead-close{background:rgba(255,255,255,0.08);border:none;color:#e8edf5;width:32px;height:32px;min-width:32px;border-radius:50%;font-size:15px;cursor:pointer;}
+.lead-bd{padding:14px 18px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.lead-sec{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.6px;color:#4a9eff;margin:15px 0 7px;}
+.lead-row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+.lead-row-l{font-size:12px;color:rgba(232,237,245,0.5);white-space:nowrap;}
+.lead-row-v{font-size:13px;font-weight:700;color:#e8edf5;text-align:right;word-break:break-word;}
+.lead-link{color:#4a9eff;font-weight:800;text-decoration:none;}
+.lead-desc{font-size:12.5px;color:rgba(232,237,245,0.8);line-height:1.5;white-space:pre-wrap;background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;}
+.lead-cta{display:block;margin:4px 18px 18px;text-align:center;background:linear-gradient(135deg,#4A9EFF,#2d7fe0);color:#fff;font-weight:800;text-decoration:none;padding:13px;border-radius:12px;}
 
 /* ═══ TECHNIKER SCREENS ═══ */
 .tech-screen{display:none;flex-direction:column;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#07111f;color:#e8edf5;padding-bottom:calc(140px + env(safe-area-inset-bottom,0px));scroll-padding-bottom:160px;}
@@ -5264,13 +5283,54 @@ function loadAdminDashboard(){
       return '<div class="pd-card"><div class="pd-card-n">'+((s[k]&&s[k].count)||0)+'</div><div class="pd-card-l">'+SRC[k]+'</div></div>';
     }).join('');c.style.gridTemplateColumns='1fr 1fr 1fr 1fr';}
     var leads=d.leads||[];
-    if(l)l.innerHTML=leads.length?leads.slice(0,60).map(function(x){
-      return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(x.title||'–')+'</div>'
+    window.__adminLeads=leads;   // für die Lead-Detailansicht (Block 6)
+    if(l)l.innerHTML=leads.length?leads.slice(0,60).map(function(x,i){
+      return '<div class="pd-item pd-item-click" role="button" tabindex="0" onclick="gsLeadDetail('+i+')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();gsLeadDetail('+i+');}">'
+        +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(x.title||'–')+'</div>'
         +'<span class="admin-role-tag">'+gsEsc(x.source||'')+'</span></div>'
-        +'<div class="pd-item-meta">'+adminQuelleBadge(x.quelle)+(x.date?gsEsc(String(x.date).slice(0,10)):'')+(x.detail?(' · '+gsEsc(x.detail)):'')+' · '+gsEsc(x.status||'')+(x.partner?(' · 👤 '+gsEsc(x.partner)):'')+'</div></div>';
+        +'<div class="pd-item-meta">'+adminQuelleBadge(x.quelle)+(x.date?gsEsc(String(x.date).slice(0,10)):'')+(x.detail?(' · '+gsEsc(x.detail)):'')+' · '+gsEsc(x.status||'')+(x.partner?(' · 👤 '+gsEsc(x.partner)):'')+'<span class="pd-item-arrow">›</span></div></div>';
     }).join(''):'<div class="admin-empty">Keine Leads.</div>';
   }).catch(function(){if(l)l.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
 }
+// BLOCK 6: Lead-Detailansicht – alle Daten für Planung + Erstgespräch.
+function gsLeadDetail(i){
+  var x=(window.__adminLeads||[])[i]; if(!x) return;
+  var ov=document.getElementById('lead-detail-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='lead-detail-ov'; ov.className='lead-ov'; ov.onclick=function(e){ if(e.target===ov) gsLeadDetailClose(); }; document.body.appendChild(ov); }
+  var telDigits=String(x.telefon||'').replace(/[^\d+]/g,'');
+  function row(lbl,val,extra){ if(!val) return ''; return '<div class="lead-row"><span class="lead-row-l">'+gsEsc(lbl)+'</span><span class="lead-row-v">'+(extra||'')+gsEsc(val)+'</span></div>'; }
+  var addr=[x.adresse,[x.plz,x.ort].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  var telCell=telDigits?('<a href="tel:'+gsEsc(telDigits)+'" class="lead-link">📞 '+gsEsc(x.telefon)+'</a>'):'';
+  var mailCell=x.email?('<a href="mailto:'+gsEsc(x.email)+'" class="lead-link">✉️ '+gsEsc(x.email)+'</a>'):'';
+  var body=''
+    +row('Quelle',(x.quelle||'').toString().toUpperCase()||'–')
+    +row('Status',x.status||'neu')
+    +row('Eingegangen',x.date?String(x.date).slice(0,16).replace('T',' '):'')
+    +'<div class="lead-sec">Kontakt</div>'
+    +row('Kontaktperson',x.kontakt||x.partner||'')
+    +row('Firma',x.firma||'')
+    +(telCell?'<div class="lead-row"><span class="lead-row-l">Telefon</span><span class="lead-row-v">'+telCell+'</span></div>':'')
+    +(mailCell?'<div class="lead-row"><span class="lead-row-l">E-Mail</span><span class="lead-row-v">'+mailCell+'</span></div>':'')
+    +row('Adresse / Baustelle',addr)
+    +'<div class="lead-sec">Projekt</div>'
+    +row('Projekt',x.title||'')
+    +row('Bereich',x.bereich||'')
+    +row('Objekttyp',x.objekttyp||'')
+    +row('Geschätzte Stunden',x.geschaetzte_stunden||'')
+    +row('Gewünschter Start',x.gewuenschter_start||'')
+    +row('Tarif',[x.tarif,x.tarif_preis].filter(Boolean).join(' · '))
+    +row('Team / Personen',x.team||'')
+    +row('Wunsch-Techniker',x.partner||'')
+    +(x.beschreibung?('<div class="lead-sec">Beschreibung</div><div class="lead-desc">'+gsEsc(x.beschreibung)+'</div>'):'')
+    +(x.notiz?('<div class="lead-sec">Notiz (intern)</div><div class="lead-desc">'+gsEsc(x.notiz)+'</div>'):'');
+  ov.innerHTML='<div class="lead-card"><div class="lead-hd"><div class="lead-hd-tit">'+gsEsc(x.title||'Lead')+'</div>'
+    +'<button class="lead-close" aria-label="Schliessen" onclick="gsLeadDetailClose()">✕</button></div>'
+    +'<div class="lead-bd">'+body+'</div>'
+    +(telDigits?'<a class="lead-cta" href="tel:'+gsEsc(telDigits)+'">📞 Jetzt anrufen</a>':'')
+    +'</div>';
+  ov.style.display='flex';
+}
+function gsLeadDetailClose(){ var ov=document.getElementById('lead-detail-ov'); if(ov) ov.style.display='none'; }
 function showAdminStatus(){showScreen('admin-status');loadStatus();}
 function loadStatus(){
   var l=document.getElementById('admin-status-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';

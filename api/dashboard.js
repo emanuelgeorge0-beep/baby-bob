@@ -40,15 +40,20 @@ export default async function handler(req, res) {
 
   // ── Aggregate ──
   try {
-    const [s1, s2] = await Promise.all([
+    const [s1, s2, kunden] = await Promise.all([
       fetchRows('anfragen', 'id,created_at,name,problem_titel,fachmann,kategorie,status,ort'),
       // Mit quelle versuchen; falls Spalte fehlt (Migration noch nicht gelaufen), ohne quelle.
       fetchRowsWithFallback(
         'gs_anfragen',
-        'id,erstellt_am,projekt_name,bereich,tarif,status,notiz,kunde_id,quelle',
-        'id,erstellt_am,projekt_name,bereich,tarif,status,notiz,kunde_id'
+        'id,erstellt_am,projekt_name,bereich,objekttyp,tarif,tarif_preis,gewuenschter_start,geschaetzte_stunden,beschreibung,status,notiz,kunde_id,quelle',
+        'id,erstellt_am,projekt_name,bereich,objekttyp,tarif,tarif_preis,gewuenschter_start,geschaetzte_stunden,beschreibung,status,notiz,kunde_id'
       ),
+      fetchRows('gs_kunden', 'id,firma,kontaktperson,telefon,email,adresse,plz,ort'),
     ]);
+
+    // Kunde-Daten für die Lead-Detailansicht (Block 6) verfügbar machen.
+    const kundeById = {};
+    for (const k of (Array.isArray(kunden) ? kunden : [])) kundeById[k.id] = k;
 
     const s1Leads = s1.map((r) => ({
       id: r.id,
@@ -60,19 +65,34 @@ export default async function handler(req, res) {
       status: r.status || 'neu',
       partner: r.fachmann || null,
       quelle: 'bob',
+      // Detailfelder
+      kontakt: r.name || null, ort: r.ort || null, kategorie: r.kategorie || null,
     }));
 
-    const s2Leads = s2.map((r) => ({
-      id: r.id,
-      source: 'S2',
-      source_label: 'GS Modus',
-      date: r.erstellt_am || null,
-      title: r.projekt_name || r.bereich || 'GS-Projekt',
-      detail: [r.bereich, r.tarif].filter(Boolean).join(' · '),
-      status: r.status || 'neu',
-      partner: extractPartner(r.notiz),
-      quelle: r.quelle || 'direkt',
-    }));
+    const s2Leads = s2.map((r) => {
+      const k = (r.kunde_id && kundeById[r.kunde_id]) || {};
+      return {
+        id: r.id,
+        source: 'S2',
+        source_label: 'GS Modus',
+        date: r.erstellt_am || null,
+        title: r.projekt_name || r.bereich || 'GS-Projekt',
+        detail: [r.bereich, r.tarif].filter(Boolean).join(' · '),
+        status: r.status || 'neu',
+        partner: extractPartner(r.notiz),
+        quelle: r.quelle || 'direkt',
+        // Detailfelder (Block 6) – alles für Planung + Erstgespräch.
+        bereich: r.bereich || null, objekttyp: r.objekttyp || null,
+        tarif: r.tarif || null, tarif_preis: r.tarif_preis || null,
+        gewuenschter_start: r.gewuenschter_start || null,
+        geschaetzte_stunden: r.geschaetzte_stunden || null,
+        beschreibung: r.beschreibung || null, notiz: r.notiz || null,
+        team: extractTeam(r.notiz),
+        firma: k.firma || null, kontakt: k.kontaktperson || null,
+        telefon: k.telefon || null, email: k.email || null,
+        adresse: k.adresse || null, plz: k.plz || null, ort: k.ort || null,
+      };
+    });
 
     const sources = {
       S1: { label: 'Baby BOB Scanner', sublabel: 'B2C Leads', count: s1Leads.length, leads: sortByDate(s1Leads) },
@@ -123,5 +143,12 @@ function sortByDate(arr) {
 function extractPartner(notiz) {
   if (!notiz || typeof notiz !== 'string') return null;
   const m = notiz.match(/Wunsch-Techniker:\s*([^·]+)/i);
+  return m ? m[1].trim() : null;
+}
+
+// Team is stored as "Team: 2er-Team Team 1 (… ) – Name & Name" in notiz (Block 6/7).
+function extractTeam(notiz) {
+  if (!notiz || typeof notiz !== 'string') return null;
+  const m = notiz.match(/Team:\s*([^·]+)/i);
   return m ? m[1].trim() : null;
 }
