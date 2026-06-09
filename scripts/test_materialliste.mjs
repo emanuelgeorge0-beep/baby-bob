@@ -35,7 +35,7 @@ try {
   // Techniker sends materialliste
   await setRole('techniker');
   const techTok = (await login(ACC.email, ACC.password)).access_token;
-  const send = await api('nachrichten', { action: 'send', typ: 'materialliste', projekt_id: projektId, inhalt: { positionen: [{ position: 'Kupferrohr 18mm', menge: '5', einheit: 'm' }], notiz: 'Bitte bestellen', von_name: 'Dimitri Grill' } }, techTok);
+  const send = await api('nachrichten', { action: 'send', typ: 'materialliste', projekt_id: projektId, empfaenger_email: pEmail, projekt_name: 'ML Projekt', inhalt: { positionen: [{ position: 'Kupferrohr 18mm', menge: '5', einheit: 'm' }], notiz: 'Bitte bestellen', von_name: 'Dimitri Grill' } }, techTok);
   is('techniker send materialliste → 200', send.status === 200 && send.body?.ok, JSON.stringify(send.body));
   is('routed to partner (an_id)', send.body?.nachricht?.an_id === partnerId, send.body?.nachricht?.an_id);
   is('typ materialliste', send.body?.nachricht?.typ === 'materialliste');

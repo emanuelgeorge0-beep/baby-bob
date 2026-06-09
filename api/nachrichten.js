@@ -8,6 +8,8 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KE
 const SB = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
 // Materiallisten-Mail: Absender IMMER fix info@george-solutions.ch (nicht der eingeloggte Techniker).
 const MATERIAL_FROM = 'George Solutions <info@george-solutions.ch>';
+// Fallback-Empfänger (GS-Büro), falls keine gültige Projektleiter-Adresse mitkommt.
+const MATERIAL_OFFICE = 'info@george-solutions.ch';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -63,15 +65,20 @@ async function send(res, user, role, body) {
   const empfEmail = (empfEmailRaw || '').trim();
   T('vor-validierung', { typ, empfaenger_email: empfEmail });
 
-  // Block 3: Materialliste zusätzlich per E-Mail an den Projektleiter (Hauptkanal).
-  const mailRequested = typ === 'materialliste' && empfEmail.length > 0;
+  // Block 3: Eine Materialliste löst IMMER eine Mail aus (Hauptkanal). Fehlt/ungültig die
+  // Empfängeradresse (z.B. veralteter Frontend-Cache), geht sie als Fallback ans GS-Büro,
+  // damit die Liste NIE still verloren geht. Absender bleibt fix info@george-solutions.ch.
+  const isEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim());
+  const mailRequested = typ === 'materialliste';
+  const recipient = isEmail(empfEmail) ? empfEmail : MATERIAL_OFFICE;
+  const fallbackUsed = mailRequested && !isEmail(empfEmail);
   // (C) Nach der Validierung.
-  T('nach-validierung', { mailRequested, reason: typ !== 'materialliste' ? 'typ!=materialliste' : (empfEmail ? 'ok' : 'empfaenger_email leer') });
+  T('nach-validierung', { mailRequested, recipient, fallbackUsed });
 
   let mailResult = null;
   if (mailRequested) {
-    T('vor-sendMaterialEmail', { to: empfEmail });
-    mailResult = await sendMaterialEmail(user, body, T);
+    T('vor-sendMaterialEmail', { to: recipient, fallbackUsed });
+    mailResult = await sendMaterialEmail(user, body, recipient, fallbackUsed, T);
     T('nach-sendMaterialEmail', mailResult);
   }
 
@@ -105,7 +112,7 @@ function esc(s) {
 
 // Materialliste per Resend an den Projektleiter. Absender fix info@george-solutions.ch;
 // reply_to = Techniker-Mail (Punycode-sicher via Helper; ungültig → reply_to entfällt, Mail geht trotzdem).
-async function sendMaterialEmail(user, body, T = () => {}) {
+async function sendMaterialEmail(user, body, recipient, fallbackUsed = false, T = () => {}) {
   const inhalt = body.inhalt || {};
   const positionen = Array.isArray(inhalt.positionen) ? inhalt.positionen : [];
   const projektName = (body.projekt_name || inhalt.projekt_name || 'Projekt').toString();
@@ -121,6 +128,7 @@ async function sendMaterialEmail(user, body, T = () => {}) {
 
   const inner = `
     <div style="display:inline-block;background:#FFD24A;color:#0a1628;font-weight:800;font-size:12px;padding:4px 12px;border-radius:50px;margin-bottom:14px;">📦 MATERIALLISTE</div>
+    ${fallbackUsed ? '<p style="margin:0 0 12px;padding:10px 12px;background:rgba(255,210,74,0.12);border:1px solid rgba(255,210,74,0.35);border-radius:8px;color:#FFD24A;font-size:13px;">⚠️ Ohne Empfängeradresse gesendet – bitte intern dem richtigen Projektleiter zuordnen.</p>' : ''}
     <h2 style="margin:0 0 4px;font-size:20px;color:#fff;">${esc(projektName)}</h2>
     <p style="margin:0 0 16px;color:rgba(232,237,245,0.6);">Erfasst von <strong style="color:#fff;">${esc(vonName)}</strong></p>
     ${posRows ? `<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:12px;"><thead><tr><th style="text-align:left;padding:0 0 6px;color:rgba(232,237,245,0.5);font-weight:600;">Position</th><th style="text-align:left;padding:0 0 6px;color:rgba(232,237,245,0.5);font-weight:600;">Menge</th></tr></thead><tbody>${posRows}</tbody></table>` : '<p style="color:rgba(232,237,245,0.6);">Keine Positionen erfasst.</p>'}
@@ -135,12 +143,12 @@ async function sendMaterialEmail(user, body, T = () => {}) {
     attachments = [{ filename: 'material-foto.jpg', content: foto.split('base64,')[1] }];
   }
 
-  const to = (body.empfaenger_email || '').trim();
-  T('sendMaterialEmail vor resend', { to, from: MATERIAL_FROM, reply_to: user.email || null, positionen: positionen.length, foto: !!attachments });
+  const to = recipient || MATERIAL_OFFICE;
+  T('sendMaterialEmail vor resend', { to, from: MATERIAL_FROM, reply_to: user.email || null, positionen: positionen.length, foto: !!attachments, fallbackUsed });
   const result = await sendResendEmail({
     to,
     from: MATERIAL_FROM,
-    subject: `📦 Materialliste – ${projektName}`,
+    subject: `📦 Materialliste – ${projektName}${fallbackUsed ? ' (ohne Empfänger)' : ''}`,
     html: mailShell(inner),
     replyTo: user.email || null,
     attachments,
