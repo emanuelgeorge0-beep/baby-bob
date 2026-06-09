@@ -40,6 +40,14 @@ export default async function handler(req, res) {
 }
 
 async function send(res, user, role, body) {
+  const trace = [];
+  const T = (step, info) => { const line = info === undefined ? step : step + ' ' + JSON.stringify(info); trace.push(line); console.log('[MATERIAL-MAIL]', line); };
+
+  // (A) Eingehender Body – sofort am Anfang.
+  const empfEmailRaw = body.empfaenger_email;
+  const empfTelRaw = body.empfaenger_tel;
+  T('handler-in', { typ: body.typ, empfaenger_email: empfEmailRaw, empfaenger_tel: empfTelRaw, projekt_name: body.projekt_name, has_inhalt: !!body.inhalt, von: user.email });
+
   // typ is CHECK-constrained on the table; coerce to an allowed value.
   const typ = ['materialliste', 'rapport', 'nachricht'].includes(body.typ) ? body.typ : 'nachricht';
   const projekt_id = body.projekt_id || null;
@@ -51,10 +59,21 @@ async function send(res, user, role, body) {
   }
   const base = { von_id: user.id, an_id, typ, inhalt: body.inhalt || {}, status: 'ungelesen' };
 
+  // (B) Vor der Validierung.
+  const empfEmail = (empfEmailRaw || '').trim();
+  T('vor-validierung', { typ, empfaenger_email: empfEmail });
+
   // Block 3: Materialliste zusätzlich per E-Mail an den Projektleiter (Hauptkanal).
-  const mailRequested = typ === 'materialliste' && !!(body.empfaenger_email || '').trim();
-  let mailSent = null;
-  if (mailRequested) mailSent = await sendMaterialEmail(user, body);
+  const mailRequested = typ === 'materialliste' && empfEmail.length > 0;
+  // (C) Nach der Validierung.
+  T('nach-validierung', { mailRequested, reason: typ !== 'materialliste' ? 'typ!=materialliste' : (empfEmail ? 'ok' : 'empfaenger_email leer') });
+
+  let mailResult = null;
+  if (mailRequested) {
+    T('vor-sendMaterialEmail', { to: empfEmail });
+    mailResult = await sendMaterialEmail(user, body, T);
+    T('nach-sendMaterialEmail', mailResult);
+  }
 
   // projekt_id FK may reference gs_anfragen (Emanuel's schema), so a gs_projekte
   // id would violate it — retry without projekt_id on FK error. (Best-effort In-App-Kopie.)
@@ -63,15 +82,21 @@ async function send(res, user, role, body) {
 
   // Bei der Materialliste richtet sich der Erfolg nach der E-Mail (Inbox-Kopie ist optional).
   if (mailRequested) {
-    if (mailSent) return res.status(200).json({ ok: true, mail_sent: true, nachricht: r.row || null });
-    return res.status(502).json({ error: 'E-Mail an Projektleiter konnte nicht gesendet werden', mail_sent: false });
+    if (mailResult && mailResult.ok) {
+      T('return 200 mail_sent=true', { id: mailResult.id });
+      return res.status(200).json({ ok: true, mail_sent: true, resend_id: mailResult.id || null, nachricht: r.row || null, _debug: trace });
+    }
+    T('return 502 mail_failed', mailResult);
+    return res.status(502).json({ error: 'E-Mail an Projektleiter konnte nicht gesendet werden', mail_sent: false, mail_error: (mailResult && mailResult.error) || null, _debug: trace });
   }
 
   if (!r.row) {
-    if (r.notMigrated) return res.status(503).json({ error: 'gs_nachrichten nicht migriert' });
-    return res.status(500).json({ error: 'Nachricht konnte nicht gesendet werden' });
+    if (r.notMigrated) { T('return 503 not-migrated'); return res.status(503).json({ error: 'gs_nachrichten nicht migriert', _debug: trace }); }
+    T('return 500 insert-failed');
+    return res.status(500).json({ error: 'Nachricht konnte nicht gesendet werden', _debug: trace });
   }
-  return res.status(200).json({ ok: true, nachricht: r.row });
+  T('return 200 inapp-only (kein Mailversand angefordert)');
+  return res.status(200).json({ ok: true, nachricht: r.row, _debug: trace });
 }
 
 function esc(s) {
@@ -80,7 +105,7 @@ function esc(s) {
 
 // Materialliste per Resend an den Projektleiter. Absender fix info@george-solutions.ch;
 // reply_to = Techniker-Mail (Punycode-sicher via Helper; ungültig → reply_to entfällt, Mail geht trotzdem).
-async function sendMaterialEmail(user, body) {
+async function sendMaterialEmail(user, body, T = () => {}) {
   const inhalt = body.inhalt || {};
   const positionen = Array.isArray(inhalt.positionen) ? inhalt.positionen : [];
   const projektName = (body.projekt_name || inhalt.projekt_name || 'Projekt').toString();
@@ -110,14 +135,18 @@ async function sendMaterialEmail(user, body) {
     attachments = [{ filename: 'material-foto.jpg', content: foto.split('base64,')[1] }];
   }
 
-  return await sendResendEmail({
-    to: (body.empfaenger_email || '').trim(),
+  const to = (body.empfaenger_email || '').trim();
+  T('sendMaterialEmail vor resend', { to, from: MATERIAL_FROM, reply_to: user.email || null, positionen: positionen.length, foto: !!attachments });
+  const result = await sendResendEmail({
+    to,
     from: MATERIAL_FROM,
     subject: `📦 Materialliste – ${projektName}`,
     html: mailShell(inner),
     replyTo: user.email || null,
     attachments,
   });
+  T('sendMaterialEmail nach resend', result);
+  return result;
 }
 
 async function insertNachricht(row) {
