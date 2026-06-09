@@ -6301,7 +6301,15 @@ function pdOpenProjekt(id){
   c.innerHTML='<div class="admin-empty">Lädt…</div>';
   Promise.all([
     gsAuthApi('tagesrapport',{action:'list',projekt_id:id}).then(function(d){return d.rapporte||[];}).catch(function(){return [];}),
-    gsAuthApi('nachrichten',{action:'inbox',projekt_id:id}).then(function(d){return (d.nachrichten||[]).filter(function(n){return n.typ==='materialliste';});}).catch(function(){return [];})
+    // gs_nachrichten.projekt_id wird wegen FK-Eigenheit oft NICHT gespeichert → zusätzlich
+    // über den Projektnamen (inhalt.projekt_name) matchen, damit nichts verloren geht.
+    gsAuthApi('nachrichten',{action:'inbox'}).then(function(d){
+      return (d.nachrichten||[]).filter(function(n){
+        if(n.typ!=='materialliste')return false;
+        var inh=n.inhalt||{};
+        return n.projekt_id===id || (inh.projekt_name&&inh.projekt_name===p.name);
+      });
+    }).catch(function(){return [];})
   ]).then(function(arr){ pdRenderProjektDetail(p,arr[0],arr[1]); });
 }
 function pdRenderProjektDetail(p,rapporte,materiallisten){
