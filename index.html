@@ -5729,9 +5729,11 @@ function trLoadWeek(woche,jahr){
   gsAuthApi('tagesrapport',body).then(function(d){
     var wd=['Mo','Di','Mi','Do','Fr'];var ic={eingereicht:'🟢',entwurf:'✏️',ausstehend:'🟡',offen:'⚪',ueberfaellig:'🔴'};
     var el=document.getElementById('tr-week');if(!el)return;
+    // KW-Anzeige kommt ausschliesslich aus dem ISO-Dropdown (#tr-kw). Hier nur noch der
+    // Mo–Fr-Status-Strip (Tag eingereicht/offen) – die alte "KW x/5"-Zelle ist entfernt.
     el.innerHTML=(d.days||[]).map(function(day,i){
       return '<div class="tr-wday"><div class="tr-wday-d">'+wd[i]+'</div><div class="tr-wday-s">'+(ic[day.status]||'⚪')+'</div></div>';
-    }).join('')+'<div class="tr-wday" style="flex:1.3;"><div class="tr-wday-d">KW '+(d.woche||'')+'</div><div class="tr-wday-s" style="font-size:12px;font-weight:800;color:#FFD700;">'+(d.eingereicht||0)+'/5</div></div>';
+    }).join('');
   });
 }
 function trSave(status){
