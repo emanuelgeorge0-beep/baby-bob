@@ -18,11 +18,12 @@ export default async function handler(req, res) {
   try {
     const { action, email, password, token } = req.body || {};
     switch (action) {
-      case 'magic_link': return await sendMagicLink(res, email);
-      case 'login':      return await loginWithPassword(res, email, password);
-      case 'verify':     return await verifyToken(res, token);
-      case 'refresh':    return await refreshSession(res, req.body?.refresh_token);
-      default:           return res.status(400).json({ error: 'Unknown action' });
+      case 'magic_link':     return await sendMagicLink(res, email);
+      case 'login':          return await loginWithPassword(res, email, password);
+      case 'reset_password': return await sendPasswordReset(res, email);
+      case 'verify':         return await verifyToken(res, token);
+      case 'refresh':        return await refreshSession(res, req.body?.refresh_token);
+      default:               return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
     console.error('Auth Error:', err.message);
@@ -45,8 +46,28 @@ async function sendMagicLink(res, email) {
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     const msg = err.msg || err.message || err.error_description || '';
-    if (/rate limit/i.test(msg)) return res.status(429).json({ error: 'Zu viele Anfragen – bitte in einer Minute erneut versuchen.' });
+    if (/rate limit/i.test(msg)) return res.status(429).json({ error: 'E-Mail-Limit erreicht – bitte kurz warten ODER mit Passwort anmelden.' });
     return res.status(400).json({ error: msg || 'Magic Link fehlgeschlagen' });
+  }
+  return res.status(200).json({ ok: true });
+}
+
+// Passwort-Reset/-Setzen: schickt eine Recovery-Mail (Supabase). Partner/Techniker können
+// sich so selbst ein Passwort setzen. Antwort immer ok (kein User-Enumeration-Leak).
+async function sendPasswordReset(res, email) {
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error: 'Bitte gültige E-Mail eingeben' });
+  }
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+    method: 'POST',
+    headers: SB_HEADERS,
+    body: JSON.stringify({ email }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    const msg = err.msg || err.message || err.error_description || '';
+    if (/rate limit/i.test(msg)) return res.status(429).json({ error: 'E-Mail-Limit erreicht – bitte kurz warten und erneut versuchen.' });
+    // Bei sonstigen Fehlern trotzdem neutral bestätigen (kein Enumeration-Leak).
   }
   return res.status(200).json({ ok: true });
 }
@@ -60,7 +81,12 @@ async function loginWithPassword(res, email, password) {
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
-    return res.status(401).json({ error: err.error_description || err.msg || 'Login fehlgeschlagen' });
+    const raw = err.error_description || err.msg || err.error || '';
+    // Häufigster Fall: noch kein Passwort gesetzt (nur Magic-Link-Nutzer) → klarer Hinweis.
+    if (/invalid login credentials|invalid_grant|invalid credentials/i.test(raw)) {
+      return res.status(401).json({ error: "Noch kein Passwort gesetzt? Nutze den Magic Link oder setze eines über 'Passwort vergessen'.", no_password: true });
+    }
+    return res.status(401).json({ error: raw || 'Login fehlgeschlagen' });
   }
   const data = await r.json();
   const role = await getUserRole(data.user?.id);

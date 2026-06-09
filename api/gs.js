@@ -4,13 +4,13 @@
 // und verschickt zwei Mails: (1) Lead-Alarm an GS, (2) Bestätigung an Kunden.
 // Mailfehler dürfen die Lead-Speicherung NIEMALS blockieren (nur loggen).
 
+import { sendResendEmail } from '../lib/mail.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
 // ── Mail-Konfiguration (leicht änderbar) ──
-const RESEND_API_KEY = process.env.RESEND_API_KEY;                       // Vercel-Env (Platzhalter eintragen)
 const GS_LEAD_RECIPIENTS = ['info@george-solutions.ch', 'emanuelgeorge0@gmail.com'];
-const GS_MAIL_FROM = process.env.GS_MAIL_FROM || 'George Solutions <noreply@george-solutions.ch>';
 const GS_PHONE = process.env.GS_PHONE || '+41 XX XXX XX XX';            // erscheint als tel:-Link in den Mails
 const GS_LOGO_URL = 'https://baby-bob.vercel.app/lib/logo-gs.png';
 
@@ -198,67 +198,6 @@ function deriveQuelle(t) {
   if (/duckduckgo\./.test(ref)) return 'duckduckgo';
   if (/baby-bob|george-solutions/.test(ref)) return 'direkt';
   return 'direkt';
-}
-
-// ── E-Mail-Adresse IDN-/Punycode-sicher machen (Resend lehnt Umlaut-Domains mit 422 ab) ──
-// Kodiert NUR den Domain-Teil in ASCII (z.B. rüttiag.ch → xn--rttiag-95a.ch).
-// Gibt bei leerer/ungültiger Adresse oder Fehler null zurück (Aufrufer entscheidet, was dann passiert).
-function asciiEmail(addr) {
-  if (typeof addr !== 'string') return null;
-  const trimmed = addr.trim();
-  const at = trimmed.lastIndexOf('@');
-  if (at <= 0 || at === trimmed.length - 1) return null;       // kein/leerer local- oder domain-Part
-  const localPart = trimmed.slice(0, at);
-  const domain = trimmed.slice(at + 1);
-  try {
-    // new URL(...).hostname liefert die Domain bereits in ASCII/Punycode (IDN).
-    const asciiDomain = new URL('http://' + domain).hostname;
-    if (!asciiDomain) return null;
-    return localPart + '@' + asciiDomain;
-  } catch {
-    return null;
-  }
-}
-
-// ── Mailversand via Resend (REST, keine npm-Dependency). Wirft NICHT nach aussen. ──
-async function sendResendEmail({ to, subject, html, replyTo }) {
-  if (!RESEND_API_KEY) {
-    console.warn('GS mail: RESEND_API_KEY fehlt – Mailversand übersprungen.');
-    return false;
-  }
-  try {
-    // Empfänger Punycode-sicher machen; unkonvertierbare Adressen rausfiltern.
-    const toList = (Array.isArray(to) ? to : [to])
-      .map((a) => asciiEmail(a) || (typeof a === 'string' ? a.trim() : a))
-      .filter((a) => typeof a === 'string' && a.length > 0);
-    // reply_to ist optional: nur setzen, wenn es sauber ASCII-konvertierbar ist –
-    // ansonsten weglassen, damit die Mail TROTZDEM rausgeht (Lead darf nie verloren gehen).
-    const asciiReplyTo = replyTo ? asciiEmail(replyTo) : null;
-
-    const ctrl = new AbortController();
-    const tm = setTimeout(() => ctrl.abort(), 8000);
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${RESEND_API_KEY}` },
-      body: JSON.stringify({
-        from: GS_MAIL_FROM,
-        to: toList,
-        subject,
-        html,
-        ...(asciiReplyTo ? { reply_to: asciiReplyTo } : {}),
-      }),
-      signal: ctrl.signal,
-    });
-    clearTimeout(tm);
-    if (!r.ok) {
-      console.error('Resend Fehler:', r.status, await r.text().catch(() => ''));
-      return false;
-    }
-    return true;
-  } catch (e) {
-    console.error('Resend Exception:', e.message);
-    return false;
-  }
 }
 
 function esc(s) {

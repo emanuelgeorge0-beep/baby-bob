@@ -704,6 +704,15 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .pb-tot{font-weight:800;color:#FFD700;border-top:1px solid rgba(255,255,255,0.14);margin-top:4px;padding-top:8px;}
 
 /* ═══ TAGESRAPPORT (techniker) ═══ */
+.tr-kwbar{display:flex;align-items:center;gap:8px;padding:12px 18px 0;}
+.tr-kwbar select{flex:1;margin:0;}
+/* HKLS-Schnell-Erfassung: Tabs + Chips (Block 4) */
+.tm-chip-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px;}
+.tm-chip-tab{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:6px 13px;font-size:12px;font-weight:700;color:rgba(232,237,245,0.7);cursor:pointer;}
+.tm-chip-tab.act{background:#FFD24A;color:#0a1628;border-color:#FFD24A;}
+.tm-chip-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+.tm-chip{background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.22);border-radius:18px;padding:6px 11px;font-size:12px;color:#cfe2ff;cursor:pointer;line-height:1.2;}
+.tm-chip:active{transform:scale(0.96);}
 .tr-week{display:flex;gap:6px;padding:14px 18px 0;}
 .tr-wday{flex:1;text-align:center;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:11px;padding:8px 2px;}
 .tr-wday-d{font-size:10px;color:rgba(232,237,245,0.45);}
@@ -1861,6 +1870,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="login-pw-wrap" id="login-pw-wrap">
       <input class="login-inp" id="login-pw" type="password" placeholder="Passwort" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginPassword()"/>
       <button class="login-btn-magic" onclick="loginPassword()">Anmelden</button>
+      <div class="login-skip" style="margin-top:4px;" onclick="loginResetPassword()">Passwort vergessen / neu setzen</div>
     </div>
     <div class="login-msg" id="login-msg"></div>
     <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner)</div>
@@ -2118,13 +2128,18 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <button class="tr-nav-btn" onclick="showTechProfil()">👷 Profil</button>
   </div>
   <div class="tr-tarif">💰 Dein Tarif: <strong>CHF 37.– bis 43.76/h</strong> <span>(Kundenpreis abweichend)</span></div>
+  <!-- KW-Auswahl (ISO-8601, ganzes Jahr) – mit Rapport-Datum verknüpft -->
+  <div class="tr-kwbar">
+    <label class="ob-lbl" for="tr-kw" style="margin:0;white-space:nowrap;">📅 Kalenderwoche</label>
+    <select class="login-inp" id="tr-kw" onchange="trKwChange()"></select>
+  </div>
   <!-- Week strip -->
   <div class="tr-week" id="tr-week"></div>
   <div class="tr-form">
     <div class="ob-lbl">Baustelle / Objekt *</div>
     <select class="login-inp" id="tr-projekt" onchange="trProjektChange()"><option value="">– Projekt wählen –</option></select>
     <div class="tr-row2">
-      <div><div class="ob-lbl">Datum</div><input class="login-inp" id="tr-datum" type="date"/></div>
+      <div><div class="ob-lbl">Datum</div><input class="login-inp" id="tr-datum" type="date" onchange="trDatumChange()"/></div>
       <div><div class="ob-lbl">Projektnr.</div><input class="login-inp" id="tr-pnr" type="text" placeholder="Projektnr." inputmode="text" autocomplete="off"/></div>
     </div>
     <div class="tr-row2">
@@ -2202,6 +2217,9 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       <div class="tr-bob-thinking" id="tm-voice-thinking" style="display:none;"><span class="tr-spinner" aria-hidden="true"></span> BOB erstellt deine Materialliste…</div>
       <div class="tr-bob-result" id="tm-voice-result" style="display:none;"></div>
     </div>
+    <div class="ob-lbl">Schnell-Erfassung (tippen = Position hinzufügen)</div>
+    <div class="tm-chip-tabs" id="tm-chip-tabs"></div>
+    <div class="tm-chip-grid" id="tm-chip-grid"></div>
     <div class="ob-lbl">Positionen</div>
     <div id="tm-positions"></div>
     <button class="admin-act" style="margin-top:8px;" onclick="tmAddRow()">+ Position</button>
@@ -2213,6 +2231,11 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="ob-lbl">Notiz / Sprachmemo</div>
     <textarea class="login-inp" id="tm-notiz" rows="2" placeholder="Bemerkung an den Projektleiter…"></textarea>
     <button class="login-btn-pw" id="tm-dictate" style="margin-top:8px;" onclick="tmDictate()">🎙️ Sprachmemo diktieren</button>
+    <div class="ob-lbl">Empfänger (Projektleiter)</div>
+    <div class="tr-row2">
+      <div><div class="ob-lbl" style="margin-top:0;">E-Mail *</div><input class="login-inp" id="tm-empf-email" type="email" inputmode="email" autocomplete="email" placeholder="projektleiter@firma.ch"/></div>
+      <div><div class="ob-lbl" style="margin-top:0;">Telefon (optional)</div><input class="login-inp" id="tm-empf-tel" type="tel" inputmode="tel" placeholder="+41 …"/></div>
+    </div>
     <button class="login-btn-magic" id="tm-send" style="margin-top:14px;" onclick="tmSend()">📨 An Projektleiter senden</button>
     <div class="login-msg" id="tm-msg"></div>
   </div>
@@ -4489,6 +4512,7 @@ function showScreen(id){
 }
 
 // ── Init on page load ──
+var pendingRecovery=false;  // true nach Klick auf Passwort-Recovery-Link (vor IIFE deklariert!)
 (function initAuth(){
   // 1. Check for magic link callback (#access_token=...)
   var hash=window.location.hash;
@@ -4499,6 +4523,7 @@ function showScreen(id){
     });
     if(params.access_token){
       if(params.refresh_token){authRefresh=params.refresh_token;try{localStorage.setItem('bob_refresh',params.refresh_token);}catch(e){}}
+      if(params.type==='recovery') pendingRecovery=true;  // Recovery-Link → Passwort setzen
       history.replaceState(null,'',window.location.pathname);
       verifyAndRoute(params.access_token);
       return;
@@ -4543,6 +4568,7 @@ function verifyAndRoute(token){
 // ── Onboarding gate: forced password change → mandatory profile → dashboard ──
 function routeAfterAuth(token,d){
   authToken=token;authUser=d.user;authRole=d.role;authTechName=d.tech_name;
+  if(pendingRecovery){pendingRecovery=false;showScreen('pw-change');return;}
   if(d.must_change_password){showScreen('pw-change');return;}
   if((d.role==='gs_partner'||d.role==='techniker')&&!d.profile_complete){
     showProfileSetup(d.role);return;
@@ -4597,6 +4623,20 @@ function togglePwForm(){
   var w=document.getElementById('login-pw-wrap');
   if(w) w.classList.toggle('open');
 }
+function openPwForm(){ var w=document.getElementById('login-pw-wrap'); if(w) w.classList.add('open'); }
+// Passwort vergessen / neu setzen: schickt eine Recovery-Mail; danach kann der Nutzer
+// über den Link ein Passwort setzen (siehe Recovery-Callback in initAuth).
+function loginResetPassword(){
+  var email=(document.getElementById('login-email')||{}).value.trim();
+  if(!email){setLoginMsg('Bitte zuerst E-Mail eingeben','err');openPwForm();return;}
+  setLoginMsg('Sende Link zum Passwort-Setzen…','');
+  fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'reset_password',email:email})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.error){setLoginMsg(d.error,'err');return;}
+    setLoginMsg('✓ E-Mail unterwegs an '+email+': Über den Link kannst du ein Passwort setzen.','');
+  }).catch(function(){setLoginMsg('Verbindungsfehler – bitte erneut versuchen','err');});
+}
 
 function loginMagicLink(){
   var email=(document.getElementById('login-email')||{}).value.trim();
@@ -4609,7 +4649,7 @@ function loginMagicLink(){
     body:JSON.stringify({action:'magic_link',email:email})
   }).then(function(r){return r.json();}).then(function(d){
     if(d.error){
-      if(/viele|rate/i.test(d.error)){ rateLimitCountdown('login-magic-btn','login-msg','✨ Magic Link senden',60); }
+      if(/viele|rate|limit/i.test(d.error)){ openPwForm(); rateLimitCountdown('login-magic-btn','login-msg','✨ Magic Link senden',60); }
       else { if(btn){btn.disabled=false;btn.innerHTML='✨ Magic Link senden';} setLoginMsg(d.error,'err'); }
     } else{
       if(btn){btn.disabled=false;btn.innerHTML='✨ Magic Link senden';}
@@ -4650,7 +4690,7 @@ function loginPassword(){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({action:'login',email:email,password:pw})
   }).then(function(r){return r.json();}).then(function(d){
-    if(d.error){setLoginMsg(d.error,'err');}
+    if(d.error){ setLoginMsg(d.error,'err'); if(d.no_password) openPwForm(); }
     else{
       localStorage.setItem('bob_auth_token',d.access_token);
       if(d.refresh_token){authRefresh=d.refresh_token;try{localStorage.setItem('bob_refresh',d.refresh_token);}catch(e){}}
@@ -5012,7 +5052,8 @@ function copyTempPw(){
 
 var BEREICHE=['Heizung','Sanitär','Lüftung','Klima','Kombiniert'];
 // Block 2: feste, rechnungsreife HKLS-Tätigkeiten (Mehrfachauswahl, KEINE KI-Generierung).
-var TR_ARBEITEN=['Montage','Wartung','Reparatur','Installation','Inbetriebnahme','Demontage','Service','Besprechung','Fahrt',
+var TR_ARBEITEN=['Montage','Demontage','Spülung','Druckprobe','Entlüftung','Inbetriebnahme','Isolation','Stemmarbeiten','Kernbohrung','Schweissen','Löten','Pressen','Reparatur','Wartung','Störungsbehebung',
+  'Installation','Service','Besprechung','Fahrt',
   'Fertigmontage','Ablaufleitung DN56 installiert','Ablaufleitung DN63 installiert','Ablaufleitung DN75 installiert','Ablaufleitung DN110 installiert',
   'Aluverbundrohr installiert','C-Stahl Heizungsinstallation','Edelstahl Wasserinstallation','Rohrisolation','Druckprobe durchgeführt'];
 // vom Techniker per Freitext ergänzte Tätigkeiten (Session) + Auswahl-Status bleibt erhalten
@@ -5363,6 +5404,7 @@ function initTechRapport(){
     }).catch(function(){});
   }catch(e){}
   document.getElementById('tr-datum').value=new Date().toISOString().slice(0,10);
+  trBuildKwOptions();
   chipsInto('tr-arbeiten',trArbeitenAll(),[],true);
   chipsInto('tr-material',TR_MATERIAL,[],true,trRenderMaterialQty);
   trRenderMaterialQty();
@@ -5626,8 +5668,57 @@ function trInitSign(){
   cv.ontouchstart=start;cv.ontouchmove=move;cv.ontouchend=end;
 }
 function trClearSign(){if(trSignCtx){trSignCtx.clearRect(0,0,300,120);trSignHas=false;}}
-function trLoadWeek(){
-  gsAuthApi('tagesrapport',{action:'week'}).then(function(d){
+// ── KW-Auswahl (ISO-8601) ──────────────────────────────────────────────
+// Dec 28 liegt immer in der letzten ISO-Woche → so erkennt man 52- vs. 53-KW-Jahre.
+function trWeeksInYear(y){ return getKW(new Date(y,11,28)); }
+// Montag der gewünschten ISO-Woche (UTC; identisch zur Backend-Berechnung mondayToFriday).
+function trMondayOfWeek(y,kw){
+  var simple=new Date(Date.UTC(y,0,1+(kw-1)*7));
+  var dow=simple.getUTCDay()||7;
+  var monday=new Date(simple);monday.setUTCDate(simple.getUTCDate()-dow+1);
+  return monday;
+}
+function trFmtDM(d){return ('0'+d.getUTCDate()).slice(-2)+'.'+('0'+(d.getUTCMonth()+1)).slice(-2)+'.';}
+function trBuildKwOptions(year){
+  var sel=document.getElementById('tr-kw'); if(!sel) return;
+  var now=new Date(), y=year||now.getFullYear(), curKW=getKW(now), curY=now.getFullYear();
+  var n=trWeeksInYear(y), html='';
+  for(var w=1;w<=n;w++){
+    var mon=trMondayOfWeek(y,w), fri=new Date(mon); fri.setUTCDate(mon.getUTCDate()+4);
+    var seld=(y===curY&&w===curKW)?' selected':'';
+    html+='<option value="'+w+'"'+seld+'>KW '+w+' ('+trFmtDM(mon)+'–'+trFmtDM(fri)+' '+y+')</option>';
+  }
+  sel.innerHTML=html; sel.dataset.year=String(y);
+}
+// KW-Dropdown geändert → Datum in diese Woche legen (heute, falls drin; sonst Montag) + Woche laden.
+function trKwChange(){
+  var sel=document.getElementById('tr-kw'); if(!sel) return;
+  var w=parseInt(sel.value,10)||getKW(new Date());
+  var y=parseInt(sel.dataset.year,10)||new Date().getFullYear();
+  var now=new Date(), dInp=document.getElementById('tr-datum');
+  if(dInp){
+    if(getKW(now)===w && now.getFullYear()===y) dInp.value=now.toISOString().slice(0,10);
+    else dInp.value=isoDate(trMondayOfWeek(y,w));
+  }
+  trLoadWeek(w,y);
+  var pj=document.getElementById('tr-projekt'); if(pj&&pj.value) trProjektChange();
+}
+// Datum manuell geändert → KW-Dropdown nachziehen (Abrechnung folgt immer dem Datum).
+function trDatumChange(){
+  var dInp=document.getElementById('tr-datum'), sel=document.getElementById('tr-kw');
+  if(!dInp||!sel||!dInp.value) return;
+  var p=dInp.value.split('-'), d=new Date(+p[0],+p[1]-1,+p[2]);
+  var kw=getKW(d), y=d.getFullYear();
+  if(parseInt(sel.dataset.year,10)!==y) trBuildKwOptions(y);
+  sel.value=String(kw);
+  trLoadWeek(kw,y);
+  var pj=document.getElementById('tr-projekt'); if(pj&&pj.value) trProjektChange();
+}
+function trLoadWeek(woche,jahr){
+  var sel=document.getElementById('tr-kw');
+  if(woche==null && sel && sel.value){ woche=parseInt(sel.value,10); jahr=parseInt(sel.dataset.year,10)||undefined; }
+  var body={action:'week'}; if(woche){body.woche=woche;} if(jahr){body.jahr=jahr;}
+  gsAuthApi('tagesrapport',body).then(function(d){
     var wd=['Mo','Di','Mi','Do','Fr'];var ic={eingereicht:'🟢',entwurf:'✏️',ausstehend:'🟡',offen:'⚪',ueberfaellig:'🔴'};
     var el=document.getElementById('tr-week');if(!el)return;
     el.innerHTML=(d.days||[]).map(function(day,i){
@@ -5784,6 +5875,7 @@ function showTechMaterial(){
   var sel=document.getElementById('tm-projekt');
   sel.innerHTML='<option value="">– Projekt wählen –</option>'+(trProjekte||[]).map(function(p){return '<option value="'+p.id+'">'+gsEsc(p.name)+'</option>';}).join('');
   if(!document.getElementById('tm-positions').children.length) tmAddRow();
+  tmRenderChips();
   tmFotoB64=null;document.getElementById('tm-foto-preview').innerHTML='';
   document.getElementById('tm-bob-result').style.display='none';
   var vt=document.getElementById('tm-voice-transcript'); if(vt) vt.value='';
@@ -5792,27 +5884,39 @@ function showTechMaterial(){
   setMsg('tm-msg','','');
 }
 // ── MATERIALLISTE: Voice → BOB → übernehmen (gleicher Flow wie Rapport) ──
-var tmVRec=null,tmVRecOn=false,tmVoiceData=null;
+var tmVRec=null,tmVRecOn=false,tmVoiceData=null,tmVStop=false,tmVRestartT=null;
+// Dauer-Diktat: Web Speech beendet bei Sprechpausen automatisch (onend). Damit eine lange
+// Materialliste am Stück abgelesen werden kann, starten wir bei jedem Auto-Ende neu –
+// nur ein echter Stop-Klick (tmVStop) beendet die Aufnahme wirklich. (Wie BOB-Scanner-Soll.)
 function tmVoiceDictate(){
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   var btn=document.getElementById('tm-vdictate');
   if(!SR){toast('Spracherkennung wird nicht unterstützt – bitte tippen');return;}
-  if(tmVRecOn&&tmVRec){tmVRec.stop();return;}
+  if(tmVRecOn){tmVStop=true;if(tmVRec){try{tmVRec.stop();}catch(e){}}return;}
+  tmVStop=false;
   tmVRec=new SR();tmVRec.lang='de-CH';tmVRec.interimResults=false;tmVRec.continuous=true;
-  tmVRecOn=true;if(btn){btn.classList.add('rec');btn.textContent='⏺️ Stoppen';}
   tmVRec.onresult=function(e){
     var t='';for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;}
-    var ta=document.getElementById('tm-voice-transcript');if(ta)ta.value=(ta.value?ta.value+' ':'')+t.trim();
+    t=t.trim();if(!t)return;
+    var ta=document.getElementById('tm-voice-transcript');if(ta)ta.value=(ta.value?ta.value+' ':'')+t;
   };
-  tmVRec.onend=function(){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}};
-  tmVRec.onerror=function(){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}};
-  try{tmVRec.start();}catch(e){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}}
+  tmVRec.onerror=function(ev){if(ev&&(ev.error==='not-allowed'||ev.error==='service-not-allowed'||ev.error==='audio-capture'))tmVStop=true;};
+  tmVRec.onend=function(){
+    if(tmVStop){tmVRecOn=false;if(tmVRestartT){clearTimeout(tmVRestartT);tmVRestartT=null;}if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}return;}
+    // Auto-Ende durch Stille → kurz warten und weiter zuhören (iOS braucht den Delay).
+    tmVRestartT=setTimeout(function(){
+      if(tmVStop)return;
+      try{tmVRec.start();}catch(e){tmVRestartT=setTimeout(function(){if(tmVStop)return;try{tmVRec.start();}catch(_){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}}},300);}
+    },120);
+  };
+  try{tmVRec.start();tmVRecOn=true;if(btn){btn.classList.add('rec');btn.textContent='⏺️ Aufnahme läuft… (Stop drücken wenn fertig)';}}
+  catch(e){tmVRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}}
 }
 function tmVoiceAnalyse(){
   var ta=document.getElementById('tm-voice-transcript');
   var text=(ta&&ta.value||'').trim();
   if(!text){toast('Bitte zuerst diktieren oder Text eingeben');return;}
-  if(tmVRecOn&&tmVRec){try{tmVRec.stop();}catch(e){}}
+  if(tmVRecOn){tmVStop=true;if(tmVRec){try{tmVRec.stop();}catch(e){}}}
   var btn=document.getElementById('tm-vbob-btn'),think=document.getElementById('tm-voice-thinking'),res=document.getElementById('tm-voice-result');
   if(btn)btn.disabled=true;
   if(res)res.style.display='none';
@@ -5853,6 +5957,78 @@ function tmApplyVoice(){
   var vt=document.getElementById('tm-voice-transcript'); if(vt) vt.value='';
   tmVoiceData=null;
   toast(d.positionen.length?('✓ '+d.positionen.length+' Position'+(d.positionen.length>1?'en':'')+' übernommen – jetzt editierbar'):'✓ Übernommen');
+}
+// ── Block 4: HKLS-Schnell-Erfassung. Zentrales, leicht erweiterbares Array (nur Bezeichnungen). ──
+var HKLS_MATERIAL_CHIPS=(function(){
+  function ex(prefix,sizes){return sizes.map(function(s){return prefix+' '+s;});}
+  return [
+    {id:'abwasser',label:'Abwasser',items:[].concat(
+      ex('Abzweig 45°',['56/56','63/56','75/56','90/56','110/56','110/110','110/90','110/75','50/50','63/63','75/75','90/90']),
+      ex('Bogen 45°',['40','50','56','63','75','90','110']),
+      ex('Bogen 88,5°',['56','110']),
+      ['WC-Bogen 90° 110/90','WC-Doppelbogen 110/90'],
+      ex('Rohr',['50','56','63','75','90','110']),
+      ex('Steckmuffe',['56','110']),
+      ex('Elektroschweissmuffe',['56','110']),
+      ex('Reduktion',['110/56','110/90','75/56','63/56'])
+    )},
+    {id:'sanitaer',label:'Sanitär',items:[].concat(
+      ex('T-Stück',['12','16','20','25','32']),
+      ex('T-Stück reduziert',['16/12','20/16','25/20','32/25']),
+      ex('Bogen 90°',['12','16','20','25','32']),
+      ex('Übergang IG',['1/2"-16','3/4"-20','1"-32']),
+      ex('Übergang AG',['1/2"-16','3/4"-20','1"-32']),
+      ex('Sanipex-Rohr',['12','16','20','25']),
+      ex('Bördelverschraubung',['16','20','25'])
+    )},
+    {id:'heizung',label:'Heizung',items:[].concat(
+      ex('Heizungsrohr V2A',['15','18','22','28','35','42','54']),
+      ex('Bogen 90°',['15','18','22','28','35','42','54']),
+      ex('Bogen 45°',['18','22','28','35','42','54']),
+      ex('T-Stück',['18','22','28','35','42','54']),
+      ex('Reduktion',['22/18','28/22','35/28','42/35','54/42']),
+      ex('Übergang AG/IG',['1/2"','3/4"','1"'])
+    )},
+    {id:'gas',label:'Gas',items:[].concat(
+      ex('Gas-Bogen 90°',['15','18','22','28','35','42','54']),
+      ex('Gas-T-Stück',['22','28','35','42','54']),
+      ex('Gas-Übergang AG',['1/2"','3/4"','1"'])
+    )},
+    {id:'divers',label:'Divers',items:['C-Stahl Rohr','Pressfitting','Lötfitting','Dichtung','Hanf','Loctite','Rohrschelle','Isolation','Schrauben/Dübel']}
+  ];
+})();
+var tmChipTab='abwasser';
+function tmRenderChips(){
+  var tabsEl=document.getElementById('tm-chip-tabs'),gridEl=document.getElementById('tm-chip-grid');
+  if(!tabsEl||!gridEl)return;
+  if(!HKLS_MATERIAL_CHIPS.some(function(g){return g.id===tmChipTab;})) tmChipTab=HKLS_MATERIAL_CHIPS[0].id;
+  tabsEl.innerHTML=HKLS_MATERIAL_CHIPS.map(function(g){
+    return '<button type="button" class="tm-chip-tab'+(g.id===tmChipTab?' act':'')+'" onclick="tmChipTabSel(\''+g.id+'\')">'+gsEsc(g.label)+'</button>';
+  }).join('');
+  var grp=HKLS_MATERIAL_CHIPS.filter(function(g){return g.id===tmChipTab;})[0]||HKLS_MATERIAL_CHIPS[0];
+  gridEl.innerHTML=(grp.items||[]).map(function(it){
+    return '<button type="button" class="tm-chip" data-l="'+gsEsc(it)+'" onclick="tmAddChip(this.dataset.l)">+ '+gsEsc(it)+'</button>';
+  }).join('');
+}
+function tmChipTabSel(id){tmChipTab=id;tmRenderChips();}
+// Klick auf Chip: existiert die Position schon, Menge +1; sonst neue Zeile mit Menge 1 (editierbar).
+function tmAddChip(label){
+  var rows=document.querySelectorAll('#tm-positions .tm-row');
+  for(var i=0;i<rows.length;i++){
+    var pe=rows[i].querySelector('.tm-pos');
+    if(pe&&pe.value.trim()===label){
+      var me=rows[i].querySelector('.tm-menge');
+      var n=parseFloat((me.value||'').replace(',','.'));
+      me.value=(isFinite(n)?n+1:1);me.focus();
+      try{me.scrollIntoView({block:'center'});}catch(e){}
+      return;
+    }
+  }
+  var row=tmFirstEmptyRow()||tmAddRow();
+  row.querySelector('.tm-pos').value=label;
+  var m=row.querySelector('.tm-menge');if(!m.value.trim())m.value='1';
+  try{row.scrollIntoView({block:'center'});}catch(e){}
+  m.focus();
 }
 function tmAddRow(pos,menge,einheit){
   var wrap=document.getElementById('tm-positions');
@@ -5910,38 +6086,53 @@ function tmBobAnalyse(){
       el.dataset.summary=txt;
     }).catch(function(e){if(btn){btn.disabled=false;btn.textContent='🧠 BOB: Kosten schätzen (Foto/Positionen)';}setMsg('tm-msg',(e&&e.message==='timeout')?'⚠️ BOB antwortet nicht – bitte erneut':'BOB-Analyse fehlgeschlagen','err');});
 }
-var tmRec=null,tmRecOn=false;
+var tmRec=null,tmRecOn=false,tmStop=false,tmRestartT=null;
 function tmDictate(){
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   var btn=document.getElementById('tm-dictate');
   if(!SR){toast('Spracherkennung wird nicht unterstützt – bitte tippen');return;}
-  if(tmRecOn&&tmRec){tmRec.stop();return;}
+  if(tmRecOn){tmStop=true;if(tmRec){try{tmRec.stop();}catch(e){}}return;}
+  tmStop=false;
   tmRec=new SR();tmRec.lang='de-CH';tmRec.interimResults=false;tmRec.continuous=true;
-  tmRecOn=true;if(btn){btn.textContent='⏺️ Aufnahme… (tippen zum Stoppen)';}
   tmRec.onresult=function(e){
     var t='';for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;}
-    var ta=document.getElementById('tm-notiz');ta.value=(ta.value?ta.value+' ':'')+t.trim();
+    t=t.trim();if(!t)return;
+    var ta=document.getElementById('tm-notiz');if(ta)ta.value=(ta.value?ta.value+' ':'')+t;
   };
-  tmRec.onend=function(){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';};
-  tmRec.onerror=function(){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';};
-  try{tmRec.start();}catch(e){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';}
+  tmRec.onerror=function(ev){if(ev&&(ev.error==='not-allowed'||ev.error==='service-not-allowed'||ev.error==='audio-capture'))tmStop=true;};
+  tmRec.onend=function(){
+    if(tmStop){tmRecOn=false;if(tmRestartT){clearTimeout(tmRestartT);tmRestartT=null;}if(btn)btn.textContent='🎙️ Sprachmemo diktieren';return;}
+    tmRestartT=setTimeout(function(){
+      if(tmStop)return;
+      try{tmRec.start();}catch(e){tmRestartT=setTimeout(function(){if(tmStop)return;try{tmRec.start();}catch(_){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';}},300);}
+    },120);
+  };
+  try{tmRec.start();tmRecOn=true;if(btn)btn.textContent='⏺️ Aufnahme läuft… (Stop drücken wenn fertig)';}
+  catch(e){tmRecOn=false;if(btn)btn.textContent='🎙️ Sprachmemo diktieren';}
 }
 function tmSend(){
-  var projekt_id=document.getElementById('tm-projekt').value;
+  var projektSel=document.getElementById('tm-projekt');
+  var projekt_id=projektSel.value;
   if(!projekt_id){setMsg('tm-msg','Bitte Projekt wählen','err');tmShowMsg();return;}
+  var empfEmail=(document.getElementById('tm-empf-email').value||'').trim();
+  var empfTel=(document.getElementById('tm-empf-tel').value||'').trim();
+  if(!empfEmail||!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(empfEmail)){setMsg('tm-msg','Bitte gültige Empfänger-E-Mail eingeben','err');tmShowMsg();return;}
   var pos=tmCollect();
   if(!pos.length&&!tmFotoB64){setMsg('tm-msg','Bitte Positionen oder Foto erfassen','err');tmShowMsg();return;}
+  var projektName=(projektSel.options[projektSel.selectedIndex]||{}).text||'Projekt';
   var bobEl=document.getElementById('tm-bob-result');
   var inhalt={positionen:pos,notiz:document.getElementById('tm-notiz').value.trim(),
     foto:tmFotoB64||null,bob_analyse:(bobEl&&bobEl.dataset.summary)||null,
+    projekt_name:projektName,
     von_name:authTechName||(authUser&&authUser.email)||'Techniker'};
   var btn=document.getElementById('tm-send');if(btn){btn.disabled=true;btn.textContent='Sendet…';}
   setMsg('tm-msg','Sendet…','');tmShowMsg();
-  gsAuthApi('nachrichten',{action:'send',typ:'materialliste',projekt_id:projekt_id,inhalt:inhalt}).then(function(d){
+  gsAuthApi('nachrichten',{action:'send',typ:'materialliste',projekt_id:projekt_id,inhalt:inhalt,
+    empfaenger_email:empfEmail,empfaenger_tel:empfTel,projekt_name:projektName}).then(function(d){
     d=d||{};
     if(btn){btn.disabled=false;btn.textContent='📨 An Projektleiter senden';}
     if(d.error){setMsg('tm-msg','⚠️ '+d.error,'err');tmShowMsg();toast('⚠️ '+d.error);return;}
-    setMsg('tm-msg','✓ Materialliste gesendet','');toast('✓ Materialliste an Projektleiter gesendet');
+    setMsg('tm-msg','✓ Materialliste an '+empfEmail+' gesendet','');toast('✓ Materialliste an Projektleiter gesendet');
     setTimeout(function(){showScreen('tech-rapport');},1300);
   }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📨 An Projektleiter senden';}setMsg('tm-msg','⚠️ Verbindungsfehler – bitte erneut senden','err');tmShowMsg();toast('⚠️ Verbindungsfehler');});
 }

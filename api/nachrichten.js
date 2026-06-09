@@ -1,8 +1,13 @@
 // api/nachrichten.js – in-app messages / notifications (Task 7)
 // Techniker → Projektleiter (materialliste/rapport), inbox, unread badge.
+// Materialliste wird zusätzlich per E-Mail (Resend) an den Projektleiter geschickt.
+import { sendResendEmail, mailShell } from '../lib/mail.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const SB = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
+// Materiallisten-Mail: Absender IMMER fix info@george-solutions.ch (nicht der eingeloggte Techniker).
+const MATERIAL_FROM = 'George Solutions <info@george-solutions.ch>';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -46,15 +51,73 @@ async function send(res, user, role, body) {
   }
   const base = { von_id: user.id, an_id, typ, inhalt: body.inhalt || {}, status: 'ungelesen' };
 
+  // Block 3: Materialliste zusätzlich per E-Mail an den Projektleiter (Hauptkanal).
+  const mailRequested = typ === 'materialliste' && !!(body.empfaenger_email || '').trim();
+  let mailSent = null;
+  if (mailRequested) mailSent = await sendMaterialEmail(user, body);
+
   // projekt_id FK may reference gs_anfragen (Emanuel's schema), so a gs_projekte
-  // id would violate it — retry without projekt_id on FK error.
+  // id would violate it — retry without projekt_id on FK error. (Best-effort In-App-Kopie.)
   let r = await insertNachricht({ ...base, projekt_id });
   if (r.fkError) r = await insertNachricht(base);
+
+  // Bei der Materialliste richtet sich der Erfolg nach der E-Mail (Inbox-Kopie ist optional).
+  if (mailRequested) {
+    if (mailSent) return res.status(200).json({ ok: true, mail_sent: true, nachricht: r.row || null });
+    return res.status(502).json({ error: 'E-Mail an Projektleiter konnte nicht gesendet werden', mail_sent: false });
+  }
+
   if (!r.row) {
     if (r.notMigrated) return res.status(503).json({ error: 'gs_nachrichten nicht migriert' });
     return res.status(500).json({ error: 'Nachricht konnte nicht gesendet werden' });
   }
   return res.status(200).json({ ok: true, nachricht: r.row });
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Materialliste per Resend an den Projektleiter. Absender fix info@george-solutions.ch;
+// reply_to = Techniker-Mail (Punycode-sicher via Helper; ungültig → reply_to entfällt, Mail geht trotzdem).
+async function sendMaterialEmail(user, body) {
+  const inhalt = body.inhalt || {};
+  const positionen = Array.isArray(inhalt.positionen) ? inhalt.positionen : [];
+  const projektName = (body.projekt_name || inhalt.projekt_name || 'Projekt').toString();
+  const vonName = (inhalt.von_name || user.email || 'Techniker').toString();
+  const notiz = (inhalt.notiz || '').toString().trim();
+  const tel = (body.empfaenger_tel || '').toString().trim();
+
+  const posRows = positionen.map((p) => {
+    const menge = [p && p.menge, p && p.einheit].filter(Boolean).map(esc).join(' ');
+    return `<tr><td style="padding:7px 14px 7px 0;color:#fff;border-bottom:1px solid rgba(255,255,255,0.06);">${esc((p && p.position) || '')}</td>`
+      + `<td style="padding:7px 0;color:#FFD24A;font-weight:700;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,0.06);">${menge || '—'}</td></tr>`;
+  }).join('');
+
+  const inner = `
+    <div style="display:inline-block;background:#FFD24A;color:#0a1628;font-weight:800;font-size:12px;padding:4px 12px;border-radius:50px;margin-bottom:14px;">📦 MATERIALLISTE</div>
+    <h2 style="margin:0 0 4px;font-size:20px;color:#fff;">${esc(projektName)}</h2>
+    <p style="margin:0 0 16px;color:rgba(232,237,245,0.6);">Erfasst von <strong style="color:#fff;">${esc(vonName)}</strong></p>
+    ${posRows ? `<table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:12px;"><thead><tr><th style="text-align:left;padding:0 0 6px;color:rgba(232,237,245,0.5);font-weight:600;">Position</th><th style="text-align:left;padding:0 0 6px;color:rgba(232,237,245,0.5);font-weight:600;">Menge</th></tr></thead><tbody>${posRows}</tbody></table>` : '<p style="color:rgba(232,237,245,0.6);">Keine Positionen erfasst.</p>'}
+    ${notiz ? `<div style="margin-top:10px;padding:12px 14px;background:rgba(255,255,255,0.04);border-radius:10px;"><div style="color:rgba(232,237,245,0.5);font-size:12px;margin-bottom:4px;">Notiz</div><div style="color:#fff;">${esc(notiz)}</div></div>` : ''}
+    ${tel ? `<p style="margin:14px 0 0;color:rgba(232,237,245,0.7);">Rückfragen: <a href="tel:${esc(tel.replace(/[^\d+]/g, ''))}" style="color:#4A9EFF;font-weight:700;text-decoration:none;">${esc(tel)}</a></p>` : ''}
+  `;
+
+  // Optionales Foto als Anhang (data-URL → base64 ohne Prefix).
+  let attachments;
+  const foto = inhalt.foto;
+  if (typeof foto === 'string' && foto.indexOf('base64,') > -1) {
+    attachments = [{ filename: 'material-foto.jpg', content: foto.split('base64,')[1] }];
+  }
+
+  return await sendResendEmail({
+    to: (body.empfaenger_email || '').trim(),
+    from: MATERIAL_FROM,
+    subject: `📦 Materialliste – ${projektName}`,
+    html: mailShell(inner),
+    replyTo: user.email || null,
+    attachments,
+  });
 }
 
 async function insertNachricht(row) {
