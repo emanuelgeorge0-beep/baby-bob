@@ -200,6 +200,26 @@ function deriveQuelle(t) {
   return 'direkt';
 }
 
+// ── E-Mail-Adresse IDN-/Punycode-sicher machen (Resend lehnt Umlaut-Domains mit 422 ab) ──
+// Kodiert NUR den Domain-Teil in ASCII (z.B. rüttiag.ch → xn--rttiag-95a.ch).
+// Gibt bei leerer/ungültiger Adresse oder Fehler null zurück (Aufrufer entscheidet, was dann passiert).
+function asciiEmail(addr) {
+  if (typeof addr !== 'string') return null;
+  const trimmed = addr.trim();
+  const at = trimmed.lastIndexOf('@');
+  if (at <= 0 || at === trimmed.length - 1) return null;       // kein/leerer local- oder domain-Part
+  const localPart = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  try {
+    // new URL(...).hostname liefert die Domain bereits in ASCII/Punycode (IDN).
+    const asciiDomain = new URL('http://' + domain).hostname;
+    if (!asciiDomain) return null;
+    return localPart + '@' + asciiDomain;
+  } catch {
+    return null;
+  }
+}
+
 // ── Mailversand via Resend (REST, keine npm-Dependency). Wirft NICHT nach aussen. ──
 async function sendResendEmail({ to, subject, html, replyTo }) {
   if (!RESEND_API_KEY) {
@@ -207,6 +227,14 @@ async function sendResendEmail({ to, subject, html, replyTo }) {
     return false;
   }
   try {
+    // Empfänger Punycode-sicher machen; unkonvertierbare Adressen rausfiltern.
+    const toList = (Array.isArray(to) ? to : [to])
+      .map((a) => asciiEmail(a) || (typeof a === 'string' ? a.trim() : a))
+      .filter((a) => typeof a === 'string' && a.length > 0);
+    // reply_to ist optional: nur setzen, wenn es sauber ASCII-konvertierbar ist –
+    // ansonsten weglassen, damit die Mail TROTZDEM rausgeht (Lead darf nie verloren gehen).
+    const asciiReplyTo = replyTo ? asciiEmail(replyTo) : null;
+
     const ctrl = new AbortController();
     const tm = setTimeout(() => ctrl.abort(), 8000);
     const r = await fetch('https://api.resend.com/emails', {
@@ -214,10 +242,10 @@ async function sendResendEmail({ to, subject, html, replyTo }) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${RESEND_API_KEY}` },
       body: JSON.stringify({
         from: GS_MAIL_FROM,
-        to: Array.isArray(to) ? to : [to],
+        to: toList,
         subject,
         html,
-        ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(asciiReplyTo ? { reply_to: asciiReplyTo } : {}),
       }),
       signal: ctrl.signal,
     });
