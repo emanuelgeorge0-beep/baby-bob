@@ -6,6 +6,8 @@
 //   • Temp password is returned ONCE in the create/reset response (admin shows
 //     it to the user, then sends manually). Never logged, never stored as text.
 
+import { sendResendEmail, materialEmailHtml, rapportEmailHtml, MATERIAL_FROM, GS_OFFICE_EMAIL } from '../lib/mail.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const SB = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
@@ -35,6 +37,8 @@ export default async function handler(req, res) {
       case 'create_user':    return await createUser(res, req.body);
       case 'reset_password': return await resetPassword(res, req.body);
       case 'set_active':     return await setActive(res, req.body);
+      case 'archive':        return await listArchive(res);
+      case 'resend':         return await resendArchive(res, req.body);
       default:               return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -154,6 +158,85 @@ async function setActive(res, body) {
   });
   if (!upd.ok) return res.status(500).json({ error: 'Statusänderung fehlgeschlagen' });
   return res.status(200).json({ ok: true, active });
+}
+
+// ── Archiv: alle Rapporte + Materiallisten (für nachträglichen Mailversand) ──
+async function listArchive(res) {
+  const [ml, rp, techs, projs] = await Promise.all([
+    sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_nachrichten?typ=eq.materialliste&select=id,created_at,von_id,an_id,inhalt,status&order=created_at.desc&limit=300`, { headers: SB })),
+    sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?select=id,datum,projekt_id,techniker_user_id,gesamtstunden,arbeiten,material,empfaenger,status,created_at&order=datum.desc&limit=300`, { headers: SB })),
+    sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?select=user_id,name`, { headers: SB })),
+    sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?select=id,projektnummer,name`, { headers: SB })),
+  ]);
+  const techName = {}; (Array.isArray(techs) ? techs : []).forEach((t) => { if (t.user_id) techName[t.user_id] = t.name; });
+  const projMap = {}; (Array.isArray(projs) ? projs : []).forEach((p) => { projMap[p.id] = { nr: p.projektnummer, name: p.name }; });
+
+  const items = [];
+  (Array.isArray(ml) ? ml : []).forEach((m) => {
+    const inh = m.inhalt || {};
+    items.push({
+      kind: 'materialliste', id: m.id, datum: (m.created_at || '').slice(0, 10),
+      projektnr: inh.projekt_name || '–', ersteller: inh.von_name || '–', typ: 'Materialliste',
+      empfaenger: inh.empfaenger_email || '(GS-Büro)', status: 'gesendet', ts: m.created_at || '',
+    });
+  });
+  (Array.isArray(rp) ? rp : []).forEach((r) => {
+    const pm = projMap[r.projekt_id] || {};
+    items.push({
+      kind: 'rapport', id: r.id, datum: r.datum || (r.created_at || '').slice(0, 10),
+      projektnr: pm.nr || pm.name || '–', ersteller: techName[r.techniker_user_id] || '–', typ: 'Rapport',
+      empfaenger: (Array.isArray(r.empfaenger) ? r.empfaenger.join(', ') : '') || '–',
+      status: r.status === 'eingereicht' ? 'gesendet' : 'Entwurf', ts: (r.datum || r.created_at || '') + 'T00:00:00',
+    });
+  });
+  items.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+  return res.status(200).json({ items });
+}
+
+// ── Archiv "Erneut senden": löst die Mail erneut aus (gleicher Resend-/Punycode-Pfad) ──
+async function resendArchive(res, body) {
+  const { kind, id } = body || {};
+  if (!id || !kind) return res.status(400).json({ error: 'kind + id erforderlich' });
+
+  if (kind === 'materialliste') {
+    const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_nachrichten?id=eq.${id}&select=inhalt&limit=1`, { headers: SB }));
+    const row = (Array.isArray(rows) ? rows : [])[0];
+    if (!row) return res.status(404).json({ error: 'Materialliste nicht gefunden' });
+    const inh = row.inhalt || {};
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(inh.empfaenger_email || '').trim());
+    const to = valid ? inh.empfaenger_email.trim() : GS_OFFICE_EMAIL;
+    const html = materialEmailHtml({
+      projektName: inh.projekt_name || 'Projekt', vonName: inh.von_name || 'Techniker',
+      positionen: inh.positionen || [], notiz: inh.notiz || '', tel: inh.empfaenger_tel || '', fallbackUsed: !valid,
+    });
+    const result = await sendResendEmail({ to, from: MATERIAL_FROM, subject: `📦 Materialliste – ${inh.projekt_name || 'Projekt'} (erneut gesendet)`, html });
+    if (result && result.ok) return res.status(200).json({ ok: true, mail_sent: true, to, resend_id: result.id || null });
+    return res.status(502).json({ error: 'Versand fehlgeschlagen', mail_error: (result && result.error) || null });
+  }
+
+  if (kind === 'rapport') {
+    const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?id=eq.${id}&select=*&limit=1`, { headers: SB }));
+    const r = (Array.isArray(rows) ? rows : [])[0];
+    if (!r) return res.status(404).json({ error: 'Rapport nicht gefunden' });
+    // Projektnr + Techniker-Name auflösen.
+    const [projs, techs] = await Promise.all([
+      r.projekt_id ? sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?id=eq.${r.projekt_id}&select=projektnummer,name&limit=1`, { headers: SB })) : [],
+      sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?user_id=eq.${r.techniker_user_id}&select=name&limit=1`, { headers: SB })),
+    ]);
+    const pm = (Array.isArray(projs) ? projs : [])[0] || {};
+    const vonName = ((Array.isArray(techs) ? techs : [])[0] || {}).name || 'Techniker';
+    const html = rapportEmailHtml({
+      projektNr: pm.projektnummer || pm.name || 'Projekt', vonName, datum: r.datum,
+      stunden: r.gesamtstunden, arbeiten: r.arbeiten, material: r.material,
+      besonderheiten: r.besonderheiten, empfaenger: r.empfaenger,
+    });
+    // Rapporte haben keine Empfänger-Mailadresse → ans GS-Büro (Recovery-Zweck).
+    const result = await sendResendEmail({ to: GS_OFFICE_EMAIL, from: MATERIAL_FROM, subject: `📋 Tagesrapport – ${pm.projektnummer || pm.name || 'Projekt'} · ${r.datum || ''} (erneut gesendet)`, html });
+    if (result && result.ok) return res.status(200).json({ ok: true, mail_sent: true, to: GS_OFFICE_EMAIL, resend_id: result.id || null });
+    return res.status(502).json({ error: 'Versand fehlgeschlagen', mail_error: (result && result.error) || null });
+  }
+
+  return res.status(400).json({ error: 'Unbekannter kind' });
 }
 
 // ── Helpers ──

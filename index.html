@@ -2054,6 +2054,12 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   </div>
 
   <div id="admin-user-list"><div class="admin-empty">Lädt…</div></div>
+
+  <!-- Archiv: alle Rapporte & Materiallisten + "Erneut senden" -->
+  <div style="padding:18px 18px 8px;">
+    <button class="admin-add-btn" id="admin-archive-toggle" onclick="toggleArchive()">📦 Archiv – Rapporte &amp; Materiallisten</button>
+  </div>
+  <div id="admin-archive" style="display:none;padding:0 18px 18px;"><div class="admin-empty">Lädt…</div></div>
 </div>
 
 <!-- ═══ ADMIN: PROJEKTMANAGEMENT ═══ -->
@@ -4938,7 +4944,51 @@ function adminReturnHome(){
   updateAdminReturnBtn();
 }
 
-function showAdminUsers(){showScreen('admin-users');loadAdminUsers();}
+function showAdminUsers(){showScreen('admin-users');loadAdminUsers();
+  // Archiv beim Screen-Wechsel einklappen (frisch laden beim Öffnen).
+  var ar=document.getElementById('admin-archive');if(ar)ar.style.display='none';
+  var at=document.getElementById('admin-archive-toggle');if(at)at.textContent='📦 Archiv – Rapporte & Materiallisten';
+}
+var archiveLoaded=false;
+function toggleArchive(){
+  var box=document.getElementById('admin-archive'),btn=document.getElementById('admin-archive-toggle');
+  if(!box)return;
+  var open=box.style.display!=='none';
+  if(open){box.style.display='none';if(btn)btn.textContent='📦 Archiv – Rapporte & Materiallisten';return;}
+  box.style.display='block';if(btn)btn.textContent='📦 Archiv schliessen';
+  loadArchive();
+}
+function loadArchive(){
+  var box=document.getElementById('admin-archive');if(!box)return;
+  box.innerHTML='<div class="admin-empty">Lädt…</div>';
+  adminApi({action:'archive'}).then(function(d){
+    if(d.error){box.innerHTML='<div class="admin-empty">'+demoOrError(d)+'</div>';return;}
+    renderArchive(d.items||[]);
+  }).catch(function(){box.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
+}
+function renderArchive(items){
+  var box=document.getElementById('admin-archive');if(!box)return;
+  if(!items.length){box.innerHTML='<div class="admin-empty">Noch keine Rapporte oder Materiallisten.</div>';return;}
+  var typBadge=function(t){return t==='Materialliste'?'<span style="background:rgba(255,210,74,0.18);color:#FFD24A;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:800;">📦 Material</span>':'<span style="background:rgba(74,158,255,0.18);color:#4A9EFF;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:800;">📋 Rapport</span>';};
+  var statBadge=function(s){var ok=s==='gesendet';return '<span style="color:'+(ok?'#6bcb77':'rgba(232,237,245,0.5)')+';font-weight:700;font-size:12px;">'+(ok?'✓ gesendet':'✏️ Entwurf')+'</span>';};
+  box.innerHTML='<div style="font-size:12px;color:rgba(232,237,245,0.5);margin:0 0 10px;">'+items.length+' Einträge</div>'+items.map(function(it){
+    return '<div class="arch-row" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 14px;margin-bottom:10px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">'+typBadge(it.typ)+statBadge(it.status)+'</div>'
+      +'<div style="color:#fff;font-weight:700;font-size:14px;">'+gsEsc(it.projektnr||'–')+'</div>'
+      +'<div style="color:rgba(232,237,245,0.6);font-size:12.5px;line-height:1.7;margin-top:3px;">'
+        +'📅 '+gsEsc(it.datum||'–')+' · 👷 '+gsEsc(it.ersteller||'–')+'<br>📨 '+gsEsc(it.empfaenger||'–')+'</div>'
+      +'<button class="admin-act" style="margin-top:10px;" onclick="archiveResend(this,\''+it.kind+'\',\''+it.id+'\')">↻ Erneut senden</button>'
+      +'</div>';
+  }).join('');
+}
+function archiveResend(btn,kind,id){
+  var orig=btn.textContent;btn.disabled=true;btn.textContent='Sendet…';
+  adminApi({action:'resend',kind:kind,id:id}).then(function(d){
+    btn.disabled=false;btn.textContent=orig;
+    if(d&&d.ok&&d.mail_sent){toast('✓ Erneut gesendet an '+(d.to||'Empfänger'));}
+    else{toast('⚠️ '+((d&&(d.error||d.mail_error))||'Versand fehlgeschlagen'));}
+  }).catch(function(){btn.disabled=false;btn.textContent=orig;toast('⚠️ Verbindungsfehler');});
+}
 
 function adminApi(body){
   return fetch('/api/admin',{method:'POST',
