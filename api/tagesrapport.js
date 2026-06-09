@@ -51,7 +51,15 @@ async function list(res, user, role, body) {
     f.push(`projekt_id=in.(${ids.join(',')})`);
   } else if (role !== 'gs_admin') return res.status(403).json({ error: 'Keine Berechtigung' });
   const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?${f.join('&')}&select=${SELECT}&order=datum.desc`, { headers: SB }));
-  return res.status(200).json({ rapporte: Array.isArray(rows) ? rows : [] });
+  const list = Array.isArray(rows) ? rows : [];
+  // Techniker-Namen anreichern (für Partner-Ansicht; sonst nur user_id verfügbar).
+  const ids = [...new Set(list.map((r) => r.techniker_user_id).filter(Boolean))];
+  if (ids.length) {
+    const techs = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?user_id=in.(${ids.join(',')})&select=user_id,name`, { headers: SB }));
+    const nameById = {}; (Array.isArray(techs) ? techs : []).forEach((t) => { if (t.user_id) nameById[t.user_id] = t.name; });
+    for (const r of list) r.techniker_name = nameById[r.techniker_user_id] || null;
+  }
+  return res.status(200).json({ rapporte: list });
 }
 
 async function getOne(res, user, role, body) {

@@ -763,6 +763,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .pd-tabs{display:flex;gap:6px;padding:16px 18px 0;}
 .pd-tab{flex:1;text-align:center;font-size:12px;font-weight:800;padding:10px;border-radius:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);color:rgba(232,237,245,0.55);cursor:pointer;}
 .pd-tab.act{background:rgba(74,158,255,0.14);border-color:#4a9eff;color:#9cc6ff;}
+.pd-sec-tit{font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:#e8edf5;margin:16px 2px 8px;}
 .pd-badge{display:inline-block;margin-left:5px;background:#ff3b30;color:#fff;font-size:9px;font-weight:900;min-width:15px;height:15px;line-height:15px;border-radius:8px;padding:0 4px;}
 .pd-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px 18px 0;}
 .pd-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:13px;padding:12px 8px;text-align:center;}
@@ -6256,8 +6257,11 @@ function pdTab(tab){
   }else if(tab==='projekte'){
     gsAuthApi('projekte',{action:'list'}).then(function(d){
       var ps=d.projekte||[];
+      pdProjekte=ps;
       c.innerHTML=ps.length?ps.map(function(p){
-        return '<div class="pd-item"><div class="pd-item-tit">'+gsEsc(p.name)+'</div><div class="pd-item-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')+' · '+gsEsc(p.status||'')+'</div></div>';
+        return '<div class="pd-item" style="cursor:pointer;" onclick="pdOpenProjekt(\''+p.id+'\')">'
+          +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name)+'</div><span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div>'
+          +'<div class="pd-item-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')+' · '+gsEsc(p.status||'')+'</div></div>';
       }).join(''):'<div class="admin-empty">Keine Projekte.</div>';
     });
   }else if(tab==='rapporte'){
@@ -6287,6 +6291,45 @@ function pdMsgStatus(id,status){
     if(d.error){toast(d.error);return;}
     pdLoadBadge();pdLoadCards();pdTab('inbox');
   });
+}
+// ── Partner: Projekt-Detailansicht (read-only, alles auf die Projektnummer gebucht) ──
+var pdProjekte=[];
+function pdOpenProjekt(id){
+  var p=(pdProjekte||[]).filter(function(x){return x.id===id;})[0];
+  if(!p){pdTab('projekte');return;}
+  var c=document.getElementById('pd-content');
+  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  Promise.all([
+    gsAuthApi('tagesrapport',{action:'list',projekt_id:id}).then(function(d){return d.rapporte||[];}).catch(function(){return [];}),
+    gsAuthApi('nachrichten',{action:'inbox',projekt_id:id}).then(function(d){return (d.nachrichten||[]).filter(function(n){return n.typ==='materialliste';});}).catch(function(){return [];})
+  ]).then(function(arr){ pdRenderProjektDetail(p,arr[0],arr[1]); });
+}
+function pdRenderProjektDetail(p,rapporte,materiallisten){
+  var c=document.getElementById('pd-content');if(!c)return;
+  var sumH=rapporte.reduce(function(s,r){return s+(parseFloat(r.gesamtstunden)||0);},0);
+  var matCount=0;
+  materiallisten.forEach(function(n){matCount+=(((n.inhalt||{}).positionen)||[]).length;});
+  var head='<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
+    +'<span class="admin-badge active">'+gsEsc(p.status||'')+'</span></div>'
+    +'<div class="pd-item-meta">🔖 '+gsEsc(p.projektnummer||'–')+(p.standort?(' · 📍 '+gsEsc(p.standort)):'')+(p.bereich?(' · '+gsEsc(p.bereich)):'')+'</div></div>';
+  var sums='<div style="display:flex;gap:9px;margin-bottom:6px;">'
+    +'<div class="pd-card" style="flex:1;"><div class="pd-card-n">'+(Math.round(sumH*10)/10)+'</div><div class="pd-card-l">Stunden gesamt</div></div>'
+    +'<div class="pd-card" style="flex:1;"><div class="pd-card-n">'+matCount+'</div><div class="pd-card-l">Material-Positionen</div></div></div>';
+  var rapHtml='<div class="pd-sec-tit">📋 Rapporte ('+rapporte.length+')</div>'+(rapporte.length?rapporte.map(function(r){
+    return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(r.datum||'')+' · '+(r.gesamtstunden||0)+'h</div>'
+      +(r.status==='eingereicht'?'<span class="admin-badge active">eingereicht</span>':'<span class="admin-badge must_change_password">entwurf</span>')+'</div>'
+      +'<div class="pd-item-meta">👷 '+gsEsc(r.techniker_name||(Array.isArray(r.team)?r.team.join(', '):'')||'–')+'</div>'
+      +'<div class="pd-item-meta">'+gsEsc((r.arbeiten||[]).join(', ')||'–')+'</div></div>';
+  }).join(''):'<div class="admin-empty">Keine Rapporte auf dieses Projekt.</div>');
+  var matHtml='<div class="pd-sec-tit">📦 Materiallisten ('+materiallisten.length+')</div>'+(materiallisten.length?materiallisten.map(function(n){
+    var inh=n.inhalt||{};
+    var pos=(inh.positionen||[]).map(function(x){return '• '+gsEsc(x.position)+(x.menge?(' – '+gsEsc(x.menge)):'')+(x.einheit?(' '+gsEsc(x.einheit)):'');}).join('<br>');
+    return '<div class="pd-item"><div class="pd-item-tit">'+gsEsc((n.created_at||'').slice(0,10))+' · '+gsEsc(inh.von_name||'Techniker')+'</div>'
+      +(pos?'<div class="pd-item-meta" style="margin-top:5px;">'+pos+'</div>':'')
+      +(inh.notiz?'<div class="pd-item-meta">📝 '+gsEsc(inh.notiz)+'</div>':'')+'</div>';
+  }).join(''):'<div class="admin-empty">Keine Materiallisten auf dieses Projekt.</div>');
+  c.innerHTML='<div class="pd-dl" onclick="pdTab(\'projekte\')" style="margin:0 0 12px;display:inline-block;">← Zurück zur Projektliste</div>'
+    +head+sums+rapHtml+matHtml;
 }
 function pdRenderSettings(c){
   gsAuthApi('account',{action:'me'}).then(function(d){
