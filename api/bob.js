@@ -322,12 +322,9 @@ function buildGSPrompt(wissen) {
 
 KONTEXT: George Solutions bietet professionelle B2B-Dienstleistungen für Gebäudetechnik. Kunden sind Liegenschaftsverwaltungen, Bauunternehmen, Immobilieneigentümer und Facility Manager.
 
-STUNDENTARIFE von George Solutions:
-- Pilot: CHF 60-65/h (Kennenlernen, Erstprojekte bis ~16h)
-- Single: CHF 68-70/h (Einzelprojekte, flexible Buchung)
-- Monthly: CHF 67.90/h (Monatliches Kontingent, regelmässige Zusammenarbeit)
-- Quarterly: CHF 66.50/h (Quartalsvertrag, mittelfristige Planung)
-- Annual: CHF 65/h (Jahresvertrag, strategische Partnerschaft)
+STUNDENTARIFE von George Solutions (final, nur zwei Modelle):
+- Pilot: CHF 60-65/h (Kennenlernen, Erstprojekte; Team CHF 60/h p.P., Einzel CHF 65/h)
+- Monat: CHF 65-70/h (regelmässige Zusammenarbeit; Team CHF 65/h p.P., Einzel CHF 70/h)
 
 AUFGABE:
 1. Analysiere das HKLS-Projekt professionell und technisch präzise
@@ -347,7 +344,7 @@ ANTWORTE NUR MIT DIESEM JSON (kein Text davor/danach, keine Backticks):
   "beschreibung": "Professionelle Projekteinschätzung, 2-3 Sätze, technisch präzise",
   "umfang": "Klein (<16h) / Mittel (16-60h) / Gross (60-200h) / Komplex (>200h)",
   "geschaetzte_stunden": "z.B. 8-16h",
-  "empfohlener_tarif": "Pilot / Single / Monthly / Quarterly / Annual",
+  "empfohlener_tarif": "Pilot / Monat",
   "tarif_begruendung": "1 Satz warum dieser Tarif sinnvoll ist",
   "prioritaet": "Normal / Dringend / Sehr dringend",
   "normen": "Relevante Normen z.B. SIA 180, SWKI 2015-01, SN EN 378",

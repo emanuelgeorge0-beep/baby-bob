@@ -1529,8 +1529,8 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   </div>
   <div style="margin:14px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:9px;">
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">CHF 65/h</div>
-      <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">ab Jahresvertrag</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">CHF 60/h</div>
+      <div style="font-size:10px;color:rgba(232,237,245,0.55);margin-top:2px;">Einzel 65/h · <span style="color:#FFD24A;font-weight:800;">Pilot-Aktion, nur jetzt</span></div>
     </div>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;">
       <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">4 Bereiche</div>
@@ -3717,14 +3717,20 @@ function bbRenderRegionSelector(){
   }).join('');
 }
 
-// ── GS Telefon (zentral änderbar) — befüllt alle Telefon-CTAs (Landing/Flow/Bestätigung) ──
-var GS_PHONE='+41 XX XXX XX XX';   // <- hier die echte Nummer eintragen
+// ── GS Telefon (zentral) — echte Nummer kommt aus Vercel-Env GS_PHONE via /api/config ──
+var GS_PHONE='+41 XX XXX XX XX';   // Fallback-Platzhalter, bis /api/config die echte Nummer liefert
 function gsInitPhones(){
   var tel='tel:'+String(GS_PHONE).replace(/[^\d+]/g,'');
   document.querySelectorAll('a[data-gs-phone]').forEach(function(a){
     a.setAttribute('href',tel);
     var n=a.querySelector('.gs-phone-number'); if(n) n.textContent=GS_PHONE;
   });
+}
+// Echte Nummer serverseitig holen (GS_PHONE-Env) und alle CTAs aktualisieren.
+function gsLoadPhone(){
+  fetch('/api/config').then(function(r){return r.json();}).then(function(d){
+    if(d&&d.phone&&/\d/.test(d.phone)){ GS_PHONE=d.phone; gsInitPhones(); }
+  }).catch(function(){});
 }
 
 // ── GS Navigation ──
@@ -3810,12 +3816,12 @@ function gsStartAnalysis(){
 // ── GS Lokal-Fallback ──
 function gsLocalFallback(bereich,dring){
   var map={
-    'Heizung':{typ:'Heizungsarbeit',desc:'Professionelle Heizungsarbeit im HKLS-Bereich. George Solutions verfügt über umfassende Expertise in Heizungsanlagen aller Art.',std:'8-24h',tarif:'Single'},
-    'Sanitär':{typ:'Sanitärinstallation',desc:'Fachgerechte Sanitärinstallation und -revision. Unser Team kennt alle gängigen Systeme und Normen.',std:'8-20h',tarif:'Single'},
-    'Lüftung':{typ:'Lüftungsarbeit',desc:'Planung und Installation von Komfortlüftungsanlagen (KWL) und Absaugsystemen nach SWKI-Normen.',std:'12-32h',tarif:'Monthly'},
-    'Klima':{typ:'Klimaanlage/Kältetechnik',desc:'Installation und Wartung von Split-Anlagen und VRF-Systemen. Zertifizierter F-Gas-Betrieb.',std:'8-24h',tarif:'Single'},
+    'Heizung':{typ:'Heizungsarbeit',desc:'Professionelle Heizungsarbeit im HKLS-Bereich. George Solutions verfügt über umfassende Expertise in Heizungsanlagen aller Art.',std:'8-24h',tarif:'Pilot'},
+    'Sanitär':{typ:'Sanitärinstallation',desc:'Fachgerechte Sanitärinstallation und -revision. Unser Team kennt alle gängigen Systeme und Normen.',std:'8-20h',tarif:'Pilot'},
+    'Lüftung':{typ:'Lüftungsarbeit',desc:'Planung und Installation von Komfortlüftungsanlagen (KWL) und Absaugsystemen nach SWKI-Normen.',std:'12-32h',tarif:'Monat'},
+    'Klima':{typ:'Klimaanlage/Kältetechnik',desc:'Installation und Wartung von Split-Anlagen und VRF-Systemen. Zertifizierter F-Gas-Betrieb.',std:'8-24h',tarif:'Pilot'},
   };
-  var m=map[bereich]||{typ:'HKLS-Projekt',desc:'Professionelle Gebäudetechnik-Dienstleistung durch George Solutions.',std:'8-32h',tarif:'Single'};
+  var m=map[bereich]||{typ:'HKLS-Projekt',desc:'Professionelle Gebäudetechnik-Dienstleistung durch George Solutions.',std:'8-32h',tarif:'Pilot'};
   return {
     projekt_typ:m.typ,bereich:bereich,beschreibung:m.desc,
     umfang:'Mittel (16-60h)',geschaetzte_stunden:m.std,
@@ -3849,7 +3855,7 @@ function gsRenderDatenblatt(r){
   });
   document.getElementById('gs-res-tech').textContent=r.technische_hinweise||'–';
   // Tarif-Empfehlung vorbereiten
-  gsData.ai_tarif=r.empfohlener_tarif||'Single';
+  gsData.ai_tarif=r.empfohlener_tarif||'Pilot';
   gsData.ai_tarif_grund=r.tarif_begruendung||'';
   gsData.ai_stunden=r.geschaetzte_stunden||'–';
   gsData.ai_umfang=r.umfang||'–';
@@ -4578,8 +4584,8 @@ function routeAfterAuth(token,d){
 
 function applyRole(token,user,role,techName){
   authToken=token;authUser=user;authRole=role;authTechName=techName;
-  // Admin-return button: only ever for a real master; reset for everyone else (no leak).
-  if(role!=='master'){ adminReturnArmed=false; try{ sessionStorage.removeItem('bb_admin_armed'); }catch(e){} }
+  // Admin-return button: nur für Master/gs_admin; für alle anderen zurücksetzen (kein Leak).
+  if(role!=='master'&&role!=='gs_admin'){ adminReturnArmed=false; try{ sessionStorage.removeItem('bb_admin_armed'); }catch(e){} }
   else { try{ if(sessionStorage.getItem('bb_admin_armed')==='1') adminReturnArmed=true; }catch(e){} }
   if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
   var modeWrap=document.querySelector('.mode-toggle-wrap');
@@ -4904,14 +4910,16 @@ function enterAdminMode(mode){
 
 // ── Master-only "← Zurück zum Admin" (no leak to partner/techniker/demo, reload-safe) ──
 var adminReturnArmed=false;
+// Admin-Kontext = echter Master ODER gs_admin (beide nutzen das Admin-Cockpit).
+function isAdminRole(){ return authRole==='master' || authRole==='gs_admin'; }
 function adminArmReturn(){
-  if(authRole==='master'&&!demoMode){ adminReturnArmed=true; try{ sessionStorage.setItem('bb_admin_armed','1'); }catch(e){} }
+  if(isAdminRole()&&!demoMode){ adminReturnArmed=true; try{ sessionStorage.setItem('bb_admin_armed','1'); }catch(e){} }
 }
 function adminDisarmReturn(){
   adminReturnArmed=false; try{ sessionStorage.removeItem('bb_admin_armed'); }catch(e){}
   updateAdminReturnBtn();
 }
-function isMasterContext(){ return authRole==='master' && !demoMode; }
+function isMasterContext(){ return isAdminRole() && !demoMode; }
 function adminScreenActive(){
   var ids=['admin-home','admin-users','admin-projekte','admin-projektblatt','admin-status','admin-dashboard'];
   for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el&&el.classList.contains('active')) return true; }
@@ -6237,7 +6245,7 @@ function pdRenderSettings(c){
       +'<button class="login-btn-magic" style="margin-top:12px;" onclick="pdSaveSettings()">Speichern</button>'
       +'<div class="login-msg" id="set-msg"></div></div>'
       +'<div class="pd-item"><div class="pd-item-tit">📑 Tarif-Übersicht (was Sie zahlen)</div>'
-      +'<div class="pd-item-meta" style="margin-top:6px;line-height:1.7;">Pilot CHF 60–65/h · Single CHF 68–70/h · Monthly CHF 67.90/h · Quarterly CHF 66.50/h · Annual CHF 65/h</div></div>'
+      +'<div class="pd-item-meta" style="margin-top:6px;line-height:1.7;">Pilot CHF 60–65/h (Team/Einzel) · Monat CHF 65–70/h (Team/Einzel)</div></div>'
       +'<div class="pd-legal"><a onclick="openLegal(\'agb\')">AGB</a><a onclick="openLegal(\'datenschutz\')">Datenschutzerklärung</a></div>';
   });
 }
@@ -6427,6 +6435,7 @@ function setTechStatus(msg,type){
     try{ bbApplyRegion(bbGetRegion()); bbRenderRegionSelector(); }catch(e){}
     try{ bbRenderLangSwitch(); }catch(e){}                  // Sprachumschalter DE/EN/ES rendern
     try{ gsInitPhones(); }catch(e){}
+    try{ gsLoadPhone(); }catch(e){}                         // echte Nummer aus GS_PHONE-Env nachladen
     try{ bobAudioInit(); }catch(e){}
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',run,{once:true});
