@@ -27,7 +27,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { kunden, anfrage, action, anfrage_id, tracking, team } = req.body || {};
+    const { kunden, anfrage, action, anfrage_id, tracking, team, source } = req.body || {};
+    const isLanding = source === 'landing';   // Landing-Lead: kurzes Formular, Adresse optional (max. Leads)
 
     const headers0 = {
       'Content-Type': 'application/json',
@@ -49,14 +50,21 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true });
     }
 
-    if (!kunden?.vorname || !kunden?.nachname) {
-      return res.status(400).json({ error: 'Vorname und Nachname sind Pflichtfelder' });
-    }
-    if (!kunden?.strasse || !kunden?.plz || !kunden?.ort) {
-      return res.status(400).json({ error: 'Adresse (Strasse, PLZ, Ort) ist ein Pflichtfeld' });
-    }
     if (!kunden?.email) {
       return res.status(400).json({ error: 'E-Mail ist ein Pflichtfeld' });
+    }
+    if (isLanding) {
+      // Landing: nur Name + E-Mail Pflicht (max. Leads, Adresse optional).
+      if (!kunden?.name && !kunden?.vorname) {
+        return res.status(400).json({ error: 'Name ist ein Pflichtfeld' });
+      }
+    } else {
+      if (!kunden?.vorname || !kunden?.nachname) {
+        return res.status(400).json({ error: 'Vorname und Nachname sind Pflichtfelder' });
+      }
+      if (!kunden?.strasse || !kunden?.plz || !kunden?.ort) {
+        return res.status(400).json({ error: 'Adresse (Strasse, PLZ, Ort) ist ein Pflichtfeld' });
+      }
     }
 
     const headers = {
@@ -67,7 +75,7 @@ export default async function handler(req, res) {
 
     // ── 1. Kunden speichern ──
     let kundeId = null;
-    const fullName = `${kunden.vorname} ${kunden.nachname}`.trim();
+    const fullName = (`${kunden.vorname || ''} ${kunden.nachname || ''}`.trim()) || kunden.name || 'Lead';
     try {
       const kundenPayload = {
         firma: kunden.firma || fullName || 'Privatkunde',  // NOT NULL in DB
@@ -150,6 +158,7 @@ export default async function handler(req, res) {
         ort: [kunden.plz, kunden.ort].filter(Boolean).join(' '),
         bereich: anfrage?.bereich || anfrage?.objekttyp || null,
         projekt: anfrage?.projekt_name || null,
+        nachricht: anfrage?.beschreibung || anfrage?.notiz || null,   // freie Kundennachricht (Landing)
         erstgespraech: !!anfrage?.erstgespraech,
         quelle,
         team: team && typeof team === 'object' ? team : null,
@@ -256,14 +265,16 @@ async function sendLeadEmails(d) {
       ${row('Quelle', esc(quelleLabel))}
       ${row('Eingegangen', esc(ts))}
     </table>
+    ${d.nachricht ? `<div style="margin-top:14px;padding:13px 15px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:11px;"><div style="color:rgba(232,237,245,0.5);font-size:12px;margin-bottom:5px;">Nachricht des Kunden</div><div style="color:#fff;white-space:pre-wrap;word-break:break-word;">${esc(d.nachricht)}</div></div>` : ''}
     ${telDigits ? `<a href="tel:${esc(telDigits)}" style="display:inline-block;margin-top:20px;background:linear-gradient(135deg,#4A9EFF,#2d7fe0);color:#fff;font-weight:800;text-decoration:none;padding:13px 26px;border-radius:50px;">📞 Jetzt anrufen</a>` : ''}
   `;
   const subject = `🔔 Neuer GS-Lead: ${d.name} – ${d.telefon || 'keine Nr.'} (${quelleLabel})`;
   await sendResendEmail({
     to: GS_LEAD_RECIPIENTS,
+    from: 'George Solutions <info@george-solutions.ch>',   // Absender fix info@ (Lead-Alarm an GS)
     subject,
     html: gsMailShell(leadInner),
-    replyTo: isPlausibleEmail(d.email) ? d.email : undefined,
+    replyTo: isPlausibleEmail(d.email) ? d.email : undefined,   // "Antworten" geht direkt an den Kunden
   });
 
   // (2) Bestätigung an den Kunden – nur bei plausibler E-Mail.

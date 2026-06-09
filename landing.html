@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>George Solutions — HKLS-Teams auf Abruf</title>
+<meta name="description" content="Spezialisierte HKLS-Teams auf Abruf: Heizung, Lüftung, Klima, Sanitär. Ab Tag 1 produktiv, kein Koordinationsaufwand, digitales Reporting. Pilot ohne Risiko."/>
+<meta name="theme-color" content="#06101d"/>
+<meta property="og:title" content="George Solutions — HKLS-Teams auf Abruf"/>
+<meta property="og:description" content="Spezialisierte HKLS-Teams, ab Tag 1 produktiv. Mit Baby BOB KI-Scanner: Problem scannen → Diagnose → Profi buchen."/>
+<meta property="og:type" content="website"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#06101d; --bg2:#0a1830; --panel:rgba(255,255,255,0.045); --panel-brd:rgba(255,255,255,0.09);
+  --gold:#FFD24A; --gold2:#FFB200; --blue:#4A9EFF; --txt:#eaf0f8; --mut:rgba(234,240,248,0.62); --mut2:rgba(234,240,248,0.42);
+  --maxw:1140px; --r:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--txt); line-height:1.6; overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.disp{font-family:'Syne',sans-serif;font-weight:800;letter-spacing:-0.02em;line-height:1.08;}
+a{color:inherit;text-decoration:none;}
+img{max-width:100%;display:block;}
+section{position:relative;}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px;}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);background:rgba(255,210,74,0.09);border:1px solid rgba(255,210,74,0.25);padding:7px 14px;border-radius:50px;}
+.muted{color:var(--mut);}
+
+/* ── Background glow ── */
+.bg-fx{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;}
+.blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.5;will-change:transform;}
+.blob.b1{width:520px;height:520px;background:radial-gradient(circle,#1c4fb0,transparent 70%);top:-160px;left:-120px;animation:drift1 22s ease-in-out infinite;}
+.blob.b2{width:460px;height:460px;background:radial-gradient(circle,#b8870b,transparent 70%);top:30%;right:-160px;opacity:.32;animation:drift2 26s ease-in-out infinite;}
+.blob.b3{width:420px;height:420px;background:radial-gradient(circle,#0e6b6b,transparent 70%);bottom:-140px;left:25%;opacity:.3;animation:drift1 30s ease-in-out infinite reverse;}
+@keyframes drift1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,40px)}}
+@keyframes drift2{0%,100%{transform:translate(0,0)}50%{transform:translate(-50px,30px)}}
+
+/* ── Header ── */
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:rgba(6,16,29,0.72);border-bottom:1px solid transparent;transition:border-color .3s,background .3s;}
+header.scrolled{border-bottom-color:var(--panel-brd);background:rgba(6,16,29,0.9);}
+.nav{display:flex;align-items:center;justify-content:space-between;height:70px;}
+.nav .logo{height:34px;width:auto;}
+.nav-links{display:flex;align-items:center;gap:28px;}
+.nav-links a{font-size:14.5px;font-weight:500;color:var(--mut);transition:color .2s;}
+.nav-links a:hover{color:var(--txt);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;font-weight:700;font-size:15px;border:none;cursor:pointer;border-radius:50px;padding:13px 24px;transition:transform .18s cubic-bezier(.2,.7,.2,1),box-shadow .25s,background .25s;font-family:inherit;}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#10182a;box-shadow:0 8px 26px rgba(255,184,0,0.28);}
+.btn-gold:hover{transform:translateY(-2px);box-shadow:0 14px 36px rgba(255,184,0,0.42);}
+.btn-ghost{background:rgba(255,255,255,0.05);color:var(--txt);border:1px solid var(--panel-brd);}
+.btn-ghost:hover{transform:translateY(-2px);background:rgba(255,255,255,0.09);border-color:rgba(255,255,255,0.2);}
+.btn-sm{padding:10px 18px;font-size:14px;}
+
+/* ── Hero ── */
+.hero{padding:64px 0 40px;text-align:center;}
+.hero h1{font-size:clamp(34px,7vw,68px);margin:20px auto 0;max-width:14ch;}
+.hero h1 .grad{background:linear-gradient(120deg,var(--gold),#ffe9a8 40%,var(--gold2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.hero p.sub{font-size:clamp(16px,2.4vw,20px);color:var(--mut);max-width:46ch;margin:22px auto 0;}
+.hero .cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:34px;}
+.hero .trust{margin-top:26px;font-size:13.5px;color:var(--mut2);display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+.hero .trust b{color:var(--mut);font-weight:600;}
+
+/* ── Stats ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:54px;}
+.stat{background:var(--panel);border:1px solid var(--panel-brd);border-radius:var(--r);padding:22px 14px;text-align:center;}
+.stat .n{font-family:'Syne';font-weight:800;font-size:clamp(26px,4vw,40px);color:var(--gold);line-height:1;}
+.stat .l{font-size:12.5px;color:var(--mut);margin-top:8px;}
+
+/* ── Section heads ── */
+.sec{padding:74px 0;}
+.sec-head{text-align:center;max-width:680px;margin:0 auto 44px;}
+.sec-head h2{font-size:clamp(26px,4.4vw,42px);margin-top:14px;}
+.sec-head p{color:var(--mut);margin-top:14px;font-size:16.5px;}
+
+/* ── Feature cards ── */
+.grid{display:grid;gap:16px;}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g4{grid-template-columns:repeat(4,1fr);}
+.card{background:var(--panel);border:1px solid var(--panel-brd);border-radius:var(--r);padding:26px;transition:transform .25s cubic-bezier(.2,.7,.2,1),border-color .25s,background .25s;position:relative;overflow:hidden;}
+.card:hover{transform:translateY(-5px);border-color:rgba(255,210,74,0.34);background:rgba(255,255,255,0.06);}
+.card .ico{width:50px;height:50px;display:flex;align-items:center;justify-content:center;font-size:25px;border-radius:14px;background:linear-gradient(135deg,rgba(255,210,74,0.16),rgba(74,158,255,0.12));border:1px solid var(--panel-brd);margin-bottom:16px;}
+.card h3{font-size:18.5px;margin-bottom:8px;}
+.card p{color:var(--mut);font-size:14.5px;}
+.svc{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--panel-brd);border-radius:14px;padding:18px 20px;font-weight:600;font-size:16px;transition:transform .22s,border-color .22s;}
+.svc:hover{transform:translateY(-3px);border-color:rgba(255,210,74,0.34);}
+.svc .e{font-size:26px;}
+
+/* ── Baby BOB section ── */
+.bob{background:linear-gradient(180deg,rgba(74,158,255,0.06),transparent);}
+.bob-inner{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;background:linear-gradient(135deg,rgba(74,158,255,0.08),rgba(255,210,74,0.05));border:1px solid var(--panel-brd);border-radius:26px;padding:42px;}
+.steps{display:flex;flex-direction:column;gap:16px;margin-top:24px;}
+.step{display:flex;gap:16px;align-items:flex-start;}
+.step .num{flex:none;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Syne';font-weight:800;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#10182a;}
+.step h4{font-size:16.5px;font-family:'Syne';}
+.step p{color:var(--mut);font-size:14px;}
+.qr-card{background:rgba(6,14,26,0.6);border:1px solid var(--panel-brd);border-radius:20px;padding:26px;text-align:center;}
+.qr-card img{width:190px;height:190px;border-radius:14px;margin:0 auto 16px;background:#fff;padding:10px;}
+.qr-card .qh{font-family:'Syne';font-weight:800;font-size:17px;margin-bottom:4px;}
+.qr-card .qs{color:var(--mut);font-size:13px;margin-bottom:16px;}
+
+/* ── Pricing ── */
+.prices{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;max-width:760px;margin:0 auto;}
+.price{background:var(--panel);border:1px solid var(--panel-brd);border-radius:22px;padding:32px;position:relative;transition:transform .25s,border-color .25s;}
+.price:hover{transform:translateY(-5px);}
+.price.feat{border-color:rgba(255,210,74,0.45);background:linear-gradient(180deg,rgba(255,210,74,0.07),var(--panel));}
+.price .tag{position:absolute;top:18px;right:18px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#10182a;background:linear-gradient(135deg,var(--gold),var(--gold2));padding:5px 11px;border-radius:50px;}
+.price h3{font-size:22px;}
+.price .desc{color:var(--mut);font-size:14px;margin:6px 0 20px;}
+.price .pr{display:flex;align-items:baseline;gap:8px;}
+.price .pr .big{font-family:'Syne';font-weight:800;font-size:46px;color:var(--gold);line-height:1;}
+.price .pr .u{color:var(--mut);font-size:15px;}
+.price .alt{margin-top:8px;color:var(--mut);font-size:14px;}
+.price ul{list-style:none;margin:22px 0 0;}
+.price li{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:14.5px;color:var(--mut);}
+.price li::before{content:'✓';color:var(--gold);font-weight:800;}
+.price-note{text-align:center;color:var(--mut2);font-size:13.5px;margin-top:22px;}
+
+/* ── Lead form ── */
+.lead{background:linear-gradient(180deg,transparent,rgba(255,210,74,0.04));}
+.form-wrap{display:grid;grid-template-columns:.92fr 1.08fr;gap:40px;align-items:start;}
+.form-card{background:var(--panel);border:1px solid var(--panel-brd);border-radius:24px;padding:34px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+label{display:block;font-size:13px;font-weight:600;color:var(--mut);margin:14px 0 7px;}
+label .req{color:var(--gold);}
+input,select,textarea{width:100%;background:rgba(6,14,26,0.6);border:1px solid var(--panel-brd);border-radius:12px;padding:13px 15px;color:var(--txt);font-size:15px;font-family:inherit;transition:border-color .2s,box-shadow .2s;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,210,74,0.15);}
+textarea{resize:vertical;min-height:96px;}
+.form-card .btn{width:100%;margin-top:22px;}
+.form-msg{margin-top:14px;font-size:14px;padding:12px 14px;border-radius:11px;display:none;}
+.form-msg.err{display:block;background:rgba(255,80,80,0.12);border:1px solid rgba(255,80,80,0.3);color:#ffb3b3;}
+.form-success{display:none;text-align:center;padding:18px 6px;}
+.form-success .chk{width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));color:#10182a;display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 18px;animation:pop .5s cubic-bezier(.2,1.4,.4,1);}
+@keyframes pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+.lead-side h2{font-size:clamp(26px,4vw,40px);}
+.lead-side ul{list-style:none;margin:24px 0 0;}
+.lead-side li{display:flex;gap:12px;align-items:flex-start;padding:9px 0;color:var(--mut);font-size:15.5px;}
+.lead-side li .e{color:var(--gold);font-size:18px;}
+.contact-pills{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px;}
+.pill{display:inline-flex;align-items:center;gap:9px;background:var(--panel);border:1px solid var(--panel-brd);border-radius:50px;padding:11px 18px;font-weight:600;font-size:14.5px;transition:transform .2s,border-color .2s;}
+.pill:hover{transform:translateY(-2px);border-color:rgba(255,210,74,0.4);}
+
+/* ── Footer ── */
+footer{border-top:1px solid var(--panel-brd);padding:48px 0 40px;margin-top:30px;}
+.foot-grid{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:flex-start;}
+.foot-grid .logo{height:38px;margin-bottom:14px;}
+.foot-links{display:flex;gap:26px;flex-wrap:wrap;}
+.foot-links a{color:var(--mut);font-size:14px;transition:color .2s;}
+.foot-links a:hover{color:var(--gold);}
+.foot-bottom{margin-top:30px;padding-top:22px;border-top:1px solid var(--panel-brd);color:var(--mut2);font-size:13px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+.legal-sec{max-width:760px;margin:30px auto 0;color:var(--mut);font-size:13.5px;}
+.legal-sec h3{font-size:16px;color:var(--txt);margin:18px 0 6px;}
+
+/* ── Reveal animations ── */
+.reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1);}
+.reveal.in{opacity:1;transform:none;}
+.reveal[data-d="1"]{transition-delay:.08s;}.reveal[data-d="2"]{transition-delay:.16s;}.reveal[data-d="3"]{transition-delay:.24s;}
+
+/* ── Responsive ── */
+@media(max-width:880px){
+  .nav-links{display:none;}
+  .stats{grid-template-columns:repeat(2,1fr);}
+  .g3,.g4{grid-template-columns:1fr 1fr;}
+  .bob-inner{grid-template-columns:1fr;padding:30px;}
+  .form-wrap{grid-template-columns:1fr;gap:30px;}
+  .prices{grid-template-columns:1fr;}
+}
+@media(max-width:540px){
+  .g3,.g4{grid-template-columns:1fr;}
+  .form-row{grid-template-columns:1fr;}
+  .sec{padding:56px 0;}
+  .hero{padding:46px 0 30px;}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important;}
+  .reveal{opacity:1;transform:none;}
+}
+</style>
+</head>
+<body>
+
+<div class="bg-fx"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+<header id="hdr">
+  <div class="wrap nav">
+    <img class="logo" src="https://baby-bob.vercel.app/lib/logo-gs.png" alt="George Solutions"/>
+    <nav class="nav-links">
+      <a href="#leistungen">Leistungen</a>
+      <a href="#babybob">Baby BOB</a>
+      <a href="#preise">Preise</a>
+      <a href="#kontakt">Kontakt</a>
+    </nav>
+    <a href="#anfrage" class="btn btn-gold btn-sm">Anfrage senden</a>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow reveal">🇨🇭 Spezialisierte HKLS-Teams auf Abruf</span>
+    <h1 class="reveal" data-d="1">HKLS-Expertise,<br><span class="grad">ab Tag 1 produktiv.</span></h1>
+    <p class="sub reveal" data-d="2">Heizung, Lüftung, Klima, Sanitär — eingespielte Fachteams statt Temporär-Einzelkämpfer. Kein Koordinationsaufwand, digitales Reporting, transparente Konditionen.</p>
+    <div class="cta-row reveal" data-d="3">
+      <a href="#anfrage" class="btn btn-gold">🚀 Jetzt Anfrage senden</a>
+      <a href="https://baby-bob.vercel.app/?start=bob" class="btn btn-ghost">🤖 Baby BOB testen</a>
+    </div>
+    <div class="trust reveal" data-d="3">
+      <span>✓ <b>Kein Login nötig</b></span><span>✓ <b>Antwort in 2 Std.</b> (werktags)</span><span>✓ <b>Pilot ohne Risiko</b></span>
+    </div>
+
+    <div class="stats">
+      <div class="stat reveal"><div class="n" data-count="4">4</div><div class="l">HKLS-Bereiche aus einer Hand</div></div>
+      <div class="stat reveal" data-d="1"><div class="n" data-count="2" data-suffix=" Std.">2 Std.</div><div class="l">Reaktionszeit auf Anfragen</div></div>
+      <div class="stat reveal" data-d="2"><div class="n" data-count="100" data-suffix="%">100%</div><div class="l">Digitales Reporting</div></div>
+      <div class="stat reveal" data-d="3"><div class="n" data-count="1" data-prefix="Tag ">Tag 1</div><div class="l">Produktiv auf der Baustelle</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- POSITIONIERUNG -->
+<section class="sec" id="warum">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow reveal">Warum George Solutions</span>
+      <h2 class="reveal" data-d="1">Keine Temporärfirma. Eingespielte Teams.</h2>
+      <p class="reveal" data-d="2">Sie buchen ein Fachteam, das sich kennt und sofort liefert — ohne Einarbeitung, ohne Reibungsverluste.</p>
+    </div>
+    <div class="grid g3">
+      <div class="card reveal"><div class="ico">👥</div><h3>Spezialisierte HKLS-Teams</h3><p>Feste 2er-Teams mit Meister-Qualifikation — keine wechselnden Einzelkräfte, kein Risiko-Roulette.</p></div>
+      <div class="card reveal" data-d="1"><div class="ico">⚡</div><h3>Ab Tag 1 produktiv</h3><p>Eingespielte Abläufe statt Einarbeitung. Das Team steht, das Werkzeug ist da, es geht direkt los.</p></div>
+      <div class="card reveal" data-d="2"><div class="ico">🧩</div><h3>Kein Koordinationsaufwand</h3><p>Wir organisieren Mannschaft, Material und Termine. Sie haben einen Ansprechpartner statt zehn Baustellen-Calls.</p></div>
+      <div class="card reveal"><div class="ico">📲</div><h3>Digitales Reporting</h3><p>Tagesrapporte, Stunden und Materiallisten digital erfasst — nachvollziehbar in Echtzeit, sauber dokumentiert.</p></div>
+      <div class="card reveal" data-d="1"><div class="ico">🗂️</div><h3>Projektmanagement inklusive</h3><p>Projektübersicht, Zuteilung und Abrechnung laufen über ein System. Volle Transparenz über jeden Einsatz.</p></div>
+      <div class="card reveal" data-d="2"><div class="ico">🛡️</div><h3>Pilot ohne Risiko</h3><p>Starten Sie mit einem Pilotprojekt zu Aktionskonditionen und überzeugen Sie sich, bevor Sie skalieren.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- LEISTUNGEN -->
+<section class="sec" id="leistungen">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow reveal">Leistungen</span>
+      <h2 class="reveal" data-d="1">HKLS-Vollservice aus einer Hand</h2>
+      <p class="reveal" data-d="2">Für Installationsbetriebe, Liegenschaftsverwaltungen, Generalunternehmer und Facility Manager.</p>
+    </div>
+    <div class="grid g4">
+      <div class="svc reveal"><span class="e">🔥</span> Heizung</div>
+      <div class="svc reveal" data-d="1"><span class="e">💨</span> Lüftung</div>
+      <div class="svc reveal" data-d="2"><span class="e">❄️</span> Klima</div>
+      <div class="svc reveal" data-d="3"><span class="e">🚿</span> Sanitär</div>
+    </div>
+  </div>
+</section>
+
+<!-- BABY BOB -->
+<section class="sec bob" id="babybob">
+  <div class="wrap">
+    <div class="bob-inner reveal">
+      <div>
+        <span class="eyebrow">🤖 Powered by Baby BOB AI</span>
+        <h2 style="font-size:clamp(26px,4vw,40px);margin-top:16px;">Problem scannen. KI-Diagnose. Profi buchen.</h2>
+        <p class="muted" style="margin-top:14px;">Baby BOB ist unser KI-Scanner: Foto vom Defekt aufnehmen, in Sekunden eine fundierte Einschätzung erhalten und direkt das passende HKLS-Team anfragen — ganz ohne Fachjargon.</p>
+        <div class="steps">
+          <div class="step"><div class="num">1</div><div><h4>Scannen</h4><p>Foto vom Heizungs-, Lüftungs- oder Sanitärproblem aufnehmen.</p></div></div>
+          <div class="step"><div class="num">2</div><div><h4>KI-Diagnose</h4><p>Baby BOB erkennt das Problem, schätzt Aufwand und Bereich ein.</p></div></div>
+          <div class="step"><div class="num">3</div><div><h4>Profi buchen</h4><p>Direkt das passende George-Solutions-Team anfragen — in einem Schritt.</p></div></div>
+        </div>
+        <a href="https://baby-bob.vercel.app/?start=bob" class="btn btn-gold" style="margin-top:26px;">🤖 Baby BOB jetzt starten</a>
+      </div>
+      <div class="qr-card">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=0&data=https%3A%2F%2Fbaby-bob.vercel.app%2F%3Fstart%3Dbob" alt="QR-Code zur Baby BOB App" loading="lazy"/>
+        <div class="qh">Mit dem Handy scannen</div>
+        <div class="qs">QR-Code öffnen → Baby BOB im Browser starten</div>
+        <a href="https://baby-bob.vercel.app/?start=bob" class="btn btn-ghost btn-sm" style="width:100%;">App öffnen →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PREISE -->
+<section class="sec" id="preise">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow reveal">Konditionen</span>
+      <h2 class="reveal" data-d="1">Transparent. Inklusive Spesen.</h2>
+      <p class="reveal" data-d="2">Zwei klare Modelle — kein Jahresvertrag, keine versteckten Zuschläge.</p>
+    </div>
+    <div class="prices">
+      <div class="price feat reveal">
+        <span class="tag">Pilot-Aktion</span>
+        <h3>Pilot</h3>
+        <div class="desc">Kennenlernen ohne Risiko — der attraktive Einstieg.</div>
+        <div class="pr"><span class="big">60</span><span class="u">CHF/h · Team, pro Person</span></div>
+        <div class="alt">Einzel-Techniker: <b style="color:var(--txt)">65 CHF/h</b></div>
+        <ul>
+          <li>Festes 2er-Team mit Meister-Qualifikation</li>
+          <li>Ab Tag 1 produktiv, kein Koordinationsaufwand</li>
+          <li>Digitales Reporting inklusive</li>
+          <li>Ideal für ein erstes Pilotprojekt</li>
+        </ul>
+      </div>
+      <div class="price reveal" data-d="1">
+        <h3>Regulär</h3>
+        <div class="desc">Laufende Zusammenarbeit zu fairen Fixkonditionen.</div>
+        <div class="pr"><span class="big">65</span><span class="u">CHF/h · Team, pro Person</span></div>
+        <div class="alt">Einzel-Techniker: <b style="color:var(--txt)">70 CHF/h</b></div>
+        <ul>
+          <li>Planbare Kapazität nach Bedarf</li>
+          <li>Fester Ansprechpartner & Projektmanagement</li>
+          <li>Digitale Rapporte & Materiallisten</li>
+          <li>Skalierbar über mehrere Projekte</li>
+        </ul>
+      </div>
+    </div>
+    <p class="price-note">Alle Stundensätze inklusive Spesen. Einzel-Techniker oder 2er-Team wählen Sie pro Einsatz.</p>
+  </div>
+</section>
+
+<!-- LEAD FORM -->
+<section class="sec lead" id="anfrage">
+  <div class="wrap form-wrap">
+    <div class="lead-side reveal">
+      <span class="eyebrow">Unverbindliche Anfrage</span>
+      <h2 style="margin-top:16px;">In 2 Stunden zur Antwort.</h2>
+      <p class="muted" style="margin-top:14px;">Sagen Sie uns kurz, worum es geht — wir melden uns innerhalb von 2 Stunden (werktags) persönlich bei Ihnen. Kein Login, keine Verpflichtung.</p>
+      <ul>
+        <li><span class="e">⚡</span> Schnelle, persönliche Rückmeldung</li>
+        <li><span class="e">👥</span> Direkt das passende HKLS-Team</li>
+        <li><span class="e">🛡️</span> Pilot zu Aktionskonditionen</li>
+      </ul>
+      <div class="contact-pills">
+        <a href="tel:+41764829428" class="pill">📞 +41 76 482 94 28</a>
+        <a href="mailto:info@george-solutions.ch" class="pill">✉️ info@george-solutions.ch</a>
+      </div>
+    </div>
+
+    <div class="form-card reveal" data-d="1">
+      <form id="leadForm" novalidate>
+        <div class="form-row">
+          <div><label for="lf-name">Name <span class="req">*</span></label><input id="lf-name" name="name" type="text" autocomplete="name" placeholder="Vor- und Nachname"/></div>
+          <div><label for="lf-firma">Firma</label><input id="lf-firma" name="firma" type="text" autocomplete="organization" placeholder="Firmenname (optional)"/></div>
+        </div>
+        <div class="form-row">
+          <div><label for="lf-tel">Telefon</label><input id="lf-tel" name="telefon" type="tel" autocomplete="tel" inputmode="tel" placeholder="+41 …"/></div>
+          <div><label for="lf-email">E-Mail <span class="req">*</span></label><input id="lf-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="name@firma.ch"/></div>
+        </div>
+        <label for="lf-bereich">Bereich</label>
+        <select id="lf-bereich" name="bereich">
+          <option value="">– optional wählen –</option>
+          <option>Heizung</option><option>Lüftung</option><option>Klima</option><option>Sanitär</option><option>Kombiniert / Allgemein</option>
+        </select>
+        <label for="lf-msg">Ihre Nachricht</label>
+        <textarea id="lf-msg" name="nachricht" placeholder="Worum geht es? Projekt, Umfang, gewünschter Zeitraum …"></textarea>
+        <button type="submit" class="btn btn-gold" id="lf-btn"><span>🚀</span> Anfrage jetzt senden</button>
+        <div class="form-msg" id="lf-err"></div>
+      </form>
+      <div class="form-success" id="lf-success">
+        <div class="chk">✓</div>
+        <h3 style="font-size:22px;">Danke — Anfrage erhalten!</h3>
+        <p class="muted" style="margin-top:10px;">Wir melden uns innerhalb von <b style="color:var(--txt)">2 Stunden</b> (werktags) persönlich bei Ihnen. Bei Dringendem erreichen Sie uns direkt unter <a href="tel:+41764829428" style="color:var(--gold);font-weight:700;">+41 76 482 94 28</a>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer id="kontakt">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <img class="logo" src="https://baby-bob.vercel.app/lib/logo-gs.png" alt="George Solutions"/>
+        <p class="muted" style="max-width:34ch;font-size:14px;">Schweizer HKLS-Dienstleistung — spezialisierte Teams für Heizung, Lüftung, Klima und Sanitär.</p>
+        <div class="contact-pills">
+          <a href="tel:+41764829428" class="pill">📞 +41 76 482 94 28</a>
+          <a href="mailto:info@george-solutions.ch" class="pill">✉️ info@george-solutions.ch</a>
+        </div>
+      </div>
+      <div class="foot-links">
+        <a href="#leistungen">Leistungen</a>
+        <a href="#babybob">Baby BOB</a>
+        <a href="#preise">Preise</a>
+        <a href="#anfrage">Anfrage</a>
+        <a href="#impressum">Impressum</a>
+        <a href="#datenschutz">Datenschutz</a>
+      </div>
+    </div>
+
+    <div class="legal-sec">
+      <h3 id="impressum">Impressum</h3>
+      <p>George Solutions · Schweizer HKLS-Dienstleistung · Zürich · <a href="mailto:info@george-solutions.ch" style="color:var(--gold);">info@george-solutions.ch</a> · <a href="tel:+41764829428" style="color:var(--gold);">+41 76 482 94 28</a></p>
+      <h3 id="datenschutz">Datenschutz</h3>
+      <p>Ihre über das Anfrageformular übermittelten Daten (Name, Firma, Telefon, E-Mail, Nachricht) verwenden wir ausschliesslich zur Bearbeitung Ihrer Anfrage und kontaktieren Sie auf dem von Ihnen gewählten Weg. Keine Weitergabe an Dritte zu Werbezwecken.</p>
+    </div>
+
+    <div class="foot-bottom">
+      <span>© <span id="year">2026</span> George Solutions. Alle Rechte vorbehalten.</span>
+      <span>Powered by Baby BOB AI 🤖</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var GS_API = 'https://baby-bob.vercel.app/api/gs';
+
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  // Header shadow on scroll
+  var hdr = document.getElementById('hdr');
+  var onScroll = function(){ hdr.classList.toggle('scrolled', window.scrollY > 8); };
+  window.addEventListener('scroll', onScroll, { passive:true }); onScroll();
+
+  // Reveal on scroll
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce && 'IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting){ e.target.classList.add('in'); if (e.target.hasAttribute('data-count')) runCount(e.target); io.unobserve(e.target); }
+      });
+    }, { threshold:0.16 });
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+    document.querySelectorAll('[data-count]').forEach(function(el){ io.observe(el); });
+  } else {
+    document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+  }
+
+  // Animated counters
+  function runCount(el){
+    var target = parseFloat(el.getAttribute('data-count')) || 0;
+    var prefix = el.getAttribute('data-prefix') || '';
+    var suffix = el.getAttribute('data-suffix') || '';
+    var dur = 1100, start = performance.now();
+    function tick(now){
+      var p = Math.min(1, (now - start) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = prefix + Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // UTM / Quellen-Tracking (Parität zur App)
+  function getTracking(){
+    var q = new URLSearchParams(location.search);
+    return {
+      utm_source: q.get('utm_source') || null,
+      utm_medium: q.get('utm_medium') || null,
+      utm_campaign: q.get('utm_campaign') || null,
+      utm_term: q.get('utm_term') || null,
+      utm_content: q.get('utm_content') || null,
+      referrer: document.referrer || null
+    };
+  }
+
+  // Lead form submit → bestehender /api/gs-Pfad (Punycode, Fallback, reply_to an Kunde, Mail an info@)
+  var form = document.getElementById('leadForm');
+  var btn = document.getElementById('lf-btn');
+  var errBox = document.getElementById('lf-err');
+  var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+  function showErr(msg){ errBox.textContent = '⚠️ ' + msg; errBox.classList.add('err'); }
+  function clearErr(){ errBox.textContent = ''; errBox.classList.remove('err'); }
+
+  form.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    clearErr();
+    var name = document.getElementById('lf-name').value.trim();
+    var email = document.getElementById('lf-email').value.trim();
+    var firma = document.getElementById('lf-firma').value.trim();
+    var tel = document.getElementById('lf-tel').value.trim();
+    var bereich = document.getElementById('lf-bereich').value;
+    var nachricht = document.getElementById('lf-msg').value.trim();
+
+    if (!name){ showErr('Bitte Ihren Namen eingeben.'); return; }
+    if (!email || !emailRe.test(email)){ showErr('Bitte eine gültige E-Mail-Adresse eingeben.'); return; }
+
+    btn.disabled = true; btn.innerHTML = '<span>⏳</span> Wird gesendet …';
+
+    var payload = {
+      source: 'landing',
+      kunden: { vorname: name, nachname: '', name: name, firma: firma || null, telefon: tel || null, email: email },
+      anfrage: {
+        projekt_name: 'Landing-Anfrage' + (bereich ? ' · ' + bereich : ''),
+        bereich: bereich || null,
+        beschreibung: nachricht || null,
+        dringlichkeit: 'Normal'
+      },
+      tracking: getTracking()
+    };
+
+    var ctrl = new AbortController();
+    var to = setTimeout(function(){ ctrl.abort(); }, 15000);
+
+    fetch(GS_API, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload), signal: ctrl.signal })
+      .then(function(r){ clearTimeout(to); return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+      .then(function(res){
+        if (res.ok && res.d && res.d.success){
+          form.style.display = 'none';
+          document.getElementById('lf-success').style.display = 'block';
+        } else {
+          btn.disabled = false; btn.innerHTML = '<span>🚀</span> Anfrage jetzt senden';
+          showErr((res.d && res.d.error) || 'Es ist ein Fehler aufgetreten – bitte erneut versuchen.');
+        }
+      })
+      .catch(function(e){
+        clearTimeout(to);
+        btn.disabled = false; btn.innerHTML = '<span>🚀</span> Anfrage jetzt senden';
+        showErr(e && e.name === 'AbortError' ? 'Zeitüberschreitung – bitte erneut versuchen.' : 'Verbindungsfehler – bitte Internetverbindung prüfen.');
+      });
+  });
+})();
+</script>
+</body>
+</html>
