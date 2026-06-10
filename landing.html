@@ -37,8 +37,9 @@ img{display:block;max-width:100%;}
 .hr-gold{height:1px;background:linear-gradient(90deg,transparent,var(--gs-goldDim),transparent);border:none;}
 
 /* Buttons — kein Glow */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;font-weight:600;font-size:15px;border:1px solid transparent;cursor:pointer;border-radius:10px;padding:13px 24px;transition:background .2s,color .2s,border-color .2s,transform .15s;font-family:var(--font-body);}
-.btn:active{transform:translateY(1px);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;font-weight:600;font-size:15px;border:1px solid transparent;cursor:pointer;border-radius:10px;padding:13px 24px;transition:background .22s ease,color .22s ease,border-color .22s ease,transform .2s ease,box-shadow .22s ease;font-family:var(--font-body);}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px -9px rgba(201,169,97,0.5);}
+.btn:active{transform:translateY(0);box-shadow:0 2px 8px -6px rgba(201,169,97,0.5);}
 .btn-primary{background:var(--gs-gold);color:var(--gs-bg);}
 .btn-primary:hover{background:var(--gs-goldHi);}
 .btn-secondary{background:transparent;border-color:var(--gs-gold);color:var(--gs-gold);}
@@ -193,8 +194,9 @@ textarea{resize:vertical;min-height:96px;}
 
 /* Auswahl-Chips (Anfrageformular) */
 .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:7px;}
-.chip{display:inline-flex;align-items:center;gap:7px;background:var(--gs-bg);border:1px solid var(--gs-border);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:600;line-height:1.2;color:var(--gs-textDim);cursor:pointer;user-select:none;font-family:var(--font-body);transition:border-color .18s,color .18s,background .18s;}
-.chip:hover{border-color:var(--gs-goldDim);color:var(--gs-text);}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--gs-bg);border:1px solid var(--gs-border);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:600;line-height:1.2;color:var(--gs-textDim);cursor:pointer;user-select:none;font-family:var(--font-body);transition:border-color .22s ease,color .22s ease,background .22s ease,transform .2s ease,box-shadow .22s ease;}
+.chip:hover{border-color:var(--gs-gold);color:var(--gs-text);transform:translateY(-1px);box-shadow:0 5px 16px -8px rgba(201,169,97,0.45);}
+.chip:active{transform:translateY(0);}
 .chip[aria-pressed="true"]{background:rgba(201,169,97,0.12);border-color:var(--gs-gold);color:var(--gs-gold);}
 .chip .e{font-size:16px;line-height:1;}
 .intent{display:flex;gap:11px;align-items:flex-start;margin:18px 0 0;padding:14px 16px;background:var(--gs-bg);border:1px solid var(--gs-border);border-radius:12px;cursor:pointer;transition:border-color .18s,background .18s;}
@@ -232,9 +234,19 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
 .legal-sec h3{font-size:16px;color:var(--gs-text);margin:18px 0 6px;}
 
 /* Reveal */
-.reveal{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1);}
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1);}
 .reveal.in{opacity:1;transform:none;}
 .reveal[data-d="1"]{transition-delay:.08s;}.reveal[data-d="2"]{transition-delay:.16s;}.reveal[data-d="3"]{transition-delay:.24s;}
+
+/* Goldene Trennlinie — zeichnet sich beim Sichtbarwerden von links nach rechts */
+.line-sep{padding:6px 0;}
+.line-draw{display:block;height:1px;width:0;background:linear-gradient(90deg,rgba(201,169,97,0.55),var(--gs-gold) 45%,rgba(201,169,97,0));transition:width 1.15s cubic-bezier(.22,.61,.36,1);will-change:width;}
+.line-draw.in{width:100%;}
+
+/* Hero-Headline: einmaliger, dezenter Gold-Lichtreflex beim Laden (kein Loop) */
+.hero h1{position:relative;overflow:hidden;}
+.hero h1::after{content:'';position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;background:linear-gradient(105deg,transparent 38%,rgba(224,198,133,0.22) 50%,transparent 62%);transform:translateX(-130%);animation:heroSheen 2.6s cubic-bezier(.4,0,.2,1) .6s 1 both;}
+@keyframes heroSheen{to{transform:translateX(130%);}}
 
 /* Responsive */
 @media(max-width:880px){
@@ -266,6 +278,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
 @media(prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important;scroll-behavior:auto!important;}
   .reveal{opacity:1;transform:none;}
+  .line-draw{width:100%;}
+  .hero h1::after{display:none;}
 }
 </style>
 </head>
@@ -348,6 +362,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
   </div>
 </section>
 
+<div class="line-sep wrap"><span class="line-draw"></span></div>
+
 <!-- 4 · LEISTUNGEN -->
 <section class="sec" id="leistungen">
   <div class="wrap">
@@ -364,6 +380,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
     <p class="svc-note reveal" data-d="2">Ergänzend auch <b>Lüftung</b> — auf Anfrage im Rahmen der HKLS-Gebäudetechnik.</p>
   </div>
 </section>
+
+<div class="line-sep wrap"><span class="line-draw"></span></div>
 
 <!-- 5 · WARUM GS -->
 <section class="sec" id="warum">
@@ -383,6 +401,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
     </div>
   </div>
 </section>
+
+<div class="line-sep wrap"><span class="line-draw"></span></div>
 
 <!-- 6 · VS-TABELLE -->
 <section class="sec" id="vergleich">
@@ -407,6 +427,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
   </div>
 </section>
 
+<div class="line-sep wrap"><span class="line-draw"></span></div>
+
 <!-- 7 · ÜBER MICH / EMANUEL -->
 <section class="sec" id="ansprechpartner">
   <div class="wrap about-grid">
@@ -425,6 +447,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
     </div>
   </div>
 </section>
+
+<div class="line-sep wrap"><span class="line-draw"></span></div>
 
 <!-- 8 · BOB GS -->
 <section class="sec" id="bob">
@@ -445,6 +469,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
     </div>
   </div>
 </section>
+
+<div class="line-sep wrap"><span class="line-draw"></span></div>
 
 <!-- 9 · PREISE -->
 <section class="sec" id="preise">
@@ -480,6 +506,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
   </div>
 </section>
 
+<div class="line-sep wrap"><span class="line-draw"></span></div>
+
 <!-- 10 · FAQ -->
 <section class="sec" id="faq">
   <div class="wrap">
@@ -496,6 +524,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
     </div>
   </div>
 </section>
+
+<div class="line-sep wrap"><span class="line-draw"></span></div>
 
 <!-- 11 · ANFRAGE -->
 <section class="sec" id="anfrage">
@@ -647,7 +677,7 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
         if (e.isIntersecting){ e.target.classList.add('in'); if (e.target.hasAttribute('data-count')) runCount(e.target); io.unobserve(e.target); }
       });
     }, { threshold:0.15 });
-    document.querySelectorAll('.reveal,[data-count]').forEach(function(el){ io.observe(el); });
+    document.querySelectorAll('.reveal,[data-count],.line-draw').forEach(function(el){ io.observe(el); });
   } else {
     document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
   }
