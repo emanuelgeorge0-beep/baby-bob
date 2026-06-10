@@ -3225,7 +3225,23 @@ function bobSilentURI(){
   return __bobSilentURI;
 }
 function bobAnnounce(msg){ var el=document.getElementById('bob-aria-live'); if(el) el.textContent=msg||''; }
+// GS-Kontext (Einstieg über die GS-Landing, ?gs=1): KEINE Stimme, KEIN "Ton aktivieren",
+// kein Audio-Autostart. Einmalig aus URL/Session ermittelt und gecacht.
+var __gsSilentCache=null;
+function bobIsGsSilent(){
+  if(window.__GS_SILENT) return true;
+  if(__gsSilentCache!==null) return __gsSilentCache;
+  __gsSilentCache=false;
+  try{
+    var qp=new URLSearchParams(location.search);
+    var start=((qp.get('start')||'')).toLowerCase();
+    if(qp.get('gs')==='1'||start==='bobgs'){ try{sessionStorage.setItem('gs_silent','1');}catch(e){} __gsSilentCache=true; }
+    else if(sessionStorage.getItem('gs_silent')==='1'){ __gsSilentCache=true; }
+  }catch(e){}
+  return __gsSilentCache;
+}
 function bobShowUnlockBtn(){
+  if(bobIsGsSilent()) return;        // GS-Kontext: niemals "Ton aktivieren" zeigen
   var b=document.getElementById('audio-unlock-btn'); if(b) b.style.display='flex';
   if(isInAppBrowser()){ var h=document.getElementById('inapp-hint'); if(h) h.style.display='block'; }
 }
@@ -3312,6 +3328,7 @@ function bobTryGreeting(){
 }
 // Init: mirror session unlock flag, arm gesture unlock, optimistically try the greeting.
 function bobAudioInit(){
+  if(bobIsGsSilent()) return;        // GS-Kontext: Audio-Subsystem gar nicht erst starten (keine Begrüßung, kein Gesture-Unlock)
   try{ if(sessionStorage.getItem('bob_audio_unlocked')==='1') window.__audioUnlocked=true; }catch(e){}
   bobArmGestureUnlock();
   // Optimistic: if already unlocked this session, greet immediately without a button.
@@ -3380,6 +3397,7 @@ var __bobSpeakSeq=0;
 // window.__bobAssistantActive=true while it's open — the assistant IS BOB and may speak,
 // without weakening the mute rule anywhere else.
 function bobVoiceAllowed(){
+  if(bobIsGsSilent()) return false;                            // GS-Einstieg: komplett stumm
   if(window.__bobAssistantActive) return true;                 // reserved for the later assistant
   if(typeof appMode!=='undefined'&&appMode!=='bob') return false;
   // any non-scanner surface active → muted
@@ -3612,8 +3630,10 @@ function landingGoBob(){
 function routeAnonymousStart(){
   var qp=null; try{ qp=new URLSearchParams(location.search); }catch(e){}
   var start=((qp&&qp.get('start'))||'').toLowerCase();
+  // GS-Einstieg (von der GS-Landing): kein Audio/keine Stimme — Flag VOR setMode setzen.
+  if(qp&&(qp.get('gs')==='1'||start==='bobgs')){ window.__GS_SILENT=true; try{sessionStorage.setItem('gs_silent','1');}catch(e){} }
   if(start==='gs'){ setMode('gs'); return; }
-  if(start==='bob'){ setMode('bob'); return; }   // Begrüßung übernimmt bobAudioInit (Home aktiv)
+  if(start==='bob'||start==='bobgs'){ setMode('bob'); return; }   // GS-stumm wird über bobIsGsSilent() erzwungen
   if(qp&&qp.get('bezahlt')){ setMode('bob'); return; } // Rückkehr von Stripe → direkt BOB
   showLanding();
 }

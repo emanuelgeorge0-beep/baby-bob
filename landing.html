@@ -121,7 +121,9 @@ header.scrolled{border-bottom-color:var(--gs-border);background:rgba(10,10,11,0.
 
 /* About / Emanuel */
 .about-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:44px;align-items:center;}
-.about-img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:18px;border:1px solid var(--gs-border);filter:grayscale(0.1);}
+.about-photo{position:relative;width:100%;}
+.about-img{width:100%;aspect-ratio:4/5;object-fit:cover;object-position:center 18%;border-radius:18px;border:1px solid var(--gs-border);filter:grayscale(0.05);}
+.about-comic{position:absolute;right:-12px;bottom:-12px;width:38%;max-width:126px;aspect-ratio:1/1;object-fit:cover;object-position:center 16%;border-radius:50%;border:4px solid var(--gs-bg);box-shadow:0 10px 26px -6px rgba(0,0,0,0.7);background:var(--gs-surface);}
 .about-grid h2{font-size:clamp(24px,3.6vw,36px);}
 .about-grid .role{color:var(--gs-gold);font-weight:600;margin-top:6px;font-size:15px;}
 .about-grid blockquote{margin:22px 0 0;padding-left:20px;border-left:2px solid var(--gs-gold);color:var(--gs-text);font-size:17px;line-height:1.7;}
@@ -202,6 +204,17 @@ textarea{resize:vertical;min-height:96px;}
 .intent input:checked ~ div .it-h{color:var(--gs-gold);}
 .intent:has(input:checked){border-color:var(--gs-gold);background:rgba(201,169,97,0.07);}
 
+/* Sprachmemo / Diktierfunktion */
+.msg-wrap{position:relative;}
+.msg-wrap textarea{padding-right:54px;}
+.mic-btn{position:absolute;right:9px;bottom:9px;width:38px;height:38px;border-radius:50%;border:1px solid var(--gs-border);background:var(--gs-surface2);color:var(--gs-text);font-size:17px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .18s,background .18s,color .18s,transform .12s;}
+.mic-btn:hover{border-color:var(--gs-gold);}
+.mic-btn:active{transform:scale(0.94);}
+.mic-btn.rec{background:var(--gs-gold);color:var(--gs-bg);border-color:var(--gs-gold);animation:micPulse 1.3s ease-in-out infinite;}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,169,97,0.5);}50%{box-shadow:0 0 0 8px rgba(201,169,97,0);}}
+.mic-hint{display:none;margin-top:8px;font-size:12.5px;color:var(--gs-gold);}
+.mic-hint.on{display:block;}
+
 /* Footer */
 footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px;background:var(--gs-surface);}
 .foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:34px;}
@@ -232,8 +245,8 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
   .stat:nth-child(2){border-right:none;}
   .stat:nth-child(1),.stat:nth-child(2){border-bottom:1px solid var(--gs-border);}
   .g3,.g4{grid-template-columns:1fr 1fr;}
-  .about-grid{grid-template-columns:1fr;gap:26px;}
-  .about-img{max-width:300px;}
+  .about-grid{grid-template-columns:1fr;gap:34px;}
+  .about-photo{max-width:300px;margin:0 auto;}
   .bob-inner{grid-template-columns:1fr;padding:30px;}
   .prices{grid-template-columns:1fr;}
   .form-wrap{grid-template-columns:1fr;gap:28px;}
@@ -397,7 +410,10 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
 <!-- 7 · ÜBER MICH / EMANUEL -->
 <section class="sec" id="ansprechpartner">
   <div class="wrap about-grid">
-    <img class="about-img reveal" src="/public/old/As4.webp" alt="Emanuel George, Gründer von George Solutions, in Markenkleidung mit Schutzhelm" width="800" height="800" loading="lazy"/>
+    <div class="about-photo reveal">
+      <img class="about-img" src="/public/emanuel-portrait.jpg" alt="Emanuel George, Gründer von George Solutions" width="1100" height="1647" loading="lazy"/>
+      <img class="about-comic" src="/public/emanuel-comic.jpg" alt="Emanuel George als sympathische Comic-Illustration" width="700" height="1050" loading="lazy"/>
+    </div>
     <div class="reveal" data-d="1">
       <span class="eyebrow">Ihr Ansprechpartner</span>
       <h2 style="margin-top:14px;">Emanuel George</h2>
@@ -417,10 +433,10 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
         <h2 style="font-size:clamp(24px,3.6vw,36px);margin-top:14px;">Bob GS — der KI-Assistent für <span class="gold">Profis und Kunden.</span></h2>
         <p class="muted" style="margin-top:13px;">Bob GS ist unser KI-Assistent, spezialisiert auf die HKLS-Gebäudetechnik. Er kennt Bedienungsanleitungen, Normen und Druckproben-Protokolle, hilft bei Materialbestellungen und liest Pläne — und steht Fachkräften wie Kunden zur Seite. Auf der Baustelle ist er die schnelle, fundierte Antwort; für Kunden der verständliche Übersetzer ohne Fachjargon.</p>
         <p class="muted">Bob GS ist fest in unser Betriebssystem aus Web und App eingebaut und vom Team längst im Alltag genutzt. Im Partner-Account öffnen wir ihn jetzt auch für Kunden — selbstverständlich auch im Pilotprojekt.</p>
-        <a href="https://baby-bob.vercel.app/?start=bob" class="btn btn-secondary" style="margin-top:24px;">Bob GS öffnen →</a>
+        <a href="https://baby-bob.vercel.app/?start=bob&gs=1" class="btn btn-secondary" style="margin-top:24px;">Bob GS öffnen →</a>
       </div>
       <div class="qr-card">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&color=0A0A0B&bgcolor=FFFFFF&data=https%3A%2F%2Fbaby-bob.vercel.app%2F%3Fstart%3Dbob" alt="QR-Code zu Bob GS" width="180" height="180" loading="lazy"/>
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&color=0A0A0B&bgcolor=FFFFFF&data=https%3A%2F%2Fbaby-bob.vercel.app%2F%3Fstart%3Dbob%26gs%3D1" alt="QR-Code zu Bob GS" width="180" height="180" loading="lazy"/>
         <div class="qh">Mit dem Handy scannen</div>
         <div class="qs">QR öffnen → Bob GS in der GS-App starten</div>
       </div>
@@ -531,16 +547,25 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
 
         <label>Objekt</label>
         <div class="chips" data-group="objekt">
-          <button type="button" class="chip" aria-pressed="false" data-val="Büro">Büro</button>
-          <button type="button" class="chip" aria-pressed="false" data-val="Spital">Spital</button>
-          <button type="button" class="chip" aria-pressed="false" data-val="Industrie">Industrie</button>
-          <button type="button" class="chip" aria-pressed="false" data-val="Wärmezentrale">Wärmezentrale</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Einfamilienhaus">Einfamilienhaus</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Mehrfamilienhaus">Mehrfamilienhaus</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Wohnblock/Wohnsiedlung">Wohnblock/Wohnsiedlung</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Büro/Gewerbe">Büro/Gewerbe</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Spital/Pflegeheim">Spital/Pflegeheim</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Schule/Studentenwohnheim">Schule/Studentenwohnheim</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Industrie/Produktion">Industrie/Produktion</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Hotel/Gastronomie">Hotel/Gastronomie</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Wärmezentrale/Heizzentrale">Wärmezentrale/Heizzentrale</button>
           <button type="button" class="chip" aria-pressed="false" data-val="Kältezentrale">Kältezentrale</button>
-          <button type="button" class="chip" aria-pressed="false" data-val="Privat/Wohnen">Privat/Wohnen</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Privatkunde (kein spezifisches Objekt)">Privatkunde (kein spezifisches Objekt)</button>
         </div>
 
         <label for="lf-msg">Ihre Nachricht</label>
-        <textarea id="lf-msg" name="nachricht" placeholder="Optional: Umfang, gewünschter Zeitraum, Details …"></textarea>
+        <div class="msg-wrap">
+          <textarea id="lf-msg" name="nachricht" placeholder="Optional: Umfang, gewünschter Zeitraum, Details … – oder per Mikrofon diktieren."></textarea>
+          <button type="button" class="mic-btn" id="lf-mic" aria-pressed="false" aria-label="Spracheingabe starten" title="Spracheingabe starten">🎤</button>
+        </div>
+        <div class="mic-hint" id="lf-mic-hint">🎙️ Aufnahme läuft – sprich jetzt. Zum Stoppen erneut tippen.</div>
 
         <label class="intent" id="intent-box" for="lf-erstgespraech">
           <input type="checkbox" id="lf-erstgespraech" name="erstgespraech"/>
@@ -665,6 +690,42 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
     if (erstBox) erstBox.checked = true;
     var nameF = document.getElementById('lf-name'); if (nameF) setTimeout(function(){ nameF.focus(); }, 420);
   });
+
+  // Sprachmemo / Diktierfunktion für "Ihre Nachricht" (Web Speech API).
+  // Fallback: ohne Browser-Unterstützung wird der Mikrofon-Button ausgeblendet, das Textfeld bleibt normal nutzbar.
+  (function(){
+    var micBtn = document.getElementById('lf-mic'),
+        msgEl  = document.getElementById('lf-msg'),
+        hint   = document.getElementById('lf-mic-hint');
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR || !micBtn || !msgEl){ if (micBtn) micBtn.style.display = 'none'; return; }
+    var rec, recOn = false, baseText = '';
+    function setRec(on){
+      recOn = on;
+      micBtn.classList.toggle('rec', on);
+      micBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      micBtn.setAttribute('aria-label', on ? 'Spracheingabe stoppen' : 'Spracheingabe starten');
+      micBtn.title = on ? 'Spracheingabe stoppen' : 'Spracheingabe starten';
+      if (hint) hint.classList.toggle('on', on);
+    }
+    micBtn.addEventListener('click', function(){
+      if (recOn){ try{ rec.stop(); }catch(e){} return; }
+      try {
+        rec = new SR();
+        rec.lang = 'de-CH'; rec.interimResults = true; rec.continuous = true;
+        rec.onstart = function(){ setRec(true); };
+        rec.onend   = function(){ setRec(false); };
+        rec.onerror = function(){ setRec(false); };
+        rec.onresult = function(ev){
+          var txt = '';
+          for (var i = 0; i < ev.results.length; i++){ txt += ev.results[i][0].transcript; }
+          msgEl.value = (baseText + txt).replace(/\s+/g, ' ').replace(/^\s+/, '');
+        };
+        baseText = msgEl.value ? (msgEl.value.replace(/\s+$/, '') + ' ') : '';
+        rec.start();
+      } catch(e){ setRec(false); }
+    });
+  })();
 
   form.addEventListener('submit', function(ev){
     ev.preventDefault(); clearErr();
