@@ -67,8 +67,9 @@ header.scrolled{border-bottom-color:var(--gs-border);background:rgba(10,10,11,0.
 /* Skyline-Backdrop hinter dem Mockup — dunkel, weich, mit Fade zu Schwarz */
 /* Vollflächige, sehr dezente Skyline-Textur hinter der GANZEN Hero-Sektion */
 .hero-bg{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;}
-.hero-bg-img{position:absolute;inset:-7%;background:url(/public/skyline.jpg) center 62%/cover no-repeat;filter:grayscale(1) sepia(0.32) brightness(0.7) contrast(1.04) saturate(1.05) blur(1.2px);transform:scale(1.06);will-change:transform;}
-.hero-bg::after{content:'';position:absolute;inset:0;background:radial-gradient(135% 115% at 50% 42%,rgba(10,10,11,0.80) 0%,rgba(10,10,11,0.88) 52%,rgba(10,10,11,0.97) 100%);}
+.hero-bg-img{position:absolute;inset:-7%;background:url(/public/skyline.jpg) center 62%/cover no-repeat;filter:grayscale(1) sepia(0.2) brightness(0.84) contrast(1.05) saturate(1.02) blur(1.1px);transform:scale(1.06);will-change:transform;}
+/* Helleres Gesamt-Overlay (Skyline sichtbarer) + zusätzlicher Abdunkel-Verlauf links hinter dem Hero-Text */
+.hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(10,10,11,0.62) 0%,rgba(10,10,11,0.30) 36%,rgba(10,10,11,0) 58%),radial-gradient(135% 115% at 56% 44%,rgba(10,10,11,0.58) 0%,rgba(10,10,11,0.72) 52%,rgba(10,10,11,0.93) 100%);}
 /* Geräte-Mockup: Laptop (gross, hinten) + Handy (klein, vorn rechts) */
 .device-scene{position:relative;z-index:2;transform-style:preserve-3d;transition:transform .25s ease;will-change:transform;padding:8px 6px 20px;}
 .device-laptop{position:relative;width:88%;margin:0 auto;z-index:1;animation:floatLaptop 6.5s ease-in-out infinite;will-change:transform;}
