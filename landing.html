@@ -65,10 +65,10 @@ header.scrolled{border-bottom-color:var(--gs-border);background:rgba(10,10,11,0.
 .hero .trust b{color:var(--gs-text);font-weight:600;}
 .hero-img-wrap{position:relative;perspective:1100px;}
 /* Skyline-Backdrop hinter dem Mockup — dunkel, weich, mit Fade zu Schwarz */
-.hero-skyline{position:absolute;inset:-16% -10% -8% -8%;z-index:0;pointer-events:none;background:url(/public/skyline.jpg) center 72%/cover no-repeat;filter:blur(1.6px) grayscale(0.42) brightness(0.66) contrast(1.06) saturate(0.85);transform:scale(1.06);will-change:transform;-webkit-mask-image:radial-gradient(132% 122% at 56% 44%,#000 36%,transparent 78%);mask-image:radial-gradient(132% 122% at 56% 44%,#000 36%,transparent 78%);opacity:.85;}
-.hero-skyline::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,11,0.14),rgba(10,10,11,0.5));}
+.hero-skyline{position:absolute;top:-8%;left:-9%;right:-9%;height:68%;z-index:0;pointer-events:none;background:url(/public/skyline.jpg) center 72%/cover no-repeat;filter:blur(1.6px) grayscale(0.4) brightness(0.74) contrast(1.07) saturate(0.88);transform:scale(1.05);will-change:transform;-webkit-mask-image:radial-gradient(120% 112% at 50% 36%,#000 44%,transparent 82%);mask-image:radial-gradient(120% 112% at 50% 36%,#000 44%,transparent 82%);opacity:.92;}
+.hero-skyline::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,11,0.05) 0%,rgba(10,10,11,0.22) 55%,rgba(10,10,11,0.82) 100%);}
 /* Geräte-Mockup: Laptop (gross, hinten) + Handy (klein, vorn rechts) */
-.device-scene{position:relative;z-index:2;transform-style:preserve-3d;transition:transform .25s ease;will-change:transform;padding:8px 6px 20px;}
+.device-scene{position:relative;z-index:2;transform-style:preserve-3d;transition:transform .25s ease;will-change:transform;padding:30% 6px 20px;}
 .device-laptop{position:relative;width:88%;margin:0 auto;z-index:1;animation:floatLaptop 6.5s ease-in-out infinite;will-change:transform;}
 .laptop-screen{position:relative;aspect-ratio:16/10;background:#0b0b0d;border:1px solid var(--gs-border);border-bottom:none;border-radius:14px 14px 4px 4px;padding:9px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(201,169,97,0.18),0 34px 64px -28px rgba(0,0,0,0.85);}
 .laptop-screen img{width:100%;height:100%;object-fit:cover;object-position:top center;border-radius:6px;display:block;}
@@ -739,7 +739,7 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
         pRaf = null;
         var top = heroSec.getBoundingClientRect().top;
         var ty = Math.max(-22, Math.min(22, top * -0.05));
-        sky.style.transform = 'translate3d(0,' + ty.toFixed(1) + 'px,0) scale(1.06)';
+        sky.style.transform = 'translate3d(0,' + ty.toFixed(1) + 'px,0) scale(1.05)';
       });
     }
     window.addEventListener('scroll', skyParallax, { passive:true });
