@@ -63,8 +63,20 @@ header.scrolled{border-bottom-color:var(--gs-border);background:rgba(10,10,11,0.
 .hero .cta-row{display:flex;gap:13px;flex-wrap:wrap;margin-top:30px;}
 .hero .trust{margin-top:24px;font-size:13.5px;color:var(--gs-textDim);display:flex;gap:18px;flex-wrap:wrap;}
 .hero .trust b{color:var(--gs-text);font-weight:600;}
-.hero-img-wrap{position:relative;}
-.hero-img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:20px;border:1px solid var(--gs-border);box-shadow:inset 0 0 0 1px rgba(140,115,64,0.3),0 30px 60px -30px rgba(0,0,0,0.8);filter:contrast(1.04) saturate(1.05);}
+.hero-img-wrap{position:relative;perspective:1100px;}
+/* Geräte-Mockup: Laptop (gross, hinten) + Handy (klein, vorn rechts) */
+.device-scene{position:relative;transform-style:preserve-3d;transition:transform .25s ease;will-change:transform;padding:8px 6px 20px;}
+.device-laptop{position:relative;width:88%;margin:0 auto;z-index:1;animation:floatLaptop 6.5s ease-in-out infinite;will-change:transform;}
+.laptop-screen{position:relative;aspect-ratio:16/10;background:#0b0b0d;border:1px solid var(--gs-border);border-bottom:none;border-radius:14px 14px 4px 4px;padding:9px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(201,169,97,0.18),0 34px 64px -28px rgba(0,0,0,0.85);}
+.laptop-screen img{width:100%;height:100%;object-fit:cover;object-position:top center;border-radius:6px;display:block;}
+.laptop-base{position:relative;width:112%;margin:0 -6%;height:15px;background:linear-gradient(180deg,#1b1b1f,#0d0d0f);border:1px solid var(--gs-border);border-top:none;border-radius:3px 3px 12px 12px;box-shadow:0 22px 30px -20px rgba(0,0,0,0.8);}
+.laptop-base::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:18%;height:4px;background:#000;border-radius:0 0 6px 6px;}
+.device-phone{position:absolute;right:-2%;bottom:-2%;width:29%;z-index:3;animation:floatPhone 5.4s ease-in-out infinite;animation-delay:-1.8s;will-change:transform;}
+.phone-screen{position:relative;aspect-ratio:1320/2328;background:#0b0b0d;border:1px solid var(--gs-border);border-radius:24px;padding:5px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(201,169,97,0.22),0 26px 46px -16px rgba(0,0,0,0.85);}
+.phone-screen img{width:100%;height:100%;object-fit:cover;border-radius:19px;display:block;}
+.phone-screen::before{content:'';position:absolute;top:9px;left:50%;transform:translateX(-50%);width:30%;height:5px;background:#000;border-radius:5px;z-index:2;}
+@keyframes floatLaptop{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
+@keyframes floatPhone{0%,100%{transform:translateY(0);}50%{transform:translateY(-11px);}}
 
 /* Stats */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--gs-border);border-radius:var(--r);overflow:hidden;margin-top:48px;background:var(--gs-surface);}
@@ -253,7 +265,9 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
   .nav-links{display:none;}
   .hero-grid{grid-template-columns:1fr;gap:30px;}
   .hero-img-wrap{order:-1;}
-  .hero-img{aspect-ratio:16/10;max-height:300px;}
+  .device-scene{max-width:430px;margin:0 auto;}
+  .device-laptop{width:82%;}
+  .device-phone{right:0;width:30%;}
   .stats{grid-template-columns:1fr 1fr;}
   .stat:nth-child(2){border-right:none;}
   .stat:nth-child(1),.stat:nth-child(2){border-bottom:1px solid var(--gs-border);}
@@ -315,7 +329,19 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
       </div>
     </div>
     <div class="hero-img-wrap reveal" data-d="1">
-      <img class="hero-img" src="/public/hero-gebaeudetechnik.jpg" alt="Verlötete Kupferrohr-Installation der Gebäudetechnik (Sanitär/Heizung) vor schwarzem Hintergrund" width="1100" height="1100" fetchpriority="high"/>
+      <div class="device-scene" id="deviceScene">
+        <div class="device-laptop">
+          <div class="laptop-screen">
+            <img src="/public/gs-dashboard.png" alt="George-Solutions-App: Tagesrapport-Dashboard mit Diktier-Funktion" width="1320" height="2328" fetchpriority="high"/>
+          </div>
+          <div class="laptop-base"></div>
+        </div>
+        <div class="device-phone">
+          <div class="phone-screen">
+            <img src="/public/gs-materialliste.png" alt="George-Solutions-App: Materialliste mit Schnell-Erfassung" width="1320" height="2328" loading="lazy"/>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -680,6 +706,23 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
     document.querySelectorAll('.reveal,[data-count],.line-draw').forEach(function(el){ io.observe(el); });
   } else {
     document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+  }
+
+  // Dezenter 3D-Tilt der Geräte Richtung Mauszeiger — nur Desktop (Maus), nicht bei reduced-motion
+  var scene = document.getElementById('deviceScene');
+  if (scene && !reduce && window.matchMedia('(hover:hover) and (pointer:fine)').matches){
+    var heroEl = document.querySelector('.hero'), tRaf = null;
+    heroEl.addEventListener('mousemove', function(ev){
+      if (tRaf) return;
+      tRaf = requestAnimationFrame(function(){
+        tRaf = null;
+        var r = heroEl.getBoundingClientRect();
+        var px = Math.max(-0.5, Math.min(0.5, (ev.clientX - r.left) / r.width  - 0.5));
+        var py = Math.max(-0.5, Math.min(0.5, (ev.clientY - r.top)  / r.height - 0.5));
+        scene.style.transform = 'rotateX(' + (py * -4).toFixed(2) + 'deg) rotateY(' + (px * 5).toFixed(2) + 'deg)';
+      });
+    }, { passive:true });
+    heroEl.addEventListener('mouseleave', function(){ scene.style.transform = 'rotateX(0deg) rotateY(0deg)'; });
   }
   function runCount(el){
     var target = parseFloat(el.getAttribute('data-count')) || 0;
