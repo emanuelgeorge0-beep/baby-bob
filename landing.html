@@ -186,6 +186,21 @@ textarea{resize:vertical;min-height:96px;}
 .contact-pills{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px;}
 .pill{display:inline-flex;align-items:center;gap:9px;background:var(--gs-surface);border:1px solid var(--gs-border);border-radius:10px;padding:11px 17px;font-weight:600;font-size:14.5px;transition:border-color .2s;}
 .pill:hover{border-color:var(--gs-goldDim);}
+.lead-cta{margin-top:18px;}
+
+/* Auswahl-Chips (Anfrageformular) */
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:7px;}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--gs-bg);border:1px solid var(--gs-border);border-radius:999px;padding:9px 15px;font-size:14px;font-weight:600;line-height:1.2;color:var(--gs-textDim);cursor:pointer;user-select:none;font-family:var(--font-body);transition:border-color .18s,color .18s,background .18s;}
+.chip:hover{border-color:var(--gs-goldDim);color:var(--gs-text);}
+.chip[aria-pressed="true"]{background:rgba(201,169,97,0.12);border-color:var(--gs-gold);color:var(--gs-gold);}
+.chip .e{font-size:16px;line-height:1;}
+.intent{display:flex;gap:11px;align-items:flex-start;margin:18px 0 0;padding:14px 16px;background:var(--gs-bg);border:1px solid var(--gs-border);border-radius:12px;cursor:pointer;transition:border-color .18s,background .18s;}
+.intent:hover{border-color:var(--gs-goldDim);}
+.intent input{width:auto;flex:none;margin:3px 0 0;accent-color:var(--gs-gold);}
+.intent .it-h{font-weight:600;color:var(--gs-text);font-size:14.5px;}
+.intent .it-s{color:var(--gs-textDim);font-size:13px;margin-top:2px;}
+.intent input:checked ~ div .it-h{color:var(--gs-gold);}
+.intent:has(input:checked){border-color:var(--gs-gold);background:rgba(201,169,97,0.07);}
 
 /* Footer */
 footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px;background:var(--gs-surface);}
@@ -477,35 +492,71 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
         <li><span class="e">✓</span> Pilot zu Aktionskonditionen</li>
       </ul>
       <div class="contact-pills">
-        <a href="tel:+41764829428" class="pill">📞 +41 76 482 94 28</a>
         <a href="mailto:info@george-solutions.ch" class="pill">✉️ info@george-solutions.ch</a>
+      </div>
+      <div class="lead-cta">
+        <a href="#anfrage" class="btn btn-primary" id="cta-erstgespraech">📞 Telefonisches Erstgespräch buchen</a>
       </div>
     </div>
 
     <div class="form-card reveal" data-d="1">
       <form id="leadForm" novalidate>
+        <label for="lf-projekt">Projektname</label>
+        <input id="lf-projekt" name="projekt" type="text" placeholder="z. B. Sanierung MFH Seestrasse (optional)"/>
         <div class="form-row">
           <div><label for="lf-name">Name <span class="req">*</span></label><input id="lf-name" name="name" type="text" autocomplete="name" placeholder="Vor- und Nachname"/></div>
           <div><label for="lf-firma">Firma</label><input id="lf-firma" name="firma" type="text" autocomplete="organization" placeholder="Firmenname (optional)"/></div>
         </div>
         <div class="form-row">
-          <div><label for="lf-tel">Telefon</label><input id="lf-tel" name="telefon" type="tel" autocomplete="tel" inputmode="tel" placeholder="+41 …"/></div>
+          <div><label for="lf-tel">Telefon</label><input id="lf-tel" name="telefon" type="tel" autocomplete="tel" inputmode="tel" placeholder="Ihre Nummer"/></div>
           <div><label for="lf-email">E-Mail <span class="req">*</span></label><input id="lf-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="name@firma.ch"/></div>
         </div>
-        <label for="lf-bereich">Bereich</label>
-        <select id="lf-bereich" name="bereich">
-          <option value="">– optional wählen –</option>
-          <option>Sanitär</option><option>Heizung</option><option>Klima</option><option>Lüftung</option><option>Kombiniert / Allgemein</option>
-        </select>
+
+        <label>Bereich <span class="muted" style="font-weight:500;text-transform:none;letter-spacing:0;">(Mehrfachauswahl)</span></label>
+        <div class="chips" data-group="bereich">
+          <button type="button" class="chip" aria-pressed="false" data-val="Sanitär"><span class="e">🚿</span> Sanitär</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Heizung"><span class="e">🔥</span> Heizung</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Klima"><span class="e">❄️</span> Klima</button>
+        </div>
+
+        <label>Projektart</label>
+        <div class="chips" data-group="projektart">
+          <button type="button" class="chip" aria-pressed="false" data-val="Neubau">Neubau</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Sanierung">Sanierung</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Grossprojekt">Grossprojekt</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Subunternehmer-Anfrage">Subunternehmer-Anfrage</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Fachkraft-Engpass / Urlaubsersatz">Fachkraft-Engpass / Urlaubsersatz</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Service-/Projektleitung">Service-/Projektleitung</button>
+        </div>
+
+        <label>Objekt</label>
+        <div class="chips" data-group="objekt">
+          <button type="button" class="chip" aria-pressed="false" data-val="Büro">Büro</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Spital">Spital</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Industrie">Industrie</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Wärmezentrale">Wärmezentrale</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Kältezentrale">Kältezentrale</button>
+          <button type="button" class="chip" aria-pressed="false" data-val="Privat/Wohnen">Privat/Wohnen</button>
+        </div>
+
         <label for="lf-msg">Ihre Nachricht</label>
-        <textarea id="lf-msg" name="nachricht" placeholder="Worum geht es? Projekt, Umfang, gewünschter Zeitraum …"></textarea>
+        <textarea id="lf-msg" name="nachricht" placeholder="Optional: Umfang, gewünschter Zeitraum, Details …"></textarea>
+
+        <label class="intent" id="intent-box" for="lf-erstgespraech">
+          <input type="checkbox" id="lf-erstgespraech" name="erstgespraech"/>
+          <div>
+            <div class="it-h">📞 Telefonisches Erstgespräch gewünscht</div>
+            <div class="it-s">Kostenloser Rückruf innerhalb von 2 Stunden (werktags).</div>
+          </div>
+        </label>
+
         <button type="submit" class="btn btn-primary" id="lf-btn">Anfrage jetzt senden</button>
         <div class="form-msg" id="lf-err"></div>
       </form>
       <div class="form-success" id="lf-success">
         <div class="chk">✓</div>
         <h3 style="font-size:21px;">Danke — Anfrage erhalten!</h3>
-        <p class="muted" style="margin-top:10px;">Wir melden uns innerhalb von <b style="color:var(--gs-text)">2 Stunden</b> (werktags) persönlich bei Ihnen. Bei Dringendem erreichen Sie uns direkt unter <a href="tel:+41764829428" class="gold" style="font-weight:700;">+41 76 482 94 28</a>.</p>
+        <p class="muted" style="margin-top:10px;">Wir melden uns innerhalb von <b style="color:var(--gs-text)">2 Stunden</b> (werktags) persönlich bei Ihnen. Bei Rückfragen erreichen Sie uns jederzeit unter <a href="mailto:info@george-solutions.ch" class="gold" style="font-weight:700;">info@george-solutions.ch</a>.</p>
       </div>
     </div>
   </div>
@@ -519,7 +570,6 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
         <img class="logo" src="https://baby-bob.vercel.app/lib/logo-gs.png" alt="George Solutions"/>
         <p>Schweizer Gebäudetechnik — Projektmanagement und Kapazität für Sanitär, Heizung und Klima, ergänzend Lüftung.</p>
         <div class="foot-contact">
-          <a href="tel:+41764829428">📞 +41 76 482 94 28</a>
           <a href="mailto:info@george-solutions.ch">✉️ info@george-solutions.ch</a>
           <a>📍 Zürich</a>
         </div>
@@ -540,7 +590,7 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
 
     <div class="legal-sec">
       <h3 id="impressum">Impressum</h3>
-      <p>George Solutions · Schweizer Gebäudetechnik · Zürich · <a href="mailto:info@george-solutions.ch" class="gold">info@george-solutions.ch</a> · <a href="tel:+41764829428" class="gold">+41 76 482 94 28</a></p>
+      <p>George Solutions · Schweizer Gebäudetechnik · Zürich · <a href="mailto:info@george-solutions.ch" class="gold">info@george-solutions.ch</a></p>
       <h3 id="datenschutz">Datenschutz</h3>
       <p>Ihre über das Anfrageformular übermittelten Daten (Name, Firma, Telefon, E-Mail, Nachricht) verwenden wir ausschliesslich zur Bearbeitung Ihrer Anfrage und kontaktieren Sie auf dem von Ihnen gewählten Weg. Keine Weitergabe an Dritte zu Werbezwecken.</p>
     </div>
@@ -598,17 +648,47 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
   function showErr(m){ errBox.textContent = '⚠️ ' + m; errBox.classList.add('err'); }
   function clearErr(){ errBox.textContent=''; errBox.classList.remove('err'); }
 
+  // Auswahl-Chips: an/aus schalten (Mehrfachauswahl)
+  document.querySelectorAll('.chips .chip').forEach(function(c){
+    c.addEventListener('click', function(){
+      c.setAttribute('aria-pressed', c.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+    });
+  });
+  function chipVals(group){
+    return Array.prototype.slice.call(document.querySelectorAll('.chips[data-group="'+group+'"] .chip[aria-pressed="true"]'))
+      .map(function(c){ return c.getAttribute('data-val'); });
+  }
+
+  // CTA "Telefonisches Erstgespräch buchen": Rückruf-Intent vorwählen + zum Formular
+  var ctaErst = document.getElementById('cta-erstgespraech'), erstBox = document.getElementById('lf-erstgespraech');
+  if (ctaErst) ctaErst.addEventListener('click', function(){
+    if (erstBox) erstBox.checked = true;
+    var nameF = document.getElementById('lf-name'); if (nameF) setTimeout(function(){ nameF.focus(); }, 420);
+  });
+
   form.addEventListener('submit', function(ev){
     ev.preventDefault(); clearErr();
+    var projekt=document.getElementById('lf-projekt').value.trim();
     var name=document.getElementById('lf-name').value.trim(), email=document.getElementById('lf-email').value.trim();
     var firma=document.getElementById('lf-firma').value.trim(), tel=document.getElementById('lf-tel').value.trim();
-    var bereich=document.getElementById('lf-bereich').value, nachricht=document.getElementById('lf-msg').value.trim();
+    var nachricht=document.getElementById('lf-msg').value.trim();
+    var bereiche=chipVals('bereich'), projektart=chipVals('projektart'), objekt=chipVals('objekt');
+    var erstgespraech=document.getElementById('lf-erstgespraech').checked;
     if(!name){ showErr('Bitte Ihren Namen eingeben.'); return; }
     if(!email||!emailRe.test(email)){ showErr('Bitte eine gültige E-Mail-Adresse eingeben.'); return; }
     btn.disabled=true; btn.textContent='Wird gesendet …';
+    var bereichStr=bereiche.join(', ');
+    // Auswahl strukturiert in die Beschreibung — erscheint so im Nachrichten-Block der Lead-Mail
+    var detail=[];
+    if(projektart.length) detail.push('Projektart: '+projektart.join(', '));
+    if(objekt.length) detail.push('Objekt: '+objekt.join(', '));
+    var beschreibung=detail.join('\n');
+    if(nachricht) beschreibung += (beschreibung?'\n\n':'')+nachricht;
+    var projektName = projekt || ('Landing-Anfrage'+(bereichStr?' · '+bereichStr:''));
     var payload = { source:'landing',
       kunden:{ vorname:name, nachname:'', name:name, firma:firma||null, telefon:tel||null, email:email },
-      anfrage:{ projekt_name:'Landing-Anfrage'+(bereich?' · '+bereich:''), bereich:bereich||null, beschreibung:nachricht||null, dringlichkeit:'Normal' },
+      anfrage:{ projekt_name:projektName, bereich:bereichStr||null, objekttyp:objekt.join(', ')||null,
+        beschreibung:beschreibung||null, dringlichkeit:'Normal', erstgespraech:erstgespraech },
       tracking:getTracking() };
     var ctrl=new AbortController(), to=setTimeout(function(){ctrl.abort();},15000);
     fetch(GS_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:ctrl.signal})
