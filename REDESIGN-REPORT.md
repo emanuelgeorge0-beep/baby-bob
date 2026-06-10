@@ -49,7 +49,7 @@ Die im Auftrag genannten `emanuel-hero.jpg` / `emanuel-about.jpg` existierten **
 - **2** Fotos: As1 im Hero (rechts, gerundet, Border + dezenter Goldring), As4 in neuer Sektion „Ihr Ansprechpartner" + Zitat + ~10 Jahre HKLS.
 - **3** Sektionsreihenfolge 1–12 wie gefordert (Hero, Trust-Logos, Problem, Leistungen, Warum GS ×6, VS-Tabelle, Ansprechpartner, Baby BOB nach der B2B-Story, Preise, FAQ ×5, Anfrage, Footer).
 - **4** Preise gestaffelt pro Rolle (kein Punktesystem): Pilot Leitung 65 + Monteur 60 / Einzel 65; Regulär Leitung 70 + Monteur 65 / Einzel 70; Leitung als grosse Gold-Zahl, Hook + „inkl. Spesen".
-- **5** Footer: Logo + Claim, Kontakt (+41 76 482 94 28 · info@george-solutions.ch · Zürich), Spalten, schlichte Gold-Headings (kein Glow), © 2026.
+- **5** Footer: Logo + Claim, Kontakt (info@george-solutions.ch · Zürich), Spalten, schlichte Gold-Headings (kein Glow), © 2026.
 - **6** Mobile (375px): Hero-Foto begrenzt (max 300px), Stats 2×2, VS-Tabelle horizontal scrollbar, Goldtext ≥16px, alle Bilder mit `width/height`+`alt` (kein Layout-Shift).
 - **7** dieser Report. Commits pro Phase (Assets / Phasen 1–6 / Report).
 

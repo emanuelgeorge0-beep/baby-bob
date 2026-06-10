@@ -11,7 +11,6 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KE
 
 // ── Mail-Konfiguration (leicht änderbar) ──
 const GS_LEAD_RECIPIENTS = ['info@george-solutions.ch', 'emanuelgeorge0@gmail.com'];
-const GS_PHONE = process.env.GS_PHONE || '+41 XX XXX XX XX';            // erscheint als tel:-Link in den Mails
 const GS_LOGO_URL = 'https://baby-bob.vercel.app/lib/logo-gs.png';
 
 export default async function handler(req, res) {
@@ -284,7 +283,7 @@ async function sendLeadEmails(d) {
       <h2 style="margin:0 0 14px;font-size:20px;color:#fff;">Vielen Dank für Ihre Anfrage</h2>
       <p style="margin:0 0 14px;">Guten Tag${vorname ? ' ' + esc(vorname) : ''},</p>
       <p style="margin:0 0 14px;">vielen Dank für Ihre Anfrage bei <strong>George Solutions</strong>. Wir haben sie erhalten und melden uns innerhalb von <strong>2 Stunden (werktags)</strong> persönlich bei Ihnen.</p>
-      <p style="margin:0 0 14px;">Bei dringenden Anliegen erreichen Sie uns direkt unter <a href="tel:${esc(GS_PHONE.replace(/[^\d+]/g, ''))}" style="color:#4A9EFF;font-weight:700;text-decoration:none;">${esc(GS_PHONE)}</a>.</p>
+      <p style="margin:0 0 14px;">Für Rückfragen erreichen Sie uns jederzeit unter <a href="mailto:info@george-solutions.ch" style="color:#4A9EFF;font-weight:700;text-decoration:none;">info@george-solutions.ch</a> — gerne vereinbaren wir auch ein telefonisches Erstgespräch.</p>
       <p style="margin:18px 0 0;color:rgba(232,237,245,0.7);">Freundliche Grüsse<br><strong style="color:#fff;">George Solutions</strong></p>
     `;
     await sendResendEmail({
