@@ -65,8 +65,8 @@ header.scrolled{border-bottom-color:var(--gs-border);background:rgba(10,10,11,0.
 .hero .trust b{color:var(--gs-text);font-weight:600;}
 .hero-img-wrap{position:relative;perspective:1100px;}
 /* Skyline-Backdrop hinter dem Mockup — dunkel, weich, mit Fade zu Schwarz */
-.hero-skyline{position:absolute;inset:-16% -10% -8% -8%;z-index:0;pointer-events:none;background:url(/public/skyline.jpg) center 72%/cover no-repeat;filter:blur(2px) grayscale(0.5) brightness(0.52) contrast(1.06) saturate(0.78);transform:scale(1.06);will-change:transform;-webkit-mask-image:radial-gradient(130% 120% at 56% 44%,#000 32%,transparent 76%);mask-image:radial-gradient(130% 120% at 56% 44%,#000 32%,transparent 76%);opacity:.72;}
-.hero-skyline::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,11,0.28),rgba(10,10,11,0.68));}
+.hero-skyline{position:absolute;inset:-16% -10% -8% -8%;z-index:0;pointer-events:none;background:url(/public/skyline.jpg) center 72%/cover no-repeat;filter:blur(1.6px) grayscale(0.42) brightness(0.66) contrast(1.06) saturate(0.85);transform:scale(1.06);will-change:transform;-webkit-mask-image:radial-gradient(132% 122% at 56% 44%,#000 36%,transparent 78%);mask-image:radial-gradient(132% 122% at 56% 44%,#000 36%,transparent 78%);opacity:.85;}
+.hero-skyline::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,10,11,0.14),rgba(10,10,11,0.5));}
 /* Geräte-Mockup: Laptop (gross, hinten) + Handy (klein, vorn rechts) */
 .device-scene{position:relative;z-index:2;transform-style:preserve-3d;transition:transform .25s ease;will-change:transform;padding:8px 6px 20px;}
 .device-laptop{position:relative;width:88%;margin:0 auto;z-index:1;animation:floatLaptop 6.5s ease-in-out infinite;will-change:transform;}
