@@ -1538,9 +1538,9 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">HKLS Vollservice</div>
     </div>
   </div>
-  <a class="gs-phone-cta" data-gs-phone href="tel:+41" aria-label="George Solutions anrufen">
-    <div class="gs-phone-txt"><strong>Lieber direkt sprechen?</strong><span>Ruf uns an.</span></div>
-    <span class="gs-phone-num">📞 <span class="gs-phone-number">+41 XX XXX XX XX</span></span>
+  <a class="gs-phone-cta" href="mailto:info@george-solutions.ch" aria-label="George Solutions per E-Mail kontaktieren">
+    <div class="gs-phone-txt"><strong>Lieber persönlich?</strong><span>Erstgespräch: info@george-solutions.ch</span></div>
+    <span class="gs-phone-num">✉️ Schreiben</span>
   </a>
   <div class="gs-login-link" onclick="showScreen('login')">🔑 Partner / Techniker Login</div>
 </div>
@@ -1591,9 +1591,9 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <button class="gs-btn-primary" id="gs-analyse-btn" onclick="gsStartAnalysis()">
     <span>🧠</span> KI-Analyse starten
   </button>
-  <a class="gs-phone-cta" data-gs-phone href="tel:+41" aria-label="George Solutions anrufen">
-    <div class="gs-phone-txt"><strong>Lieber direkt sprechen?</strong><span>Ruf uns an.</span></div>
-    <span class="gs-phone-num">📞 <span class="gs-phone-number">+41 XX XXX XX XX</span></span>
+  <a class="gs-phone-cta" href="mailto:info@george-solutions.ch" aria-label="George Solutions per E-Mail kontaktieren">
+    <div class="gs-phone-txt"><strong>Lieber persönlich?</strong><span>Erstgespräch: info@george-solutions.ch</span></div>
+    <span class="gs-phone-num">✉️ Schreiben</span>
   </a>
 </div>
 
@@ -1807,9 +1807,9 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <button class="gs-btn-primary" id="gs-send-btn" onclick="gsSubmit()">
     <span>🚀</span> Anfrage jetzt senden
   </button>
-  <a class="gs-phone-cta" data-gs-phone href="tel:+41" aria-label="George Solutions anrufen">
-    <div class="gs-phone-txt"><strong>Lieber direkt sprechen?</strong><span>Ruf uns an.</span></div>
-    <span class="gs-phone-num">📞 <span class="gs-phone-number">+41 XX XXX XX XX</span></span>
+  <a class="gs-phone-cta" href="mailto:info@george-solutions.ch" aria-label="George Solutions per E-Mail kontaktieren">
+    <div class="gs-phone-txt"><strong>Lieber persönlich?</strong><span>Erstgespräch: info@george-solutions.ch</span></div>
+    <span class="gs-phone-num">✉️ Schreiben</span>
   </a>
   <div style="padding:10px 18px 0;font-size:11px;color:rgba(232,237,245,0.3);text-align:center;">Ihre Daten werden vertraulich behandelt und nur für diese Anfrage verwendet.</div>
 </div>
@@ -3724,21 +3724,7 @@ function bbRenderRegionSelector(){
   }).join('');
 }
 
-// ── GS Telefon (zentral) — echte Nummer kommt aus Vercel-Env GS_PHONE via /api/config ──
-var GS_PHONE='+41 XX XXX XX XX';   // Fallback-Platzhalter, bis /api/config die echte Nummer liefert
-function gsInitPhones(){
-  var tel='tel:'+String(GS_PHONE).replace(/[^\d+]/g,'');
-  document.querySelectorAll('a[data-gs-phone]').forEach(function(a){
-    a.setAttribute('href',tel);
-    var n=a.querySelector('.gs-phone-number'); if(n) n.textContent=GS_PHONE;
-  });
-}
-// Echte Nummer serverseitig holen (GS_PHONE-Env) und alle CTAs aktualisieren.
-function gsLoadPhone(){
-  fetch('/api/config').then(function(r){return r.json();}).then(function(d){
-    if(d&&d.phone&&/\d/.test(d.phone)){ GS_PHONE=d.phone; gsInitPhones(); }
-  }).catch(function(){});
-}
+// ── Kontakt: kein Telefon mehr — Kontakt-CTAs verlinken direkt auf info@george-solutions.ch ──
 
 // ── GS Navigation ──
 function gsGo(screenId){
@@ -6538,8 +6524,6 @@ function setTechStatus(msg,type){
     try{ bobLang=bbGetLang(); }catch(e){ bobLang='de'; }    // Sprache: IMMER Deutsch-Default, persistiert
     try{ bbApplyRegion(bbGetRegion()); bbRenderRegionSelector(); }catch(e){}
     try{ bbRenderLangSwitch(); }catch(e){}                  // Sprachumschalter DE/EN/ES rendern
-    try{ gsInitPhones(); }catch(e){}
-    try{ gsLoadPhone(); }catch(e){}                         // echte Nummer aus GS_PHONE-Env nachladen
     try{ bobAudioInit(); }catch(e){}
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',run,{once:true});
