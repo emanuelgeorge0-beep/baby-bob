@@ -1,4 +1,5 @@
 {
+  "outputDirectory": ".",
   "crons": [
     { "path": "/api/bob-learn", "schedule": "0 1 * * *" }
   ],
