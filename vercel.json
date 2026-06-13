@@ -4,11 +4,31 @@
   ],
   "rewrites": [
     { "source": "/app", "destination": "/app.html" },
-    { "source": "/gs-intern-7k2x", "destination": "/app.html" }
+    { "source": "/gs-intern-7k2x", "destination": "/gs-intern.html" }
   ],
   "headers": [
     {
       "source": "/manifest.json",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+    },
+    {
+      "source": "/gs-intern-7k2x",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/gs-intern.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/cockpit-manifest.json",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
     },
     {
