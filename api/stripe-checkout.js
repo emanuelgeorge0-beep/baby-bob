@@ -45,8 +45,8 @@ async function createSession(req, res) {
 
   const form = new URLSearchParams();
   form.set('mode', 'payment');
-  form.set('success_url', `${base}/?stripe=success&session_id={CHECKOUT_SESSION_ID}`);
-  form.set('cancel_url', `${base}/?stripe=cancel`);
+  form.set('success_url', `${base}/app?stripe=success&session_id={CHECKOUT_SESSION_ID}`);
+  form.set('cancel_url', `${base}/app?stripe=cancel`);
   // Kreditkarte + TWINT (CHF). "Banküberweisung" = the invoice option in the UI.
   form.append('payment_method_types[]', 'card');
   form.append('payment_method_types[]', 'twint');

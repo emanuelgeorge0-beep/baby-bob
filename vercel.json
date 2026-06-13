@@ -3,7 +3,8 @@
     { "path": "/api/bob-learn", "schedule": "0 1 * * *" }
   ],
   "rewrites": [
-    { "source": "/gs-intern-7k2x", "destination": "/index.html" }
+    { "source": "/app", "destination": "/app.html" },
+    { "source": "/gs-intern-7k2x", "destination": "/app.html" }
   ],
   "headers": [
     {

@@ -32,8 +32,8 @@ export default async function handler(req, res) {
   const isSub = item.type === 'sub';
   const form = new URLSearchParams();
   form.set('mode', isSub ? 'subscription' : 'payment');
-  form.set('success_url', `${base}/?bezahlt=ok&product=${encodeURIComponent(product)}&session_id={CHECKOUT_SESSION_ID}`);
-  form.set('cancel_url', `${base}/?bezahlt=abbruch`);
+  form.set('success_url', `${base}/app?bezahlt=ok&product=${encodeURIComponent(product)}&session_id={CHECKOUT_SESSION_ID}`);
+  form.set('cancel_url', `${base}/app?bezahlt=abbruch`);
   // TWINT only for one-time; subscriptions → card.
   form.append('payment_method_types[]', 'card');
   if (!isSub) form.append('payment_method_types[]', 'twint');

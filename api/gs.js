@@ -279,10 +279,28 @@ async function sendLeadEmails(d) {
   // (2) Bestätigung an den Kunden – nur bei plausibler E-Mail.
   if (isPlausibleEmail(d.email)) {
     const vorname = (d.name || '').split(' ')[0] || '';
+    // Gewähltes Team in der Kundenbestätigung anzeigen (Personen, kein Equipment).
+    const confRow = (label, value) => value ? `<tr><td style="padding:5px 12px 5px 0;color:rgba(232,237,245,0.55);white-space:nowrap;vertical-align:top;">${esc(label)}</td><td style="padding:5px 0;color:#fff;font-weight:600;">${esc(value)}</td></tr>` : '';
+    const confTarif = [d.tarif, d.tarif_preis].filter(Boolean).join(' · ');
+    // Team nur zeigen, wenn im GS-Flow tatsächlich eine Auswahl getroffen wurde
+    // (Landing-Leads haben keine Team-Auswahl → kein irreführendes "2er-Team").
+    const hasTeamSel = !!(d.team && (d.team.mode || teamMembers.length));
+    const confTeamBox = (hasTeamSel || confTarif || d.projekt || d.bereich)
+      ? `<div style="margin:16px 0;padding:14px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,210,74,0.22);border-radius:12px;">
+          <div style="color:#FFD24A;font-weight:700;font-size:13px;margin-bottom:8px;">Ihre Auswahl</div>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            ${confRow('Projekt', [d.projekt, d.bereich].filter(Boolean).join(' · '))}
+            ${confRow('Tarif', confTarif)}
+            ${hasTeamSel ? confRow('Team', teamLabel) : ''}
+            ${hasTeamSel && teamMembers.length ? confRow('Ihr Team', teamMembers.join(' & ')) : ''}
+          </table>
+        </div>`
+      : '';
     const confInner = `
       <h2 style="margin:0 0 14px;font-size:20px;color:#fff;">Vielen Dank für Ihre Anfrage</h2>
       <p style="margin:0 0 14px;">Guten Tag${vorname ? ' ' + esc(vorname) : ''},</p>
       <p style="margin:0 0 14px;">vielen Dank für Ihre Anfrage bei <strong>George Solutions</strong>. Wir haben sie erhalten und melden uns innerhalb von <strong>2 Stunden (werktags)</strong> persönlich bei Ihnen.</p>
+      ${confTeamBox}
       <p style="margin:0 0 14px;">Für Rückfragen erreichen Sie uns jederzeit unter <a href="mailto:info@george-solutions.ch" style="color:#4A9EFF;font-weight:700;text-decoration:none;">info@george-solutions.ch</a> — gerne vereinbaren wir auch ein telefonisches Erstgespräch.</p>
       <p style="margin:18px 0 0;color:rgba(232,237,245,0.7);">Freundliche Grüsse<br><strong style="color:#fff;">George Solutions</strong></p>
     `;

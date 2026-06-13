@@ -2,7 +2,7 @@
   "name": "Baby BOB – Handwerker Finder",
   "short_name": "Baby BOB",
   "description": "KI-Scanner für Handwerker & Dienstleister in der Schweiz – Foto scannen, Fachmann finden.",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#080808",
   "theme_color": "#FFD700",
@@ -28,7 +28,7 @@
       "name": "Problem scannen",
       "short_name": "Scannen",
       "description": "Foto aufnehmen und Fachmann finden",
-      "url": "/",
+      "url": "/app",
       "icons": [{ "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><text y='80' font-size='80'>📸</text></svg>", "sizes": "96x96" }]
     }
   ]
