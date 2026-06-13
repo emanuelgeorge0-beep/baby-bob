@@ -240,6 +240,10 @@ var TOKEN = null, USER = null, ROLE = null;
 var dash = null, leadsCache = [], custCache = [];
 var leadFilter = { stufe:'', quelle:'' };
 var STUFEN = ['neu','kontaktiert','angebot','gewonnen','verloren'];
+var MASTER_UID = 'ee46a716-7017-4045-9f67-fe06d05171e7';
+// Cockpit-Zugang NUR für die Master/Admin-UUID. Die Server-API (api/cockpit.js)
+// erzwingt dieselbe Regel hart (403) — dies hier ist nur die UI-Spiegelung.
+function isMaster(d){ return d && d.user && d.user.id===MASTER_UID && (d.role==='master'||d.role==='gs_admin'); }
 
 // ── Helpers ──
 function $(id){ return document.getElementById(id); }
@@ -269,8 +273,10 @@ function handleForbidden(){
   if(rt && !handleForbidden._tried){
     handleForbidden._tried=true;
     authApi('refresh',{refresh_token:rt}).then(function(d){
-      if(d && d.access_token){ setSession(d.access_token, d.refresh_token, d.user, d.role); router(); }
-      else logout();
+      if(d && d.access_token && d.user && d.user.id===MASTER_UID){
+        handleForbidden._tried=false;  // erlaubt erneuten Refresh nach Ablauf
+        setSession(d.access_token, d.refresh_token, d.user, d.role); router();
+      } else logout();
     }).catch(logout);
   } else { logout(); }
 }
@@ -307,8 +313,9 @@ function boot(){
 function verifyAndEnter(token, refresh){
   authApi('verify',{token:token}).then(function(d){
     if(d.error || !d.user){ logout(); return; }
-    if(d.role!=='master' && d.role!=='gs_admin'){
-      // Eingeloggt, aber kein Master → kein Cockpit-Zugang. Kein Leak.
+    if(!isMaster(d)){
+      // Eingeloggt, aber nicht die Master-UUID → kein Cockpit-Zugang. Kein Leak.
+      logout();
       $('login').classList.remove('hidden');
       $('li-msg').className='login-msg err';
       $('li-msg').textContent='Dieser Account hat keinen Zugriff auf das Cockpit.';
@@ -335,7 +342,7 @@ $('li-go').onclick=function(){
   setMsg('Anmelden…','');
   authApi('login',{email:email,password:pw}).then(function(d){
     if(d.error){ setMsg(d.error,'err'); return; }
-    if(d.role!=='master'&&d.role!=='gs_admin'){ setMsg('Kein Zugriff auf das Cockpit.','err'); return; }
+    if(!isMaster(d)){ setMsg('Kein Zugriff auf das Cockpit.','err'); return; }
     setSession(d.access_token, d.refresh_token, d.user, d.role);
     enterApp();
   }).catch(function(){ setMsg('Verbindungsfehler','err'); });

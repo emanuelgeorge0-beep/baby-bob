@@ -86,9 +86,12 @@ export default async function handler(req, res) {
 
 // ── Stammdaten laden + in JS joinen (robust, unabhängig von FK-Metadaten) ──
 async function loadCore() {
+  // select=* (NICHT einzelne neue Spalten) → das Cockpit funktioniert auch VOR
+  // dem SQL-Migrationslauf: fehlende crm_stufe/zugewiesen_an/typ etc. werden in
+  // JS via Fallback (stufeOf / Defaults) behandelt, statt 400 zu werfen.
   const [anfragen, kunden] = await Promise.all([
-    sbGet('gs_anfragen?select=id,projekt_name,bereich,objekttyp,beschreibung,dringlichkeit,tarif,tarif_preis,status,crm_stufe,zugewiesen_an,followup_datum,quelle,utm_source,utm_medium,utm_campaign,referrer,gewuenschter_start,umfang,notiz,kunde_id,erstellt_am&order=erstellt_am.desc'),
-    sbGet('gs_kunden?select=id,firma,kontaktperson,ansprechpartner,email,telefon,adresse,plz,ort,typ,land,notiz,vertragstyp,erstellt_am'),
+    sbGet('gs_anfragen?select=*&order=erstellt_am.desc'),
+    sbGet('gs_kunden?select=*'),
   ]);
   const kundenById = {};
   for (const k of kunden) kundenById[k.id] = k;
@@ -238,7 +241,7 @@ async function getCustomerDetail(id) {
   const kunde = (await sbGet(`gs_kunden?id=eq.${id}&select=*&limit=1`))?.[0];
   if (!kunde) throw new Error('Kunde nicht gefunden');
   const [anfragen, aktivitaeten, aufgaben, projekte] = await Promise.all([
-    sbGet(`gs_anfragen?kunde_id=eq.${id}&select=id,projekt_name,bereich,status,crm_stufe,erstellt_am&order=erstellt_am.desc`).catch(() => []),
+    sbGet(`gs_anfragen?kunde_id=eq.${id}&select=*&order=erstellt_am.desc`).catch(() => []),
     sbGet(`gs_crm_aktivitaeten?kunde_id=eq.${id}&select=*&order=datum.desc`).catch(() => []),
     sbGet(`gs_crm_aufgaben?kunde_id=eq.${id}&select=*&order=faelligkeit.asc`).catch(() => []),
     sbGet(`gs_projekte?kunde_id=eq.${id}&select=id,name,projektnummer,status,bereich`).catch(() => []),
