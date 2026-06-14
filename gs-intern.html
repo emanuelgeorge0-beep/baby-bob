@@ -11,7 +11,10 @@
 <meta name="apple-mobile-web-app-title" content="GS Cockpit"/>
 <title>GS</title>
 <link rel="manifest" href="/cockpit-manifest.json"/>
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230a0e14'/%3E%3Crect x='8' y='8' width='164' height='164' rx='34' fill='none' stroke='%23C9A961' stroke-width='3'/%3E%3Ctext x='90' y='118' font-size='86' font-family='Georgia,serif' font-weight='700' text-anchor='middle' fill='%23C9A961'%3EGS%3C/text%3E%3C/svg%3E"/>
+<!-- iOS ignoriert SVG-apple-touch-icons → echtes PNG, damit das Homescreen-Icon korrekt erscheint. -->
+<link rel="apple-touch-icon" sizes="180x180" href="/cockpit-icon-180.png"/>
+<link rel="apple-touch-icon" href="/cockpit-icon-180.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="/cockpit-icon-192.png"/>
 <style>
   :root{
     --bg:#070a0f; --bg2:#0c111a; --card:#10161f; --card2:#141c28;
@@ -254,6 +257,17 @@
   .jdots{display:inline-block;}
   .jdots::after{content:'';animation:jdotsa 1.2s steps(4,end) infinite;}
   @keyframes jdotsa{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}}
+
+  /* ── Install-Hinweis (PWA zum Homescreen) ── */
+  .installbar{display:flex;align-items:center;gap:11px;margin:14px 16px 0;padding:12px 14px;
+    background:linear-gradient(135deg,rgba(201,169,97,.16),rgba(201,169,97,.05));
+    border:1px solid var(--gold-line);border-radius:14px;}
+  .installbar .ii{font-size:22px;flex:0 0 auto;}
+  .installbar .it{flex:1;font-size:12.5px;line-height:1.45;color:var(--txt);}
+  .installbar .it b{color:var(--gold);}
+  .installbar .ibtn{flex:0 0 auto;background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;
+    font-weight:800;font-size:13px;border-radius:10px;padding:9px 13px;}
+  .installbar .ix{flex:0 0 auto;background:transparent;border:none;color:var(--muted2);font-size:20px;line-height:1;padding:2px 4px;}
 </style>
 </head>
 <body>
@@ -394,6 +408,7 @@ function enterApp(){
   $('tb-sub').textContent = ROLE==='master'?'Master':'Admin';
   buildNav();
   go('dashboard');
+  maybeShowInstall();
 }
 
 // ── Login handlers ──
@@ -1303,6 +1318,45 @@ function paintSaeulen(d){
     '</div>';
   }).join('');
   $('sae-body').innerHTML=head+cards;
+}
+
+// ── PWA: Service-Worker + Install-Hinweis ──
+// SW macht das Cockpit auf Android installierbar (fetch-Handler) + schneller Start.
+// updateViaCache:'none' → SW-Updates trotz immutable-Cache der .js-Assets.
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('/cockpit-sw.js',{scope:'/gs-intern-7k2x',updateViaCache:'none'}).catch(function(){});
+  });
+}
+var _deferredInstall=null;
+window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); _deferredInstall=e; maybeShowInstall(); });
+window.addEventListener('appinstalled',function(){ _deferredInstall=null; var b=$('installbar'); if(b) b.remove(); });
+function isStandalone(){
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true;
+}
+function installDismissed(){ try{ return localStorage.getItem('gs_install_hint_off')==='1'; }catch(e){ return false; } }
+function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+// Wird nach Login (enterApp) und bei beforeinstallprompt aufgerufen.
+function maybeShowInstall(){
+  if(!TOKEN) return;                       // nur im eingeloggten Cockpit
+  if(isStandalone() || installDismissed()) return;
+  if($('installbar')) return;              // schon sichtbar
+  var android = !!_deferredInstall, ios = isIOS();
+  if(!android && !ios) return;             // Desktop-Browser ohne Prompt → kein Hinweis
+  var bar=document.createElement('div'); bar.className='installbar'; bar.id='installbar';
+  if(android){
+    bar.innerHTML='<span class="ii">📲</span><span class="it"><b>Als App installieren</b><br>Cockpit zum Homescreen hinzufügen — öffnet wie eine echte App.</span>'+
+      '<button class="ibtn" id="install-go">Installieren</button><button class="ix" id="install-x">×</button>';
+  } else {
+    bar.innerHTML='<span class="ii">📲</span><span class="it"><b>Zum Homescreen hinzufügen</b><br>In Safari: <b>Teilen</b> ⬆️ → <b>Zum Home-Bildschirm</b>. Dann läuft das Cockpit wie eine App.</span>'+
+      '<button class="ix" id="install-x">×</button>';
+  }
+  var v=$('view'); v.parentNode.insertBefore(bar, v);
+  var go=$('install-go');
+  if(go) go.onclick=function(){
+    if(_deferredInstall){ _deferredInstall.prompt(); _deferredInstall.userChoice.then(function(){ _deferredInstall=null; bar.remove(); }); }
+  };
+  $('install-x').onclick=function(){ try{ localStorage.setItem('gs_install_hint_off','1'); }catch(e){} bar.remove(); };
 }
 
 // ── Go ──
