@@ -76,6 +76,22 @@ export default async function handler(req, res) {
       case 'activity_add':    return res.status(200).json(await addActivity(req.body));
       case 'task_add':        return res.status(200).json(await addTask(req.body));
       case 'task_done':       return res.status(200).json(await taskDone(req.body.id));
+      // ── Session 2: Marketing ──
+      case 'marketing':       return res.status(200).json(await getMarketing());
+      case 'mkt_kosten_set':  return res.status(200).json(await setKanalKosten(req.body));
+      case 'mkt_content_add': return res.status(200).json(await addContent(req.body));
+      case 'mkt_content_set': return res.status(200).json(await setContentStatus(req.body));
+      case 'mkt_content_del': return res.status(200).json(await delContent(req.body.id));
+      // ── Session 2: To-Dos ──
+      case 'todos':           return res.status(200).json(await getTodos());
+      case 'todo_add':        return res.status(200).json(await addTodo(req.body));
+      case 'todo_update':     return res.status(200).json(await updateTodo(req.body));
+      case 'todo_del':        return res.status(200).json(await delTodo(req.body.id));
+      // ── Session 2: Verkauf / Margen ──
+      case 'margen':          return res.status(200).json(await getMargen());
+      case 'marge_add':       return res.status(200).json(await addMarge(req.body));
+      case 'marge_update':    return res.status(200).json(await updateMarge(req.body));
+      case 'marge_del':       return res.status(200).json(await delMarge(req.body.id));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -149,6 +165,25 @@ async function getDashboard() {
     else if (t.faelligkeit < today) followupUeberfaellig++;
   }
 
+  // ── Session 2 Widgets (resilient: Tabellen evtl. noch nicht migriert) ──
+  let todosHeute = 0, todosUeberfaellig = 0, todosOffen = 0;
+  try {
+    const todos = await sbGet('gs_todos?status=eq.offen&select=id,faelligkeit');
+    todosOffen = todos.length;
+    for (const t of todos) {
+      if (!t.faelligkeit) continue;
+      if (t.faelligkeit === today) todosHeute++;
+      else if (t.faelligkeit < today) todosUeberfaellig++;
+    }
+  } catch (_) {}
+
+  let umsatzGesamt = 0, margeGesamt = 0;
+  try {
+    const margen = await sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell');
+    for (const m of margen) { const c = calcMarge(m); umsatzGesamt += c.umsatz; margeGesamt += c.marge; }
+  } catch (_) {}
+  const margeProzent = umsatzGesamt > 0 ? Math.round((margeGesamt / umsatzGesamt) * 100) : 0;
+
   return {
     perStufe,
     perQuelle,
@@ -158,7 +193,33 @@ async function getDashboard() {
     followupUeberfaellig,
     leadsGesamt: anfragen.length,
     leadsOffen: perStufe.neu + perStufe.kontaktiert + perStufe.angebot,
+    todosHeute, todosUeberfaellig, todosOffen,
+    umsatzGesamt: Math.round(umsatzGesamt), margeGesamt: Math.round(margeGesamt), margeProzent,
   };
+}
+
+// Umsatz = umsatz_manuell falls gesetzt, sonst stundensatz*stunden. Marge = Umsatz - Einkauf.
+function calcMarge(m) {
+  const einkauf = Number(m.einkauf) || 0;
+  const umsatz = (m.umsatz_manuell != null && m.umsatz_manuell !== '')
+    ? Number(m.umsatz_manuell) || 0
+    : (Number(m.stundensatz) || 0) * (Number(m.stunden) || 0);
+  const marge = umsatz - einkauf;
+  const prozent = umsatz > 0 ? Math.round((marge / umsatz) * 100) : 0;
+  return { einkauf, umsatz, marge, prozent };
+}
+
+// Quelle (Freitext) → kanonischer Marketing-Kanal.
+const KANAELE = ['meta', 'google', 'app', 'linkedin', 'netzwerk', 'direkt'];
+function kanalOf(quelle) {
+  const q = String(quelle || '').toLowerCase();
+  if (/facebook|instagram|insta|meta|fb|ig/.test(q)) return 'meta';
+  if (/google|adwords|gads/.test(q)) return 'google';
+  if (/linkedin/.test(q)) return 'linkedin';
+  if (/netzwerk|empfehl|referral|mund|word/.test(q)) return 'netzwerk';
+  if (/bob|app|scan|baby-bob/.test(q)) return 'app';
+  if (/direkt|direct/.test(q)) return 'direkt';
+  return 'sonstige';
 }
 
 async function getLeads(body) {
@@ -275,5 +336,187 @@ async function addTask(body) {
 async function taskDone(id) {
   if (!id) throw new Error('id fehlt');
   await sbWrite('PATCH', `gs_crm_aufgaben?id=eq.${id}`, { status: 'erledigt' }, 'return=minimal');
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SESSION 2 — Marketing · To-Dos · Verkauf/Margen
+// ═══════════════════════════════════════════════════════════════════════════
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function uuid(v) { if (!UUID_RE.test(String(v || ''))) throw new Error('Ungültige id'); return v; }
+function num(v) { const n = Number(v); return isFinite(n) ? n : 0; }
+function fuState(dateStr, today) {
+  if (!dateStr) return null;
+  if (dateStr < today) return 'ueberfaellig';
+  if (dateStr === today) return 'heute';
+  return 'geplant';
+}
+
+// ── Marketing ──
+async function getMarketing() {
+  const { anfragen } = await loadCore();
+  const agg = {}; // kanal → {leads, gewonnen}
+  for (const a of anfragen) {
+    const kn = kanalOf(a.quelle);
+    if (!agg[kn]) agg[kn] = { leads: 0, gewonnen: 0 };
+    agg[kn].leads++;
+    if (stufeOf(a) === 'gewonnen') agg[kn].gewonnen++;
+  }
+  let kostenRows = [];
+  try { kostenRows = await sbGet('gs_mkt_kanal?select=*'); } catch (_) {}
+  const kostenByKanal = {};
+  for (const r of kostenRows) kostenByKanal[r.kanal] = r;
+
+  // Alle bekannten Kanäle + evtl. 'sonstige', falls Leads existieren.
+  const kanalSet = new Set(KANAELE);
+  Object.keys(agg).forEach((k) => kanalSet.add(k));
+  const kanaele = Array.from(kanalSet).map((kn) => {
+    const a = agg[kn] || { leads: 0, gewonnen: 0 };
+    const kosten = num(kostenByKanal[kn]?.kosten);
+    return {
+      kanal: kn, leads: a.leads, gewonnen: a.gewonnen,
+      conversion: a.leads > 0 ? Math.round((a.gewonnen / a.leads) * 100) : 0,
+      kosten, cpl: a.leads > 0 ? Math.round((kosten / a.leads) * 100) / 100 : 0,
+      notiz: kostenByKanal[kn]?.notiz || null,
+    };
+  }).sort((x, y) => y.leads - x.leads);
+
+  let content = [];
+  try { content = await sbGet('gs_mkt_content?select=*&order=datum.desc.nullslast'); } catch (_) {}
+
+  const totals = kanaele.reduce((t, k) => ({
+    leads: t.leads + k.leads, gewonnen: t.gewonnen + k.gewonnen, kosten: t.kosten + k.kosten,
+  }), { leads: 0, gewonnen: 0, kosten: 0 });
+  totals.kosten = Math.round(totals.kosten);
+  totals.cpl = totals.leads > 0 ? Math.round((totals.kosten / totals.leads) * 100) / 100 : 0;
+
+  return { kanaele, content, totals };
+}
+
+async function setKanalKosten(body) {
+  const kanal = String(body.kanal || '').toLowerCase();
+  if (!KANAELE.includes(kanal) && kanal !== 'sonstige') throw new Error('Unbekannter Kanal');
+  // Upsert über PostgREST (on_conflict=kanal).
+  await sbWrite('POST', 'gs_mkt_kanal?on_conflict=kanal',
+    { kanal, kosten: num(body.kosten), notiz: body.notiz || null, updated_at: new Date().toISOString() },
+    'return=minimal,resolution=merge-duplicates');
+  return { ok: true };
+}
+
+const CONTENT_STATUS = ['idee', 'geplant', 'veroeffentlicht'];
+async function addContent(body) {
+  if (!body.idee) throw new Error('idee nötig');
+  const status = CONTENT_STATUS.includes(body.status) ? body.status : 'idee';
+  const row = await sbWrite('POST', 'gs_mkt_content', {
+    datum: body.datum || null, kanal: body.kanal || null, idee: body.idee, status,
+  });
+  return { ok: true, content: Array.isArray(row) ? row[0] : row };
+}
+async function setContentStatus(body) {
+  uuid(body.id);
+  if (!CONTENT_STATUS.includes(body.status)) throw new Error('Ungültiger Status');
+  await sbWrite('PATCH', `gs_mkt_content?id=eq.${body.id}`, { status: body.status }, 'return=minimal');
+  return { ok: true };
+}
+async function delContent(id) {
+  uuid(id);
+  await sbWrite('DELETE', `gs_mkt_content?id=eq.${id}`, undefined, 'return=minimal');
+  return { ok: true };
+}
+
+// ── To-Dos ──
+const PRIOS = ['niedrig', 'mittel', 'hoch'];
+const MITARBEITER = ['Emanuel', 'Dimitri', 'Patrick', 'Vasil', 'Yasemin'];
+async function getTodos() {
+  const today = todayISO();
+  let rows = [];
+  try { rows = await sbGet('gs_todos?select=*&order=status.asc,faelligkeit.asc.nullslast'); } catch (_) { return { todos: [] }; }
+  const todos = rows.map((t) => ({ ...t, fu_state: t.status === 'offen' ? fuState(t.faelligkeit, today) : null }));
+  return { todos };
+}
+async function addTodo(body) {
+  if (!body.titel) throw new Error('titel nötig');
+  const prioritaet = PRIOS.includes(body.prioritaet) ? body.prioritaet : 'mittel';
+  const row = await sbWrite('POST', 'gs_todos', {
+    titel: body.titel, beschreibung: body.beschreibung || null,
+    zustaendig: body.zustaendig || null, faelligkeit: body.faelligkeit || null,
+    prioritaet, status: 'offen',
+  });
+  return { ok: true, todo: Array.isArray(row) ? row[0] : row };
+}
+async function updateTodo(body) {
+  uuid(body.id);
+  const patch = {};
+  if (body.status !== undefined) { if (!['offen', 'erledigt'].includes(body.status)) throw new Error('Status'); patch.status = body.status; }
+  if (body.titel !== undefined) patch.titel = body.titel;
+  if (body.beschreibung !== undefined) patch.beschreibung = body.beschreibung || null;
+  if (body.zustaendig !== undefined) patch.zustaendig = body.zustaendig || null;
+  if (body.faelligkeit !== undefined) patch.faelligkeit = body.faelligkeit || null;
+  if (body.prioritaet !== undefined) { if (!PRIOS.includes(body.prioritaet)) throw new Error('Prio'); patch.prioritaet = body.prioritaet; }
+  if (!Object.keys(patch).length) return { ok: true };
+  await sbWrite('PATCH', `gs_todos?id=eq.${body.id}`, patch, 'return=minimal');
+  return { ok: true };
+}
+async function delTodo(id) {
+  uuid(id);
+  await sbWrite('DELETE', `gs_todos?id=eq.${id}`, undefined, 'return=minimal');
+  return { ok: true };
+}
+
+// ── Verkauf / Margen ──
+async function getMargen() {
+  let rows = [];
+  try { rows = await sbGet('gs_margen?select=*&order=created_at.desc'); } catch (_) { return { margen: [], totals: { umsatz: 0, marge: 0, prozent: 0, einkauf: 0 } }; }
+  // Anfrage-Titel (optional) nachladen, falls verknüpft.
+  const ids = rows.map((r) => r.anfrage_id).filter(Boolean);
+  let titelById = {};
+  if (ids.length) {
+    try {
+      const anf = await sbGet(`gs_anfragen?id=in.(${ids.join(',')})&select=id,projekt_name`);
+      for (const a of anf) titelById[a.id] = a.projekt_name;
+    } catch (_) {}
+  }
+  let umsatz = 0, marge = 0, einkauf = 0;
+  const margen = rows.map((m) => {
+    const c = calcMarge(m);
+    umsatz += c.umsatz; marge += c.marge; einkauf += c.einkauf;
+    return {
+      id: m.id, titel: m.titel, anfrage_id: m.anfrage_id,
+      anfrage_titel: m.anfrage_id ? (titelById[m.anfrage_id] || null) : null,
+      einkauf: c.einkauf, stundensatz: num(m.stundensatz), stunden: num(m.stunden),
+      umsatz_manuell: m.umsatz_manuell, umsatz: c.umsatz, marge: c.marge, prozent: c.prozent,
+      notiz: m.notiz,
+    };
+  });
+  const totals = {
+    umsatz: Math.round(umsatz), marge: Math.round(marge), einkauf: Math.round(einkauf),
+    prozent: umsatz > 0 ? Math.round((marge / umsatz) * 100) : 0,
+  };
+  return { margen, totals };
+}
+async function addMarge(body) {
+  if (!body.titel) throw new Error('titel nötig');
+  const payload = {
+    titel: body.titel, einkauf: num(body.einkauf), stundensatz: num(body.stundensatz),
+    stunden: num(body.stunden), notiz: body.notiz || null,
+    umsatz_manuell: (body.umsatz_manuell === '' || body.umsatz_manuell == null) ? null : num(body.umsatz_manuell),
+  };
+  if (body.anfrage_id) payload.anfrage_id = uuid(body.anfrage_id);
+  const row = await sbWrite('POST', 'gs_margen', payload);
+  return { ok: true, marge: Array.isArray(row) ? row[0] : row };
+}
+async function updateMarge(body) {
+  uuid(body.id);
+  const patch = {};
+  ['titel', 'notiz'].forEach((k) => { if (body[k] !== undefined) patch[k] = body[k] || null; });
+  ['einkauf', 'stundensatz', 'stunden'].forEach((k) => { if (body[k] !== undefined) patch[k] = num(body[k]); });
+  if (body.umsatz_manuell !== undefined) patch.umsatz_manuell = (body.umsatz_manuell === '' || body.umsatz_manuell == null) ? null : num(body.umsatz_manuell);
+  if (!Object.keys(patch).length) return { ok: true };
+  await sbWrite('PATCH', `gs_margen?id=eq.${body.id}`, patch, 'return=minimal');
+  return { ok: true };
+}
+async function delMarge(id) {
+  uuid(id);
+  await sbWrite('DELETE', `gs_margen?id=eq.${id}`, undefined, 'return=minimal');
   return { ok: true };
 }
