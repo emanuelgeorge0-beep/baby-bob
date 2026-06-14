@@ -37,10 +37,30 @@
 ### ☐ Offen (Session 1)
 - (nichts) — Grundstruktur + Block 1 + Block 2 stehen.
 
-### ☐ Nächste Sessions
-- [ ] Module: Marketing, To-Dos, Verkauf/Einkauf (Marge), 4 Säulen.
-- [ ] Verknüpfung Lead → Kunde → Projekt → Rapport → Vertrag voll ausbauen.
-- [ ] RLS-Härtung gs_anfragen/gs_kunden gegen anon (in Abstimmung mit App-Team/main).
+### ✅ Session 2 — Mehr-Tab ausgebaut (3 Module)
+- [x] SQL Session 2: `scripts/master_cockpit_session2.sql` (idempotent, RLS master-only):
+      `gs_mkt_kanal`, `gs_mkt_content`, `gs_todos`, `gs_margen`. → **MUSS einmalig ausgeführt werden.**
+- [x] API erweitert (`api/cockpit.js`): marketing, mkt_kosten_set, mkt_content_add/set/del,
+      todos, todo_add/update/del, margen, marge_add/update/del. UUID-Guard + Whitelists.
+- [x] Dashboard erweitert: `todosHeute/Ueberfaellig/Offen`, `umsatzGesamt/margeGesamt/margeProzent`.
+- [x] Frontend: Mehr-Menü → 3 Module (Gold/Dunkel, mobile-first):
+      • **Marketing** — Kanal-Stats (Quelle↔Lead), Kosten/CPL/Conversion, Content-Plan (CRUD).
+      • **To-Dos** — CRUD, Team (Emanuel/Dimitri/Patrick/Vasil/Yasemin), Prio, Fälligkeit (heute/überfällig).
+      • **Verkauf/Margen** — Einkauf vs. Stundensatz×Stunden, Live-Vorschau, Totals, CRUD.
+      • Dashboard: anklickbare To-Dos- + Marge-gesamt-Kacheln.
+- [x] 20x-Analyse S2 (siehe unten) + Smoke-Test (Marketing-Agg live ok; alle S2-Tabellen 404 →
+      graceful migHint; calcMarge ohne Division-durch-0).
+- [x] **Vorfall behoben:** externer Branch-Wechsel/`reset` hatte master-cockpit auf S1 zurückgesetzt.
+      S2-Commits via reflog (`reset --hard d21ef14`) wiederhergestellt; danach SOFORT gepusht.
+      → **Lehre: nach jedem Commit sofort `git push origin master-cockpit`.**
+
+### ☐ Nächste Sessions (Session 3)
+- [ ] Modul **4 Säulen** (Platzhalter steht im Mehr-Menü).
+- [ ] Verknüpfung Lead → Kunde → Projekt → Rapport → Vertrag voll ausbauen
+      (Margen optional an `anfrage_id` koppelbar — Picker im UI ergänzen).
+- [ ] Marketing: echte Kampagnen-Objekte + Zeitraum-Filter (statt nur Kosten je Kanal).
+- [ ] RLS-Härtung gs_anfragen/gs_kunden gegen anon (Abstimmung mit App-Team/main) — Status:
+      bereits 0 Zeilen für anon (S1 verifiziert), also nur Doku/Bestätigung offen.
 
 ## 20x Bug-/Security-Analyse (Session 1) — Ergebnis
 1. **RLS gegen DevTools/anon-Key — VERIFIZIERT:** Mit dem im Client (app.html) eingebetteten
@@ -72,12 +92,36 @@
 19. **Pipeline-Wert** aus tarif_preis geparst → als „(geschätzt)" gelabelt (kein Fake-Genauigkeitsanspruch).
 20. **gs_admin ≠ Master:** würde Frontend-/Server-seitig per UUID-Check geblockt (kein 403-Loop dank Strict-Gate vor App-Eintritt).
 
-## NÄCHSTE SESSION — Wiedereinstieg
-→ Diese Datei lesen. Dann Module (Marketing/To-Dos/Verkauf/4 Säulen) im „Mehr"-Tab ausbauen;
-   Nav-Array in gs-intern.html + neue Actions in api/cockpit.js erweitern (Architektur steht).
+## 20x Bug-/Security-Analyse (Session 2) — Ergebnis
+1. **Vor Migration nutzbar:** marketing liest gs_anfragen (immer da); gs_mkt_*/todos/margen via
+   try/catch → []/migHint. Dashboard-Widgets ebenso. Smoke-Test bestätigt (alle S2-Tabellen 404 → ok).
+2. **Schreiben vor Migration:** POST → 404 → handler-catch 500 → Frontend-Toast „Migration nötig?". Kein Crash.
+3. **RLS neue Tabellen:** master_only (auth.uid()=gs_master_uid()); service_role nur Server; anon blockiert.
+4. **UUID-Injection:** alle id-Pfade per `uuid()` (Regex) geprüft; kanal/status/prioritaet per Whitelist.
+5. **Upsert mkt_kosten_set:** POST on_conflict=kanal + resolution=merge-duplicates; PK=kanal; vorab-geseedet.
+6. **calcMarge:** Division durch 0 abgesichert (umsatz>0); umsatz_manuell ''/null → Fallback Satz×Stunden.
+7. **num():** isFinite-Guard → 0 bei ungültig; '' → 0; umsatz_manuell '' → null (echter Fallback).
+8. **kanalOf:** Freitext-Quelle → kanonischer Kanal; 'test-script' → sonstige (live verifiziert).
+9. **'sonstige'-Kanal:** erscheint nur bei vorhandenen Leads (Object.keys(agg)); Kosten editierbar.
+10. **CPL/Conversion:** durch leads>0 abgesichert (kein Infinity/NaN).
+11. **XSS:** idee/titel/notiz/zustaendig via esc(); data-*-Attribute nur UUIDs/Whitelist-Keys.
+12. **To-Do done-Toggle:** robustes `data-done`-Attribut statt Style-Regex.
+13. **Sortierung:** todos offen-zuerst (Frontend-Split); faelligkeit asc nullslast; margen created_at desc.
+14. **FK gs_margen.anfrage_id:** ON DELETE SET NULL → Marge bleibt bei Lead-Löschung.
+15. **Gate gilt für alle neuen Actions:** liegen hinter verifyMaster (403) im selben switch.
+16. **Delete=hard delete** (master-only, Toast-Bestätigung) — bewusst, kein Undo in v1.
+17. **Back-Nav:** Sub-Views markieren „Mehr" (MEHR_VIEWS); Escape/Backdrop schließt Sheets.
+18. **Keine Secrets im Client:** nur /api-Calls; noindex/no-store unverändert.
+19. **Idempotente SQL:** CREATE TABLE IF NOT EXISTS; CHECK inline; RLS DROP+CREATE; Kanäle ON CONFLICT DO NOTHING.
+20. **outputDirectory ".":** in vercel.json gesetzt (verhindert 404 nach Merge); Rewrite → /gs-intern.html.
+
+## NÄCHSTE SESSION (3) — Wiedereinstieg
+→ Diese Datei lesen. Modul **4 Säulen** bauen; Lead→Projekt→Marge-Picker; Marketing-Kampagnen/Zeitraum.
+   Architektur steht: Nav (`MEHR_VIEWS` + `go()`), `renderXxx()`-Muster, API-Actions im switch.
 
 ## Manuelle Aktionen für Emanuel
-1. **`scripts/master_cockpit_session1.sql`** im Supabase SQL Editor ausführen (für Schreiben:
-   Stufe ändern, Zuweisung, Follow-ups, Kontakt-Historie). Lesen/Dashboard geht auch ohne.
-2. Supabase Auth: Redirect-URL für Magic-Link auf `…/gs-intern-7k2x` zulassen (falls Magic-Login gewünscht).
-3. Login mit `emanuelgeorge0@gmail.com` (Master-UUID) testen → /gs-intern-7k2x.
+1. **`scripts/master_cockpit_session1.sql`** im Supabase SQL Editor ausführen (CRM-Schreiben).
+2. **`scripts/master_cockpit_session2.sql`** im Supabase SQL Editor ausführen (Marketing/To-Dos/Margen-
+   Schreiben). Reihenfolge S1 → S2 (beide idempotent). Lesen/Dashboard geht auch ohne.
+3. Supabase Auth: Redirect-URL für Magic-Link auf `…/gs-intern-7k2x` zulassen (falls Magic-Login gewünscht).
+4. Login mit `emanuelgeorge0@gmail.com` (Master-UUID) testen → /gs-intern-7k2x.
