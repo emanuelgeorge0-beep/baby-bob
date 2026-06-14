@@ -218,6 +218,51 @@
 > optional). `gs_umsatz_monat` ist bereits live befüllt (März 3171 / April 17896 / Mai 13317.50) → Command-
 > Center zeigt echten Umsatz. S1–S3 nach Bedarf für Schreibfunktionen; Lesen/Reel läuft ohne.
 
+### ✅ Session 9 — Master-Login demo-tauglich + Access-Reality geklärt
+- [x] **MERGE-CHECK (wichtig, ehrlich):** Der Cockpit-Code (`gs-intern.html`, `cockpit-manifest.json`)
+      liegt **NUR auf `master-cockpit`, NICHT auf `main`**. Auf `main` zeigt `vercel.json` den Pfad
+      `/gs-intern-7k2x` sogar auf `/app.html` → die **Produktions-URL `baby-bob.vercel.app/gs-intern-7k2x`
+      liefert die Baby-BOB-Landing, NICHT das Cockpit.** Die Branch-Preview
+      `baby-bob-git-master-cockpit-baby-bob.vercel.app/gs-intern-7k2x` liefert das Cockpit, ist aber durch
+      **Vercel Deployment Protection (Vercel Authentication) geschützt → HTTP 401** (bestätigt via
+      `_vercel_sso_nonce`-Cookie). ⇒ **Aktuell ist KEINE URL ohne Eingriff am Handy offen.** Zwei Hebel:
+      (A) Deployment Protection für das Projekt deaktivieren → Preview-URL offen, oder
+      (B) master-cockpit → main mergen → Produktions-URL offen (NICHT autonom gemacht: zieht auch
+      `app.html`/`api/nachrichten.js`/`lib/pdf.js`-Änderungen in die Live-B2C-App; braucht deine Freigabe).
+- [x] **Schneller, zuverlässiger Master-Login (gebaut):** Passwort-Login ist der **Hauptweg** — läuft
+      server-seitig über `/api/auth` (`grant_type=password`, = `signInWithPassword`), gibt access+refresh
+      zurück; das Cockpit speichert beide in `localStorage` und refresht bei 403 automatisch → **Session
+      hält an, kein erneuter Login** (persistSession-Äquivalent). KEIN Umweg über `/app`, KEIN Redirect
+      zur Landing (eigenständige Datei).
+- [x] **Login-Seite** (`gs-intern.html`): klarer **„Master-Login"** (E-Mail + Passwort, goldener Haupt-
+      Button), darunter sekundär „Kein Passwort? Magic-Link senden" und „Passwort vergessen / neu setzen".
+- [x] **Magic-Link/Reset landen EXAKT im Cockpit:** Frontend sendet `redirect_to = origin+'/gs-intern-7k2x'`;
+      `api/auth.js` hängt es (per `safeRedirectQuery`, **nur** Pfad `/gs-intern-7k2x` erlaubt → kein
+      Open-Redirect) an `/auth/v1/otp` bzw. `/auth/v1/recover`. `boot()` liest das `#access_token` aus dem
+      Hash → **direkt im Cockpit**, nicht auf `/app`. (Supabase erzwingt zusätzlich seine Redirect-Allowlist
+      → siehe manuelle Aktion unten.)
+- [x] **Passwort-Setz-Skript** `scripts/set-master-password.mjs` (idempotent): setzt via service_role-
+      Admin-API (`PUT /auth/v1/admin/users/{master-uid}`) ein Passwort + `email_confirm:true`. Prüft vorher,
+      dass die UUID wirklich `emanuelgeorge0@gmail.com` ist (kein falscher Account). Liest `SUPABASE_URL`/
+      `SUPABASE_KEY` aus `.env.local`. **Aufruf:** `node scripts/set-master-password.mjs 'DeinPasswort'`.
+      (Admin-API lokal verifiziert: HTTP 200, Master-User gefunden, `SUPABASE_KEY` = `sb_secret_…` = service_role.)
+- [x] **PWA-Homescreen:** Manifest-Name → **„Master George"** (`short_name`), `apple-mobile-web-app-title`
+      → „Master George"; standalone, portrait, Schwarz-Gold, echte PNG-Icons + maskable (aus S5). `vercel.json`
+      `outputDirectory "."` **unberührt**.
+- [x] Syntaxchecks grün (`node --check` auth.js/Skript/Cockpit-JS), Redirect-Schutz unit-getestet, Login-Seite
+      gerendert (sauber, schwarz-gold), nur eigene Dateien committet + sofort gepusht.
+
+> **MANUELLE AKTIONEN FÜR EMANUEL (Session 9):**
+> 1. **Passwort setzen (einmalig):** im Projekt-Root `node scripts/set-master-password.mjs 'DeinPasswort'`.
+> 2. **Eine offene URL schaffen** — eine der beiden:
+>    (A) **Vercel → Projekt `baby-bob` → Settings → Deployment Protection → Vercel Authentication →
+>        „Disabled"** (oder „Only Production" so wählen, dass Preview offen ist) → Speichern. Danach offen:
+>        `https://baby-bob-git-master-cockpit-baby-bob.vercel.app/gs-intern-7k2x`.
+>    (B) ODER master-cockpit → main mergen (Freigabe nötig) → dann
+>        `https://baby-bob.vercel.app/gs-intern-7k2x` (Prod ist NICHT geschützt).
+> 3. **Nur falls Magic-Link genutzt wird:** Supabase → Authentication → URL Configuration → **Redirect URLs**
+>    → die Cockpit-URL aus Schritt 2 mit `/gs-intern-7k2x` eintragen. Für reinen Passwort-Login NICHT nötig.
+
 ## 20x Bug-/Mobile-Analyse (Session 8 · Reel-Finish Command-Center) — Ergebnis
 1. **Titel nie abgeschnitten:** SVG-`textLength`+`preserveAspectRatio` skaliert „MASTER GEORGE" exakt in
    `width:min(100%,360px)` → garantiert randlos auf 320–768 px. Render auf 500 px bestätigt (textW<svgW<Hero).
