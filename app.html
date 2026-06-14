@@ -386,7 +386,9 @@ button:active{transform:scale(0.97);}
 .gs-badge-hdr{background:rgba(74,158,255,0.12);border:1px solid rgba(74,158,255,0.3);color:#4a9eff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;}
 
 /* GS Nav Header (sub-screens) */
-.gs-nav{display:flex;align-items:center;padding:52px 18px 0;gap:10px;}
+.gs-nav{display:flex;align-items:center;padding:52px 18px 0;gap:10px;flex-wrap:wrap;}
+/* Bug 1: Sprachumschalter auf JEDEM GS-Flow-Screen – eigene Zeile unter der Nav, damit nichts gequetscht wird. */
+.gs-nav-lang{flex-basis:100%;justify-content:center;margin-top:8px;}
 .gs-back-btn{width:38px;height:38px;min-width:38px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;color:#e8edf5;}
 .gs-nav-tit{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .gs-nav-logo{height:20px;width:auto;flex-shrink:0;}
@@ -702,6 +704,16 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .pb-row:last-child{border-bottom:none;}
 .pb-row span:first-child{color:rgba(232,237,245,0.5);}
 .pb-tot{font-weight:800;color:#FFD700;border-top:1px solid rgba(255,255,255,0.14);margin-top:4px;padding-top:8px;}
+.pb-rap{padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06);}
+.pb-rap:last-of-type{border-bottom:none;}
+.pb-rap-top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.pb-rap-d{font-size:13px;font-weight:700;color:#fff;}
+.pb-rap-meta{font-size:12.5px;color:rgba(232,237,245,0.6);margin-top:3px;}
+.pb-rap-mat{font-size:12.5px;color:#FFD24A;margin-top:3px;}
+.pb-ml{background:rgba(255,255,255,0.03);border:1px solid rgba(255,210,74,0.18);border-radius:10px;padding:10px 12px;margin-bottom:9px;}
+.pb-ml:last-child{margin-bottom:0;}
+.pb-ml-h{font-size:13px;font-weight:800;color:#fff;margin-bottom:6px;}
+.pb-ml-note{font-size:12.5px;color:rgba(232,237,245,0.7);margin-top:6px;}
 
 /* ═══ TAGESRAPPORT (techniker) ═══ */
 .tr-kwbar{display:flex;align-items:center;gap:8px;padding:12px 18px 0;}
@@ -1552,6 +1564,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_erfassung">Projekterfassung</div>
     <div class="gs-step-chip">1 / 6</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" id="gp1" style="width:16%"></div></div>
   <div class="gs-aktion" style="margin-top:14px;">
@@ -1604,6 +1617,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_datenblatt">Projektdatenblatt</div>
     <div class="gs-step-chip">2 / 6</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:33%"></div></div>
   <div class="gs-result-card">
@@ -1637,6 +1651,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_tarif">Tarif-Auswahl</div>
     <div class="gs-step-chip">3 / 6</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:50%"></div></div>
   <div class="gs-ai-rec" id="gs-tarif-ai-rec">🤖 KI-Empfehlung wird geladen...</div>
@@ -1669,6 +1684,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_team">Unser Team</div>
     <div class="gs-step-chip">4 / 7</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:57%"></div></div>
   <!-- Simulierte Karte (CSS/SVG – keine Google-Maps-API; echte Integration folgt später) -->
@@ -1734,6 +1750,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_kontakt">Kontakt & Verfügbarkeit</div>
     <div class="gs-step-chip">5 / 7</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:71%"></div></div>
   <div class="gs-form">
@@ -1787,6 +1804,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_bestaet">Anfrage bestätigen</div>
     <div class="gs-step-chip">6 / 7</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:86%"></div></div>
   <div style="padding:14px 18px 0;font-size:13px;color:rgba(232,237,245,0.5);" data-i18n="gsf_bestaet_intro">Bitte prüfen Sie Ihre Anfrage vor dem Absenden:</div>
@@ -3142,14 +3160,14 @@ function toggleVoice(){
 function bobResultSpeech(r){
   if(!r) return '';
   var L=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
-  function T(de,es,en){ return L==='es'?es:(L==='en'?en:de); }
+  function T(o){ return o[L]||o.de; }
   var p=[];
-  if(r.notfall) p.push(T('Achtung, Notfall.','Atención, urgencia.','Attention, emergency.'));
+  if(r.notfall) p.push(T({de:'Achtung, Notfall.',es:'Atención, urgencia.',en:'Attention, emergency.',fr:'Attention, urgence.',it:'Attenzione, emergenza.'}));
   var prob=r.erkannt_als||r.titel;
   if(prob) p.push(String(prob).trim().replace(/[.\s]+$/,'')+'.');
-  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') p.push(T('Empfehlung: ','Recomendación: ','Recommendation: ')+r.fachmann+'.');
+  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') p.push(T({de:'Empfehlung: ',es:'Recomendación: ',en:'Recommendation: ',fr:'Recommandation : ',it:'Raccomandazione: '})+r.fachmann+'.');
   var hasKost=r.kosten&&['CHF --','n/a','–','CHF –','-'].indexOf(r.kosten)===-1;
-  if(hasKost) p.push(T('Kosten etwa ','Coste aproximado ','Cost approximately ')+r.kosten+'.');
+  if(hasKost) p.push(T({de:'Kosten etwa ',es:'Coste aproximado ',en:'Cost approximately ',fr:'Coût environ ',it:'Costo circa '})+r.kosten+'.');
   return p.join(' ');
 }
 // JARVIS-style voice: deep, calm, confident male. British-English preference.
@@ -3235,7 +3253,10 @@ function bobIsGsSilent(){
   return __gsSilentCache;
 }
 function bobShowUnlockBtn(){
-  if(bobIsGsSilent()) return;        // GS-Kontext: niemals "Ton aktivieren" zeigen
+  // Single source of truth: der "Ton aktivieren"-Button erscheint NUR dort, wo Voice
+  // überhaupt erlaubt ist (Baby-BOB-Scanner bzw. künftiger Partner/Techniker-Assistent).
+  // Im GS-Kundenflow (und Admin/Login/Techniker) ist Voice aus → Button nie sichtbar.
+  if(typeof bobVoiceAllowed==='function' && !bobVoiceAllowed()) return;
   var b=document.getElementById('audio-unlock-btn'); if(b) b.style.display='flex';
   if(isInAppBrowser()){ var h=document.getElementById('inapp-hint'); if(h) h.style.display='block'; }
 }
@@ -3309,6 +3330,8 @@ function bobGreetingText(){
   var l=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
   if(l==='es') return 'Hola, me llamo Bob. Te ayudo con cualquier problema, ya sea de oficios o de belleza. ¿Cómo puedo ayudarte?';
   if(l==='en') return 'Hey, my name is Bob! I help you with any problem, whether trades or beauty. How can I help you?';
+  if(l==='fr') return 'Bonjour, je m\'appelle Bob. Je t\'aide pour tout problème, qu\'il s\'agisse d\'artisanat ou de beauté. Comment puis-je t\'aider ?';
+  if(l==='it') return 'Ciao, mi chiamo Bob. Ti aiuto con qualsiasi problema, che sia di artigianato o di bellezza. Come posso aiutarti?';
   return 'Hey, mein Name ist Bob! Ich helfe dir bei jedem Problem – egal ob Handwerk oder Beauty. Wie kann ich dir helfen?';
 }
 // Greeting once per page load (guarded against fast-reload double / overlapping triggers).
@@ -3385,19 +3408,22 @@ function _numStr(m){
   return w;
 }
 var __bobSpeakSeq=0;
-// Voice is bound to the FUNCTION (BOB scanner: greeting + diagnosis), NOT the account type.
-// Everywhere else (admin, all techniker + partner views) BOB is completely muted.
-// FUTURE: when the in-app AI assistant ships (techniker/partner), set
-// window.__bobAssistantActive=true while it's open — the assistant IS BOB and may speak,
-// without weakening the mute rule anywhere else.
+// ── Zentrale Voice-Erlaubnis (single source of truth) ──────────────────────────
+// Voice gehört AUSSCHLIESSLICH in den Baby-BOB-Scanner (Begrüßung + Diagnose).
+// Der George-Solutions-Kundenflow ist komplett stumm: keine TTS, kein "Ton aktivieren".
+// Ebenso Admin / Login / Techniker-Views.
+// RE-ENABLE (Partner/Techniker-Sprachassistent, später): bobSetAssistantVoice(true)
+// schaltet Voice gezielt frei (window.__bobAssistantActive). Solange dieser Flag aus ist,
+// bleibt der GS-Flow garantiert stumm – kein anderer Codepfad kann ihn sprechen lassen.
 function bobVoiceAllowed(){
-  if(bobIsGsSilent()) return false;                            // GS-Einstieg: komplett stumm
-  if(window.__bobAssistantActive) return true;                 // reserved for the later assistant
-  if(typeof appMode!=='undefined'&&appMode!=='bob') return false;
-  // any non-scanner surface active → muted
+  if(window.__bobAssistantActive) return true;                 // expliziter Re-Enable-Hook (Rollen-/Modus-Flag)
+  if(bobIsGsSilent()) return false;                            // GS-Einstieg (?gs=1): komplett stumm
+  if(typeof appMode!=='undefined'&&appMode!=='bob') return false;  // GS/Admin/Techniker/Login → stumm
   if(document.querySelector('.gs-screen.active,.admin-screen.active,.tech-screen.active,.login-screen.active')) return false;
-  return !!document.querySelector('.screen.active'); // a BOB scanner screen must be active
+  return !!document.querySelector('.screen.active'); // nur bei aktivem Baby-BOB-Scanner-Screen
 }
+// Re-Enablement-API: Voice gezielt für einen späteren Partner/Techniker-Assistenten ein-/ausschalten.
+function bobSetAssistantVoice(on){ window.__bobAssistantActive=!!on; if(!on){ try{ if(typeof bobStopSpeak==='function') bobStopSpeak(); }catch(e){} } }
 function bobSpeak(rawText,opts){
   opts=opts||{};
   if(!rawText) return;
@@ -3415,7 +3441,7 @@ function bobSpeak(rawText,opts){
     if(opts.announce) bobAnnounce('Ton ist blockiert. Bitte den Button „Ton aktivieren“ drücken.');
     bobShowUnlockBtn();
   }
-  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text,lang:(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de'})})
     .then(function(r){
       if(!r.ok) return null;
       var ct=r.headers.get('content-type')||'';
@@ -3571,6 +3597,12 @@ var gsSelectedTarifPrice=null;
 function setMode(mode){
   if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop voice on mode switch
   appMode=mode;
+  // Voice gehört ausschliesslich in den Baby-BOB-Scanner. Beim Wechsel in GS (oder
+  // jeden Nicht-BOB-Modus) Tonausgabe stoppen und den "Ton aktivieren"-Button verstecken.
+  if(mode!=='bob'){
+    if(typeof bobHideUnlockBtn==='function') bobHideUnlockBtn();
+    var __ih=document.getElementById('inapp-hint'); if(__ih) __ih.style.display='none';
+  }
   var bobScreens=['home','scan','result','contact','success','feedback','about'];
   var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
 
@@ -4086,7 +4118,7 @@ function gsApplyTeamToData(){
 function gsLoadTechniker(){
   var list=document.getElementById('gs-tech-list');
   if(gsTechniker.length){gsRenderTechniker();return;}
-  if(list) list.innerHTML='<div class="gs-tech-empty" id="gs-tech-loading">Techniker werden geladen…</div>';
+  if(list) list.innerHTML='<div class="gs-tech-empty" id="gs-tech-loading">'+gsEsc(bbTr('gs_tech_loading'))+'</div>';
   var bereich=encodeURIComponent(gsData.bereich||'');
   fetch('/api/techniker'+(bereich?('?bereich='+bereich):''))
     .then(function(r){return r.json();})
@@ -4099,7 +4131,7 @@ function gsLoadTechniker(){
       gsRenderTechniker();
     })
     .catch(function(){
-      if(list) list.innerHTML='<div class="gs-tech-empty">Techniker konnten nicht geladen werden. Sie können trotzdem fortfahren – das Team wird zugeteilt.</div>';
+      if(list) list.innerHTML='<div class="gs-tech-empty">'+gsEsc(bbTr('gsf_dyn_load_err'))+'</div>';
     });
 }
 
@@ -4109,9 +4141,9 @@ function gsFmtDate(iso){
   return p.length===3?(p[2]+'.'+p[1]+'.'+p[0]):iso;
 }
 function gsAgo(ts){
-  if(!ts)return 'gerade eben';
+  if(!ts)return bbTr('gsf_dyn_just_now');
   var m=Math.floor((Date.now()-ts)/60000);
-  return m<=0?'gerade eben':('vor '+m+' Min');
+  return m<=0?bbTr('gsf_dyn_just_now'):bbTr('gsf_dyn_min_ago').replace('%n',m);
 }
 
 // ── Simulierte Karte: Geo-Koordinaten (% auf der Schweiz-Silhouette) ──
@@ -4192,7 +4224,7 @@ function gsRenderMap(){
   if(gsNearXY){
     html+='<div class="gs-map-pin you" style="left:'+gsClamp(gsNearXY[0]).toFixed(1)+'%;top:'+gsClampY(gsNearXY[1]).toFixed(1)+'%">'
       +'<div class="gs-map-pin-bub"><span class="gs-map-pin-em">📍</span></div>'
-      +'<div class="gs-map-pin-lbl">Sie</div></div>';
+      +'<div class="gs-map-pin-lbl">'+gsEsc(bbTr('gsf_dyn_you'))+'</div></div>';
   }
   pins.innerHTML=html;
 }
@@ -4211,11 +4243,11 @@ function gsTechCardHtml(t){
     return '<span class="gs-tech-tag'+on+'">'+gsEsc(s)+'</span>';
   }).join('');
   var rating=t.rating!=null?('★ '+Number(t.rating).toFixed(1)):'';
-  var years=t.years_experience!=null?(t.years_experience+' J. Erfahrung'):'';
+  var years=t.years_experience!=null?(t.years_experience+' '+bbTr('gsf_dyn_years')):'';
   var loc=t.location?('📍 '+gsEsc(t.location)):'';
   var meta=[years,loc].filter(Boolean).map(function(m){return '<span>'+m+'</span>';}).join('');
-  var statusLine=avail?'<span class="gs-tech-avail"><span class="gs-tech-dot live"></span>Verfügbar</span>':'';
-  var req=(avail&&gsTechReq[t.id])?'<span class="gs-tech-req-badge">🔥 Gerade angefragt</span>':'';
+  var statusLine=avail?'<span class="gs-tech-avail"><span class="gs-tech-dot live"></span>'+gsEsc(bbTr('gsf_dyn_available'))+'</span>':'';
+  var req=(avail&&gsTechReq[t.id])?'<span class="gs-tech-req-badge">'+gsEsc(bbTr('gsf_dyn_just_requested'))+'</span>':'';
   var onclick=avail?(' onclick="gsSelectTechniker(\''+t.id+'\')"'):'';
   return '<div class="gs-tech-card'+sel+matchCls+bookedCls+'" data-tid="'+gsEsc(t.id)+'"'+onclick+'>'
     +'<div class="gs-tech-avatar">'+(t.photo_emoji||'👷')+'</div>'
@@ -4223,8 +4255,8 @@ function gsTechCardHtml(t){
       +'<div class="gs-tech-top"><span class="gs-tech-name">'+gsEsc(t.name)+' '+gsHerkunftHtml(t.herkunft)+req+'</span>'
         +(rating?'<span class="gs-tech-rating">'+rating+'</span>':'')+'</div>'
       +(t.qualification?'<div class="gs-tech-qual">'+gsEsc(t.qualification)+'</div>':'')
-      +(isMatch?'<div class="gs-tech-match-badge">✓ Passt zu '+gsEsc(gsData.bereich)+'</div>':'')
-      +(avail?'':'<div class="gs-tech-booked-badge">🔴 Ausgebucht bis '+gsFmtDate(t.booked_until)+'</div>')
+      +(isMatch?'<div class="gs-tech-match-badge">'+gsEsc(bbTr('gsf_dyn_matches'))+' '+gsEsc(gsData.bereich)+'</div>':'')
+      +(avail?'':'<div class="gs-tech-booked-badge">'+gsEsc(bbTr('gsf_dyn_booked_until'))+' '+gsFmtDate(t.booked_until)+'</div>')
       +'<div class="gs-tech-tags">'+tags+'</div>'
       +'<div class="gs-tech-meta">'+meta+statusLine+'</div>'
     +'</div>'
@@ -4242,7 +4274,7 @@ function gsRenderTechniker(){
   var hint=document.getElementById('gs-tech-hint');
   if(hint){
     hint.innerHTML='<div class="gs-net-hdr"><span class="gs-net-count"><strong>'+gsTechAvail+' '+bbTr('gsf_dyn_avail_now')+'</strong> · '+gsTechTotal+' '+bbTr('gsf_dyn_in_network')+'</span>'
-      +'<span class="gs-live-ind">Live</span></div>';
+      +'<span class="gs-live-ind">'+gsEsc(bbTr('gsf_dyn_live'))+'</span></div>';
   }
   var avail=gsTechniker.filter(function(t){return t.availability!==false;});
   var booked=gsTechniker.filter(function(t){return t.availability===false;});
@@ -4961,7 +4993,10 @@ function updateAdminReturnBtn(){
   if(!btn) return;
   var landing=document.getElementById('landing');
   var onLanding=!!(landing&&landing.classList.contains('active'));
-  var show=adminReturnArmed && isMasterContext() && !adminScreenActive() && !onLanding;
+  // Schritt 1: Button erscheint IMMER, wenn ein Admin (master/gs_admin, kein Demo) sich
+  // ausserhalb der Admin-Screens befindet — GS-Modus, BOB-Scanner, Login, Partner/Techniker,
+  // egal wie er dorthin kam. (Früher an adminReturnArmed gekoppelt → fehlte an einigen Stellen.)
+  var show=isMasterContext() && !adminScreenActive() && !onLanding;
   btn.style.display=show?'flex':'none';
 }
 function adminReturnHome(){
@@ -5283,8 +5318,26 @@ function loadProjekte(){
 }
 
 // ── ADMIN: PROJEKTDATENBLATT (Detailansicht) ──
-var pbProjekt=null,pbAllTechs=[],pbPartners=[],pbAssigned=[];
+var pbProjekt=null,pbAllTechs=[],pbPartners=[],pbAssigned=[],pbMateriallisten=[];
 var PB_STATUS=['aktiv','laufend','pausiert','abgeschlossen'];
+// Optionale GS-Schnellkontakt-/Support-WhatsApp-Nummer (für einen evtl. "Kontakt GS"-Button).
+// Format: Ländercode + Nummer, OHNE "+", OHNE Leerzeichen. Hinweis: Der MATERIALLISTEN-
+// WhatsApp-Versand nutzt diese Nummer NICHT — dort wählt der Nutzer den Empfänger frei.
+var GS_WHATSAPP_NR='41764829428';
+// ISO-Kalenderwoche (für Rapport-Status "läuft noch in dieser KW").
+function pbIsoWeek(d){
+  var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  var day=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-day);
+  var ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil((((t-ys)/86400000)+1)/7);
+}
+function pbRapStatus(r){
+  if(r.status==='eingereicht') return {label:'abgeschlossen',color:'#6bcb77',bg:'rgba(107,203,119,0.16)'};
+  var now=new Date();
+  if(Number(r.woche)===pbIsoWeek(now) && Number(r.jahr)===now.getFullYear())
+    return {label:'läuft noch in dieser KW',color:'#FFD24A',bg:'rgba(255,210,74,0.16)'};
+  return {label:'in Arbeit',color:'#4A9EFF',bg:'rgba(74,158,255,0.16)'};
+}
 function showProjektDatenblatt(id){
   showScreen('admin-projektblatt');
   var b=document.getElementById('pb-body');
@@ -5294,7 +5347,10 @@ function showProjektDatenblatt(id){
     gsAuthApi('projekte',{action:'get',id:id}),
     gsAuthApi('tagesrapport',{action:'list',projekt_id:id}),
     gsAuthApi('projekte',{action:'technicians'}),
-    gsAuthApi('projekte',{action:'partners'})
+    gsAuthApi('projekte',{action:'partners'}),
+    // Materiallisten (gs_nachrichten typ=materialliste). projekt_id wird wegen FK-Eigenheit
+    // oft NICHT gespeichert → zusätzlich über projekt_name matchen (wie Partner-Ansicht).
+    gsAuthApi('nachrichten',{action:'inbox',all:true}).then(function(d){return d.nachrichten||[];}).catch(function(){return [];})
   ]).then(function(r){
     if(r[0].error){b.innerHTML='<div class="admin-empty">'+demoOrError(r[0])+'</div>';return;}
     pbProjekt=r[0].projekt||{};
@@ -5302,16 +5358,20 @@ function showProjektDatenblatt(id){
     pbPartners=r[3].partners||[];
     pbAssigned=(pbProjekt.techniker||[]).map(function(t){return t.user_id;});
     pbLastRapporte=r[1].rapporte||[];
-    pbRender(pbProjekt,pbLastRapporte);
+    pbMateriallisten=(r[4]||[]).filter(function(n){
+      if(n.typ!=='materialliste')return false;
+      var inh=n.inhalt||{};
+      return n.projekt_id===id || (inh.projekt_name&&inh.projekt_name===pbProjekt.name);
+    });
+    pbRender(pbProjekt,pbLastRapporte,pbMateriallisten);
   }).catch(function(){b.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
 }
 function pbTechName(uid){var t=(pbAllTechs||[]).filter(function(x){return x.user_id===uid;})[0];return t?t.name:'Techniker';}
-function pbRender(p,rapporte){
+function pbRender(p,rapporte,materiallisten){
+  rapporte=rapporte||[]; materiallisten=materiallisten||[];
   document.getElementById('pb-title').textContent=p.name||'Projekt';
   document.getElementById('pb-nr').textContent=(p.projektnummer||'')+' · '+(p.standort||'');
   var totH=rapporte.reduce(function(a,r){return a+(Number(r.gesamtstunden)||0);},0);
-  var matCount={};rapporte.forEach(function(r){(r.material||[]).forEach(function(m){matCount[m]=(matCount[m]||0)+1;});});
-  var matKeys=Object.keys(matCount);
   var statusOpts=PB_STATUS.map(function(s){return '<option'+(p.status===s?' selected':'')+'>'+s+'</option>';}).join('');
   var bereichOpts=['Heizung','Sanitär','Lüftung','Klima','Kombiniert'].map(function(s){return '<option'+(p.bereich===s?' selected':'')+'>'+s+'</option>';}).join('');
   var partnerOpts='<option value="">– kein Partner –</option>'+(pbPartners||[]).map(function(pa){return '<option value="'+pa.user_id+'"'+(p.partner_user_id===pa.user_id?' selected':'')+'>'+gsEsc(pa.name)+(pa.firma?(' ('+gsEsc(pa.firma)+')'):'')+'</option>';}).join('');
@@ -5320,11 +5380,34 @@ function pbRender(p,rapporte){
     var on=pbAssigned.indexOf(t.user_id)>-1;
     return '<span class="ob-chip'+(on?' sel':'')+'" onclick="pbToggleTech(\''+t.user_id+'\')">'+gsEsc(t.name)+'</span>';
   }).join('')||'<span class="admin-proj-meta">Keine Techniker im System.</span>';
-  // Rapporte
+  // Rapporte – jeder mit Status-Badge (abgeschlossen / in Arbeit / läuft noch in dieser KW)
+  // und seinem eigenen Material inline.
   var rapHtml=rapporte.length?rapporte.map(function(r){
-    return '<div class="pb-row"><span>'+gsEsc((r.datum||'').slice(0,10))+' · '+gsEsc(pbTechName(r.techniker_user_id))+'</span>'
-      +'<span>'+(r.gesamtstunden||0)+' h'+((r.arbeiten||[]).length?(' · '+gsEsc((r.arbeiten||[]).join(', '))):'')+'</span></div>';
+    var st=pbRapStatus(r);
+    var badge='<span style="font-size:10.5px;font-weight:800;color:'+st.color+';background:'+st.bg+';padding:2px 9px;border-radius:50px;white-space:nowrap;">'+st.label+'</span>';
+    var mat=(r.material||[]).length?'<div class="pb-rap-mat">📦 '+gsEsc((r.material||[]).join(', '))+'</div>':'';
+    var arb=(r.arbeiten||[]).length?gsEsc((r.arbeiten||[]).join(', ')):'–';
+    return '<div class="pb-rap">'
+      +'<div class="pb-rap-top"><span class="pb-rap-d">'+gsEsc((r.datum||'').slice(0,10))+' · '+gsEsc(pbTechName(r.techniker_user_id))+'</span>'+badge+'</div>'
+      +'<div class="pb-rap-meta">⏱️ '+(r.gesamtstunden||0)+' h · '+arb+'</div>'+mat+'</div>';
   }).join(''):'<div class="admin-empty" style="padding:8px;">Noch keine Rapporte.</div>';
+  // Stunden pro Techniker (Admin-Auswertung) – aus allen Rapporten dieses Projekts.
+  var hoursByTech={};
+  rapporte.forEach(function(r){var k=r.techniker_user_id||'?';hoursByTech[k]=(hoursByTech[k]||0)+(Number(r.gesamtstunden)||0);});
+  var techKeys=Object.keys(hoursByTech);
+  var hoursHtml=techKeys.length?techKeys.map(function(k){
+    return '<div class="pb-row"><span>👷 '+gsEsc(pbTechName(k))+'</span><span>'+(Math.round(hoursByTech[k]*10)/10)+' h</span></div>';
+  }).join(''):'<div class="admin-empty" style="padding:8px;">Noch keine erfassten Stunden.</div>';
+  // Materiallisten (gs_nachrichten) – ersetzt das frühere "Material (aggregiert)"-Element.
+  var mlHtml=materiallisten.length?materiallisten.map(function(n){
+    var inh=n.inhalt||{};
+    var pos=(inh.positionen||[]).map(function(x){
+      return '<div class="pb-row"><span>'+gsEsc(x.position||'')+'</span><span>'+gsEsc([x.menge,x.einheit].filter(Boolean).join(' ')||'—')+'</span></div>';
+    }).join('');
+    return '<div class="pb-ml"><div class="pb-ml-h">📦 '+gsEsc((n.created_at||'').slice(0,10))+' · '+gsEsc(inh.von_name||'Techniker')+'</div>'
+      +(pos||'<div class="admin-empty" style="padding:6px;">Keine Positionen.</div>')
+      +(inh.notiz?'<div class="pb-ml-note">📝 '+gsEsc(inh.notiz)+'</div>':'')+'</div>';
+  }).join(''):'<div class="admin-empty" style="padding:8px;">Noch keine Materiallisten zu diesem Projekt.</div>';
 
   document.getElementById('pb-body').innerHTML=
     '<div class="pb-sec"><div class="pb-sec-t">Kopfdaten</div>'
@@ -5334,21 +5417,76 @@ function pbRender(p,rapporte){
       +'<div><div class="ob-lbl">Status</div><select class="login-inp" id="pb-status">'+statusOpts+'</select></div></div>'
       +'<div class="ob-lbl">Stundensatz (CHF/h)</div><input class="login-inp" id="pb-satz" type="number" step="0.01" value="'+(p.stundensatz!=null?p.stundensatz:'')+'"/>'
       +'<div class="ob-lbl">Partner / Auftraggeber</div><select class="login-inp" id="pb-partner">'+partnerOpts+'</select></div>'
-    +'<div class="pb-sec"><div class="pb-sec-t">Zugeteilte Techniker</div><div class="ob-chips">'+techChips+'</div></div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Zugeteilter Techniker / Team</div><div class="ob-chips">'+techChips+'</div></div>'
     +'<div class="pb-sec"><div class="pb-sec-t">Rapporte ('+rapporte.length+')</div>'+rapHtml
       +'<div class="pb-row pb-tot"><span>Total erfasste Stunden</span><span>'+(Math.round(totH*10)/10)+' h</span></div></div>'
-    +'<div class="pb-sec"><div class="pb-sec-t">Material (aggregiert)</div>'
-      +(matKeys.length?matKeys.map(function(m){return '<div class="pb-row"><span>'+gsEsc(m)+'</span><span>×'+matCount[m]+'</span></div>';}).join(''):'<div class="admin-empty" style="padding:8px;">Kein Material erfasst.</div>')+'</div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Stunden pro Techniker</div>'+hoursHtml+'</div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Materiallisten ('+materiallisten.length+')</div>'+mlHtml+'</div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Materialliste senden</div>'
+      +'<div class="ob-lbl">Empfänger E-Mail (Projektleiter vor Ort)</div>'
+      +'<input class="login-inp" id="pb-ml-email" type="email" inputmode="email" autocomplete="off" placeholder="name@firma.ch"/>'
+      +'<div class="ob-lbl">Notiz (optional)</div>'
+      +'<input class="login-inp" id="pb-ml-notiz" type="text" placeholder="z.B. Bitte bis Freitag bestellen"/>'
+      +'<button class="admin-add-btn" style="margin:12px 0 0;width:100%;" onclick="pbSendMaterialMail()">📧 Materialliste per E-Mail senden</button>'
+      +'<button type="button" style="margin:8px 0 0;width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;min-height:46px;font-weight:800;font-size:14px;cursor:pointer;" onclick="pbWhatsAppMaterial()">💬 Per WhatsApp teilen (Empfänger frei wählbar)</button>'
+      +'<div class="login-msg" id="pb-ml-msg"></div>'
+      +'<div style="font-size:11px;color:rgba(232,237,245,0.42);margin-top:8px;line-height:1.5;">E-Mail via Resend (Absender info@george-solutions.ch), Material sauber formatiert + PDF-Anhang. WhatsApp öffnet mit vorausgefülltem Text und OHNE festen Empfänger – du wählst in WhatsApp selbst aus (Projektleiter, Kollege, Gruppe) und drückst dort selbst Senden. Ein Dateianhang ist über WhatsApp technisch nicht möglich.</div>'
+    +'</div>'
     +'<div class="pb-sec"><div class="pb-sec-t">Projekt-Notiz</div><textarea class="login-inp" id="pb-notiz" rows="3" placeholder="Interne Notiz zum Projekt…">'+gsEsc(p.notiz||'')+'</textarea></div>'
     +'<button class="admin-add-btn" style="margin:0 18px;width:calc(100% - 36px);" onclick="pbSave()">💾 Änderungen speichern</button>'
     +'<div class="login-msg" id="pb-msg"></div>';
 }
+// Sammelt alle Material-Positionen des Projekts: strukturierte Materiallisten-Positionen
+// (gs_nachrichten) + Freitext-Material aus den Rapporten. Grob dedupliziert.
+function pbCollectPositionen(){
+  var out=[];
+  (pbMateriallisten||[]).forEach(function(n){
+    (((n.inhalt||{}).positionen)||[]).forEach(function(x){
+      if(x&&x.position)out.push({position:String(x.position),menge:x.menge||'',einheit:x.einheit||''});
+    });
+  });
+  (pbLastRapporte||[]).forEach(function(r){
+    (r.material||[]).forEach(function(m){ if(m)out.push({position:String(m),menge:'',einheit:''}); });
+  });
+  var seen={},dedup=[];
+  out.forEach(function(p){var k=(p.position+'|'+p.menge+'|'+p.einheit).toLowerCase();if(!seen[k]){seen[k]=1;dedup.push(p);}});
+  return dedup;
+}
+// Schritt 4: Materialliste per E-Mail (Resend) an eingegebene Empfängeradresse.
+function pbSendMaterialMail(){
+  if(!pbProjekt||!pbProjekt.id){setMsg('pb-ml-msg','Kein Projekt geladen','err');return;}
+  var email=((document.getElementById('pb-ml-email')||{}).value||'').trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){setMsg('pb-ml-msg','Bitte gültige Empfänger-E-Mail eingeben','err');return;}
+  var positionen=pbCollectPositionen();
+  if(!positionen.length){setMsg('pb-ml-msg','Keine Material-Positionen vorhanden zum Senden','err');return;}
+  var notiz=((document.getElementById('pb-ml-notiz')||{}).value||'').trim();
+  var btn=document.querySelector('#pb-body button[onclick="pbSendMaterialMail()"]');
+  if(btn){btn.disabled=true;btn.textContent='Sendet…';}
+  setMsg('pb-ml-msg','Sendet…','');
+  gsAuthApi('nachrichten',{action:'send',typ:'materialliste',projekt_id:pbProjekt.id,
+    empfaenger_email:email,projekt_name:pbProjekt.name,pdf:true,
+    inhalt:{positionen:positionen,notiz:notiz,von_name:'George Solutions',projekt_name:pbProjekt.name}
+  }).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='📧 Materialliste per E-Mail senden';}
+    if(d&&d.mail_sent){setMsg('pb-ml-msg','✓ Materialliste an '+email+' gesendet','');toast('Materialliste gesendet');}
+    else setMsg('pb-ml-msg',(d&&(d.error||d.mail_error))||'E-Mail konnte nicht gesendet werden','err');
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📧 Materialliste per E-Mail senden';}setMsg('pb-ml-msg','Verbindungsfehler','err');});
+}
+// Schritt 5: WhatsApp mit vorausgefülltem Text, OHNE festen Empfänger – der Nutzer wählt
+// in WhatsApp selbst aus (Projektleiter / Kollege / Gruppe). KEIN Dateianhang (technisch
+// nicht möglich) und KEIN automatischer Versand – im WhatsApp drückt der Nutzer selbst Senden.
+// Empfängerlose Share-URL (api.whatsapp.com/send?text=) öffnet die Kontaktauswahl auf iOS+Android.
+function pbWhatsAppMaterial(){
+  var positionen=pbCollectPositionen();
+  var lines=positionen.map(function(p){var mq=[p.menge,p.einheit].filter(Boolean).join(' ');return '• '+p.position+(mq?(' – '+mq):'');});
+  var txt='Materialliste – '+((pbProjekt&&pbProjekt.name)||'Projekt')+((pbProjekt&&pbProjekt.projektnummer)?(' ('+pbProjekt.projektnummer+')'):'')
+    +'\n'+(lines.join('\n')||'(keine Positionen)')+'\n\nGeorge Solutions';
+  window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(txt),'_blank');
+}
 function pbToggleTech(uid){
   var i=pbAssigned.indexOf(uid);
   if(i>-1)pbAssigned.splice(i,1);else pbAssigned.push(uid);
-  // re-render just the chips
-  document.querySelectorAll('#pb-body .ob-chip').forEach(function(el){});
-  pbRender(pbProjekt,[].concat(pbLastRapporte||[]));
+  pbRender(pbProjekt,[].concat(pbLastRapporte||[]),[].concat(pbMateriallisten||[]));
 }
 var pbLastRapporte=[];
 function pbSave(){
@@ -5380,11 +5518,14 @@ function pbRenderDemo(){
   pbPartners=[{user_id:'p1',name:'Anna Muster',firma:'Muster Immobilien AG'}];
   pbAssigned=['d1','d2'];
   pbLastRapporte=[
-    {datum:'2026-06-02',techniker_user_id:'d1',gesamtstunden:8.5,arbeiten:['Demontage','Montage'],material:['Pumpe','Thermostat']},
-    {datum:'2026-06-03',techniker_user_id:'d2',gesamtstunden:7,arbeiten:['Wartung'],material:['Thermostat','Dichtung']},
-    {datum:'2026-06-04',techniker_user_id:'d1',gesamtstunden:6.5,arbeiten:['Inbetriebnahme'],material:['Pumpe']}
+    {datum:'2026-06-02',techniker_user_id:'d1',gesamtstunden:8.5,arbeiten:['Demontage','Montage'],material:['Pumpe','Thermostat'],status:'eingereicht'},
+    {datum:'2026-06-03',techniker_user_id:'d2',gesamtstunden:7,arbeiten:['Wartung'],material:['Thermostat','Dichtung'],status:'eingereicht'},
+    {datum:'2026-06-04',techniker_user_id:'d1',gesamtstunden:6.5,arbeiten:['Inbetriebnahme'],material:['Pumpe'],status:'entwurf'}
   ];
-  pbRender(pbProjekt,pbLastRapporte);
+  pbMateriallisten=[
+    {created_at:'2026-06-03',inhalt:{von_name:'Dimitri Grill',positionen:[{position:'Umwälzpumpe Grundfos',menge:'1',einheit:'Stk'},{position:'Kupferrohr 18mm',menge:'12',einheit:'m'}],notiz:'Bitte bis Freitag bestellen'}}
+  ];
+  pbRender(pbProjekt,pbLastRapporte,pbMateriallisten);
 }
 
 // ── ADMIN: RAPPORT-STATUS ──
@@ -6348,10 +6489,12 @@ function pdRenderProjektDetail(p,rapporte,materiallisten){
     +'<div class="pd-card" style="flex:1;"><div class="pd-card-n">'+(Math.round(sumH*10)/10)+'</div><div class="pd-card-l">Stunden gesamt</div></div>'
     +'<div class="pd-card" style="flex:1;"><div class="pd-card-n">'+matCount+'</div><div class="pd-card-l">Material-Positionen</div></div></div>';
   var rapHtml='<div class="pd-sec-tit">📋 Rapporte ('+rapporte.length+')</div>'+(rapporte.length?rapporte.map(function(r){
+    var st=pbRapStatus(r);
     return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(r.datum||'')+' · '+(r.gesamtstunden||0)+'h</div>'
-      +(r.status==='eingereicht'?'<span class="admin-badge active">eingereicht</span>':'<span class="admin-badge must_change_password">entwurf</span>')+'</div>'
+      +'<span style="font-size:10.5px;font-weight:800;color:'+st.color+';background:'+st.bg+';padding:2px 9px;border-radius:50px;white-space:nowrap;">'+st.label+'</span></div>'
       +'<div class="pd-item-meta">👷 '+gsEsc(r.techniker_name||(Array.isArray(r.team)?r.team.join(', '):'')||'–')+'</div>'
-      +'<div class="pd-item-meta">'+gsEsc((r.arbeiten||[]).join(', ')||'–')+'</div></div>';
+      +'<div class="pd-item-meta">'+gsEsc((r.arbeiten||[]).join(', ')||'–')+'</div>'
+      +((r.material||[]).length?'<div class="pd-item-meta" style="color:#FFD24A;">📦 '+gsEsc((r.material||[]).join(', '))+'</div>':'')+'</div>';
   }).join(''):'<div class="admin-empty">Keine Rapporte auf dieses Projekt.</div>');
   var matHtml='<div class="pd-sec-tit">📦 Materiallisten ('+materiallisten.length+')</div>'+(materiallisten.length?materiallisten.map(function(n){
     var inh=n.inhalt||{};
