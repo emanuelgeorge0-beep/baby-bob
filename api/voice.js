@@ -9,6 +9,19 @@ const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
 const VOICE_ID = 'nPczCjzI2devNBz1zQrb'; // Brian (verified working with this account/key)
 const TTS_MODEL = 'eleven_multilingual_v2';
 const STT_MODEL = 'scribe_v1';
+// Bug 4: Sprachen, bei denen die Auto-Erkennung von multilingual_v2 mit der
+// englisch/deutsch geprägten Stimme falsch lag (v.a. Spanisch). Für diese wird
+// die Sprache via eleven_turbo_v2_5 + language_code hart erzwungen.
+// DE/EN bleiben bewusst auf dem bewährten multilingual_v2 (keine Regression).
+const FORCE_LANG_MODEL = 'eleven_turbo_v2_5';
+const FORCE_LANGS = ['es', 'fr', 'it', 'pt', 'tr'];
+
+// Normalisiert die vom Client gemeldete Sprache auf einen ISO-639-1-Code.
+function normalizeLang(l) {
+  const c = String(l || '').toLowerCase().slice(0, 2);
+  if (c === 'ch') return 'de';
+  return ['de', 'en', 'es', 'fr', 'it', 'pt', 'tr'].includes(c) ? c : '';
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,15 +39,20 @@ export default async function handler(req, res) {
 async function tts(res, body) {
   const text = (body.text ? String(body.text) : '').trim();
   if (!text) return res.status(400).json({ error: 'text erforderlich' });
+  const lang = normalizeLang(body.lang);
+  const forceLang = lang && FORCE_LANGS.includes(lang);
+  const payload = {
+    text: text.slice(0, 2000),
+    model_id: forceLang ? FORCE_LANG_MODEL : TTS_MODEL,
+    voice_settings: { stability: 0.55, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true },
+  };
+  // language_code wird NUR von turbo/flash unterstützt – multilingual_v2 (DE/EN) würde 400 werfen.
+  if (forceLang) payload.language_code = lang;
   try {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
       method: 'POST',
       headers: { 'xi-api-key': ELEVEN_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-      body: JSON.stringify({
-        text: text.slice(0, 2000),
-        model_id: TTS_MODEL,
-        voice_settings: { stability: 0.55, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true },
-      }),
+      body: JSON.stringify(payload),
     });
     if (!r.ok) {
       const t = await r.text().catch(() => '');

@@ -3425,7 +3425,7 @@ function bobSpeak(rawText,opts){
     if(opts.announce) bobAnnounce('Ton ist blockiert. Bitte den Button „Ton aktivieren“ drücken.');
     bobShowUnlockBtn();
   }
-  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text,lang:(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de'})})
     .then(function(r){
       if(!r.ok) return null;
       var ct=r.headers.get('content-type')||'';
