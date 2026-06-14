@@ -100,6 +100,19 @@
 - [x] **Teil B (NUR DOKUMENTIERT, nicht gebaut):** Roadmap-Sektion „Agenten-Steuerung & Integrationen"
       unten + idempotentes Schema `scripts/master_cockpit_session5.sql` (`agent_tasks`, `agent_wissen`,
       RLS master-only) als Vorbereitung. KEIN Agenten-Code (API/Frontend) geschrieben.
+- [x] **PWA mobile-first / installierbar (überall):** Das ganze Cockpit (Dashboard, Leads, CRM,
+      Marketing, To-Dos, **Verkauf/Margen-Umsatzübersicht**, 4 Säulen, **Jarvis inkl. Sprachein-/ausgabe**)
+      läuft auf iPhone/Android — mobile-first CSS, Safe-Area-Insets, Bottom-Nav, Touch-Targets.
+      • **Echte PNG-Icons** (`cockpit-icon-180/192/512.png` + `cockpit-maskable-512.png`) statt SVG —
+        iOS ignoriert SVG-`apple-touch-icon`, daher PNG → korrektes GS-Icon am Homescreen.
+      • **Service-Worker** (`cockpit-sw.js`): macht die App auf **Android installierbar** (fetch-Handler
+        ist Pflicht für den Install-Prompt) + schneller App-Start; `/api/*` wird **nie** gecacht (immer Live).
+      • **Install-Hinweis** im Cockpit: Android → „Installieren"-Button (`beforeinstallprompt`);
+        iOS → Anleitung „Teilen → Zum Home-Bildschirm". Dismissbar, gemerkt in localStorage.
+      • Standalone-Modus über `cockpit-manifest.json` (`display:standalone`, scope/start_url = secret path).
+      • `vercel.json`: `Service-Worker-Allowed`+no-cache für den SW, `outputDirectory "."` erhalten.
+      • **Keine Funktion ist desktop-only** — Mikrofon (getUserMedia/MediaRecorder) & Sprachausgabe
+        (ElevenLabs/SpeechSynthesis) laufen im iOS-Standalone-PWA (ab iOS 14.3) und Android Chrome.
 - [x] 20x-Analyse S5 (siehe unten) + **Live-Smoke gegen echte DB**: `getJarvisFacts` liefert
       10 Leads / 10 Kunden / Projekte aktiv 1 / Techniker 4 von 12 frei / Pipeline ~CHF 65 (deckt sich
       mit S1–S3). S2/S3-Tabellen (gs_todos/gs_margen/gs_crm_aufgaben) 404 → graceful (null/0/[]).
@@ -230,6 +243,30 @@
     (idempotent, RLS master-only), KEIN API-/Frontend-Code. Tabellen leer = ohne Wirkung, kein Risiko.
 20. **outputDirectory ".":** in `vercel.json` unverändert erhalten (keine Routing-/404-Regression).
 
+## 20x Bug-/Mobile-Analyse (Session 5 · PWA-Härtung) — Ergebnis
+1. **iOS-Icon-Bug behoben:** apple-touch-icon war SVG (von iOS ignoriert → Screenshot statt Icon).
+   Jetzt PNG 180×180 → korrektes GS-Icon am iPhone-Homescreen. Visuell gerendert & geprüft.
+2. **Android-Install:** SW mit fetch-Handler erfüllt das Chrome-Install-Kriterium; Manifest hat
+   PNG 192 & 512 + maskable. `beforeinstallprompt` → „Installieren"-Button.
+3. **Maskable-Icon:** eigene Variante mit Safe-Zone-Padding (~66%) → kein Abschneiden unter Android-Masken.
+4. **SW-Scope:** `/cockpit-sw.js` (Root) registriert mit scope `/gs-intern-7k2x`; zusätzlich Header
+   `Service-Worker-Allowed`. Kontrolliert NUR den geheimen Pfad, nicht die ganze Domain.
+5. **API nie gecacht:** SW lässt alle POST + alle `/api/*` durch → Jarvis/Cockpit/Voice immer Live-Daten.
+6. **Fremd-Hosts unangetastet:** SW ignoriert cross-origin (ElevenLabs/Claude laufen serverseitig eh,
+   aber doppelt abgesichert) → keine kaputte Sprachausgabe durch Caching.
+7. **SW-Update trotz immutable-JS:** `updateViaCache:'none'` + `Cache-Control:no-cache` für den SW →
+   neue Versionen greifen, keine „eingefrorene" App.
+8. **Navigation network-first:** online immer frisches HTML (kein Stale nach Deploy), offline Fallback Shell.
+9. **Mic im Standalone:** getUserMedia/MediaRecorder laufen im iOS-Homescreen-PWA (ab iOS 14.3) & Android;
+   nur über HTTPS (Vercel) + Tap-Geste → erfüllt.
+10. **Install-Hinweis-Timing:** zeigt nur eingeloggt (`TOKEN`), nicht im Standalone, nicht nach Dismiss;
+    Android-Button nur wenn `beforeinstallprompt` da, sonst iOS-Anleitung; Desktop ohne Prompt → kein Hinweis.
+11. **Kein Doppel-Banner:** `$('installbar')`-Guard + Entfernen bei `appinstalled`.
+12. **Layout:** Install-Bar mit Seitenrand (kein Rand-an-Rand), sitzt zwischen Topbar und View; Bottom-Nav
+    unverändert (fixe Nav + Safe-Area). Margen-/Umsatz-Übersicht bleibt 2-Spalten-Grid, mobil lesbar.
+13. **outputDirectory ".":** unverändert — Icons/SW/Manifest werden als Root-Statics ausgeliefert (kein 404).
+14. **Secret-Modell unberührt:** noindex/no-store für Cockpit-HTML bleibt; SW/Icons sind unkritische Statics.
+
 ## Roadmap — Agenten-Steuerung & Integrationen (TEIL B · NUR DOKUMENTIERT)
 > Status: **konzipiert, NICHT gebaut.** Schema-Vorbereitung liegt idempotent bereit
 > (`scripts/master_cockpit_session5.sql`). Kein Agenten-Code (API/Frontend) in Session 5.
@@ -260,6 +297,12 @@
   Auslesen** eingehender Nachrichten. Vollzugriff bräuchte WhatsApp Business API (Meta-Freigabe,
   Provider, Kosten). Grenze klar im Demo benennen.
 
+**Geräte-Roadmap**
+- **iPhone / Android:** ✅ erledigt — installierbare PWA (Homescreen, standalone, Icon, Sprache). Kein Store nötig.
+- **Apple Watch:** braucht später eine **native App** (watchOS/SwiftUI, separates Xcode-Projekt; eine PWA
+  läuft NICHT auf der Watch). **NICHT Teil dieses Auftrags** — nur als Roadmap vermerkt. Anbindung dann
+  über dieselbe token-gated `/api/cockpit`-API (z.B. Jarvis-Kurzabfragen + Komplikationen/Kennzahlen).
+
 ## NÄCHSTE SESSION (6) — Wiedereinstieg
 → Diese Datei lesen. Teil A (Jarvis) steht & ist DB-verifiziert. Offene Ausbaupunkte:
    • Jarvis: Multi-Turn-Verlauf (aktuell Einzel-Frage), optional gewünschte ElevenLabs-Voice-ID setzen,
@@ -283,3 +326,7 @@
 6. Supabase Auth: Redirect-URL für Magic-Link auf `…/gs-intern-7k2x` zulassen (falls Magic-Login gewünscht).
 7. Login mit `emanuelgeorge0@gmail.com` (Master-UUID) → /gs-intern-7k2x → Tab **„Mehr" → „Jarvis fragen"**.
    Am Handy testen: Frage tippen oder Mikrofon antippen; Antwort kommt als Text + Stimme.
+8. **Als App installieren (kein Store nötig):** iPhone → Safari öffnen, /gs-intern-7k2x, **Teilen ⬆️ →
+   „Zum Home-Bildschirm"**. Android → Chrome, **„Installieren"-Hinweis** im Cockpit oder Menü → „App
+   installieren". Danach startet das Cockpit im Vollbild wie eine echte App (Icon = goldenes GS).
+   Beim ersten Mikrofon-Antippen die **Mikrofon-Berechtigung erlauben**.
