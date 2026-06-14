@@ -951,7 +951,9 @@ function migHint(){ return '<div class="empty">Modul-Tabellen noch nicht migrier
 
 // ════ JARVIS — Sprach-Assistent (Session 5, Teil A) ════
 // Frage (Text ODER Sprache) → /api/cockpit jarvis (echte Zahlen + Claude) →
-// Antwort als Text + Stimme (/api/voice TTS, Fallback SpeechSynthesis).
+// Antwort als Text + Stimme — IDENTISCH zu Baby BOB: POST /api/voice {text}
+// (ElevenLabs, Voice-ID + model eleven_multilingual_v2 + voice_settings serverseitig,
+// dieselbe Datei, die `bobSpeak()` in app.html nutzt). KEINE Browser-Stimme.
 var JARVIS_QUICK=[
   'Wie viele Anfragen sind heute reingekommen?',
   'Wie viele Leads gesamt?',
@@ -964,6 +966,15 @@ var _jConv=[];                 // {role:'me'|'jv', text}
 var _jBusy=false, _jVoiceOn=true;
 var _jRec=null, _jChunks=[], _jRecording=false;
 var _jAutoMic=false;           // vom Command-Center-Tap gesetzt → direkt zuhören
+// EIN persistentes Audio-Element, im Tap-Kontext „entsperrt" (iOS-Autoplay) →
+// die Sprachantwort spielt auch im Sprach-Dialog (Antwort kommt aus dem STT-Callback,
+// also OHNE Geste) zuverlässig mit der ElevenLabs-Stimme — kein Browser-Fallback.
+var _jAudio=null, _jAudioUnlocked=false, _jCurUrl=null;
+// Kurzes, stilles WAV nur zum Entsperren des Audio-Elements (iOS).
+var _J_SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
+// Automatische Stille-Erkennung (Auto-Stopp) — VORBEREITET, aber DEFAULT AUS.
+// Jetzt: manueller Stopp (Tippen zum Starten/Stoppen). Siehe armSilenceDetection().
+var _jSilenceAuto=false;
 
 function renderJarvis(){
   $('view').innerHTML='<h2><span class="acc">🎙️</span> Jarvis</h2>'+backRow()+
@@ -986,16 +997,16 @@ function renderJarvis(){
   paintJarvisVoiceToggle();
   paintJConv();
   Array.prototype.forEach.call($('j-chips').children,function(c){
-    c.onclick=function(){ jarvisAsk(c.getAttribute('data-q')); };
+    c.onclick=function(){ unlockJAudio(); jarvisAsk(c.getAttribute('data-q')); };
   });
-  $('j-vtoggle').onclick=function(){ _jVoiceOn=!_jVoiceOn; paintJarvisVoiceToggle(); if(!_jVoiceOn) stopSpeak(); };
+  $('j-vtoggle').onclick=function(){ unlockJAudio(); _jVoiceOn=!_jVoiceOn; paintJarvisVoiceToggle(); if(!_jVoiceOn) stopSpeak(); };
   var inp=$('j-input');
   inp.addEventListener('input',function(){ inp.style.height='auto'; inp.style.height=Math.min(120,inp.scrollHeight)+'px'; });
   inp.addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('j-send').click(); } });
-  $('j-send').onclick=function(){ var t=inp.value.trim(); if(t){ inp.value=''; inp.style.height='auto'; jarvisAsk(t); } };
-  $('j-mic').onclick=toggleJarvisMic;
+  $('j-send').onclick=function(){ unlockJAudio(); var t=inp.value.trim(); if(t){ inp.value=''; inp.style.height='auto'; jarvisAsk(t); } };
+  $('j-mic').onclick=function(){ unlockJAudio(); toggleJarvisMic(); };
   // Vom "MASTER GEORGE"-Tap kommend → sofort Mikrofon starten (noch im Tap-Kontext).
-  if(_jAutoMic){ _jAutoMic=false; startJarvisMic(); }
+  if(_jAutoMic){ _jAutoMic=false; unlockJAudio(); startJarvisMic(); }
 }
 function paintJarvisVoiceToggle(){
   var e=$('j-vtoggle'); if(!e) return;
@@ -1018,8 +1029,6 @@ function jarvisAsk(frage){
   if(_jBusy||!frage) return;
   _jBusy=true;
   if(_jRecording) stopJarvisMic(true);
-  // Audio-Objekt schon JETZT (im Tap-Kontext) erzeugen → iOS erlaubt späteres play().
-  var au = _jVoiceOn ? new Audio() : null;
   // Verlauf VOR dieser Frage (für In-Conversation-Freigabe + Kontext); ohne Platzhalter.
   var verlauf=_jConv.filter(function(m){return m&&m.text&&m.text!=='…';})
     .slice(-12).map(function(m){return {role:m.role,text:m.text};});
@@ -1031,45 +1040,70 @@ function jarvisAsk(frage){
     var antwort=(d&&d.antwort)||'Dazu habe ich gerade keine Antwort.';
     _jConv[_jConv.length-1]={role:'jv',text:antwort};
     paintJConv();
-    if(_jVoiceOn){ speakJarvis(antwort,au); } else { jState('Bereit für die nächste Frage.','idle'); }
+    if(_jVoiceOn){ speakJarvis(antwort); } else { jState('Bereit für die nächste Frage.','idle'); }
   }).catch(function(){
     _jConv[_jConv.length-1]={role:'jv',text:'Verbindungsfehler — bitte nochmal versuchen.'};
     paintJConv(); jState('Fehler. Bitte erneut fragen.','idle');
   }).then(function(){ _jBusy=false; });
 }
 
-// ── Stimme: ElevenLabs via /api/voice, Fallback Browser-SpeechSynthesis ──
-var _jCurAudio=null;
-function stopSpeak(){
-  try{ if(_jCurAudio){ _jCurAudio.pause(); _jCurAudio=null; } }catch(e){}
-  try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){}
+// ── Stimme: NUR ElevenLabs via /api/voice (exakt wie Baby BOB). KEINE Browser-Stimme. ──
+function jGetAudio(){ if(!_jAudio){ _jAudio=new Audio(); _jAudio.preload='auto'; } return _jAudio; }
+// Im Tap-Kontext aufrufen → entsperrt das Audio-Element für iOS, damit die spätere
+// Sprachantwort (auch aus dem STT-Callback ohne Geste) abspielen darf.
+function unlockJAudio(){
+  if(_jAudioUnlocked) return;
+  try{
+    var a=jGetAudio();
+    a.muted=true; a.src=_J_SILENT;
+    var p=a.play();
+    var done=function(){ try{ a.pause(); a.currentTime=0; }catch(e){} a.muted=false; _jAudioUnlocked=true; };
+    if(p&&p.then) p.then(done).catch(function(){ a.muted=false; });
+    else done();
+  }catch(e){}
 }
-function speakJarvis(text, au){
+function stopSpeak(){
+  try{ if(_jAudio){ _jAudio.pause(); } }catch(e){}
+  if(_jCurUrl){ try{ URL.revokeObjectURL(_jCurUrl); }catch(e){} _jCurUrl=null; }
+  hideJUnlock();
+}
+function speakJarvis(text){
   stopSpeak();
   jState('Jarvis spricht','speak');
   fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
   .then(function(r){
-    if(!r.ok) throw new Error('tts');
+    if(!r.ok) throw new Error('tts '+r.status);
+    var ct=r.headers.get('content-type')||'';
+    if(ct.indexOf('audio')<0) throw new Error('no-audio');
     return r.blob();
   }).then(function(blob){
-    var url=URL.createObjectURL(blob);
-    var a=au||new Audio();
-    _jCurAudio=a; a.src=url;
-    a.onended=function(){ URL.revokeObjectURL(url); jState('Bereit für die nächste Frage.','idle'); };
-    a.onerror=function(){ URL.revokeObjectURL(url); speakFallback(text); };
+    var url=URL.createObjectURL(blob); _jCurUrl=url;
+    var a=jGetAudio();
+    a.src=url; a.muted=false;
+    a.onended=function(){ stopSpeak(); jState('Bereit für die nächste Frage.','idle'); };
+    a.onerror=function(){ jState('Bereit für die nächste Frage.','idle'); };
     var p=a.play();
-    if(p&&p.catch) p.catch(function(){ speakFallback(text); });
-  }).catch(function(){ speakFallback(text); });
+    // Autoplay vom Browser blockiert → KEINE Browser-Stimme, sondern ein Tap-Button,
+    // der dieselbe ElevenLabs-Aufnahme abspielt.
+    if(p&&p.catch) p.catch(function(){ showJUnlock(); });
+  }).catch(function(){
+    // /api/voice nicht erreichbar → keine Ersatzstimme, nur Hinweis. Text steht bereits da.
+    jState('Stimme momentan nicht verfügbar — Antwort steht oben.','idle');
+    toast('Stimme nicht verfügbar');
+  });
 }
-function speakFallback(text){
-  try{
-    if(!('speechSynthesis' in window)){ jState('Bereit für die nächste Frage.','idle'); return; }
-    var u=new SpeechSynthesisUtterance(text);
-    u.lang='de-DE'; u.rate=1.02; u.pitch=1;
-    u.onend=function(){ jState('Bereit für die nächste Frage.','idle'); };
-    window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
-  }catch(e){ jState('Bereit für die nächste Frage.','idle'); }
+// „Antippen zum Hören" — erscheint nur, wenn der Browser das Autoplay blockiert.
+function showJUnlock(){
+  jState('Antippen zum Hören 🔊','idle');
+  var bar=$('j-conv'); if(!bar) return;
+  if($('j-unlock')) return;
+  var b=document.createElement('button');
+  b.id='j-unlock'; b.className='jchip'; b.style.cssText='display:block;margin:8px auto;background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;font-weight:800;border:none;';
+  b.textContent='🔊 Antippen zum Hören';
+  b.onclick=function(){ _jAudioUnlocked=true; var a=jGetAudio(); var p=a.play(); if(p&&p.then) p.then(function(){ hideJUnlock(); jState('Jarvis spricht','speak'); }).catch(function(){}); };
+  bar.appendChild(b);
 }
+function hideJUnlock(){ var b=$('j-unlock'); if(b&&b.parentNode) b.parentNode.removeChild(b); }
 
 // ── Spracheingabe: MediaRecorder → /api/voice STT ──
 function toggleJarvisMic(){ if(_jRecording) stopJarvisMic(false); else startJarvisMic(); }
@@ -1100,15 +1134,47 @@ function startJarvisMic(){
     };
     _jRec.start();
     _jRecording=true;
-    var b=$('j-mic'); if(b) b.classList.add('rec');
-    jState('Ich höre zu… (zum Stoppen tippen)','speak');
+    var b=$('j-mic'); if(b){ b.classList.add('rec'); b.textContent='⏹'; b.title='Aufnahme stoppen'; }
+    jState('● Ich höre zu… — zum Stoppen tippen','speak');
+    armSilenceDetection(stream);   // default AUS (manueller Stopp); Hook für späteres Auto-Stopp
   }).catch(function(){ toast('Mikrofon-Zugriff verweigert'); });
 }
 function stopJarvisMic(silent){
   _jRecording=false;
-  var b=$('j-mic'); if(b) b.classList.remove('rec');
+  disarmSilenceDetection();
+  var b=$('j-mic'); if(b){ b.classList.remove('rec'); b.textContent='🎤'; b.title='Sprechen'; }
   try{ if(_jRec&&_jRec.state!=='inactive') _jRec.stop(); }catch(e){}
   if(silent){ /* von jarvisAsk ausgelöst — kein State-Reset nötig */ }
+}
+// ── Stille-Erkennung (Auto-Stopp) — VORBEREITET, DEFAULT AUS ──────────────────
+// Jetzt bewusst manueller Stopp, damit der Nutzer am Anfang NICHT abgeschnitten wird.
+// Zum Nachrüsten: _jSilenceAuto=true setzen und unten den Analyser-Block aktivieren
+// (WebAudio AnalyserNode → RMS unter Schwelle für X ms → stopJarvisMic(false)).
+var _jSilCtx=null, _jSilRAF=0;
+function armSilenceDetection(stream){
+  if(!_jSilenceAuto) return;                 // ← Schalter: default AUS
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    _jSilCtx=new AC(); var src=_jSilCtx.createMediaStreamSource(stream);
+    var an=_jSilCtx.createAnalyser(); an.fftSize=2048; src.connect(an);
+    var buf=new Uint8Array(an.fftSize), quietSince=0, MIN_MS=1200, THRESH=0.012, startedAt=Date.now();
+    (function loop(){
+      if(!_jRecording){ disarmSilenceDetection(); return; }
+      an.getByteTimeDomainData(buf);
+      var sum=0; for(var i=0;i<buf.length;i++){ var v=(buf[i]-128)/128; sum+=v*v; }
+      var rms=Math.sqrt(sum/buf.length), now=Date.now();
+      // erst nach einer Mindest-Sprechzeit greifen, damit der Anfang NIE abgeschnitten wird
+      if(now-startedAt>1500){
+        if(rms<THRESH){ if(!quietSince) quietSince=now; else if(now-quietSince>MIN_MS){ stopJarvisMic(false); return; } }
+        else quietSince=0;
+      }
+      _jSilRAF=requestAnimationFrame(loop);
+    })();
+  }catch(e){}
+}
+function disarmSilenceDetection(){
+  if(_jSilRAF){ try{ cancelAnimationFrame(_jSilRAF); }catch(e){} _jSilRAF=0; }
+  if(_jSilCtx){ try{ _jSilCtx.close(); }catch(e){} _jSilCtx=null; }
 }
 
 // ════ MARKETING ════
