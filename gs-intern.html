@@ -193,6 +193,24 @@
   .soon{text-align:center;padding:60px 24px;color:var(--muted);}
   .soon .ic{font-size:46px;opacity:.6;}
   .soon h3{margin:14px 0 6px;color:var(--txt);}
+
+  /* ── 4 Säulen ── */
+  .pillar{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px;margin-bottom:12px;position:relative;overflow:hidden;}
+  .pillar::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--gold),transparent);}
+  .pillar .ph{display:flex;align-items:center;gap:10px;margin-bottom:3px;}
+  .pillar .nr{font:700 11px Georgia,serif;color:var(--gold);border:1px solid var(--gold-line);border-radius:7px;padding:2px 7px;background:var(--gold-soft);letter-spacing:.5px;}
+  .pillar .pn{font-weight:800;font-size:16px;flex:1;letter-spacing:.2px;}
+  .pillar .ptag{font-size:12px;color:var(--muted);margin-bottom:12px;}
+  .pillar .pkpi{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .pkpi .cell{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:9px 11px;}
+  .pkpi .cell .kk{font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted2);}
+  .pkpi .cell .vv{font-size:19px;font-weight:800;margin-top:2px;letter-spacing:-.3px;}
+  .pkpi .cell .vv.gold{color:var(--gold);} .pkpi .cell .vv.ok{color:var(--ok);} .pkpi .cell .vv.warn{color:var(--warn);} .pkpi .cell .vv.bad{color:var(--bad);}
+  .pillar .phint{font-size:11.5px;color:var(--muted2);margin-top:11px;border-top:1px solid var(--line);padding-top:9px;line-height:1.45;}
+  .st-badge{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:50px;}
+  .st-aktiv{background:rgba(62,207,142,.16);color:var(--ok);}
+  .st-aufbau{background:rgba(245,185,66,.16);color:var(--warn);}
+  .st-geplant{background:rgba(90,167,255,.14);color:var(--info);}
 </style>
 </head>
 <body>
@@ -381,7 +399,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','marketing','todos','margen'];
+var MEHR_VIEWS=['mehr','marketing','todos','margen','saeulen'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -395,6 +413,7 @@ function go(v){
   else if(v==='marketing') renderMarketing();
   else if(v==='todos') renderTodos();
   else if(v==='margen') renderMargen();
+  else if(v==='saeulen') renderSaeulen();
 }
 function router(){ go(curView); }
 
@@ -697,7 +716,7 @@ function renderMehr(){
     {v:'marketing',ic:'📣',t:'Marketing',d:'Kanäle, Kosten/Lead, Conversion, Content-Plan'},
     {v:'todos',ic:'✅',t:'To-Dos',d:'Interne Aufgaben (Team, Fälligkeit, Priorität)'},
     {v:'margen',ic:'💰',t:'Verkauf & Margen',d:'Einkauf vs. Verkauf → Marge pro Projekt'},
-    {v:null,ic:'🏛️',t:'4 Säulen',d:'Übergreifende Geschäftsbereiche'}
+    {v:'saeulen',ic:'🏛️',t:'4 Säulen',d:'S1 Baby BOB · S2 Marketplace · S3 George Solutions · S4 Facility'}
   ];
   $('view').innerHTML='<h2><span class="acc">⋯</span> Module</h2>'+
     '<div class="list">'+mods.map(function(m){
@@ -716,17 +735,37 @@ function wireBack(){ var b=$('back-mehr'); if(b) b.onclick=function(){ go('mehr'
 function migHint(){ return '<div class="empty">Modul-Tabellen noch nicht migriert.<br><span style="font-size:12px;color:var(--muted2)">scripts/master_cockpit_session2.sql im Supabase SQL Editor ausführen.</span></div>'; }
 
 // ════ MARKETING ════
+var MKT_RANGES=[{k:'alle',l:'Alle'},{k:'30',l:'30 Tage'},{k:'90',l:'90 Tage'},{k:'month',l:'Dieser Monat'},{k:'year',l:'Dieses Jahr'}];
+var mktRange='alle', _kampCache=[];
+function mktVonBis(){
+  function iso(d){ return d.toISOString().slice(0,10); }
+  var now=new Date(), bis=iso(now), d;
+  if(mktRange==='30'){ d=new Date(now); d.setDate(d.getDate()-29); return {von:iso(d),bis:bis}; }
+  if(mktRange==='90'){ d=new Date(now); d.setDate(d.getDate()-89); return {von:iso(d),bis:bis}; }
+  if(mktRange==='month'){ return {von:bis.slice(0,7)+'-01', bis:bis}; }
+  if(mktRange==='year'){ return {von:bis.slice(0,4)+'-01-01', bis:bis}; }
+  return {von:null,bis:null};
+}
 function renderMarketing(){
-  $('view').innerHTML='<h2><span class="acc">📣</span> Marketing</h2>'+backRow()+'<div id="mkt-body"><div class="list">'+skeletonCards(3)+'</div></div>';
+  var chips=MKT_RANGES.map(function(r){ return '<span class="chip'+(mktRange===r.k?' on':'')+'" data-mr="'+r.k+'">'+r.l+'</span>'; }).join('');
+  $('view').innerHTML='<h2><span class="acc">📣</span> Marketing</h2>'+backRow()+
+    '<div class="filters" id="mkt-range">'+chips+'</div>'+
+    '<div id="mkt-body"><div class="list">'+skeletonCards(3)+'</div></div>';
   wireBack();
-  api('marketing').then(paintMarketing).catch(function(){ var b=$('mkt-body'); if(b) b.innerHTML=migHint(); });
+  Array.prototype.forEach.call($('mkt-range').children,function(c){ c.onclick=function(){ mktRange=c.getAttribute('data-mr'); renderMarketing(); }; });
+  var vb=mktVonBis();
+  api('marketing',{von:vb.von,bis:vb.bis}).then(paintMarketing).catch(function(){ var b=$('mkt-body'); if(b) b.innerHTML=migHint(); });
 }
 function paintMarketing(d){
+  _kampCache=d.kampagnen||[];
+  var z=d.zeitraum||{von:null,bis:null};
+  var zlbl=(z.von||z.bis)?('Zeitraum: '+(z.von?deDate(z.von):'…')+' – '+(z.bis?deDate(z.bis):'…')):'Gesamter Zeitraum';
   var t=d.totals||{leads:0,gewonnen:0,kosten:0,cpl:0};
-  var tiles='<div class="grid">'+
-    tile('Leads gesamt', t.leads, '')+
+  var tiles='<div class="ptag" style="margin:-4px 0 10px">'+esc(zlbl)+'</div>'+
+  '<div class="grid">'+
+    tile('Leads (Zeitraum)', t.leads, '')+
     tile('Gewonnen', t.gewonnen, '', 'ok')+
-    tile('Kosten gesamt', chf(t.kosten), '', 'gold')+
+    tile('Kanal-Kosten', chf(t.kosten), '', 'gold')+
     tile('Ø Kosten/Lead', chf(t.cpl), '', t.cpl?'warn':'')+
   '</div>';
   var rows=(d.kanaele||[]).map(function(k){
@@ -743,8 +782,15 @@ function paintMarketing(d){
         '<span class="assign" style="margin-left:auto">tippen ›</span>'+
       '</div></div>';
   }).join('');
+  var kt=d.kampTotals||{anzahl:0,budget:0,kosten:0,aktiv:0};
+  var kampSummary=kt.anzahl?('<div class="meta" style="margin:-2px 0 10px;color:var(--muted2)">'+
+    kt.anzahl+' Kampagne'+(kt.anzahl===1?'':'n')+' · '+kt.aktiv+' aktiv · Budget '+chf(kt.budget)+' · Ausgaben '+chf(kt.kosten)+'</div>'):'';
   $('mkt-body').innerHTML=tiles+
-    '<div class="sec-t" style="border:none;margin-top:18px">Kanäle (Quelle ↔ Lead)</div>'+
+    '<div class="sec-t" style="border:none;margin-top:18px">Kampagnen</div>'+
+    '<button class="btn-sm btn-gold" id="mkt-kamp-add" style="width:100%;margin-bottom:10px">+ Kampagne</button>'+
+    kampSummary+
+    '<div class="list" id="mkt-kamp-list">'+paintKampagnen(_kampCache)+'</div>'+
+    '<div class="sec-t">Kanäle (Quelle ↔ Lead)</div>'+
     '<div class="list">'+(rows||'<div class="empty">Keine Lead-Daten.</div>')+'</div>'+
     '<div class="sec-t">Content-Plan</div>'+
     '<button class="btn-sm" id="mkt-content-add" style="width:100%;margin-bottom:10px">+ Content-Idee</button>'+
@@ -752,8 +798,56 @@ function paintMarketing(d){
   Array.prototype.forEach.call($('mkt-body').querySelectorAll('[data-kanal]'),function(c){
     c.onclick=function(){ openKanalEdit(c.getAttribute('data-kanal'), d); };
   });
+  $('mkt-kamp-add').onclick=function(){ openKampagneForm(null); };
+  wireKampagnen();
   $('mkt-content-add').onclick=function(){ openContentForm(); };
   wireContentList();
+}
+function paintKampagnen(list){
+  if(!list.length) return '<div class="empty" style="padding:18px">Keine Kampagnen im Zeitraum.</div>';
+  var stcls={geplant:'st-geplant',aktiv:'st-aktiv',pausiert:'st-aufbau',beendet:'st-geplant'};
+  return list.map(function(k){
+    var laufzeit=(k.start_datum?deDate(k.start_datum):'—')+' – '+(k.end_datum?deDate(k.end_datum):'offen');
+    var pct=k.budget>0?Math.round(k.kosten/k.budget*100):0;
+    return '<div class="lcard" data-kamp="'+k.id+'">'+
+      '<div class="top"><div class="nm">'+esc(k.name)+(k.kanal?' <span style="color:var(--muted);font-weight:500">· '+esc(KANAL_LABEL[k.kanal]||k.kanal)+'</span>':'')+'</div>'+
+        '<span class="st-badge '+(stcls[k.status]||'st-geplant')+'">'+esc(k.status)+'</span></div>'+
+      '<div class="meta" style="align-items:center">'+
+        '<span>Budget <b style="color:var(--gold)">'+chf(k.budget)+'</b></span>'+
+        '<span class="dot">Ausgaben '+chf(k.kosten)+(k.budget>0?' · '+pct+'%':'')+'</span>'+
+      '</div>'+
+      '<div class="meta" style="color:var(--muted2)">📅 '+esc(laufzeit)+'<span class="assign" style="margin-left:auto">bearbeiten ›</span></div>'+
+    '</div>';
+  }).join('');
+}
+function wireKampagnen(){
+  Array.prototype.forEach.call($('mkt-kamp-list').querySelectorAll('[data-kamp]'),function(c){
+    c.onclick=function(){ var k=_kampCache.filter(function(x){return x.id===c.getAttribute('data-kamp');})[0]; if(k) openKampagneForm(k); };
+  });
+}
+function openKampagneForm(k){
+  k=k||{};
+  openSheet('');
+  sheetBody.innerHTML='<h3>'+(k.id?'Kampagne bearbeiten':'Neue Kampagne')+'</h3>'+
+    '<input class="field" id="kp-name" placeholder="Kampagnen-Name" value="'+esc(k.name||'')+'"/>'+
+    '<div class="row2"><select class="field" id="kp-kanal">'+kanalOptions(k.kanal||'')+'</select>'+
+    '<select class="field" id="kp-status">'+['geplant','aktiv','pausiert','beendet'].map(function(s){ return '<option value="'+s+'"'+((k.status||'geplant')===s?' selected':'')+'>'+cap(s)+'</option>'; }).join('')+'</select></div>'+
+    '<div class="row2"><div><label style="font-size:11px;color:var(--muted)">Budget</label><input class="field" id="kp-budget" type="number" inputmode="decimal" value="'+(k.budget||'')+'"/></div>'+
+    '<div><label style="font-size:11px;color:var(--muted)">Ausgaben</label><input class="field" id="kp-kosten" type="number" inputmode="decimal" value="'+(k.kosten||'')+'"/></div></div>'+
+    '<div class="row2"><div><label style="font-size:11px;color:var(--muted)">Start</label><input class="field" id="kp-start" type="date" value="'+esc(k.start_datum||'')+'"/></div>'+
+    '<div><label style="font-size:11px;color:var(--muted)">Ende</label><input class="field" id="kp-end" type="date" value="'+esc(k.end_datum||'')+'"/></div></div>'+
+    '<textarea class="field" id="kp-notiz" placeholder="Notiz (optional)">'+esc(k.notiz||'')+'</textarea>'+
+    '<button class="btn-sm btn-gold" id="kp-save" style="width:100%">'+(k.id?'Speichern':'Anlegen')+'</button>'+
+    (k.id?'<button class="btn-sm" id="kp-del" style="width:100%;margin-top:8px;color:var(--bad);border-color:rgba(255,93,93,.3)">Löschen</button>':'');
+  $('kp-save').onclick=function(){
+    var name=$('kp-name').value.trim(); if(!name){ toast('Name eingeben'); return; }
+    var p={name:name,kanal:$('kp-kanal').value||null,status:$('kp-status').value,
+      budget:$('kp-budget').value,kosten:$('kp-kosten').value,
+      start_datum:$('kp-start').value||null,end_datum:$('kp-end').value||null,notiz:$('kp-notiz').value.trim()};
+    var call=k.id?api('kampagne_update',Object.assign({id:k.id},p)):api('kampagne_add',p);
+    call.then(function(){ toast('Gespeichert'); closeSheet(); renderMarketing(); refreshDashSilent(); }).catch(function(){ toast('Migration nötig?'); });
+  };
+  if(k.id) $('kp-del').onclick=function(){ api('kampagne_del',{id:k.id}).then(function(){ toast('Gelöscht'); closeSheet(); renderMarketing(); }).catch(function(){ toast('Fehler'); }); };
 }
 function paintContent(list){
   if(!list.length) return '<div class="empty" style="padding:18px">Noch keine Content-Ideen.</div>';
@@ -892,13 +986,21 @@ function openTodoForm(t){
 }
 
 // ════ VERKAUF / MARGEN ════
+var _margePickers={anfragen:[],projekte:[]};
 function renderMargen(){
   $('view').innerHTML='<h2><span class="acc">💰</span> Verkauf &amp; Margen</h2>'+backRow()+
     '<button class="btn-sm btn-gold" id="marge-add" style="width:100%;margin-bottom:12px">+ Projekt / Position</button>'+
     '<div id="marge-totals"></div><div class="list" id="marge-list">'+skeletonCards(3)+'</div>';
   wireBack();
   $('marge-add').onclick=function(){ openMargeForm(null); };
+  // Picker-Listen (Lead/Projekt) für die Verknüpfung vorladen — unabhängig von Margen.
+  api('marge_pickers').then(function(p){ _margePickers={anfragen:p.anfragen||[],projekte:p.projekte||[]}; }).catch(function(){});
   api('margen').then(function(d){ paintMargen(d); }).catch(function(){ var b=$('marge-list'); if(b) b.innerHTML=migHint(); });
+}
+function pickerOptions(items, sel, placeholder){
+  return '<option value="">'+placeholder+'</option>'+(items||[]).map(function(it){
+    return '<option value="'+esc(it.id)+'"'+(sel===it.id?' selected':'')+'>'+esc(it.label)+'</option>';
+  }).join('');
 }
 function paintMargen(d){
   var t=d.totals||{umsatz:0,marge:0,prozent:0,einkauf:0};
@@ -910,9 +1012,13 @@ function paintMargen(d){
   var rows=(d.margen||[]);
   if(!rows.length){ $('marge-list').innerHTML='<div class="empty">Noch keine Positionen. Lege ein Projekt an.</div>'; return; }
   $('marge-list').innerHTML=rows.map(function(m){
+    var link=[];
+    if(m.anfrage_titel) link.push('🔗 '+esc(m.anfrage_titel));
+    if(m.projekt_titel) link.push('🏗 '+esc(m.projekt_titel));
     return '<div class="lcard" data-marge="'+m.id+'">'+
-      '<div class="top"><div class="nm">'+esc(m.titel)+(m.anfrage_titel?' <span style="color:var(--muted);font-weight:500">· '+esc(m.anfrage_titel)+'</span>':'')+'</div>'+
+      '<div class="top"><div class="nm">'+esc(m.titel)+'</div>'+
         '<span class="badge '+(m.marge>=0?'b-gewonnen':'b-verloren')+'">'+m.prozent+'%</span></div>'+
+      (link.length?'<div class="meta" style="color:var(--gold)">'+link.join('<span class="dot"></span>')+'</div>':'')+
       '<div class="meta" style="align-items:center">'+
         '<span>Umsatz <b style="color:var(--gold)">'+chf(m.umsatz)+'</b></span>'+
         '<span class="dot">Einkauf '+chf(m.einkauf)+'</span>'+
@@ -932,6 +1038,10 @@ function openMargeForm(m){
   sheetBody.innerHTML='<h3>'+(m.id?'Position bearbeiten':'Neue Position')+'</h3>'+
     '<div class="h-sub">Umsatz = Stundensatz × Stunden (oder manuell). Marge = Umsatz − Einkauf.</div>'+
     '<input class="field" id="m-titel" placeholder="Projekt / Bezeichnung" value="'+esc(m.titel||'')+'"/>'+
+    '<label style="font-size:11px;color:var(--muted)">Verknüpfter Lead / Anfrage</label>'+
+    '<select class="field" id="m-anfrage">'+pickerOptions(_margePickers.anfragen, m.anfrage_id||'', 'kein Lead')+'</select>'+
+    '<label style="font-size:11px;color:var(--muted)">Verknüpftes Projekt</label>'+
+    '<select class="field" id="m-projekt">'+pickerOptions(_margePickers.projekte, m.projekt_id||'', 'kein Projekt')+'</select>'+
     '<div class="row2"><div><label style="font-size:11px;color:var(--muted)">Stundensatz</label><input class="field" id="m-satz" type="number" inputmode="decimal" value="'+(m.stundensatz||'')+'"/></div>'+
     '<div><label style="font-size:11px;color:var(--muted)">Stunden</label><input class="field" id="m-std" type="number" inputmode="decimal" value="'+(m.stunden||'')+'"/></div></div>'+
     '<div class="row2"><div><label style="font-size:11px;color:var(--muted)">Einkauf / Material</label><input class="field" id="m-eink" type="number" inputmode="decimal" value="'+(m.einkauf||'')+'"/></div>'+
@@ -949,11 +1059,46 @@ function openMargeForm(m){
   ['m-satz','m-std','m-eink','m-ums'].forEach(function(id){ $(id).addEventListener('input',preview); }); preview();
   $('m-save').onclick=function(){
     var titel=$('m-titel').value.trim(); if(!titel){ toast('Bezeichnung eingeben'); return; }
-    var p={titel:titel,stundensatz:$('m-satz').value,stunden:$('m-std').value,einkauf:$('m-eink').value,umsatz_manuell:$('m-ums').value,notiz:$('m-notiz').value.trim()};
+    var anfrageId=$('m-anfrage').value||'', projektId=$('m-projekt').value||'';
+    var p={titel:titel,stundensatz:$('m-satz').value,stunden:$('m-std').value,einkauf:$('m-eink').value,umsatz_manuell:$('m-ums').value,notiz:$('m-notiz').value.trim(),
+      anfrage_id:anfrageId, projekt_id:projektId};
+    // Projekt entkoppeln nur, wenn vorher eins gesetzt war (Spalte existiert dann seit S3).
+    if(m.id && m.projekt_id && !projektId) p.projekt_id_clear=true;
     var call = m.id ? api('marge_update',Object.assign({id:m.id},p)) : api('marge_add',p);
     call.then(function(){ toast('Gespeichert'); closeSheet(); renderMargen(); refreshDashSilent(); }).catch(function(){ toast('Migration nötig?'); });
   };
   if(m.id) $('m-del').onclick=function(){ api('marge_del',{id:m.id}).then(function(){ toast('Gelöscht'); closeSheet(); renderMargen(); refreshDashSilent(); }).catch(function(){ toast('Fehler'); }); };
+}
+
+// ════ 4 SÄULEN ════
+var ST_LABEL={aktiv:'aktiv',aufbau:'im Aufbau',geplant:'geplant'};
+function renderSaeulen(){
+  $('view').innerHTML='<h2><span class="acc">🏛️</span> 4 Säulen</h2>'+backRow()+
+    '<div id="sae-body"><div class="list">'+skeletonCards(4)+'</div></div>';
+  wireBack();
+  api('saeulen').then(paintSaeulen).catch(function(){ var b=$('sae-body'); if(b) b.innerHTML='<div class="empty">Konnte Säulen-Daten nicht laden.</div>'; });
+}
+function paintSaeulen(d){
+  var s=d.summary||{};
+  var head='<div class="grid" style="margin-bottom:14px">'+
+    tile('Säulen aktiv', (s.aktiv||0)+' / '+(s.saeulen||4), '', 'gold')+
+    tile('Leads gesamt', (s.leadsTotal||0), '')+
+    tile('Kunden', (s.kundenTotal||0), '')+
+    tile('Techniker frei', (s.techFrei||0)+' / '+(s.techGesamt||0), '', 'ok')+
+  '</div>';
+  var cards=(d.saeulen||[]).map(function(p){
+    var kpis=(p.kennzahlen||[]).map(function(k){
+      return '<div class="cell"><div class="kk">'+esc(k.label)+'</div><div class="vv '+(k.cls||'')+' mono">'+esc(k.value)+'</div></div>';
+    }).join('');
+    return '<div class="pillar">'+
+      '<div class="ph"><span class="nr">'+esc(p.nr)+'</span><span class="pn">'+esc(p.name)+'</span>'+
+        '<span class="st-badge st-'+(p.status||'geplant')+'">'+(ST_LABEL[p.status]||p.status)+'</span></div>'+
+      '<div class="ptag">'+esc(p.tagline||'')+'</div>'+
+      '<div class="pkpi">'+kpis+'</div>'+
+      (p.hinweis?'<div class="phint">'+esc(p.hinweis)+'</div>':'')+
+    '</div>';
+  }).join('');
+  $('sae-body').innerHTML=head+cards;
 }
 
 // ── Go ──
