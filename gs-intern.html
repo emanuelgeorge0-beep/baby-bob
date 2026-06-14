@@ -1066,10 +1066,77 @@ function stopSpeak(){
   if(_jCurUrl){ try{ URL.revokeObjectURL(_jCurUrl); }catch(e){} _jCurUrl=null; }
   hideJUnlock();
 }
+// ── Sprach-Aufbereitung (Zahlen sauber aussprechen) ──────────────────────────
+// Übernimmt Baby BOBs Zahl-zu-Wort-Logik und erweitert sie um Datum + Uhrzeit.
+// NUR die VORGELESENE Version wird umgeschrieben — der Chat zeigt weiter „CHF 34'384".
+function _jZahl(n){
+  n=Math.floor(Math.abs(n));
+  if(n>999999999) return String(n);
+  var e=['null','eins','zwei','drei','vier','fünf','sechs','sieben','acht','neun','zehn','elf','zwölf','dreizehn','vierzehn','fünfzehn','sechzehn','siebzehn','achtzehn','neunzehn'];
+  var z=['','','zwanzig','dreissig','vierzig','fünfzig','sechzig','siebzig','achtzig','neunzig'];
+  function u100(x){ if(x<20)return e[x]; var t=Math.floor(x/10),o=x%10; return (o?(o===1?'einund':e[o]+'und'):'')+z[t]; }
+  function u1000(x){ if(x<100)return u100(x); var h=Math.floor(x/100),r=x%100; return (h===1?'ein':e[h])+'hundert'+(r?u1000(r):''); }
+  if(n===0) return 'null';
+  var out='', mio=Math.floor(n/1000000), th=Math.floor((n%1000000)/1000), rest=n%1000;
+  if(mio>0) out+=(mio===1?'eine Million ':u1000(mio)+' Millionen ');
+  if(th>0) out+=(th===1?'eintausend':u1000(th)+'tausend');
+  if(rest>0) out+=u1000(rest);
+  return out.trim();
+}
+function _jChf(num){
+  var c=String(num).replace(/['’\s]/g,'').replace(',','.');
+  var p=c.split('.'); var ganz=parseInt((p[0]||'').replace(/[^\d]/g,''),10);
+  if(isNaN(ganz)) return num+' Franken';
+  var w=_jZahl(ganz)+' Franken';
+  if(p[1]){ var rp=parseInt(p[1].slice(0,2),10); if(rp>0) w+=' '+_jZahl(rp)+' Rappen'; }
+  return w;
+}
+function _jNum(m){
+  var c=String(m).replace(/['’\s]/g,'').replace(',','.');
+  var p=c.split('.'); var ganz=parseInt((p[0]||'').replace(/[^\d]/g,''),10);
+  if(isNaN(ganz)) return m;
+  var w=_jZahl(ganz);
+  if(p[1]&&parseInt(p[1],10)>0) w+=' Komma '+p[1].split('').map(function(d){return _jZahl(parseInt(d,10)||0);}).join(' ');
+  return w;
+}
+function _jOrd(n){
+  var sp={1:'erster',3:'dritter',7:'siebter',8:'achter'}; if(sp[n]) return sp[n];
+  var w=_jZahl(n); return n<20 ? w+'ter' : w+'ster';
+}
+var _J_MONATE=['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+function jSanitizeSpeech(text){
+  if(!text) return text;
+  var s=String(text).replace(/[*#`_]/g,'');
+  // Uhrzeit HH:MM → „… Uhr …" (00 → nur „… Uhr"); ein folgendes „Uhr" wird geschluckt.
+  s=s.replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b(\s*Uhr)?/gi,function(m,h,mi){
+    var min=parseInt(mi,10); return _jZahl(parseInt(h,10))+' Uhr'+(min>0?' '+_jZahl(min):'');
+  });
+  // Datum TT.MM.(JJJJ) → „TTter MonatName (Jahr)".
+  s=s.replace(/\b(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})?/g,function(m,d,mo,y){
+    var dd=parseInt(d,10), mm=parseInt(mo,10);
+    if(dd<1||dd>31||mm<1||mm>12) return m;
+    var out=_jOrd(dd)+' '+_J_MONATE[mm-1];
+    if(y){ var yy=parseInt(y,10); if(y.length===2) yy=2000+yy; out+=' '+_jZahl(yy); }
+    return out;
+  });
+  s=s.replace(/m²|m2\b/gi,' Quadratmeter');
+  s=s.replace(/%/g,' Prozent');
+  s=s.replace(/\s*\/\s*h\b/gi,' pro Stunde');
+  // Zahl-Token endet immer auf einer Ziffer → Satzpunkt/Komma bleibt erhalten (saubere Sprech-Pausen).
+  // CHF-Bereich „CHF 1500–2000" und Einzelbetrag.
+  s=s.replace(/(?:CHF|Fr\.?)\s*(\d[\d'’.,]*\d|\d)\s*[–-]\s*(\d[\d'’.,]*\d|\d)/gi,function(m,a,b){ return _jChf(a).replace(/ Franken.*$/,'')+' bis '+_jChf(b); });
+  s=s.replace(/(?:CHF|Fr\.?)\s*(\d[\d'’.,]*\d|\d)/gi,function(m,a){ return _jChf(a); });
+  // Reiner Zahlenbereich.
+  s=s.replace(/(\d[\d'’.,]*\d|\d)\s*[–-]\s*(\d[\d'’.,]*\d|\d)/g,function(m,a,b){ return _jNum(a)+' bis '+_jNum(b); });
+  // Restliche Zahlen.
+  s=s.replace(/\d[\d'’.,]*\d|\d/g,function(m){ return _jNum(m); });
+  return s.replace(/\s{2,}/g,' ').trim();
+}
 function speakJarvis(text){
   stopSpeak();
   jState('Jarvis spricht','speak');
-  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+  var spoken=jSanitizeSpeech(text);   // nur die vorgelesene Version; Chat bleibt unverändert
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:spoken})})
   .then(function(r){
     var ct=r.headers.get('content-type')||'';
     if(r.ok && ct.indexOf('audio')>-1){ return r.blob().then(playJBlob); }
