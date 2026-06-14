@@ -272,6 +272,35 @@
 > 3. **Für Magic-Link (optional):** Supabase → Authentication → URL Configuration → **Redirect URLs**
 >    → `https://baby-bob.vercel.app/gs-intern-7k2x` eintragen. Für reinen Passwort-Login NICHT nötig.
 
+### ✅ Session 11 — Jarvis-Voice-Bugfix am iPhone (2 echte Bugs gefunden & behoben)
+- [x] **BUG 1 „Stimme spielt nie" → URSACHE: ElevenLabs-GUTHABEN ERSCHÖPFT (kein Code-Bug).**
+      Live-Test gegen Prod-`/api/voice` (5×, iPhone-User-Agent): **alle HTTP 502**, ElevenLabs-Detail
+      `"This request exceeds your quota of 10000. You have 4 credits remaining, while 96 required"`.
+      Der Key GREIFT zur Laufzeit (ElevenLabs antwortet inhaltlich) — das Konto ist schlicht leer. **Baby BOB
+      ist genauso betroffen** (fällt nur still auf die Browser-Stimme zurück → wirkt „ok"). Mein früherer
+      Erfolgstest verbrauchte die letzten Credits. ⇒ **Fix = ElevenLabs aufladen/Plan upgraden** (Emanuel-Aktion).
+      Code: Jarvis liest jetzt die JSON-Fehlerantwort und zeigt die **echte Ursache** an
+      („Stimme: ElevenLabs-Guthaben erschöpft — bitte aufladen") statt pauschal „nicht verfügbar". Sobald
+      Guthaben da ist, spielt die Stimme ohne weitere Änderung (Wiedergabe-/Unlock-Pfad in S10 verifiziert).
+- [x] **BUG 2 „STT erkennt nichts" → URSACHE: falscher STT-Pfad für iOS.** Jarvis nutzte MediaRecorder→
+      `/api/voice` scribe_v1; iOS Safari liefert **audio/mp4**, der Server hängte fix `audio.webm` an →
+      ElevenLabs gab leeren Text. **Baby BOB nutzt für STT GAR NICHT scribe**, sondern die **native
+      `webkitSpeechRecognition`** (`bobChatMic`, app.html) — die am iPhone zuverlässig läuft und kein
+      ElevenLabs-Guthaben kostet. ⇒ **Fix: Jarvis exakt auf denselben nativen SR-Pfad umgestellt.**
+      • Manueller Stopp (Tippen Start / Tippen Stopp, ⏹-Button). • `continuous`+`interimResults`; endet iOS
+        bei einer Sprechpause, wird **neu gestartet bis zum manuellen Stopp** → kein vorzeitiges Abschneiden.
+      • Transkript **sessionsicher** akkumuliert (`_jBase`+`_jSessionFinal`) → keine Duplikate über Neustarts.
+      • MediaRecorder/scribe-Pfad + WebAudio-Stille-Gerüst entfernt.
+- [x] **Getestet (headless, beide Globals gemockt):** native SR-Ergebnis → `jarvisAsk("wie viele leads
+      gesamt")` (kein Duplikat), Dialog korrekt; TTS-502-Quota → klare Guthaben-Meldung, `speechSynthesis`
+      NICHT benutzt. **Prod nach Deploy:** `webkitSpeechRecognition` aktiv, `MediaRecorder` nur noch im
+      Kommentar, Guthaben-Meldung vorhanden. `outputDirectory "."` unberührt.
+
+> **MANUELLE AKTION FÜR EMANUEL (Session 11):** **ElevenLabs-Konto aufladen** (oder Plan upgraden) —
+> aktuell nur 4 von 10'000 Credits übrig, deshalb spielt KEINE Stimme (weder Jarvis noch Baby BOB).
+> Sobald Guthaben da ist, funktioniert die ElevenLabs-Stimme sofort wieder. Spracheingabe (STT) läuft
+> ab sofort unabhängig davon (native Browser-Erkennung, kostenlos).
+
 ### ✅ Session 10 — Jarvis-Stimme = Baby BOB (ElevenLabs only) + manueller Stopp
 - [x] **Ursache der „schlechten Stimme" gefunden:** Jarvis rief zwar schon `/api/voice` auf (= Baby-BOB-
       Stimme), kippte aber bei iOS-**Autoplay-Block** sofort auf die **Browser-Stimme** (`SpeechSynthesis`) —
