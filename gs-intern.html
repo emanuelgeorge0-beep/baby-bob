@@ -1119,6 +1119,10 @@ function jSanitizeSpeech(text){
     if(y){ var yy=parseInt(y,10); if(y.length===2) yy=2000+yy; out+=' '+_jZahl(yy); }
     return out;
   });
+  // Datum „TT. MonatName" (z. B. „24. Juni") → „TTter MonatName".
+  s=s.replace(/\b(\d{1,2})\.\s+(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\b/gi,function(m,d,mon){
+    var dd=parseInt(d,10); if(dd<1||dd>31) return m; return _jOrd(dd)+' '+mon;
+  });
   s=s.replace(/m²|m2\b/gi,' Quadratmeter');
   s=s.replace(/%/g,' Prozent');
   s=s.replace(/\s*\/\s*h\b/gi,' pro Stunde');
