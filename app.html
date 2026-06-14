@@ -702,6 +702,16 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .pb-row:last-child{border-bottom:none;}
 .pb-row span:first-child{color:rgba(232,237,245,0.5);}
 .pb-tot{font-weight:800;color:#FFD700;border-top:1px solid rgba(255,255,255,0.14);margin-top:4px;padding-top:8px;}
+.pb-rap{padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.06);}
+.pb-rap:last-of-type{border-bottom:none;}
+.pb-rap-top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.pb-rap-d{font-size:13px;font-weight:700;color:#fff;}
+.pb-rap-meta{font-size:12.5px;color:rgba(232,237,245,0.6);margin-top:3px;}
+.pb-rap-mat{font-size:12.5px;color:#FFD24A;margin-top:3px;}
+.pb-ml{background:rgba(255,255,255,0.03);border:1px solid rgba(255,210,74,0.18);border-radius:10px;padding:10px 12px;margin-bottom:9px;}
+.pb-ml:last-child{margin-bottom:0;}
+.pb-ml-h{font-size:13px;font-weight:800;color:#fff;margin-bottom:6px;}
+.pb-ml-note{font-size:12.5px;color:rgba(232,237,245,0.7);margin-top:6px;}
 
 /* ═══ TAGESRAPPORT (techniker) ═══ */
 .tr-kwbar{display:flex;align-items:center;gap:8px;padding:12px 18px 0;}
@@ -5286,8 +5296,25 @@ function loadProjekte(){
 }
 
 // ── ADMIN: PROJEKTDATENBLATT (Detailansicht) ──
-var pbProjekt=null,pbAllTechs=[],pbPartners=[],pbAssigned=[];
+var pbProjekt=null,pbAllTechs=[],pbPartners=[],pbAssigned=[],pbMateriallisten=[];
 var PB_STATUS=['aktiv','laufend','pausiert','abgeschlossen'];
+// ⚠️⚠️ ECHTE FIRMEN-WHATSAPP-NUMMER HIER EINTRAGEN ⚠️⚠️
+// Format: Ländercode + Nummer, OHNE "+", OHNE Leerzeichen/Schrägstriche. Beispiel: 41791234567
+var GS_WHATSAPP_NR='41XXXXXXXXX';
+// ISO-Kalenderwoche (für Rapport-Status "läuft noch in dieser KW").
+function pbIsoWeek(d){
+  var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  var day=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-day);
+  var ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil((((t-ys)/86400000)+1)/7);
+}
+function pbRapStatus(r){
+  if(r.status==='eingereicht') return {label:'abgeschlossen',color:'#6bcb77',bg:'rgba(107,203,119,0.16)'};
+  var now=new Date();
+  if(Number(r.woche)===pbIsoWeek(now) && Number(r.jahr)===now.getFullYear())
+    return {label:'läuft noch in dieser KW',color:'#FFD24A',bg:'rgba(255,210,74,0.16)'};
+  return {label:'in Arbeit',color:'#4A9EFF',bg:'rgba(74,158,255,0.16)'};
+}
 function showProjektDatenblatt(id){
   showScreen('admin-projektblatt');
   var b=document.getElementById('pb-body');
@@ -5297,7 +5324,10 @@ function showProjektDatenblatt(id){
     gsAuthApi('projekte',{action:'get',id:id}),
     gsAuthApi('tagesrapport',{action:'list',projekt_id:id}),
     gsAuthApi('projekte',{action:'technicians'}),
-    gsAuthApi('projekte',{action:'partners'})
+    gsAuthApi('projekte',{action:'partners'}),
+    // Materiallisten (gs_nachrichten typ=materialliste). projekt_id wird wegen FK-Eigenheit
+    // oft NICHT gespeichert → zusätzlich über projekt_name matchen (wie Partner-Ansicht).
+    gsAuthApi('nachrichten',{action:'inbox',all:true}).then(function(d){return d.nachrichten||[];}).catch(function(){return [];})
   ]).then(function(r){
     if(r[0].error){b.innerHTML='<div class="admin-empty">'+demoOrError(r[0])+'</div>';return;}
     pbProjekt=r[0].projekt||{};
@@ -5305,16 +5335,20 @@ function showProjektDatenblatt(id){
     pbPartners=r[3].partners||[];
     pbAssigned=(pbProjekt.techniker||[]).map(function(t){return t.user_id;});
     pbLastRapporte=r[1].rapporte||[];
-    pbRender(pbProjekt,pbLastRapporte);
+    pbMateriallisten=(r[4]||[]).filter(function(n){
+      if(n.typ!=='materialliste')return false;
+      var inh=n.inhalt||{};
+      return n.projekt_id===id || (inh.projekt_name&&inh.projekt_name===pbProjekt.name);
+    });
+    pbRender(pbProjekt,pbLastRapporte,pbMateriallisten);
   }).catch(function(){b.innerHTML='<div class="admin-empty">Verbindungsfehler</div>';});
 }
 function pbTechName(uid){var t=(pbAllTechs||[]).filter(function(x){return x.user_id===uid;})[0];return t?t.name:'Techniker';}
-function pbRender(p,rapporte){
+function pbRender(p,rapporte,materiallisten){
+  rapporte=rapporte||[]; materiallisten=materiallisten||[];
   document.getElementById('pb-title').textContent=p.name||'Projekt';
   document.getElementById('pb-nr').textContent=(p.projektnummer||'')+' · '+(p.standort||'');
   var totH=rapporte.reduce(function(a,r){return a+(Number(r.gesamtstunden)||0);},0);
-  var matCount={};rapporte.forEach(function(r){(r.material||[]).forEach(function(m){matCount[m]=(matCount[m]||0)+1;});});
-  var matKeys=Object.keys(matCount);
   var statusOpts=PB_STATUS.map(function(s){return '<option'+(p.status===s?' selected':'')+'>'+s+'</option>';}).join('');
   var bereichOpts=['Heizung','Sanitär','Lüftung','Klima','Kombiniert'].map(function(s){return '<option'+(p.bereich===s?' selected':'')+'>'+s+'</option>';}).join('');
   var partnerOpts='<option value="">– kein Partner –</option>'+(pbPartners||[]).map(function(pa){return '<option value="'+pa.user_id+'"'+(p.partner_user_id===pa.user_id?' selected':'')+'>'+gsEsc(pa.name)+(pa.firma?(' ('+gsEsc(pa.firma)+')'):'')+'</option>';}).join('');
@@ -5323,11 +5357,34 @@ function pbRender(p,rapporte){
     var on=pbAssigned.indexOf(t.user_id)>-1;
     return '<span class="ob-chip'+(on?' sel':'')+'" onclick="pbToggleTech(\''+t.user_id+'\')">'+gsEsc(t.name)+'</span>';
   }).join('')||'<span class="admin-proj-meta">Keine Techniker im System.</span>';
-  // Rapporte
+  // Rapporte – jeder mit Status-Badge (abgeschlossen / in Arbeit / läuft noch in dieser KW)
+  // und seinem eigenen Material inline.
   var rapHtml=rapporte.length?rapporte.map(function(r){
-    return '<div class="pb-row"><span>'+gsEsc((r.datum||'').slice(0,10))+' · '+gsEsc(pbTechName(r.techniker_user_id))+'</span>'
-      +'<span>'+(r.gesamtstunden||0)+' h'+((r.arbeiten||[]).length?(' · '+gsEsc((r.arbeiten||[]).join(', '))):'')+'</span></div>';
+    var st=pbRapStatus(r);
+    var badge='<span style="font-size:10.5px;font-weight:800;color:'+st.color+';background:'+st.bg+';padding:2px 9px;border-radius:50px;white-space:nowrap;">'+st.label+'</span>';
+    var mat=(r.material||[]).length?'<div class="pb-rap-mat">📦 '+gsEsc((r.material||[]).join(', '))+'</div>':'';
+    var arb=(r.arbeiten||[]).length?gsEsc((r.arbeiten||[]).join(', ')):'–';
+    return '<div class="pb-rap">'
+      +'<div class="pb-rap-top"><span class="pb-rap-d">'+gsEsc((r.datum||'').slice(0,10))+' · '+gsEsc(pbTechName(r.techniker_user_id))+'</span>'+badge+'</div>'
+      +'<div class="pb-rap-meta">⏱️ '+(r.gesamtstunden||0)+' h · '+arb+'</div>'+mat+'</div>';
   }).join(''):'<div class="admin-empty" style="padding:8px;">Noch keine Rapporte.</div>';
+  // Stunden pro Techniker (Admin-Auswertung) – aus allen Rapporten dieses Projekts.
+  var hoursByTech={};
+  rapporte.forEach(function(r){var k=r.techniker_user_id||'?';hoursByTech[k]=(hoursByTech[k]||0)+(Number(r.gesamtstunden)||0);});
+  var techKeys=Object.keys(hoursByTech);
+  var hoursHtml=techKeys.length?techKeys.map(function(k){
+    return '<div class="pb-row"><span>👷 '+gsEsc(pbTechName(k))+'</span><span>'+(Math.round(hoursByTech[k]*10)/10)+' h</span></div>';
+  }).join(''):'<div class="admin-empty" style="padding:8px;">Noch keine erfassten Stunden.</div>';
+  // Materiallisten (gs_nachrichten) – ersetzt das frühere "Material (aggregiert)"-Element.
+  var mlHtml=materiallisten.length?materiallisten.map(function(n){
+    var inh=n.inhalt||{};
+    var pos=(inh.positionen||[]).map(function(x){
+      return '<div class="pb-row"><span>'+gsEsc(x.position||'')+'</span><span>'+gsEsc([x.menge,x.einheit].filter(Boolean).join(' ')||'—')+'</span></div>';
+    }).join('');
+    return '<div class="pb-ml"><div class="pb-ml-h">📦 '+gsEsc((n.created_at||'').slice(0,10))+' · '+gsEsc(inh.von_name||'Techniker')+'</div>'
+      +(pos||'<div class="admin-empty" style="padding:6px;">Keine Positionen.</div>')
+      +(inh.notiz?'<div class="pb-ml-note">📝 '+gsEsc(inh.notiz)+'</div>':'')+'</div>';
+  }).join(''):'<div class="admin-empty" style="padding:8px;">Noch keine Materiallisten zu diesem Projekt.</div>';
 
   document.getElementById('pb-body').innerHTML=
     '<div class="pb-sec"><div class="pb-sec-t">Kopfdaten</div>'
@@ -5337,21 +5394,74 @@ function pbRender(p,rapporte){
       +'<div><div class="ob-lbl">Status</div><select class="login-inp" id="pb-status">'+statusOpts+'</select></div></div>'
       +'<div class="ob-lbl">Stundensatz (CHF/h)</div><input class="login-inp" id="pb-satz" type="number" step="0.01" value="'+(p.stundensatz!=null?p.stundensatz:'')+'"/>'
       +'<div class="ob-lbl">Partner / Auftraggeber</div><select class="login-inp" id="pb-partner">'+partnerOpts+'</select></div>'
-    +'<div class="pb-sec"><div class="pb-sec-t">Zugeteilte Techniker</div><div class="ob-chips">'+techChips+'</div></div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Zugeteilter Techniker / Team</div><div class="ob-chips">'+techChips+'</div></div>'
     +'<div class="pb-sec"><div class="pb-sec-t">Rapporte ('+rapporte.length+')</div>'+rapHtml
       +'<div class="pb-row pb-tot"><span>Total erfasste Stunden</span><span>'+(Math.round(totH*10)/10)+' h</span></div></div>'
-    +'<div class="pb-sec"><div class="pb-sec-t">Material (aggregiert)</div>'
-      +(matKeys.length?matKeys.map(function(m){return '<div class="pb-row"><span>'+gsEsc(m)+'</span><span>×'+matCount[m]+'</span></div>';}).join(''):'<div class="admin-empty" style="padding:8px;">Kein Material erfasst.</div>')+'</div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Stunden pro Techniker</div>'+hoursHtml+'</div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Materiallisten ('+materiallisten.length+')</div>'+mlHtml+'</div>'
+    +'<div class="pb-sec"><div class="pb-sec-t">Materialliste senden</div>'
+      +'<div class="ob-lbl">Empfänger E-Mail (Projektleiter vor Ort)</div>'
+      +'<input class="login-inp" id="pb-ml-email" type="email" inputmode="email" autocomplete="off" placeholder="name@firma.ch"/>'
+      +'<div class="ob-lbl">Notiz (optional)</div>'
+      +'<input class="login-inp" id="pb-ml-notiz" type="text" placeholder="z.B. Bitte bis Freitag bestellen"/>'
+      +'<button class="admin-add-btn" style="margin:12px 0 0;width:100%;" onclick="pbSendMaterialMail()">📧 Materialliste per E-Mail senden</button>'
+      +'<button type="button" style="margin:8px 0 0;width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;min-height:46px;font-weight:800;font-size:14px;cursor:pointer;" onclick="pbWhatsAppMaterial()">💬 Per WhatsApp öffnen (Text)</button>'
+      +'<div class="login-msg" id="pb-ml-msg"></div>'
+      +'<div style="font-size:11px;color:rgba(232,237,245,0.42);margin-top:8px;line-height:1.5;">E-Mail via Resend (Absender info@george-solutions.ch), Material sauber formatiert + PDF-Anhang. WhatsApp öffnet nur mit vorausgefülltem Text – ein Dateianhang ist über WhatsApp technisch nicht möglich.</div>'
+    +'</div>'
     +'<div class="pb-sec"><div class="pb-sec-t">Projekt-Notiz</div><textarea class="login-inp" id="pb-notiz" rows="3" placeholder="Interne Notiz zum Projekt…">'+gsEsc(p.notiz||'')+'</textarea></div>'
     +'<button class="admin-add-btn" style="margin:0 18px;width:calc(100% - 36px);" onclick="pbSave()">💾 Änderungen speichern</button>'
     +'<div class="login-msg" id="pb-msg"></div>';
 }
+// Sammelt alle Material-Positionen des Projekts: strukturierte Materiallisten-Positionen
+// (gs_nachrichten) + Freitext-Material aus den Rapporten. Grob dedupliziert.
+function pbCollectPositionen(){
+  var out=[];
+  (pbMateriallisten||[]).forEach(function(n){
+    (((n.inhalt||{}).positionen)||[]).forEach(function(x){
+      if(x&&x.position)out.push({position:String(x.position),menge:x.menge||'',einheit:x.einheit||''});
+    });
+  });
+  (pbLastRapporte||[]).forEach(function(r){
+    (r.material||[]).forEach(function(m){ if(m)out.push({position:String(m),menge:'',einheit:''}); });
+  });
+  var seen={},dedup=[];
+  out.forEach(function(p){var k=(p.position+'|'+p.menge+'|'+p.einheit).toLowerCase();if(!seen[k]){seen[k]=1;dedup.push(p);}});
+  return dedup;
+}
+// Schritt 4: Materialliste per E-Mail (Resend) an eingegebene Empfängeradresse.
+function pbSendMaterialMail(){
+  if(!pbProjekt||!pbProjekt.id){setMsg('pb-ml-msg','Kein Projekt geladen','err');return;}
+  var email=((document.getElementById('pb-ml-email')||{}).value||'').trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){setMsg('pb-ml-msg','Bitte gültige Empfänger-E-Mail eingeben','err');return;}
+  var positionen=pbCollectPositionen();
+  if(!positionen.length){setMsg('pb-ml-msg','Keine Material-Positionen vorhanden zum Senden','err');return;}
+  var notiz=((document.getElementById('pb-ml-notiz')||{}).value||'').trim();
+  var btn=document.querySelector('#pb-body button[onclick="pbSendMaterialMail()"]');
+  if(btn){btn.disabled=true;btn.textContent='Sendet…';}
+  setMsg('pb-ml-msg','Sendet…','');
+  gsAuthApi('nachrichten',{action:'send',typ:'materialliste',projekt_id:pbProjekt.id,
+    empfaenger_email:email,projekt_name:pbProjekt.name,pdf:true,
+    inhalt:{positionen:positionen,notiz:notiz,von_name:'George Solutions',projekt_name:pbProjekt.name}
+  }).then(function(d){
+    if(btn){btn.disabled=false;btn.textContent='📧 Materialliste per E-Mail senden';}
+    if(d&&d.mail_sent){setMsg('pb-ml-msg','✓ Materialliste an '+email+' gesendet','');toast('Materialliste gesendet');}
+    else setMsg('pb-ml-msg',(d&&(d.error||d.mail_error))||'E-Mail konnte nicht gesendet werden','err');
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📧 Materialliste per E-Mail senden';}setMsg('pb-ml-msg','Verbindungsfehler','err');});
+}
+// Schritt 5: WhatsApp mit vorausgefülltem Text (KEIN Dateianhang – technisch nicht möglich).
+function pbWhatsAppMaterial(){
+  if(GS_WHATSAPP_NR.indexOf('X')>-1){toast('⚠️ WhatsApp-Nummer noch nicht hinterlegt (GS_WHATSAPP_NR in app.html)');return;}
+  var positionen=pbCollectPositionen();
+  var lines=positionen.map(function(p){var mq=[p.menge,p.einheit].filter(Boolean).join(' ');return '• '+p.position+(mq?(' – '+mq):'');});
+  var txt='Materialliste – '+((pbProjekt&&pbProjekt.name)||'Projekt')+((pbProjekt&&pbProjekt.projektnummer)?(' ('+pbProjekt.projektnummer+')'):'')
+    +'\n'+(lines.join('\n')||'(keine Positionen)')+'\n\nGeorge Solutions';
+  window.open('https://wa.me/'+encodeURIComponent(GS_WHATSAPP_NR)+'?text='+encodeURIComponent(txt),'_blank');
+}
 function pbToggleTech(uid){
   var i=pbAssigned.indexOf(uid);
   if(i>-1)pbAssigned.splice(i,1);else pbAssigned.push(uid);
-  // re-render just the chips
-  document.querySelectorAll('#pb-body .ob-chip').forEach(function(el){});
-  pbRender(pbProjekt,[].concat(pbLastRapporte||[]));
+  pbRender(pbProjekt,[].concat(pbLastRapporte||[]),[].concat(pbMateriallisten||[]));
 }
 var pbLastRapporte=[];
 function pbSave(){
@@ -5383,11 +5493,14 @@ function pbRenderDemo(){
   pbPartners=[{user_id:'p1',name:'Anna Muster',firma:'Muster Immobilien AG'}];
   pbAssigned=['d1','d2'];
   pbLastRapporte=[
-    {datum:'2026-06-02',techniker_user_id:'d1',gesamtstunden:8.5,arbeiten:['Demontage','Montage'],material:['Pumpe','Thermostat']},
-    {datum:'2026-06-03',techniker_user_id:'d2',gesamtstunden:7,arbeiten:['Wartung'],material:['Thermostat','Dichtung']},
-    {datum:'2026-06-04',techniker_user_id:'d1',gesamtstunden:6.5,arbeiten:['Inbetriebnahme'],material:['Pumpe']}
+    {datum:'2026-06-02',techniker_user_id:'d1',gesamtstunden:8.5,arbeiten:['Demontage','Montage'],material:['Pumpe','Thermostat'],status:'eingereicht'},
+    {datum:'2026-06-03',techniker_user_id:'d2',gesamtstunden:7,arbeiten:['Wartung'],material:['Thermostat','Dichtung'],status:'eingereicht'},
+    {datum:'2026-06-04',techniker_user_id:'d1',gesamtstunden:6.5,arbeiten:['Inbetriebnahme'],material:['Pumpe'],status:'entwurf'}
   ];
-  pbRender(pbProjekt,pbLastRapporte);
+  pbMateriallisten=[
+    {created_at:'2026-06-03',inhalt:{von_name:'Dimitri Grill',positionen:[{position:'Umwälzpumpe Grundfos',menge:'1',einheit:'Stk'},{position:'Kupferrohr 18mm',menge:'12',einheit:'m'}],notiz:'Bitte bis Freitag bestellen'}}
+  ];
+  pbRender(pbProjekt,pbLastRapporte,pbMateriallisten);
 }
 
 // ── ADMIN: RAPPORT-STATUS ──
@@ -6351,10 +6464,12 @@ function pdRenderProjektDetail(p,rapporte,materiallisten){
     +'<div class="pd-card" style="flex:1;"><div class="pd-card-n">'+(Math.round(sumH*10)/10)+'</div><div class="pd-card-l">Stunden gesamt</div></div>'
     +'<div class="pd-card" style="flex:1;"><div class="pd-card-n">'+matCount+'</div><div class="pd-card-l">Material-Positionen</div></div></div>';
   var rapHtml='<div class="pd-sec-tit">📋 Rapporte ('+rapporte.length+')</div>'+(rapporte.length?rapporte.map(function(r){
+    var st=pbRapStatus(r);
     return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(r.datum||'')+' · '+(r.gesamtstunden||0)+'h</div>'
-      +(r.status==='eingereicht'?'<span class="admin-badge active">eingereicht</span>':'<span class="admin-badge must_change_password">entwurf</span>')+'</div>'
+      +'<span style="font-size:10.5px;font-weight:800;color:'+st.color+';background:'+st.bg+';padding:2px 9px;border-radius:50px;white-space:nowrap;">'+st.label+'</span></div>'
       +'<div class="pd-item-meta">👷 '+gsEsc(r.techniker_name||(Array.isArray(r.team)?r.team.join(', '):'')||'–')+'</div>'
-      +'<div class="pd-item-meta">'+gsEsc((r.arbeiten||[]).join(', ')||'–')+'</div></div>';
+      +'<div class="pd-item-meta">'+gsEsc((r.arbeiten||[]).join(', ')||'–')+'</div>'
+      +((r.material||[]).length?'<div class="pd-item-meta" style="color:#FFD24A;">📦 '+gsEsc((r.material||[]).join(', '))+'</div>':'')+'</div>';
   }).join(''):'<div class="admin-empty">Keine Rapporte auf dieses Projekt.</div>');
   var matHtml='<div class="pd-sec-tit">📦 Materiallisten ('+materiallisten.length+')</div>'+(materiallisten.length?materiallisten.map(function(n){
     var inh=n.inhalt||{};
