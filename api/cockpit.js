@@ -10,6 +10,7 @@
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const MASTER_UID = 'ee46a716-7017-4045-9f67-fe06d05171e7';
 
 const SB = {
@@ -99,6 +100,8 @@ export default async function handler(req, res) {
       case 'marge_pickers':   return res.status(200).json(await getMargePickers());
       // ── Session 3: 4 Säulen ──
       case 'saeulen':         return res.status(200).json(await getSaeulen());
+      // ── Session 5: Jarvis Sprach-Assistent (Lesezugriff/Auskunft) ──
+      case 'jarvis':          return res.status(200).json(await askJarvis(req.body));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -737,4 +740,165 @@ async function getSaeulen() {
     leadsTotal, kundenTotal: kunden.length, projAktiv, techFrei, techGesamt,
   };
   return { saeulen, summary };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SESSION 5 — "Jarvis" Sprach-Assistent (TEIL A)
+//  NUR Lesezugriff/Auskunft: sammelt die ECHTEN GS-Kennzahlen aus Supabase,
+//  gibt sie Claude als Kontext, Claude formuliert die Antwort. KEINE Schreib-
+//  aktion, keine Agenten-Steuerung. TTS läuft im Frontend über /api/voice.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Alle relevanten Kennzahlen in EINEM Objekt — ausschliesslich aus echten
+// Tabellen. Optionale (evtl. nicht migrierte) Quellen sind resilient (try/catch).
+async function getJarvisFacts() {
+  const { anfragen, kunden } = await loadCore();
+  const today = todayISO();
+  const monthPrefix = today.slice(0, 7);
+
+  const perStufe = { neu: 0, kontaktiert: 0, angebot: 0, gewonnen: 0, verloren: 0 };
+  const perKanal = {};
+  let pipeline = 0, gewonnenMonat = 0, heuteNeu = 0, fuHeute = 0, fuUeber = 0;
+  for (const a of anfragen) {
+    const st = stufeOf(a);
+    perStufe[st] = (perStufe[st] || 0) + 1;
+    const kn = kanalOf(a.quelle);
+    perKanal[kn] = (perKanal[kn] || 0) + 1;
+    if (st === 'kontaktiert' || st === 'angebot') pipeline += parsePreis(a.tarif_preis);
+    if (String(a.erstellt_am || '').slice(0, 10) === today) heuteNeu++;
+    if (String(a.erstellt_am || '').slice(0, 7) === monthPrefix && st === 'gewonnen') gewonnenMonat++;
+    if (a.followup_datum) {
+      if (a.followup_datum === today) fuHeute++;
+      else if (a.followup_datum < today && st !== 'gewonnen' && st !== 'verloren') fuUeber++;
+    }
+  }
+
+  // Offene CRM-Aufgaben (zählen ebenfalls als Follow-ups).
+  let offeneAufgaben = 0;
+  try {
+    const auf = await sbGet('gs_crm_aufgaben?status=eq.offen&select=faelligkeit');
+    offeneAufgaben = auf.length;
+    for (const t of auf) {
+      if (!t.faelligkeit) continue;
+      if (t.faelligkeit === today) fuHeute++;
+      else if (t.faelligkeit < today) fuUeber++;
+    }
+  } catch (_) {}
+
+  // Interne To-Dos (Team).
+  let todosOffen = 0, todosHeute = 0, todosUeber = 0, topTodos = [];
+  try {
+    const todos = await sbGet('gs_todos?status=eq.offen&select=titel,zustaendig,faelligkeit,prioritaet&order=faelligkeit.asc.nullslast&limit=8');
+    todosOffen = todos.length;
+    for (const t of todos) {
+      if (!t.faelligkeit) continue;
+      if (t.faelligkeit === today) todosHeute++;
+      else if (t.faelligkeit < today) todosUeber++;
+    }
+    topTodos = todos.slice(0, 5).map((t) => ({
+      titel: t.titel, zustaendig: t.zustaendig || null,
+      faelligkeit: t.faelligkeit || null, prioritaet: t.prioritaet || 'mittel',
+    }));
+  } catch (_) {}
+
+  // Margen / Umsatz (nur falls migriert).
+  let umsatz = 0, marge = 0, margenDa = false;
+  try {
+    const margen = await sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell');
+    margenDa = margen.length > 0;
+    for (const m of margen) { const c = calcMarge(m); umsatz += c.umsatz; marge += c.marge; }
+  } catch (_) {}
+
+  // Projekte / Techniker.
+  let projGesamt = 0, projAktiv = 0, techGesamt = 0, techFrei = 0;
+  try {
+    const pr = await sbGet('gs_projekte?select=status');
+    projGesamt = pr.length;
+    projAktiv = pr.filter((p) => String(p.status || '').toLowerCase() === 'aktiv').length;
+  } catch (_) {}
+  try {
+    const te = await sbGet('gs_techniker?select=verfuegbar');
+    techGesamt = te.length;
+    techFrei = te.filter((t) => t.verfuegbar === true).length;
+  } catch (_) {}
+
+  return {
+    datum: today,
+    leads_gesamt: anfragen.length,
+    leads_heute_neu: heuteNeu,
+    leads_offen: perStufe.neu + perStufe.kontaktiert + perStufe.angebot,
+    leads_pro_stufe: perStufe,
+    leads_pro_kanal: perKanal,
+    gewonnen_diesen_monat: gewonnenMonat,
+    pipeline_wert_chf: Math.round(pipeline),
+    followups_heute: fuHeute,
+    followups_ueberfaellig: fuUeber,
+    offene_crm_aufgaben: offeneAufgaben,
+    todos_offen: todosOffen,
+    todos_heute_faellig: todosHeute,
+    todos_ueberfaellig: todosUeber,
+    top_offene_todos: topTodos,
+    kunden_gesamt: kunden.length,
+    umsatz_gesamt_chf: margenDa ? Math.round(umsatz) : null,
+    marge_gesamt_chf: margenDa ? Math.round(marge) : null,
+    marge_prozent: (margenDa && umsatz > 0) ? Math.round((marge / umsatz) * 100) : null,
+    projekte_gesamt: projGesamt,
+    projekte_aktiv: projAktiv,
+    techniker_gesamt: techGesamt,
+    techniker_frei: techFrei,
+  };
+}
+
+const JARVIS_SYSTEM = `Du bist „Jarvis", der persönliche Sprach-Assistent im internen Master-Cockpit von George Solutions (B2B-Handwerks- und Facility-Firma, Schweiz). Der Geschäftsführer stellt dir Fragen zu seinem Betrieb. Du erhältst die ECHTEN, aktuellen Kennzahlen aus der Datenbank als JSON.
+
+REGELN:
+- Beantworte die Frage AUSSCHLIESSLICH auf Basis der bereitgestellten Zahlen. Erfinde nichts.
+- Steht die Antwort nicht in den Daten, sag ehrlich, dass du dazu im Cockpit keine Zahl hast — und nenne, falls passend, eine verwandte Zahl die du hast.
+- Antworte kurz und gesprochen, 1 bis 3 Sätze. Deine Antwort wird laut vorgelesen.
+- KEINE Markdown-Symbole, keine Sternchen, keine Aufzählungszeichen, keine Tabellen. Reiner Fliesstext.
+- Nenne konkrete Zahlen. Geldbeträge als „… Franken" (CHF-Werte sind in Schweizer Franken).
+- Sprich Hochdeutsch, professionell, ruhig und prägnant — wie ein kompetenter Assistent. Du-Form.`;
+
+async function askJarvis(body) {
+  const frage = String((body && body.frage) || '').trim().slice(0, 500);
+  if (!frage) throw new Error('frage nötig');
+  const facts = await getJarvisFacts();
+
+  // Ohne Claude-Key → einfache, ehrliche Kurzantwort aus den Zahlen (Fallback).
+  if (!ANTHROPIC_KEY) {
+    return { antwort: jarvisFallback(facts), facts, fallback: true };
+  }
+
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 400,
+        system: `${JARVIS_SYSTEM}\n\nHEUTE: ${facts.datum}\n\nAKTUELLE COCKPIT-DATEN (JSON):\n${JSON.stringify(facts)}`,
+        messages: [{ role: 'user', content: frage }],
+      }),
+    });
+    if (!r.ok) throw new Error('Claude API: ' + r.status);
+    const d = await r.json();
+    let antwort = (d.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+    // Sicherheitshalber Markdown-Reste entfernen (sauberer Vorlese-Text).
+    antwort = antwort.replace(/[*#`_]/g, '').replace(/\s+\n/g, '\n').trim();
+    return { antwort: antwort || jarvisFallback(facts), facts };
+  } catch (err) {
+    console.error('Jarvis Error:', err.message);
+    return { antwort: jarvisFallback(facts), facts, fallback: true };
+  }
+}
+
+// Regelbasierter Notfall-Überblick (falls Claude nicht erreichbar) — nie erfunden.
+function jarvisFallback(f) {
+  const parts = [
+    `Aktueller Stand: ${f.leads_gesamt} Leads insgesamt, davon ${f.leads_offen} offen und heute ${f.leads_heute_neu} neu.`,
+    `${f.followups_heute} Follow-ups heute, ${f.followups_ueberfaellig} überfällig.`,
+    `${f.kunden_gesamt} Kunden, Pipeline rund ${f.pipeline_wert_chf.toLocaleString('de-CH')} Franken.`,
+  ];
+  if (f.marge_gesamt_chf != null) parts.push(`Marge gesamt ${f.marge_gesamt_chf.toLocaleString('de-CH')} Franken (${f.marge_prozent}%).`);
+  return parts.join(' ');
 }
