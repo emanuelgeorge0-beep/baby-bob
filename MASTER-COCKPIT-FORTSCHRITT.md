@@ -119,6 +119,66 @@
       Claude-Call lokal NICHT testbar (lokaler `ANTHROPIC_API_KEY` ist ein Platzhalter `your_…`);
       Aufruf ist byte-identisch zum produktiv laufenden `api/bob-chat.js` → in Vercel funktionsfähig.
 
+### ✅ Session 6 — „MASTER GEORGE" Command-Center · Umsatz-Daten (Jarvis liest echte Zahlen)
+- [x] **TEIL 1 · Umsatz-Tabelle** `scripts/master_cockpit_umsatz.sql` (idempotent, RLS master-only):
+      `gs_umsatz_monat(id, jahr, monat 1–12, umsatz_chf, anzahl_projekte?, notiz?)`, UNIQUE(jahr,monat).
+      Enthält einen **ausfüllbaren INSERT-Block** (Jan 2025 – Jun 2026, eine Zeile pro Monat, komplett
+      auskommentiert + Schritt-für-Schritt-Anleitung, `ON CONFLICT (jahr,monat) DO UPDATE` → korrigierbar).
+      → **EINMALIG im Supabase SQL Editor ausführen, dann die echten Zahlen eintragen.** SQL NICHT von mir ausgeführt.
+- [x] **TEIL 1 · Jarvis liest Umsatz aus der DB** (`api/cockpit.js`): neuer Helper `getUmsatzStats()`
+      (Gesamt, bester Monat, Umsatz dieses Jahr, Trend, Reihe pro Monat) fliesst in `getJarvisFacts` als
+      `umsatz_pro_monat / umsatz_erfasste_monate_chf / umsatz_dieses_jahr_chf / bester_umsatzmonat /
+      umsatz_daten_vorhanden`. System-Prompt zwingt Jarvis, Umsatzfragen NUR aus diesen Feldern zu
+      beantworten und bei leerer Tabelle ehrlich „noch keine Umsatzdaten hinterlegt" zu sagen. Fallback
+      ebenso. (Margen-Umsatz aus `gs_margen` sauber getrennt → Feld umbenannt zu `margen_umsatz_chf`.)
+- [x] **TEIL 2 · Command-Center „MASTER GEORGE"** (`gs-intern.html`, `paintDashboard` neu): animierter
+      Gold-Orb (rotierende Ringe + Puls + Sweep-Glow) mit Titel **MASTER GEORGE / COMMAND CENTER**,
+      Live-Punkt + tickende Uhr. **Tap auf den Hero → Jarvis öffnet & Mikrofon startet sofort**
+      (im Tap-Kontext → iOS/Android erlauben getUserMedia). 8 KPI-Kacheln mit **echten** Live-Zahlen:
+      Leads gesamt, Follow-ups (heute/überfällig), Pipeline, Kunden, **Umsatz gesamt**, **bester Monat**,
+      aktive Projekte, Techniker frei. Fehlt eine Quelle → ehrlich „—". **System-Status** (6 Module)
+      ehrlich aus echten Daten abgeleitet (Aktiv/Bereit, KEINE erfundenen „17 Agenten"). **Umsatz-Mini-
+      Chart** (Balken pro Monat) nur bei echten Daten. Darunter Pipeline-pro-Stufe + Quellen + To-Do/Marge.
+- [x] Mobile-first/Hochformat: 2-Spalten-Grid, Safe-Area, Touch-Targets; Hero/Chart skalieren; reine
+      CSS-Animationen (kein JS-Loop ausser 20-s-Uhr, die sich selbst stoppt) → flüssig fürs Demo-Reel.
+- [x] 20x-Analyse S6 (siehe unten) + **Live-Smoke gegen echte DB**: `gs_umsatz_monat` 404 → graceful
+      `present:false` → Cockpit zeigt „—" und Status „Umsatz-Tracking: noch keine Daten". Übrige Quellen
+      decken sich mit S1–S5 (10 Leads, 10 Kunden, Projekte 1/1 aktiv, Techniker 4/12 frei, 0 App-Leads).
+      Render beider Zustände (mit/ohne Umsatzdaten) im DOM-Sandbox geprüft: kein NaN/undefined, Chart nur
+      bei Daten, „—" sonst, 6 System-Zeilen, Titel MASTER GEORGE. Claude-Call wie gehabt lokal nicht
+      testbar (Platzhalter-Key) → byte-gleich zum produktiven bob-chat-Muster.
+
+## 20x Bug-/Mobile-Analyse (Session 6 · Command-Center + Umsatz) — Ergebnis
+1. **Umsatz nur echt:** Jarvis & Cockpit lesen ausschliesslich `gs_umsatz_monat`/aggregierte Felder —
+   keine erfundenen Zahlen. Leere Tabelle → ehrlich „noch keine Umsatzdaten" (System-Prompt + Fallback + UI „—").
+2. **Vor Migration nutzbar:** `getUmsatzStats` ist try/catch → `present:false`. Live-Smoke: 404 → graceful.
+3. **RLS neue Tabelle:** `gs_umsatz_monat` master_only (auth.uid()=gs_master_uid()); anon/authenticated geblockt.
+4. **Idempotente SQL:** CREATE TABLE IF NOT EXISTS, UNIQUE-Index IF NOT EXISTS, RLS DROP+CREATE; INSERT-
+   Block komplett auskommentiert → erstes Ausführen legt nur Schema an (keine 0-Fake-Zeilen).
+5. **ON CONFLICT (jahr,monat):** erneutes Einspielen aktualisiert Zahlen statt Duplikate; UNIQUE erzwingt es.
+6. **CHECK monat 1–12:** verhindert ungültige Monate.
+7. **Trennung Margen vs. Monatsumsatz:** Facts-Feld `umsatz_gesamt_chf`→`margen_umsatz_chf` umbenannt,
+   damit Claude Umsatzfragen nicht aus der Margen-Kalkulation beantwortet. Keine Altreferenz (grep leer).
+8. **Division/Empty-Guards:** bester Monat nur wenn Zeilen da; Chart-Skalierung mx≥1; Trend nur ab 2 Monaten.
+9. **Auto-Mic im Tap-Kontext:** Hero-Tap setzt `_jAutoMic` und ruft `go('jarvis')` synchron → `renderJarvis`
+   startet `startJarvisMic()` noch im selben Gesten-Stack → iOS/Android erlauben getUserMedia. Ohne Mic → Toast.
+10. **Kein hängendes Mikrofon:** Mic-Pfad unverändert (S5) — Stream-Tracks in onstop gestoppt, Capability-Check.
+11. **Live-Uhr leakt nicht:** `startCcClock` clwith clearInterval bei jedem Render + Selbst-Stopp wenn
+    `#cc-clock` fehlt (Tab-Wechsel) → kein Timer-Stau, keine Last im Hintergrund.
+12. **XSS:** alle dynamischen Werte (System-Labels/Details, Monatslabels, bester Monat) via `esc()`;
+    Zahlen via `chf()`/mono. Sandbox-Render: kein NaN/undefined in beiden Zuständen.
+13. **Ehrlicher System-Status:** state aus echten Daten (Leads>0, Projekte>0, Techniker>0, App-Leads>0,
+    Umsatzdaten vorhanden) → „Aktiv"/„Bereit". Keine Fake-Liste, kein „online"-Theater.
+14. **Mobile-Hochformat:** 2-Spalten cc-grid, Hero/Orb/Chart responsiv, Safe-Area, Touch ≥44px; reine
+    CSS-Animationen → flüssig, screenshot-/reel-tauglich.
+15. **Performance:** Dashboard-API macht zusätzliche Reads (projekte/techniker/umsatz) parallel zum Rest;
+    alle klein (select nur nötige Spalten). Keine N+1, kein Client-Polling.
+16. **Tap-Kacheln:** data-go (leads/crm/saeulen) + data-tap (todos/margen) generisch verdrahtet; Nav konsistent.
+17. **Gate unverändert:** dashboard/jarvis weiter hinter `verifyMaster` (403); keine neue Action ohne Gate.
+18. **Kein Secret im Client:** nur `/api/cockpit` & `/api/voice`; Keys serverseitig; noindex/no-store unberührt.
+19. **outputDirectory ".":** in `vercel.json` unverändert — keine Routing-/404-Regression.
+20. **Syntax/Build:** `node --check api/cockpit.js` ok; eingebettetes Frontend-JS via `new Function` fehlerfrei.
+
 ## 20x Bug-/Security-Analyse (Session 1) — Ergebnis
 1. **RLS gegen DevTools/anon-Key — VERIFIZIERT:** Mit dem im Client (app.html) eingebetteten
    `sb_publishable_…`-Key liefert Supabase für gs_anfragen/gs_kunden/gs_projekte/user_roles
@@ -320,6 +380,11 @@
 4. **`scripts/master_cockpit_session5.sql`** — **OPTIONAL / Vorbereitung für Teil B** (Agenten-Steuerung).
    Für **Jarvis (Teil A) NICHT nötig** — Jarvis ist reiner Lesezugriff und läuft sofort. Nur ausführen,
    wenn das Agenten-Modul später gebaut werden soll.
+4b. **`scripts/master_cockpit_umsatz.sql`** (Session 6) im Supabase SQL Editor ausführen → legt
+   `gs_umsatz_monat` an. **Danach in DERSELBEN Datei** den auskommentierten INSERT-Block (Block 3 unten)
+   einkommentieren, die `0` je Monat durch deinen **echten Umsatz in CHF** ersetzen und erneut „Run".
+   Erst dann zeigen Command-Center („Umsatz gesamt"/„Bester Monat") und Jarvis echte Umsatzzahlen;
+   vorher steht ehrlich „—" bzw. „noch keine Umsatzdaten hinterlegt". Mehrfach ausführbar (ON CONFLICT).
 5. **Vercel-Env prüfen:** `ANTHROPIC_API_KEY` (für Jarvis-Antworten) und `ELEVENLABS_API_KEY` (für die
    Stimme) müssen im Vercel-Projekt gesetzt sein. Beide sind dort bereits in Gebrauch (bob-chat / voice).
    Ohne ElevenLabs-Key spricht Jarvis per Browser-Stimme; ohne Anthropic-Key gibt es nur die Fallback-Übersicht.

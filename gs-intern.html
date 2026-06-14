@@ -258,6 +258,71 @@
   .jdots::after{content:'';animation:jdotsa 1.2s steps(4,end) infinite;}
   @keyframes jdotsa{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}}
 
+  /* ── Command Center „MASTER GEORGE" ── */
+  .cc-hero{position:relative;text-align:center;padding:30px 18px 24px;margin-bottom:18px;border-radius:24px;overflow:hidden;cursor:pointer;
+    background:
+      radial-gradient(130% 90% at 50% -10%, rgba(201,169,97,.16), transparent 62%),
+      linear-gradient(165deg,var(--card2),var(--card));
+    border:1px solid var(--gold-line);box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);}
+  .cc-hero::before{content:'';position:absolute;left:-40%;top:0;width:50%;height:100%;
+    background:linear-gradient(100deg,transparent,rgba(201,169,97,.10),transparent);
+    transform:skewX(-18deg);animation:ccsweep 5.5s ease-in-out infinite;}
+  @keyframes ccsweep{0%{left:-50%;}55%,100%{left:140%;}}
+  .cc-hero:active{transform:scale(.992);}
+  .cc-orb{position:relative;width:96px;height:96px;margin:0 auto 16px;}
+  .cc-orb .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--gold-line);animation:ccspin 9s linear infinite;}
+  .cc-orb .ring::after{content:'';position:absolute;top:-3px;left:calc(50% - 4px);width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 12px 2px var(--gold);}
+  .cc-orb .ring.r2{inset:11px;border-style:dashed;border-color:rgba(201,169,97,.4);animation:ccspin 6s linear infinite reverse;}
+  .cc-orb .core{position:absolute;inset:24px;border-radius:50%;
+    background:radial-gradient(circle at 34% 28%,#f6dca0,#c9a961 55%,#9a7a3c 100%);
+    box-shadow:0 0 34px 4px rgba(201,169,97,.55);animation:ccpulse 2.6s ease-in-out infinite;
+    display:flex;align-items:center;justify-content:center;font-size:26px;}
+  @keyframes ccspin{to{transform:rotate(360deg);}}
+  @keyframes ccpulse{0%,100%{box-shadow:0 0 30px 3px rgba(201,169,97,.45);}50%{box-shadow:0 0 46px 12px rgba(201,169,97,.7);}}
+  .cc-title{position:relative;font:800 27px Georgia,serif;letter-spacing:3.5px;color:var(--gold);
+    text-shadow:0 0 28px rgba(201,169,97,.45);margin:0;}
+  .cc-subt{position:relative;font-size:11px;letter-spacing:5px;color:var(--muted);margin-top:3px;}
+  .cc-meta{position:relative;font-size:11.5px;color:var(--muted2);margin-top:12px;display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;}
+  .cc-meta .live{display:inline-flex;align-items:center;gap:6px;color:var(--ok);font-weight:700;}
+  .cc-meta .live::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);animation:ccblink 1.6s ease-in-out infinite;}
+  @keyframes ccblink{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .cc-cta{position:relative;display:inline-flex;align-items:center;gap:8px;margin-top:16px;
+    background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;font-weight:800;font-size:13.5px;
+    letter-spacing:.3px;padding:11px 20px;border-radius:50px;box-shadow:0 8px 22px rgba(201,169,97,.3);}
+
+  .cc-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin-bottom:18px;}
+  .cc-tile{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 14px 13px;overflow:hidden;}
+  .cc-tile::after{content:'';position:absolute;left:0;top:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,var(--gold-line),transparent);}
+  .cc-tile .cci{font-size:17px;opacity:.9;}
+  .cc-tile .cck{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-top:7px;}
+  .cc-tile .ccv{font-size:25px;font-weight:800;letter-spacing:-.6px;margin-top:3px;line-height:1.1;}
+  .cc-tile .ccv.gold{color:var(--gold);} .cc-tile .ccv.ok{color:var(--ok);} .cc-tile .ccv.bad{color:var(--bad);} .cc-tile .ccv.muted{color:var(--muted2);}
+  .cc-tile .ccs{font-size:11px;color:var(--muted2);margin-top:3px;}
+  .cc-tile.tap{cursor:pointer;} .cc-tile.tap:active{border-color:var(--gold-line);}
+
+  .cc-sec{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:700;margin:6px 2px 11px;display:flex;align-items:center;gap:8px;}
+  .cc-sec::after{content:'';flex:1;height:1px;background:var(--line);}
+  .cc-sys{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
+  .sysrow{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:11px 14px;}
+  .sysrow .sd{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+  .sysrow .sd.on{background:var(--ok);box-shadow:0 0 9px var(--ok);animation:ccblink 2.2s ease-in-out infinite;}
+  .sysrow .sd.warn{background:var(--warn);box-shadow:0 0 7px rgba(245,185,66,.6);}
+  .sysrow .sd.off{background:var(--muted2);}
+  .sysrow .sn{font-weight:700;font-size:13.5px;flex:0 0 auto;}
+  .sysrow .sdet{flex:1;text-align:right;font-size:11.5px;color:var(--muted);}
+  .sysrow .sstate{font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:50px;}
+  .sstate.on{background:rgba(62,207,142,.16);color:var(--ok);} .sstate.warn{background:rgba(245,185,66,.16);color:var(--warn);}
+
+  /* Umsatz-Mini-Chart */
+  .cc-chart{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 15px 12px;margin-bottom:18px;}
+  .cc-chart .ch{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px;}
+  .cc-chart .ch .t{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);}
+  .cc-chart .ch .tot{font-weight:800;color:var(--gold);font-size:15px;}
+  .cc-bars{display:flex;align-items:flex-end;gap:6px;height:84px;}
+  .cc-bars .cb{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end;min-width:0;}
+  .cc-bars .cb .bar{width:100%;max-width:22px;border-radius:5px 5px 2px 2px;background:linear-gradient(180deg,var(--gold),#8a6f37);min-height:3px;transition:height .5s cubic-bezier(.2,.8,.2,1);}
+  .cc-bars .cb .bl{font-size:8.5px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+
   /* ── Install-Hinweis (PWA zum Homescreen) ── */
   .installbar{display:flex;align-items:center;gap:11px;margin:14px 16px 0;padding:12px 14px;
     background:linear-gradient(135deg,rgba(201,169,97,.16),rgba(201,169,97,.05));
@@ -483,35 +548,115 @@ function renderDashboard(){
   api('dashboard').then(function(d){ dash=d; paintDashboard(d); }).catch(function(){});
 }
 function skeletons(n){ var s=''; for(var i=0;i<n;i++) s+='<div class="tile skeleton"></div>'; return s; }
+
+// ── MASTER GEORGE · Command Center ──
+function ccTile(ic,label,val,sub,cls,goView){
+  return '<div class="cc-tile'+(goView?' tap" data-go="'+goView+'"':'"')+'>'+
+    '<div class="cci">'+ic+'</div>'+
+    '<div class="cck">'+label+'</div>'+
+    '<div class="ccv '+(cls||'')+' mono">'+val+'</div>'+
+    (sub?'<div class="ccs">'+sub+'</div>':'')+'</div>';
+}
 function paintDashboard(d){
-  var fuOver=d.followupUeberfaellig||0, fuToday=d.followupHeute||0;
-  var stufeBars='';
+  var fuOver=d.followupUeberfaellig||0, fuToday=d.followupHeute||0, fuTotal=fuToday+fuOver;
+  var um=d.umsatzMonat||{present:false};
+  var sys=d.system||[];
+
+  // Umsatz-KPIs (ehrlich „—" ohne Daten).
+  var umGesV = um.present ? chf(um.gesamt) : '—';
+  var umGesS = um.present ? (um.anzahlMonate+' Monate erfasst') : 'noch keine Daten';
+  var bestV = (um.present && um.bester) ? chf(um.bester.umsatz) : '—';
+  var bestS = (um.present && um.bester) ? esc(um.bester.label) : 'noch keine Daten';
+
+  // System-Status-Zeilen.
+  var sysHtml = sys.map(function(s){
+    var st = s.state==='on'?'on':(s.state==='warn'?'warn':'off');
+    var lbl = s.state==='on'?'Aktiv':(s.state==='warn'?'Bereit':'Aus');
+    return '<div class="sysrow"><span class="sd '+st+'"></span>'+
+      '<span class="sn">'+esc(s.label)+'</span>'+
+      '<span class="sdet">'+esc(s.detail||'')+'</span>'+
+      '<span class="sstate '+st+'">'+lbl+'</span></div>';
+  }).join('') || '<div class="empty">Keine Module.</div>';
+
+  // Umsatz-Mini-Chart (nur bei echten Daten).
+  var chartHtml='';
+  if(um.present && um.monate && um.monate.length){
+    var mx=1; um.monate.forEach(function(m){ if(m.umsatz>mx) mx=m.umsatz; });
+    var bars=um.monate.slice(-12).map(function(m){
+      var h=Math.max(3, Math.round(m.umsatz/mx*100));
+      return '<div class="cb" title="'+esc(m.label)+': '+chf(m.umsatz)+'">'+
+        '<div class="bar" style="height:'+h+'%"></div>'+
+        '<div class="bl">'+esc(m.label.split(' ')[0])+'</div></div>';
+    }).join('');
+    chartHtml='<div class="cc-chart"><div class="ch"><span class="t">Umsatz pro Monat</span>'+
+      '<span class="tot">'+chf(um.jahrUmsatz)+' <span style="font-weight:600;color:var(--muted);font-size:11px">'+um.jahr+'</span></span></div>'+
+      '<div class="cc-bars">'+bars+'</div></div>';
+  }
+
+  // Pipeline pro Stufe + Quellen (echte Detail-Daten, unten).
   var maxS=Math.max(1, d.perStufe.neu, d.perStufe.kontaktiert, d.perStufe.angebot, d.perStufe.gewonnen, d.perStufe.verloren);
-  STUFEN.forEach(function(s){
+  var stufeBars=STUFEN.map(function(s){
     var n=d.perStufe[s]||0;
-    stufeBars+='<div class="sb-row"><span class="lbl">'+cap(s)+'</span>'+
+    return '<div class="sb-row"><span class="lbl">'+cap(s)+'</span>'+
       '<span class="sb-track"><span class="sb-fill" style="width:'+Math.round(n/maxS*100)+'%"></span></span>'+
       '<span class="n">'+n+'</span></div>';
-  });
+  }).join('');
   var srcChips=Object.keys(d.perQuelle||{}).sort(function(a,b){return d.perQuelle[b]-d.perQuelle[a];})
     .map(function(q){ return '<span class="src-chip">'+esc(cap(q))+'<b>'+d.perQuelle[q]+'</b></span>'; }).join('') || '<span class="src-chip">keine Daten</span>';
 
   $('view').innerHTML=
-    '<h2><span class="acc">●</span> Übersicht</h2>'+
+    '<div class="cc-hero" id="cc-hero">'+
+      '<div class="cc-orb"><span class="ring"></span><span class="ring r2"></span><span class="core">⌬</span></div>'+
+      '<h1 class="cc-title">MASTER GEORGE</h1>'+
+      '<div class="cc-subt">COMMAND CENTER</div>'+
+      '<div class="cc-meta"><span class="live">Live</span><span id="cc-clock"></span></div>'+
+      '<div class="cc-cta">🎙️ Antippen &amp; sprechen</div>'+
+    '</div>'+
+
+    '<div class="cc-grid">'+
+      ccTile('📊','Leads gesamt', d.leadsGesamt, d.leadsOffen+' offen', 'gold', 'leads')+
+      ccTile('⏰','Follow-ups', fuTotal, (fuToday+' heute · '+fuOver+' überfällig'), (fuOver?'bad':(fuToday?'gold':'ok')), 'crm')+
+      ccTile('📈','Pipeline-Wert', chf(d.pipelineWert), 'geschätzt', 'gold')+
+      ccTile('🤝','Kunden', d.kundenGesamt, 'aktiv erfasst')+
+      ccTile('💎','Umsatz gesamt', umGesV, umGesS, (um.present?'ok':'muted'))+
+      ccTile('🏆','Bester Monat', bestV, bestS, (um.present&&um.bester?'gold':'muted'))+
+      ccTile('🏗️','Aktive Projekte', d.projekteAktiv, 'von '+d.projekteGesamt+' gesamt', 'ok', 'saeulen')+
+      ccTile('🛠️','Techniker frei', d.technikerFrei, 'von '+d.technikerGesamt+' im Pool', 'gold', 'saeulen')+
+    '</div>'+
+
+    chartHtml+
+
+    '<div class="cc-sec">System-Status</div>'+
+    '<div class="cc-sys">'+sysHtml+'</div>'+
+
+    '<div class="cc-sec">Pipeline &amp; Quellen</div>'+
     '<div class="grid">'+
-      tile('Offene Leads', d.leadsOffen, '', 'gold')+
-      tile('Gesamt', d.leadsGesamt, '')+
-      tile('Follow-up heute', fuToday, '', fuToday? 'gold':'')+
-      tile('Überfällig', fuOver, '', fuOver? 'bad':'ok')+
-      tileWide('Pipeline-Wert <span class="sfx">(geschätzt)</span>', chf(d.pipelineWert), 'gold')+
-      tile('Gewonnen / Monat', d.gewonnenMonat, '', 'ok')+
-      tileTap('todos','To-Dos heute', (d.todosHeute||0), ((d.todosUeberfaellig||0)? (d.todosUeberfaellig)+' überfällig':'offen: '+(d.todosOffen||0)), (d.todosUeberfaellig? 'bad': (d.todosHeute? 'gold':'')))+
-      tileTap('margen','Marge gesamt', chf(d.margeGesamt||0), (d.margeProzent||0)+'% · Umsatz '+chf(d.umsatzGesamt||0), 'ok')+
       tileWide('Pipeline pro Stufe','<div class="stufebars">'+stufeBars+'</div>','plain')+
       tileWide('Leads pro Quelle','<div class="src-chips">'+srcChips+'</div>','plain')+
+      tileTap('todos','To-Dos heute', (d.todosHeute||0), ((d.todosUeberfaellig||0)? (d.todosUeberfaellig)+' überfällig':'offen: '+(d.todosOffen||0)), (d.todosUeberfaellig? 'bad': (d.todosHeute? 'gold':'')))+
+      tileTap('margen','Marge gesamt', chf(d.margeGesamt||0), (d.margeProzent||0)+'% · Umsatz '+chf(d.umsatzGesamt||0), 'ok')+
     '</div>';
+
+  // Hero → Jarvis + direkt Mikrofon aktivieren ("antippen → sprechen").
+  var hero=$('cc-hero'); if(hero) hero.onclick=ccActivateJarvis;
+  // KPI-Kacheln mit data-go → Modul öffnen.
+  Array.prototype.forEach.call($('view').querySelectorAll('.cc-tile[data-go]'),function(c){
+    c.onclick=function(){ go(c.getAttribute('data-go')); };
+  });
   var tt=$('view').querySelector('[data-tap="todos"]'); if(tt) tt.onclick=function(){ go('todos'); };
   var tm=$('view').querySelector('[data-tap="margen"]'); if(tm) tm.onclick=function(){ go('margen'); };
+  startCcClock();
+}
+// Tap auf "MASTER GEORGE" → Jarvis öffnen und sofort zuhören (im Tap-Kontext,
+// damit iOS/Android das Mikrofon erlaubt).
+function ccActivateJarvis(){ _jAutoMic=true; go('jarvis'); }
+function startCcClock(){
+  if(window._ccTimer) clearInterval(window._ccTimer);
+  function upd(){
+    var e=$('cc-clock'); if(!e){ clearInterval(window._ccTimer); window._ccTimer=null; return; }
+    try{ e.textContent=new Date().toLocaleString('de-CH',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(x){}
+  }
+  upd(); window._ccTimer=setInterval(upd,20000);
 }
 function tile(k,v,sfx,cls){
   return '<div class="tile"><div class="k">'+k+'</div><div class="v '+(cls||'')+' mono">'+v+
@@ -811,6 +956,7 @@ var JARVIS_QUICK=[
 var _jConv=[];                 // {role:'me'|'jv', text}
 var _jBusy=false, _jVoiceOn=true;
 var _jRec=null, _jChunks=[], _jRecording=false;
+var _jAutoMic=false;           // vom Command-Center-Tap gesetzt → direkt zuhören
 
 function renderJarvis(){
   $('view').innerHTML='<h2><span class="acc">🎙️</span> Jarvis</h2>'+backRow()+
@@ -841,6 +987,8 @@ function renderJarvis(){
   inp.addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('j-send').click(); } });
   $('j-send').onclick=function(){ var t=inp.value.trim(); if(t){ inp.value=''; inp.style.height='auto'; jarvisAsk(t); } };
   $('j-mic').onclick=toggleJarvisMic;
+  // Vom "MASTER GEORGE"-Tap kommend → sofort Mikrofon starten (noch im Tap-Kontext).
+  if(_jAutoMic){ _jAutoMic=false; startJarvisMic(); }
 }
 function paintJarvisVoiceToggle(){
   var e=$('j-vtoggle'); if(!e) return;

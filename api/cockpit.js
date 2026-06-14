@@ -144,13 +144,13 @@ function parsePreis(v) {
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
 async function getDashboard() {
-  const { anfragen } = await loadCore();
+  const { anfragen, kunden } = await loadCore();
   const today = todayISO();
   const monthPrefix = today.slice(0, 7);
 
   const perStufe = { neu: 0, kontaktiert: 0, angebot: 0, gewonnen: 0, verloren: 0 };
   const perQuelle = {};
-  let pipelineWert = 0, gewonnenMonat = 0;
+  let pipelineWert = 0, gewonnenMonat = 0, appLeads = 0;
   let followupHeute = 0, followupUeberfaellig = 0;
 
   for (const a of anfragen) {
@@ -158,6 +158,7 @@ async function getDashboard() {
     perStufe[st] = (perStufe[st] || 0) + 1;
     const q = a.quelle || 'direkt';
     perQuelle[q] = (perQuelle[q] || 0) + 1;
+    if (kanalOf(a.quelle) === 'app') appLeads++;
     if (st === 'kontaktiert' || st === 'angebot') pipelineWert += parsePreis(a.tarif_preis);
     if (st === 'gewonnen' && (a.erstellt_am || '').slice(0, 7) === monthPrefix) gewonnenMonat++;
     if (a.followup_datum) {
@@ -194,6 +195,37 @@ async function getDashboard() {
   } catch (_) {}
   const margeProzent = umsatzGesamt > 0 ? Math.round((margeGesamt / umsatzGesamt) * 100) : 0;
 
+  // ── Command-Center: Projekte / Techniker / Umsatz-Tracking (echte Quellen) ──
+  let projGesamt = 0, projAktiv = 0, technikerGesamt = 0, technikerFrei = 0;
+  try {
+    const pr = await sbGet('gs_projekte?select=status');
+    projGesamt = pr.length;
+    projAktiv = pr.filter((p) => String(p.status || '').toLowerCase() === 'aktiv').length;
+  } catch (_) {}
+  try {
+    const te = await sbGet('gs_techniker?select=verfuegbar');
+    technikerGesamt = te.length;
+    technikerFrei = te.filter((t) => t.verfuegbar === true).length;
+  } catch (_) {}
+  const ums = await getUmsatzStats();
+
+  // System-Status — ehrlich aus echten Daten abgeleitet (kein Fake, keine
+  // erfundene Agenten-Liste). state: 'on' = läuft mit Daten, 'warn' = bereit,
+  // aber (noch) keine Daten hinterlegt.
+  const system = [
+    { key: 'gs', label: 'George Solutions', state: anfragen.length ? 'on' : 'warn',
+      detail: anfragen.length + ' Leads · ' + kunden.length + ' Kunden' },
+    { key: 'jarvis', label: 'Jarvis Assistent', state: 'on', detail: 'Sprachsteuerung bereit' },
+    { key: 'umsatz', label: 'Umsatz-Tracking', state: ums.present ? 'on' : 'warn',
+      detail: ums.present ? ums.anzahlMonate + ' Monate erfasst' : 'noch keine Daten' },
+    { key: 'facility', label: 'Facility / Projekte', state: projGesamt ? 'on' : 'warn',
+      detail: projGesamt ? projAktiv + ' aktiv · ' + projGesamt + ' gesamt' : 'keine Projekte' },
+    { key: 'team', label: 'Techniker-Pool', state: technikerGesamt ? 'on' : 'warn',
+      detail: technikerGesamt ? technikerFrei + ' von ' + technikerGesamt + ' frei' : 'keine Techniker' },
+    { key: 'app', label: 'Baby BOB App', state: appLeads ? 'on' : 'warn',
+      detail: appLeads ? appLeads + ' App-Leads' : 'noch keine App-Leads' },
+  ];
+
   return {
     perStufe,
     perQuelle,
@@ -205,6 +237,16 @@ async function getDashboard() {
     leadsOffen: perStufe.neu + perStufe.kontaktiert + perStufe.angebot,
     todosHeute, todosUeberfaellig, todosOffen,
     umsatzGesamt: Math.round(umsatzGesamt), margeGesamt: Math.round(margeGesamt), margeProzent,
+    // Command-Center
+    kundenGesamt: kunden.length,
+    projekteAktiv: projAktiv, projekteGesamt: projGesamt,
+    technikerFrei, technikerGesamt,
+    umsatzMonat: {
+      present: ums.present, gesamt: ums.gesamt, bester: ums.bester,
+      jahr: ums.jahr, jahrUmsatz: ums.jahrUmsatz, trend: ums.trend,
+      anzahlMonate: ums.anzahlMonate, monate: ums.monate,
+    },
+    system,
   };
 }
 
@@ -217,6 +259,36 @@ function calcMarge(m) {
   const marge = umsatz - einkauf;
   const prozent = umsatz > 0 ? Math.round((marge / umsatz) * 100) : 0;
   return { einkauf, umsatz, marge, prozent };
+}
+
+// ── Umsatz pro Monat (gs_umsatz_monat) — ausschliesslich echte, eingetragene
+// Zahlen. Resilient: fehlt die Tabelle (noch nicht migriert) → present:false.
+const MONATE_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+async function getUmsatzStats() {
+  let rows = [];
+  try {
+    rows = await sbGet('gs_umsatz_monat?select=jahr,monat,umsatz_chf,anzahl_projekte,notiz&order=jahr.asc,monat.asc');
+  } catch (_) { rows = []; }
+  const present = rows.length > 0;
+  const monate = rows.map((r) => ({
+    jahr: Number(r.jahr), monat: Number(r.monat),
+    label: (MONATE_KURZ[Number(r.monat) - 1] || '?') + ' ' + r.jahr,
+    umsatz: Math.round(Number(r.umsatz_chf) || 0),
+    projekte: r.anzahl_projekte != null ? Number(r.anzahl_projekte) : null,
+    notiz: r.notiz || null,
+  }));
+  let gesamt = 0, bester = null;
+  const jahr = new Date().getFullYear();
+  let jahrUmsatz = 0;
+  for (const m of monate) {
+    gesamt += m.umsatz;
+    if (m.jahr === jahr) jahrUmsatz += m.umsatz;
+    if (!bester || m.umsatz > bester.umsatz) bester = { label: m.label, umsatz: m.umsatz };
+  }
+  // Trend = Differenz der letzten beiden erfassten Monate (chronologisch).
+  let trend = null;
+  if (monate.length >= 2) trend = monate[monate.length - 1].umsatz - monate[monate.length - 2].umsatz;
+  return { present, monate, gesamt, bester, jahr, jahrUmsatz, trend, anzahlMonate: monate.length };
 }
 
 // Quelle (Freitext) → kanonischer Marketing-Kanal.
@@ -822,6 +894,9 @@ async function getJarvisFacts() {
     techFrei = te.filter((t) => t.verfuegbar === true).length;
   } catch (_) {}
 
+  // Umsatz pro Monat (gs_umsatz_monat) — die einzige Quelle für Umsatzfragen.
+  const ums = await getUmsatzStats();
+
   return {
     datum: today,
     leads_gesamt: anfragen.length,
@@ -839,9 +914,18 @@ async function getJarvisFacts() {
     todos_ueberfaellig: todosUeber,
     top_offene_todos: topTodos,
     kunden_gesamt: kunden.length,
-    umsatz_gesamt_chf: margenDa ? Math.round(umsatz) : null,
+    // Marge/Umsatz aus der Margen-Kalkulation (gs_margen) — separat von der
+    // monatlichen Umsatzerfassung unten.
+    margen_umsatz_chf: margenDa ? Math.round(umsatz) : null,
     marge_gesamt_chf: margenDa ? Math.round(marge) : null,
     marge_prozent: (margenDa && umsatz > 0) ? Math.round((marge / umsatz) * 100) : null,
+    // Monatlicher Umsatz (gs_umsatz_monat) — DIE Quelle für Umsatzfragen.
+    umsatz_daten_vorhanden: ums.present,
+    umsatz_erfasste_monate_chf: ums.present ? ums.gesamt : null,
+    umsatz_dieses_jahr_chf: ums.present ? ums.jahrUmsatz : null,
+    bester_umsatzmonat: ums.bester ? { monat: ums.bester.label, umsatz_chf: ums.bester.umsatz } : null,
+    umsatz_trend_letzter_monat_chf: ums.trend,
+    umsatz_pro_monat: ums.monate.map((m) => ({ monat: m.label, umsatz_chf: m.umsatz })),
     projekte_gesamt: projGesamt,
     projekte_aktiv: projAktiv,
     techniker_gesamt: techGesamt,
@@ -857,6 +941,7 @@ REGELN:
 - Antworte kurz und gesprochen, 1 bis 3 Sätze. Deine Antwort wird laut vorgelesen.
 - KEINE Markdown-Symbole, keine Sternchen, keine Aufzählungszeichen, keine Tabellen. Reiner Fliesstext.
 - Nenne konkrete Zahlen. Geldbeträge als „… Franken" (CHF-Werte sind in Schweizer Franken).
+- UMSATZFRAGEN beantwortest du ausschliesslich aus den Feldern umsatz_pro_monat, umsatz_erfasste_monate_chf, umsatz_dieses_jahr_chf und bester_umsatzmonat. Ist umsatz_daten_vorhanden false oder umsatz_pro_monat leer, sag ehrlich: „Es sind noch keine Umsatzdaten hinterlegt." — erfinde NIE Umsatzzahlen. (Die Felder rund um marge_* stammen aus der separaten Margen-Kalkulation, nicht aus der Monatsumsatz-Erfassung.)
 - Sprich Hochdeutsch, professionell, ruhig und prägnant — wie ein kompetenter Assistent. Du-Form.`;
 
 async function askJarvis(body) {
@@ -899,6 +984,10 @@ function jarvisFallback(f) {
     `${f.followups_heute} Follow-ups heute, ${f.followups_ueberfaellig} überfällig.`,
     `${f.kunden_gesamt} Kunden, Pipeline rund ${f.pipeline_wert_chf.toLocaleString('de-CH')} Franken.`,
   ];
-  if (f.marge_gesamt_chf != null) parts.push(`Marge gesamt ${f.marge_gesamt_chf.toLocaleString('de-CH')} Franken (${f.marge_prozent}%).`);
+  if (f.umsatz_daten_vorhanden) {
+    parts.push(`Erfasster Umsatz gesamt ${f.umsatz_erfasste_monate_chf.toLocaleString('de-CH')} Franken${f.bester_umsatzmonat ? `, bester Monat ${f.bester_umsatzmonat.monat} mit ${f.bester_umsatzmonat.umsatz_chf.toLocaleString('de-CH')} Franken` : ''}.`);
+  } else {
+    parts.push('Es sind noch keine Umsatzdaten hinterlegt.');
+  }
   return parts.join(' ');
 }
