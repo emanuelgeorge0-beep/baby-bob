@@ -964,17 +964,16 @@ var JARVIS_QUICK=[
 ];
 var _jConv=[];                 // {role:'me'|'jv', text}
 var _jBusy=false, _jVoiceOn=true;
-var _jRec=null, _jChunks=[], _jRecording=false;
+// Spracheingabe über native Browser-Erkennung (wie Baby BOB):
+// _jBase = Text aus bereits beendeten Sessions; _jSessionFinal = finaler Text der laufenden Session.
+var _jSR=null, _jRecording=false, _jWantRec=false, _jBase='', _jSessionFinal='', _jSRrestarts=0;
 var _jAutoMic=false;           // vom Command-Center-Tap gesetzt → direkt zuhören
 // EIN persistentes Audio-Element, im Tap-Kontext „entsperrt" (iOS-Autoplay) →
-// die Sprachantwort spielt auch im Sprach-Dialog (Antwort kommt aus dem STT-Callback,
+// die Sprachantwort spielt auch im Sprach-Dialog (Antwort kommt aus dem Erkennungs-Callback,
 // also OHNE Geste) zuverlässig mit der ElevenLabs-Stimme — kein Browser-Fallback.
 var _jAudio=null, _jAudioUnlocked=false, _jCurUrl=null;
 // Kurzes, stilles WAV nur zum Entsperren des Audio-Elements (iOS).
 var _J_SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
-// Automatische Stille-Erkennung (Auto-Stopp) — VORBEREITET, aber DEFAULT AUS.
-// Jetzt: manueller Stopp (Tippen zum Starten/Stoppen). Siehe armSilenceDetection().
-var _jSilenceAuto=false;
 
 function renderJarvis(){
   $('view').innerHTML='<h2><span class="acc">🎙️</span> Jarvis</h2>'+backRow()+
@@ -1072,25 +1071,36 @@ function speakJarvis(text){
   jState('Jarvis spricht','speak');
   fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
   .then(function(r){
-    if(!r.ok) throw new Error('tts '+r.status);
     var ct=r.headers.get('content-type')||'';
-    if(ct.indexOf('audio')<0) throw new Error('no-audio');
-    return r.blob();
-  }).then(function(blob){
-    var url=URL.createObjectURL(blob); _jCurUrl=url;
-    var a=jGetAudio();
-    a.src=url; a.muted=false;
-    a.onended=function(){ stopSpeak(); jState('Bereit für die nächste Frage.','idle'); };
-    a.onerror=function(){ jState('Bereit für die nächste Frage.','idle'); };
-    var p=a.play();
-    // Autoplay vom Browser blockiert → KEINE Browser-Stimme, sondern ein Tap-Button,
-    // der dieselbe ElevenLabs-Aufnahme abspielt.
-    if(p&&p.catch) p.catch(function(){ showJUnlock(); });
-  }).catch(function(){
-    // /api/voice nicht erreichbar → keine Ersatzstimme, nur Hinweis. Text steht bereits da.
+    if(r.ok && ct.indexOf('audio')>-1){ return r.blob().then(playJBlob); }
+    // Kein Audio → echten Grund aus der JSON-Fehlerantwort lesen (Quota? Key? Rate-Limit?).
+    return r.json().catch(function(){ return {}; }).then(function(j){ jTtsError(j); });
+  }).catch(function(){ jTtsError({}); });
+}
+function playJBlob(blob){
+  var url=URL.createObjectURL(blob); _jCurUrl=url;
+  var a=jGetAudio();
+  a.src=url; a.muted=false;
+  a.onended=function(){ stopSpeak(); jState('Bereit für die nächste Frage.','idle'); };
+  a.onerror=function(){ jState('Bereit für die nächste Frage.','idle'); };
+  var p=a.play();
+  // Autoplay blockiert → KEINE Browser-Stimme, sondern Tap-Button für dieselbe ElevenLabs-Aufnahme.
+  if(p&&p.catch) p.catch(function(){ showJUnlock(); });
+}
+// Ehrliche Diagnose statt pauschal „nicht verfügbar": Guthaben leer wird klar benannt,
+// damit Master George weiss, dass er ElevenLabs aufladen muss (kein Code-Problem).
+function jTtsError(j){
+  var d=((j&&(j.detail||j.error))||'')+'';
+  if(/quota|credit|exceeds your quota/i.test(d)){
+    jState('Stimme: ElevenLabs-Guthaben erschöpft — bitte aufladen. (Antwort steht oben.)','idle');
+    toast('ElevenLabs-Guthaben leer');
+  } else if(/not configured|api key|unauthor/i.test(d)){
+    jState('Stimme: ElevenLabs-Key fehlt im Server. (Antwort steht oben.)','idle');
+    toast('Stimme: Key fehlt');
+  } else {
     jState('Stimme momentan nicht verfügbar — Antwort steht oben.','idle');
     toast('Stimme nicht verfügbar');
-  });
+  }
 }
 // „Antippen zum Hören" — erscheint nur, wenn der Browser das Autoplay blockiert.
 function showJUnlock(){
@@ -1105,76 +1115,70 @@ function showJUnlock(){
 }
 function hideJUnlock(){ var b=$('j-unlock'); if(b&&b.parentNode) b.parentNode.removeChild(b); }
 
-// ── Spracheingabe: MediaRecorder → /api/voice STT ──
-function toggleJarvisMic(){ if(_jRecording) stopJarvisMic(false); else startJarvisMic(); }
+// ── Spracheingabe: native Browser-Erkennung — EXAKT wie Baby BOB (bobChatMic). ──
+// iOS Safari unterstützt webkitSpeechRecognition zuverlässig; MediaRecorder→scribe lieferte
+// am iPhone (audio/mp4) leeren Text. Native SR braucht keinen ElevenLabs-Endpoint/Guthaben.
+// Manueller Stopp: Tippen startet, Tippen stoppt. KEIN vorzeitiges Abschneiden — endet iOS
+// bei einer Sprechpause von selbst, wird die Erkennung neu gestartet, bis der Nutzer stoppt.
+function jSRsupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function toggleJarvisMic(){ if(_jRecording){ stopJarvisMic(false); } else { startJarvisMic(); } }
 function startJarvisMic(){
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||typeof MediaRecorder==='undefined'){
-    toast('Spracheingabe hier nicht verfügbar'); return;
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ toast('Spracheingabe hier nicht verfügbar'); return; }
+  stopSpeak();
+  _jBase=''; _jSessionFinal=''; _jWantRec=true; _jRecording=true; _jSRrestarts=0;
+  var b=$('j-mic'); if(b){ b.classList.add('rec'); b.textContent='⏹'; b.title='Aufnahme stoppen'; }
+  jState('● Ich höre zu… — zum Stoppen tippen','speak');
+  jSRbegin(SR);
+}
+function jSRbegin(SR){
+  try{ _jSR=new SR(); }catch(e){ _jRecording=false; _jWantRec=false; toast('Spracheingabe nicht verfügbar'); jSRresetBtn(); return; }
+  _jSessionFinal='';
+  _jSR.lang='de-CH';
+  _jSR.interimResults=true;          // Teilergebnisse → flüssige Anzeige, nichts geht verloren
+  _jSR.continuous=true;              // Android: durchgehend; iOS endet bei Pause → wir starten neu
+  _jSR.onresult=function(e){
+    // e.results ist innerhalb EINER Session kumulativ → pro Session ersetzen, nicht anhängen.
+    var fin='', interim='';
+    for(var i=0;i<e.results.length;i++){
+      if(e.results[i].isFinal) fin+=e.results[i][0].transcript+' ';
+      else interim+=e.results[i][0].transcript;
+    }
+    _jSessionFinal=fin.trim();
+    var show=((_jBase+' '+_jSessionFinal+' '+interim).trim());
+    if(show) jState('… '+show,'speak');
+  };
+  _jSR.onerror=function(ev){
+    var err=(ev&&ev.error)||'';
+    if(err==='not-allowed'||err==='service-not-allowed'){ _jWantRec=false; _jRecording=false; jSRresetBtn(); toast('Mikrofon-Zugriff verweigert'); }
+    // 'no-speech'/'aborted'/'network' → onend übernimmt (Neustart oder Abschluss)
+  };
+  _jSR.onend=function(){
+    // Diese Session ist zu Ende → finalen Text in die Basis übernehmen.
+    if(_jSessionFinal){ _jBase=(_jBase? _jBase+' ':'')+_jSessionFinal; _jSessionFinal=''; }
+    // iOS beendet bei Pause. Will der Nutzer weiter → neu starten (kein vorzeitiges Abschneiden).
+    if(_jWantRec && _jSRrestarts<40){ _jSRrestarts++; try{ jSRbegin(SR); return; }catch(e){} }
+    jSRfinalize();
+  };
+  try{ _jSR.start(); }
+  catch(e){ /* start() direkt nach end() kann werfen → kurz warten, dann erneut */
+    if(_jWantRec && _jSRrestarts<40){ _jSRrestarts++; setTimeout(function(){ try{ jSRbegin(SR); }catch(_){ jSRfinalize(); } },250); }
+    else jSRfinalize();
   }
-  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-    var mime=''; ['audio/webm','audio/mp4','audio/ogg'].some(function(m){ if(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m)){ mime=m; return true; } return false; });
-    _jRec = mime ? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream);
-    _jChunks=[];
-    _jRec.ondataavailable=function(e){ if(e.data&&e.data.size) _jChunks.push(e.data); };
-    _jRec.onstop=function(){
-      stream.getTracks().forEach(function(t){ t.stop(); });
-      var blob=new Blob(_jChunks,{type:_jRec.mimeType||mime||'audio/webm'});
-      if(!blob.size){ jState('Nichts aufgenommen.','idle'); return; }
-      var fr=new FileReader();
-      fr.onload=function(){
-        jState('Verstehe dich','think');
-        fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({action:'stt',audio:fr.result,mime:_jRec.mimeType||mime})})
-        .then(function(r){ return r.json(); }).then(function(d){
-          var txt=(d&&d.text||'').trim();
-          if(txt){ jarvisAsk(txt); } else { jState('Konnte nichts erkennen. Bitte nochmal.','idle'); toast('Nichts erkannt'); }
-        }).catch(function(){ jState('Spracherkennung fehlgeschlagen.','idle'); toast('STT-Fehler'); });
-      };
-      fr.readAsDataURL(blob);
-    };
-    _jRec.start();
-    _jRecording=true;
-    var b=$('j-mic'); if(b){ b.classList.add('rec'); b.textContent='⏹'; b.title='Aufnahme stoppen'; }
-    jState('● Ich höre zu… — zum Stoppen tippen','speak');
-    armSilenceDetection(stream);   // default AUS (manueller Stopp); Hook für späteres Auto-Stopp
-  }).catch(function(){ toast('Mikrofon-Zugriff verweigert'); });
 }
+function jSRfinalize(){
+  _jRecording=false; _jWantRec=false; _jSR=null;
+  jSRresetBtn();
+  var txt=((_jBase+' '+_jSessionFinal).trim());
+  if(txt){ jState('Verstehe dich','think'); jarvisAsk(txt); }
+  else { jState('Konnte nichts erkennen. Bitte nochmal.','idle'); toast('Nichts erkannt'); }
+}
+function jSRresetBtn(){ var b=$('j-mic'); if(b){ b.classList.remove('rec'); b.textContent='🎤'; b.title='Sprechen'; } }
 function stopJarvisMic(silent){
-  _jRecording=false;
-  disarmSilenceDetection();
-  var b=$('j-mic'); if(b){ b.classList.remove('rec'); b.textContent='🎤'; b.title='Sprechen'; }
-  try{ if(_jRec&&_jRec.state!=='inactive') _jRec.stop(); }catch(e){}
-  if(silent){ /* von jarvisAsk ausgelöst — kein State-Reset nötig */ }
-}
-// ── Stille-Erkennung (Auto-Stopp) — VORBEREITET, DEFAULT AUS ──────────────────
-// Jetzt bewusst manueller Stopp, damit der Nutzer am Anfang NICHT abgeschnitten wird.
-// Zum Nachrüsten: _jSilenceAuto=true setzen und unten den Analyser-Block aktivieren
-// (WebAudio AnalyserNode → RMS unter Schwelle für X ms → stopJarvisMic(false)).
-var _jSilCtx=null, _jSilRAF=0;
-function armSilenceDetection(stream){
-  if(!_jSilenceAuto) return;                 // ← Schalter: default AUS
-  try{
-    var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
-    _jSilCtx=new AC(); var src=_jSilCtx.createMediaStreamSource(stream);
-    var an=_jSilCtx.createAnalyser(); an.fftSize=2048; src.connect(an);
-    var buf=new Uint8Array(an.fftSize), quietSince=0, MIN_MS=1200, THRESH=0.012, startedAt=Date.now();
-    (function loop(){
-      if(!_jRecording){ disarmSilenceDetection(); return; }
-      an.getByteTimeDomainData(buf);
-      var sum=0; for(var i=0;i<buf.length;i++){ var v=(buf[i]-128)/128; sum+=v*v; }
-      var rms=Math.sqrt(sum/buf.length), now=Date.now();
-      // erst nach einer Mindest-Sprechzeit greifen, damit der Anfang NIE abgeschnitten wird
-      if(now-startedAt>1500){
-        if(rms<THRESH){ if(!quietSince) quietSince=now; else if(now-quietSince>MIN_MS){ stopJarvisMic(false); return; } }
-        else quietSince=0;
-      }
-      _jSilRAF=requestAnimationFrame(loop);
-    })();
-  }catch(e){}
-}
-function disarmSilenceDetection(){
-  if(_jSilRAF){ try{ cancelAnimationFrame(_jSilRAF); }catch(e){} _jSilRAF=0; }
-  if(_jSilCtx){ try{ _jSilCtx.close(); }catch(e){} _jSilCtx=null; }
+  // Manueller Stopp (Nutzer-Tap) → kein Neustart mehr, Ergebnis verarbeiten.
+  _jWantRec=false;
+  try{ if(_jSR) _jSR.stop(); }catch(e){}
+  if(silent){ _jRecording=false; jSRresetBtn(); }  // von jarvisAsk → nur abbrechen
 }
 
 // ════ MARKETING ════
