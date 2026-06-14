@@ -85,12 +85,16 @@ Im Projektdatenblatt: Sektion **„Materialliste senden"** → Empfänger-E-Mail
 **Tests:**
 - `scripts/test-material-content.mjs` — **16/16 grün** (deploy-unabhängig, kein Key nötig):
   beweist, dass Mail-Body UND PDF die korrekten Positionen, Mengen und die Notiz enthalten.
-- `scripts/test-material-mail.mjs` — echter End-to-End-Resend-Versand gegen das Deployment,
-  5 Durchläufe (für „20x" einfach Zahl erhöhen: `node scripts/test-material-mail.mjs <URL> 20`).
+- `scripts/test-material-mail.mjs` — echter End-to-End-Resend-Versand gegen das Deployment.
+  **AUSGEFÜHRT am 2026-06-14 gegen das Preview-Deployment dieses Branches: 20 Durchläufe,
+  101 Assertions, 0 Fehler — ALLE GRÜN.** Pro Durchlauf bestätigt: HTTP 200, `mail_sent=true`,
+  echte `resend_id`, 3 korrekte Material-Positionen im Versand, PDF-Anhang erzeugt.
   Empfänger ist die Resend-Test-Adresse `delivered@resend.dev` → akzeptiert + „zugestellt",
   aber KEINE echte Mail an reale Postfächer → beliebig oft wiederholbar.
-  **Noch auszuführen gegen ein Deployment, das diesen Branch enthält** (siehe unten), weil
-  `RESEND_API_KEY` nur in Vercel liegt (nicht lokal in `.env.local`).
+  Re-Run (das Preview ist Vercel-SSO-geschützt → Bypass-Secret nötig):
+  `VERCEL_BYPASS=<secret> node scripts/test-material-mail.mjs <preview-url> 20`
+  (Secret: Vercel → Projekt baby-bob → Settings → Deployment Protection →
+  Protection Bypass for Automation.)
 
 ## SCHRITT 5 — WhatsApp-Button ✅
 
@@ -104,18 +108,23 @@ Im Projektdatenblatt neben dem Mail-Button: **„💬 Per WhatsApp öffnen (Text
 
 ---
 
+## Preview-URL zum Selbst-Testen im Browser
+
+**https://baby-bob-git-fix-kritische-bugs-baby-bob.vercel.app**
+
+Im Browser bist du als Vercel-Projektinhaber eingeloggt → die Seite öffnet direkt
+(die SSO-Schutzschranke betrifft nur anonyme Tools/curl, nicht deinen Browser).
+Erster Test-Pfad: **GS-Modus öffnen → Projektmanagement → Projekt anklicken
+(PM-Detailansicht: Status, Stunden/Techniker, Materiallisten) → Materialliste per
+E-Mail + WhatsApp → „← Zurück zum Admin"-Button.**
+
 ## Manuelle Schritte für Emanuel
 
-1. **`scripts/test-material-mail.mjs` gegen ein Deployment mit diesem Branch laufen lassen**
-   (Branch `fix/kritische-bugs` ist gepusht → Vercel-Preview, oder nach Merge auf die
-   Produktions-URL). Beispiel 20×:
-   `node scripts/test-material-mail.mjs https://<deployment-url> 20` → muss grün sein.
-   (Geht an `delivered@resend.dev`, spammt niemanden.)
+1. ✅ E2E-Mailtest 20× grün ausgeführt (siehe Schritt 4). Re-Run jederzeit möglich.
 2. **WhatsApp-Nummer eintragen** (siehe unten) — sonst zeigt der Button nur den Hinweis.
-3. Sicherstellen, dass in Vercel `RESEND_API_KEY` für die genutzte Umgebung gesetzt ist
-   (Production ist es bereits; für Preview-Deployments ggf. auch setzen, falls dort getestet
-   wird).
+3. `RESEND_API_KEY` ist in Vercel für **production + preview** gesetzt (geprüft). ✓
 4. `outputDirectory: "."` in `vercel.json` ist unverändert erhalten geblieben. ✓
+5. Wenn alles im Browser passt: `fix/kritische-bugs` nach Production mergen/deployen.
 
 ## WhatsApp-Nummer eintragen
 

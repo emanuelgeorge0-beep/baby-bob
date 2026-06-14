@@ -14,6 +14,9 @@ import { readFileSync } from 'node:fs';
 const BASE = process.argv[2] || 'https://baby-bob.vercel.app';
 const RUNS = Number(process.argv[3] || 5);
 const RECIPIENT = 'delivered@resend.dev'; // Resend-Test-Sink (keine echte Zustellung)
+// Geschützte Vercel-Preview-Deployments: Protection-Bypass-Secret als Header
+// x-vercel-protection-bypass. Via Umgebungsvariable VERCEL_BYPASS oder 4. Argument.
+const BYPASS = process.env.VERCEL_BYPASS || process.argv[4] || '';
 
 let SUPABASE_URL, SUPABASE_KEY;
 for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')) {
@@ -28,7 +31,7 @@ let pass = 0, fail = 0;
 const is = (n, c, d) => (c ? (console.log('  ✓ ' + n), pass++) : (console.log('  ✗ ' + n + (d ? ' — ' + d : '')), fail++));
 const login = async (e, p) => (await (await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, { method: 'POST', headers: SBH, body: JSON.stringify({ email: e, password: p }) })).json());
 const api = async (ep, body, tok) => {
-  const r = await fetch(`${BASE}/api/${ep}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify(body) });
+  const r = await fetch(`${BASE}/api/${ep}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(tok ? { Authorization: `Bearer ${tok}` } : {}), ...(BYPASS ? { 'x-vercel-protection-bypass': BYPASS } : {}) }, body: JSON.stringify(body) });
   return { status: r.status, body: await r.json().catch(() => null) };
 };
 
