@@ -4961,7 +4961,10 @@ function updateAdminReturnBtn(){
   if(!btn) return;
   var landing=document.getElementById('landing');
   var onLanding=!!(landing&&landing.classList.contains('active'));
-  var show=adminReturnArmed && isMasterContext() && !adminScreenActive() && !onLanding;
+  // Schritt 1: Button erscheint IMMER, wenn ein Admin (master/gs_admin, kein Demo) sich
+  // ausserhalb der Admin-Screens befindet — GS-Modus, BOB-Scanner, Login, Partner/Techniker,
+  // egal wie er dorthin kam. (Früher an adminReturnArmed gekoppelt → fehlte an einigen Stellen.)
+  var show=isMasterContext() && !adminScreenActive() && !onLanding;
   btn.style.display=show?'flex':'none';
 }
 function adminReturnHome(){
