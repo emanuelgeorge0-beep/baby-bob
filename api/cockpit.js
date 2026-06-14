@@ -895,68 +895,53 @@ async function getJarvisFacts(opts = {}) {
     }
   }
 
+  // Alle unabhängigen Cockpit-Abfragen PARALLEL (statt sequenziell) → spürbar schnellere
+  // Jarvis-Antwort (war zuvor ~8 Round-Trips hintereinander). Jede Abfrage einzeln abgesichert.
+  const [auf, todos, margen, pr, te, rp, mt, ums] = await Promise.all([
+    sbGet('gs_crm_aufgaben?status=eq.offen&select=faelligkeit').catch(() => []),
+    sbGet('gs_todos?status=eq.offen&select=titel,zustaendig,faelligkeit,prioritaet&order=faelligkeit.asc.nullslast&limit=8').catch(() => []),
+    sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell').catch(() => null),
+    sbGet('gs_projekte?select=status').catch(() => []),
+    sbGet('gs_techniker?select=verfuegbar').catch(() => []),
+    sbGet('gs_tagesrapporte?select=status').catch(() => []),
+    sbGet('gs_material?select=id').catch(() => null),
+    getUmsatzStats(),
+  ]);
+
   // Offene CRM-Aufgaben (zählen ebenfalls als Follow-ups).
-  let offeneAufgaben = 0;
-  try {
-    const auf = await sbGet('gs_crm_aufgaben?status=eq.offen&select=faelligkeit');
-    offeneAufgaben = auf.length;
-    for (const t of auf) {
-      if (!t.faelligkeit) continue;
-      if (t.faelligkeit === today) fuHeute++;
-      else if (t.faelligkeit < today) fuUeber++;
-    }
-  } catch (_) {}
+  const offeneAufgaben = (auf || []).length;
+  for (const t of (auf || [])) {
+    if (!t.faelligkeit) continue;
+    if (t.faelligkeit === today) fuHeute++;
+    else if (t.faelligkeit < today) fuUeber++;
+  }
 
   // Interne To-Dos (Team).
-  let todosOffen = 0, todosHeute = 0, todosUeber = 0, topTodos = [];
-  try {
-    const todos = await sbGet('gs_todos?status=eq.offen&select=titel,zustaendig,faelligkeit,prioritaet&order=faelligkeit.asc.nullslast&limit=8');
-    todosOffen = todos.length;
-    for (const t of todos) {
-      if (!t.faelligkeit) continue;
-      if (t.faelligkeit === today) todosHeute++;
-      else if (t.faelligkeit < today) todosUeber++;
-    }
-    topTodos = todos.slice(0, 5).map((t) => ({
-      titel: t.titel, zustaendig: t.zustaendig || null,
-      faelligkeit: t.faelligkeit || null, prioritaet: t.prioritaet || 'mittel',
-    }));
-  } catch (_) {}
+  let todosHeute = 0, todosUeber = 0;
+  const todosOffen = (todos || []).length;
+  for (const t of (todos || [])) {
+    if (!t.faelligkeit) continue;
+    if (t.faelligkeit === today) todosHeute++;
+    else if (t.faelligkeit < today) todosUeber++;
+  }
+  const topTodos = (todos || []).slice(0, 5).map((t) => ({
+    titel: t.titel, zustaendig: t.zustaendig || null,
+    faelligkeit: t.faelligkeit || null, prioritaet: t.prioritaet || 'mittel',
+  }));
 
   // Margen / Umsatz (nur falls migriert).
-  let umsatz = 0, marge = 0, margenDa = false;
-  try {
-    const margen = await sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell');
-    margenDa = margen.length > 0;
-    for (const m of margen) { const c = calcMarge(m); umsatz += c.umsatz; marge += c.marge; }
-  } catch (_) {}
+  let umsatz = 0, marge = 0;
+  const margenDa = Array.isArray(margen) && margen.length > 0;
+  if (margenDa) for (const m of margen) { const c = calcMarge(m); umsatz += c.umsatz; marge += c.marge; }
 
-  // Projekte / Techniker.
-  let projGesamt = 0, projAktiv = 0, techGesamt = 0, techFrei = 0;
-  try {
-    const pr = await sbGet('gs_projekte?select=status');
-    projGesamt = pr.length;
-    projAktiv = pr.filter((p) => String(p.status || '').toLowerCase() === 'aktiv').length;
-  } catch (_) {}
-  try {
-    const te = await sbGet('gs_techniker?select=verfuegbar');
-    techGesamt = te.length;
-    techFrei = te.filter((t) => t.verfuegbar === true).length;
-  } catch (_) {}
-
-  // Tagesrapporte (gs_tagesrapporte): Gesamt + eingereicht.
-  let rapporteGesamt = 0, rapporteEingereicht = 0;
-  try {
-    const rp = await sbGet('gs_tagesrapporte?select=status');
-    rapporteGesamt = rp.length;
-    rapporteEingereicht = rp.filter((r) => String(r.status || '').toLowerCase() === 'eingereicht').length;
-  } catch (_) {}
-  // Material (gs_material) — Tabelle evtl. noch nicht migriert → null = Erfassung nicht aktiv.
-  let materialPositionen = null;
-  try { const mt = await sbGet('gs_material?select=id'); materialPositionen = mt.length; } catch (_) { materialPositionen = null; }
-
-  // Umsatz pro Monat (gs_umsatz_monat) — die einzige Quelle für Umsatzfragen.
-  const ums = await getUmsatzStats();
+  // Projekte / Techniker / Rapporte / Material.
+  const projGesamt = (pr || []).length;
+  const projAktiv = (pr || []).filter((p) => String(p.status || '').toLowerCase() === 'aktiv').length;
+  const techGesamt = (te || []).length;
+  const techFrei = (te || []).filter((t) => t.verfuegbar === true).length;
+  const rapporteGesamt = (rp || []).length;
+  const rapporteEingereicht = (rp || []).filter((r) => String(r.status || '').toLowerCase() === 'eingereicht').length;
+  const materialPositionen = mt === null ? null : (mt || []).length;
 
   // ── DATENSCHUTZ: Namen NUR bei ausdrücklicher Freigabe im Gespräch beilegen ──
   // Ohne Freigabe verlässt KEIN Kunden-/Firmenname den Server (Schutz auf
@@ -1075,16 +1060,15 @@ async function askJarvis(body) {
   // Freigabe gilt, wenn sie irgendwo im Gespräch ODER in der aktuellen Frage steht.
   const freigabe = FREIGABE_RE.test(frage) || userTexte.some((t) => FREIGABE_RE.test(t));
 
-  const facts = await getJarvisFacts({ freigabe });
-
-  // ── Jarvis-Gedächtnis: gespeichertes Wissen mitlesen (falls Tabelle existiert) ──
-  try {
-    const wissen = await sbGet('gs_jarvis_wissen?select=kategorie,inhalt,erstellt_am&order=erstellt_am.desc&limit=30');
-    facts.gespeichertes_wissen = wissen.map((w) => ({
-      kategorie: w.kategorie || 'allgemein', inhalt: w.inhalt,
-      datum: String(w.erstellt_am || '').slice(0, 10),
-    }));
-  } catch (_) { facts.gespeichertes_wissen = []; }
+  // Fakten UND Gedächtnis parallel laden (spart einen weiteren Round-Trip).
+  const [facts, wissen] = await Promise.all([
+    getJarvisFacts({ freigabe }),
+    sbGet('gs_jarvis_wissen?select=kategorie,inhalt,erstellt_am&order=erstellt_am.desc&limit=30').catch(() => []),
+  ]);
+  facts.gespeichertes_wissen = (wissen || []).map((w) => ({
+    kategorie: w.kategorie || 'allgemein', inhalt: w.inhalt,
+    datum: String(w.erstellt_am || '').slice(0, 10),
+  }));
 
   // ── Merk-Anweisung → in gs_jarvis_wissen schreiben ──
   if (MERK_RE.test(frage)) {
