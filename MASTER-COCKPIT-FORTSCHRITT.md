@@ -54,11 +54,31 @@
       S2-Commits via reflog (`reset --hard d21ef14`) wiederhergestellt; danach SOFORT gepusht.
       → **Lehre: nach jedem Commit sofort `git push origin master-cockpit`.**
 
-### ☐ Nächste Sessions (Session 3)
-- [ ] Modul **4 Säulen** (Platzhalter steht im Mehr-Menü).
-- [ ] Verknüpfung Lead → Kunde → Projekt → Rapport → Vertrag voll ausbauen
-      (Margen optional an `anfrage_id` koppelbar — Picker im UI ergänzen).
-- [ ] Marketing: echte Kampagnen-Objekte + Zeitraum-Filter (statt nur Kosten je Kanal).
+### ✅ Session 3 — 4 Säulen · Lead→Projekt→Marge-Picker · Marketing-Kampagnen/Zeitraum
+- [x] SQL Session 3: `scripts/master_cockpit_session3.sql` (idempotent, RLS master-only):
+      `gs_mkt_kampagnen` (Kampagnen mit Laufzeit/Budget/Status) + `gs_margen.projekt_id`
+      (guarded ALTER via `to_regclass`, läuft auch wenn S2 noch nicht lief). → **EINMALIG ausführen.**
+- [x] **Modul „4 Säulen"** (`saeulen`): read-only Aggregation echter Daten, kein neues Schema.
+      • S1 Baby BOB (aktiv) — App-Leads, App-Anteil %, Leads gesamt.
+      • S2 Marketplace (Aufbau) — Handwerker im Netz, verfügbar, Ø Bewertung (aus gs_techniker).
+      • S3 George Solutions (aktiv) — Leads/Offen/Gewonnen/Kunden/Pipeline + Marge (falls migriert).
+      • S4 Facility (aktiv) — aktive Projekte, Projekte gesamt, gewonnene Aufträge, Techniker frei.
+      • Status-Badge (aktiv/Aufbau/geplant) je Säule + Gesamt-Header. Hinweis-Zeile bei fehlenden Quellen.
+- [x] **Lead → Projekt → Marge per Picker**: API `marge_pickers` (Leads + Projekte), Marge-Formular
+      mit zwei Selects (Lead/Anfrage + Projekt). `anfrage_id` set/clear (Spalte seit S2),
+      `projekt_id` nur schreiben wenn gewählt (migrationssicher vor S3). Marge-Karte zeigt 🔗 Lead / 🏗 Projekt.
+- [x] **Marketing: Kampagnen + Zeitraum-Filter**: Zeitraum-Chips (Alle/30T/90T/Monat/Jahr) → Leads
+      werden im Zeitraum gezählt; Kampagnen-CRUD (Name, Kanal, Budget vs. Ausgaben, Laufzeit, Status),
+      gefiltert per Laufzeit-Überlappung; Kampagnen-Summen (Anzahl/aktiv/Budget/Ausgaben).
+- [x] 20x-Analyse S3 (siehe unten) + Live-Smoke-Test: `gs_mkt_kampagnen`/`gs_margen` 404 → graceful [];
+      projekte aktiv=1, techniker frei=4/12 (matcht Säulen-KPIs); Zeitraum Juni=10, davor=0 (matcht Client-Filter).
+
+### ☐ Offen für Session 4
+- [ ] Verknüpfung weiter ausbauen: Rapport → Vertrag (Kette Lead→Kunde→Projekt→**Rapport→Vertrag**).
+- [ ] Kampagnen: Lead-Attribution je Kampagne (utm_campaign ↔ gs_mkt_kampagnen.name/Kanal) statt nur Kanal.
+- [ ] Marketing-Kosten zeitraum-genau (aktuell Kanal-Kosten = manueller Gesamtwert; Kampagnen tragen
+      die zeitraum-genauen Ausgaben). Optional CPL aus Kampagnen-Ausgaben statt Kanal-Summe.
+- [ ] Säulen S1/S2: echte Nutzungs-/Buchungsdaten anbinden, sobald Quellen existieren (App-DB/Marketplace).
 - [ ] RLS-Härtung gs_anfragen/gs_kunden gegen anon (Abstimmung mit App-Team/main) — Status:
       bereits 0 Zeilen für anon (S1 verifiziert), also nur Doku/Bestätigung offen.
 
@@ -115,13 +135,47 @@
 19. **Idempotente SQL:** CREATE TABLE IF NOT EXISTS; CHECK inline; RLS DROP+CREATE; Kanäle ON CONFLICT DO NOTHING.
 20. **outputDirectory ".":** in vercel.json gesetzt (verhindert 404 nach Merge); Rewrite → /gs-intern.html.
 
-## NÄCHSTE SESSION (3) — Wiedereinstieg
-→ Diese Datei lesen. Modul **4 Säulen** bauen; Lead→Projekt→Marge-Picker; Marketing-Kampagnen/Zeitraum.
-   Architektur steht: Nav (`MEHR_VIEWS` + `go()`), `renderXxx()`-Muster, API-Actions im switch.
+## 20x Bug-/Security-Analyse (Session 3) — Ergebnis
+1. **Vor Migration nutzbar:** `gs_mkt_kampagnen`/`gs_margen.projekt_id` fehlen → alle Lesepfade
+   via try/catch → []/null. Live-Smoke bestätigt (PGRST205 → graceful).
+2. **Schreiben vor Migration:** kampagne_add / projekt-Link → Tabelle/Spalte fehlt → handler-catch 500
+   → Frontend-Toast „Migration nötig?". Kein Crash, kein Datenverlust.
+3. **Marge-Edit bleibt S2-kompatibel:** `projekt_id` wird nur geschrieben, wenn ein Projekt gewählt ist;
+   `projekt_id_clear` NUR, wenn die Marge vorher bereits ein Projekt hatte (vor S3 nie der Fall) →
+   bestehende Margen-Bearbeitung bricht nach S2/vor S3 NICHT.
+4. **anfrage_id set/clear:** Spalte existiert seit S2 → voll unterstützt ('' → null entkoppelt).
+5. **UUID-Guard:** kampagne_update/del, marge picker-ids, anfrage_id/projekt_id alle per `uuid()` (Regex).
+6. **Whitelists:** Kampagnen-Status (geplant/aktiv/pausiert/beendet), Kanal (KANAELE+sonstige sonst null).
+7. **RLS neue Tabelle:** `gs_mkt_kampagnen` master_only (auth.uid()=gs_master_uid()); anon blockiert.
+8. **Idempotente SQL:** CREATE TABLE IF NOT EXISTS; ADD COLUMN IF NOT EXISTS unter `to_regclass`-Guard;
+   RLS DROP+CREATE; gefahrlos mehrfach + auch ohne S2 ausführbar.
+9. **FK projekt_id → gs_projekte(id) ON DELETE SET NULL:** Marge bleibt bei Projekt-Löschung erhalten.
+10. **Zeitraum-Filter (Client↔Server konsistent):** Datum-Stringvergleich YYYY-MM-DD; Live-Gegenprobe
+    Juni=10 / davor=0 = identisch zur Server-Filterung.
+11. **Date-Range-Berechnung:** setDate()-Arithmetik (30/90 Tage) überschreitet Monatsgrenzen korrekt;
+    Monat/Jahr aus today abgeleitet; 'alle' → kein Filter (von/bis null).
+12. **CPL-Ehrlichkeit:** Kanal-Kosten sind ein manueller Gesamtwert → Tile heißt „Kanal-Kosten" (nicht
+    „Kosten gesamt"); zeitraum-genaue Ausgaben laufen über Kampagnen-Objekte. Kein Genauigkeits-Fake.
+13. **Kampagnen-Zeitraum = Laufzeit-Überlappung** [start,end] ∩ [von,bis]; offenes Ende (null) zählt mit.
+14. **Säulen ehrlich:** S1 App-Anteil aus echtem Kanal (kanalOf 'app'); fehlende App-/Marketplace-Daten
+    klar als Hinweis ausgewiesen statt Fake-Zahlen. Status-Badge spiegelt Datenlage (aktiv/Aufbau).
+15. **Säulen read-only:** keine Schreib-Action, kein neues Schema — reine Aggregation (geringe Angriffsfläche).
+16. **XSS:** Kampagnen-Name/Notiz, Säulen-Labels/Values, Picker-Labels alle via esc(); data-* nur UUIDs.
+17. **Division-durch-0:** Budget-% (budget>0), CPL (leads>0), appAnteil (leads>0), ratingAvg (len>0) abgesichert.
+18. **Picker-Race:** marge_pickers lädt async; bei sofortigem „+ Position" evtl. leere Optionen → Position
+    trotzdem anlegbar (nur ohne Link), Picker füllt sich beim nächsten Render. Kein Fehler.
+19. **Gate gilt für alle neuen Actions** (saeulen, kampagne_*, marge_pickers): hinter verifyMaster (403).
+20. **outputDirectory ".":** in vercel.json unverändert erhalten (Rewrite /gs-intern-7k2x → /gs-intern.html).
+
+## NÄCHSTE SESSION (4) — Wiedereinstieg
+→ Diese Datei lesen. Offene Punkte unter „Offen für Session 4": Rapport→Vertrag-Kette,
+   Kampagnen-Lead-Attribution (utm_campaign), zeitraum-genaue Kosten/CPL, S1/S2-Datenquellen.
+   Architektur steht: Nav (`MEHR_VIEWS` + `go()`), `renderXxx()`-Muster, API-Actions im switch, Picker via `*_pickers`.
 
 ## Manuelle Aktionen für Emanuel
 1. **`scripts/master_cockpit_session1.sql`** im Supabase SQL Editor ausführen (CRM-Schreiben).
-2. **`scripts/master_cockpit_session2.sql`** im Supabase SQL Editor ausführen (Marketing/To-Dos/Margen-
-   Schreiben). Reihenfolge S1 → S2 (beide idempotent). Lesen/Dashboard geht auch ohne.
-3. Supabase Auth: Redirect-URL für Magic-Link auf `…/gs-intern-7k2x` zulassen (falls Magic-Login gewünscht).
-4. Login mit `emanuelgeorge0@gmail.com` (Master-UUID) testen → /gs-intern-7k2x.
+2. **`scripts/master_cockpit_session2.sql`** im Supabase SQL Editor ausführen (Marketing/To-Dos/Margen).
+3. **`scripts/master_cockpit_session3.sql`** im Supabase SQL Editor ausführen (Kampagnen + Marge.projekt_id).
+   Reihenfolge **S1 → S2 → S3** (alle idempotent). Lesen/Dashboard/Säulen funktionieren auch ohne.
+4. Supabase Auth: Redirect-URL für Magic-Link auf `…/gs-intern-7k2x` zulassen (falls Magic-Login gewünscht).
+5. Login mit `emanuelgeorge0@gmail.com` (Master-UUID) testen → /gs-intern-7k2x.
