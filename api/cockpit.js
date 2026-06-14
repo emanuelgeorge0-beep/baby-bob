@@ -77,11 +77,15 @@ export default async function handler(req, res) {
       case 'task_add':        return res.status(200).json(await addTask(req.body));
       case 'task_done':       return res.status(200).json(await taskDone(req.body.id));
       // ── Session 2: Marketing ──
-      case 'marketing':       return res.status(200).json(await getMarketing());
+      case 'marketing':       return res.status(200).json(await getMarketing(req.body));
       case 'mkt_kosten_set':  return res.status(200).json(await setKanalKosten(req.body));
       case 'mkt_content_add': return res.status(200).json(await addContent(req.body));
       case 'mkt_content_set': return res.status(200).json(await setContentStatus(req.body));
       case 'mkt_content_del': return res.status(200).json(await delContent(req.body.id));
+      // ── Session 3: Marketing-Kampagnen ──
+      case 'kampagne_add':    return res.status(200).json(await addKampagne(req.body));
+      case 'kampagne_update': return res.status(200).json(await updateKampagne(req.body));
+      case 'kampagne_del':    return res.status(200).json(await delKampagne(req.body.id));
       // ── Session 2: To-Dos ──
       case 'todos':           return res.status(200).json(await getTodos());
       case 'todo_add':        return res.status(200).json(await addTodo(req.body));
@@ -92,6 +96,9 @@ export default async function handler(req, res) {
       case 'marge_add':       return res.status(200).json(await addMarge(req.body));
       case 'marge_update':    return res.status(200).json(await updateMarge(req.body));
       case 'marge_del':       return res.status(200).json(await delMarge(req.body.id));
+      case 'marge_pickers':   return res.status(200).json(await getMargePickers());
+      // ── Session 3: 4 Säulen ──
+      case 'saeulen':         return res.status(200).json(await getSaeulen());
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -352,11 +359,25 @@ function fuState(dateStr, today) {
   return 'geplant';
 }
 
-// ── Marketing ──
-async function getMarketing() {
+// ── Marketing (mit optionalem Zeitraum-Filter: body.von / body.bis = YYYY-MM-DD) ──
+async function getMarketing(body) {
+  body = body || {};
+  const von = body.von || null, bis = body.bis || null;        // beide inklusiv
+  const hasRange = !!(von || bis);
+  // Lead-Datum im Zeitraum? (ohne Datum → nur außerhalb gefilterter Ansicht)
+  const leadInRange = (a) => {
+    if (!hasRange) return true;
+    const day = String(a.erstellt_am || '').slice(0, 10);
+    if (!day) return false;
+    if (von && day < von) return false;
+    if (bis && day > bis) return false;
+    return true;
+  };
+
   const { anfragen } = await loadCore();
   const agg = {}; // kanal → {leads, gewonnen}
   for (const a of anfragen) {
+    if (!leadInRange(a)) continue;
     const kn = kanalOf(a.quelle);
     if (!agg[kn]) agg[kn] = { leads: 0, gewonnen: 0 };
     agg[kn].leads++;
@@ -384,13 +405,73 @@ async function getMarketing() {
   let content = [];
   try { content = await sbGet('gs_mkt_content?select=*&order=datum.desc.nullslast'); } catch (_) {}
 
+  // ── Kampagnen (echte Objekte mit Laufzeit; Zeitraum = Überlappung [von,bis]) ──
+  let kampagnenRows = [];
+  try { kampagnenRows = await sbGet('gs_mkt_kampagnen?select=*&order=start_datum.desc.nullslast'); } catch (_) {}
+  const overlaps = (k) => {
+    if (!hasRange) return true;
+    const s = k.start_datum || null, e = k.end_datum || null;
+    if (bis && s && s > bis) return false;   // beginnt nach dem Fenster
+    if (von && e && e < von) return false;    // endet vor dem Fenster
+    return true;
+  };
+  const kampagnen = kampagnenRows.filter(overlaps).map((k) => ({
+    id: k.id, name: k.name, kanal: k.kanal || null,
+    budget: num(k.budget), kosten: num(k.kosten),
+    start_datum: k.start_datum || null, end_datum: k.end_datum || null,
+    status: k.status || 'geplant', notiz: k.notiz || null,
+  }));
+  const kampTotals = kampagnen.reduce((t, k) => ({
+    anzahl: t.anzahl + 1, budget: t.budget + k.budget, kosten: t.kosten + k.kosten,
+    aktiv: t.aktiv + (k.status === 'aktiv' ? 1 : 0),
+  }), { anzahl: 0, budget: 0, kosten: 0, aktiv: 0 });
+  kampTotals.budget = Math.round(kampTotals.budget);
+  kampTotals.kosten = Math.round(kampTotals.kosten);
+
   const totals = kanaele.reduce((t, k) => ({
     leads: t.leads + k.leads, gewonnen: t.gewonnen + k.gewonnen, kosten: t.kosten + k.kosten,
   }), { leads: 0, gewonnen: 0, kosten: 0 });
   totals.kosten = Math.round(totals.kosten);
   totals.cpl = totals.leads > 0 ? Math.round((totals.kosten / totals.leads) * 100) / 100 : 0;
 
-  return { kanaele, content, totals };
+  return { kanaele, content, totals, kampagnen, kampTotals, zeitraum: { von, bis } };
+}
+
+const KAMP_STATUS = ['geplant', 'aktiv', 'pausiert', 'beendet'];
+function kampKanal(v) {
+  const k = String(v || '').toLowerCase();
+  return (KANAELE.includes(k) || k === 'sonstige') ? k : null;
+}
+async function addKampagne(body) {
+  if (!body.name) throw new Error('name nötig');
+  const status = KAMP_STATUS.includes(body.status) ? body.status : 'geplant';
+  const row = await sbWrite('POST', 'gs_mkt_kampagnen', {
+    name: body.name, kanal: kampKanal(body.kanal),
+    budget: num(body.budget), kosten: num(body.kosten),
+    start_datum: body.start_datum || null, end_datum: body.end_datum || null,
+    status, notiz: body.notiz || null,
+  });
+  return { ok: true, kampagne: Array.isArray(row) ? row[0] : row };
+}
+async function updateKampagne(body) {
+  uuid(body.id);
+  const patch = {};
+  if (body.name !== undefined) { if (!body.name) throw new Error('name nötig'); patch.name = body.name; }
+  if (body.kanal !== undefined) patch.kanal = kampKanal(body.kanal);
+  if (body.budget !== undefined) patch.budget = num(body.budget);
+  if (body.kosten !== undefined) patch.kosten = num(body.kosten);
+  if (body.start_datum !== undefined) patch.start_datum = body.start_datum || null;
+  if (body.end_datum !== undefined) patch.end_datum = body.end_datum || null;
+  if (body.status !== undefined) { if (!KAMP_STATUS.includes(body.status)) throw new Error('Status'); patch.status = body.status; }
+  if (body.notiz !== undefined) patch.notiz = body.notiz || null;
+  if (!Object.keys(patch).length) return { ok: true };
+  await sbWrite('PATCH', `gs_mkt_kampagnen?id=eq.${body.id}`, patch, 'return=minimal');
+  return { ok: true };
+}
+async function delKampagne(id) {
+  uuid(id);
+  await sbWrite('DELETE', `gs_mkt_kampagnen?id=eq.${id}`, undefined, 'return=minimal');
+  return { ok: true };
 }
 
 async function setKanalKosten(body) {
@@ -467,13 +548,20 @@ async function delTodo(id) {
 async function getMargen() {
   let rows = [];
   try { rows = await sbGet('gs_margen?select=*&order=created_at.desc'); } catch (_) { return { margen: [], totals: { umsatz: 0, marge: 0, prozent: 0, einkauf: 0 } }; }
-  // Anfrage-Titel (optional) nachladen, falls verknüpft.
-  const ids = rows.map((r) => r.anfrage_id).filter(Boolean);
-  let titelById = {};
-  if (ids.length) {
+  // Anfrage-/Projekt-Titel (optional) nachladen, falls verknüpft.
+  const anfrageIds = rows.map((r) => r.anfrage_id).filter(Boolean);
+  const projektIds = rows.map((r) => r.projekt_id).filter(Boolean);
+  let titelById = {}, projektById = {};
+  if (anfrageIds.length) {
     try {
-      const anf = await sbGet(`gs_anfragen?id=in.(${ids.join(',')})&select=id,projekt_name`);
+      const anf = await sbGet(`gs_anfragen?id=in.(${anfrageIds.join(',')})&select=id,projekt_name`);
       for (const a of anf) titelById[a.id] = a.projekt_name;
+    } catch (_) {}
+  }
+  if (projektIds.length) {
+    try {
+      const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer`);
+      for (const p of pr) projektById[p.id] = [p.projektnummer, p.name].filter(Boolean).join(' · ');
     } catch (_) {}
   }
   let umsatz = 0, marge = 0, einkauf = 0;
@@ -481,8 +569,9 @@ async function getMargen() {
     const c = calcMarge(m);
     umsatz += c.umsatz; marge += c.marge; einkauf += c.einkauf;
     return {
-      id: m.id, titel: m.titel, anfrage_id: m.anfrage_id,
+      id: m.id, titel: m.titel, anfrage_id: m.anfrage_id, projekt_id: m.projekt_id || null,
       anfrage_titel: m.anfrage_id ? (titelById[m.anfrage_id] || null) : null,
+      projekt_titel: m.projekt_id ? (projektById[m.projekt_id] || null) : null,
       einkauf: c.einkauf, stundensatz: num(m.stundensatz), stunden: num(m.stunden),
       umsatz_manuell: m.umsatz_manuell, umsatz: c.umsatz, marge: c.marge, prozent: c.prozent,
       notiz: m.notiz,
@@ -501,7 +590,11 @@ async function addMarge(body) {
     stunden: num(body.stunden), notiz: body.notiz || null,
     umsatz_manuell: (body.umsatz_manuell === '' || body.umsatz_manuell == null) ? null : num(body.umsatz_manuell),
   };
+  // anfrage_id: Spalte existiert seit Session 2 → set/clear möglich.
   if (body.anfrage_id) payload.anfrage_id = uuid(body.anfrage_id);
+  // projekt_id: Spalte existiert erst nach Session 3 → nur schreiben, wenn gesetzt
+  // (so bleibt das Anlegen ohne Projekt auch VOR der S3-Migration funktionsfähig).
+  if (body.projekt_id) payload.projekt_id = uuid(body.projekt_id);
   const row = await sbWrite('POST', 'gs_margen', payload);
   return { ok: true, marge: Array.isArray(row) ? row[0] : row };
 }
@@ -511,12 +604,137 @@ async function updateMarge(body) {
   ['titel', 'notiz'].forEach((k) => { if (body[k] !== undefined) patch[k] = body[k] || null; });
   ['einkauf', 'stundensatz', 'stunden'].forEach((k) => { if (body[k] !== undefined) patch[k] = num(body[k]); });
   if (body.umsatz_manuell !== undefined) patch.umsatz_manuell = (body.umsatz_manuell === '' || body.umsatz_manuell == null) ? null : num(body.umsatz_manuell);
+  // anfrage_id: voll (Spalte seit S2) — '' → null entkoppelt.
+  if (body.anfrage_id !== undefined) patch.anfrage_id = body.anfrage_id ? uuid(body.anfrage_id) : null;
+  // projekt_id: nur schreiben, wenn ein Projekt gewählt wurde (Spalte erst ab S3).
+  // Verknüpfen funktioniert nach S3; das Entkoppeln eines Projekts ebenso (leer → null),
+  // aber nur falls die Spalte existiert — sonst meldet das UI "Migration nötig?".
+  if (body.projekt_id !== undefined && body.projekt_id !== '') patch.projekt_id = uuid(body.projekt_id);
+  else if (body.projekt_id_clear) patch.projekt_id = null;
   if (!Object.keys(patch).length) return { ok: true };
   await sbWrite('PATCH', `gs_margen?id=eq.${body.id}`, patch, 'return=minimal');
   return { ok: true };
+}
+
+// Picker-Listen für die Marge-Verknüpfung (Lead → Projekt → Marge).
+async function getMargePickers() {
+  const { anfragen, kundenById } = await loadCore();
+  const leadItems = anfragen.map((a) => {
+    const k = kundenById[a.kunde_id] || {};
+    const label = [a.projekt_name || a.bereich || 'Anfrage', k.firma || k.kontaktperson]
+      .filter(Boolean).join(' · ');
+    return { id: a.id, label, kunde_id: a.kunde_id || null };
+  });
+  let projektItems = [];
+  try {
+    const pr = await sbGet('gs_projekte?select=id,name,projektnummer,status&order=created_at.desc');
+    projektItems = pr.map((p) => ({
+      id: p.id, label: [p.projektnummer, p.name].filter(Boolean).join(' · ') || 'Projekt',
+      status: p.status || null,
+    }));
+  } catch (_) {}
+  return { anfragen: leadItems, projekte: projektItems };
 }
 async function delMarge(id) {
   uuid(id);
   await sbWrite('DELETE', `gs_margen?id=eq.${id}`, undefined, 'return=minimal');
   return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SESSION 3 — 4 Säulen (read-only Aggregation vorhandener Daten)
+//  S1 Baby BOB · S2 Marketplace · S3 George Solutions · S4 Facility
+//  Kennzahlen NUR aus real vorhandenen Quellen; fehlende Tabellen → graceful.
+// ═══════════════════════════════════════════════════════════════════════════
+async function getSaeulen() {
+  const { anfragen, kunden } = await loadCore();
+
+  // Optionale Quellen — alle resilient (Tabelle evtl. (noch) nicht da).
+  let projekte = [], techniker = [], margen = [];
+  try { projekte = await sbGet('gs_projekte?select=id,status,bereich,stundensatz'); } catch (_) {}
+  try { techniker = await sbGet('gs_techniker?select=verfuegbar,rating'); } catch (_) {}
+  try { margen = await sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell'); } catch (_) {}
+
+  // ── Lead-Kennzahlen (S1 App-Anteil, S3 Funnel, S4 Umsetzung) ──
+  let appLeads = 0, gewonnen = 0, offen = 0, pipeline = 0;
+  for (const a of anfragen) {
+    if (kanalOf(a.quelle) === 'app') appLeads++;
+    const st = stufeOf(a);
+    if (st === 'gewonnen') gewonnen++;
+    if (st === 'neu' || st === 'kontaktiert' || st === 'angebot') offen++;
+    if (st === 'kontaktiert' || st === 'angebot') pipeline += parsePreis(a.tarif_preis);
+  }
+  const leadsTotal = anfragen.length;
+  const appAnteil = leadsTotal > 0 ? Math.round((appLeads / leadsTotal) * 100) : 0;
+
+  // ── Marge-Summe (nur falls migriert) ──
+  let umsatzSum = 0, margeSum = 0;
+  for (const m of margen) { const c = calcMarge(m); umsatzSum += c.umsatz; margeSum += c.marge; }
+  const margenDa = margen.length > 0;
+
+  // ── Marketplace / Facility (Techniker, Projekte) ──
+  const techGesamt = techniker.length;
+  const techFrei = techniker.filter((t) => t.verfuegbar === true).length;
+  const ratings = techniker.map((t) => Number(t.rating)).filter((n) => isFinite(n) && n > 0);
+  const ratingAvg = ratings.length ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : 0;
+  const projGesamt = projekte.length;
+  const projAktiv = projekte.filter((p) => String(p.status || '').toLowerCase() === 'aktiv').length;
+
+  // status: 'aktiv' (läuft, Daten da) · 'aufbau' (existiert, im Aufbau) · 'geplant'
+  const saeulen = [
+    {
+      key: 'baby-bob', nr: 'S1', name: 'Baby BOB', tagline: 'B2C · App & Voice-Assistent',
+      status: 'aktiv',
+      kennzahlen: [
+        { label: 'Leads über App', value: appLeads, cls: appLeads ? 'gold' : '' },
+        { label: 'App-Anteil', value: appAnteil + '%', cls: '' },
+        { label: 'Leads gesamt', value: leadsTotal, cls: '' },
+      ],
+      hinweis: 'App-/Voice-Nutzung (Scans, Sessions) wird in der Baby-BOB-App gemessen — separate Datenquelle.',
+    },
+    {
+      key: 'marketplace', nr: 'S2', name: 'Marketplace', tagline: 'Handwerker-Netzwerk · Vermittlung',
+      status: techGesamt ? 'aufbau' : 'geplant',
+      kennzahlen: [
+        { label: 'Handwerker im Netz', value: techGesamt, cls: techGesamt ? 'gold' : '' },
+        { label: 'Verfügbar', value: techFrei, cls: techFrei ? 'ok' : '' },
+        { label: 'Ø Bewertung', value: ratingAvg ? ratingAvg.toFixed(1) + ' ★' : '—', cls: '' },
+      ],
+      hinweis: 'Buchungen & Vermittlungs-Quote folgen, sobald der Marktplatz live schaltet.',
+    },
+    {
+      key: 'george-solutions', nr: 'S3', name: 'George Solutions', tagline: 'B2B · Leads, CRM, Verkauf',
+      status: 'aktiv',
+      kennzahlen: [
+        { label: 'Leads gesamt', value: leadsTotal, cls: 'gold' },
+        { label: 'Offen', value: offen, cls: offen ? 'warn' : '' },
+        { label: 'Gewonnen', value: gewonnen, cls: gewonnen ? 'ok' : '' },
+        { label: 'Kunden', value: kunden.length, cls: '' },
+        { label: 'Pipeline (gesch.)', value: 'CHF ' + Math.round(pipeline).toLocaleString('de-CH'), cls: '' },
+        margenDa
+          ? { label: 'Marge gesamt', value: 'CHF ' + Math.round(margeSum).toLocaleString('de-CH'), cls: margeSum >= 0 ? 'ok' : 'bad' }
+          : { label: 'Marge gesamt', value: '—', cls: '' },
+      ],
+      hinweis: margenDa ? null : 'Margen-Modul noch nicht migriert (Session 2 SQL).',
+    },
+    {
+      key: 'facility', nr: 'S4', name: 'Facility', tagline: 'Facility Management · Projekte & Einsatz',
+      status: projGesamt ? 'aktiv' : 'aufbau',
+      kennzahlen: [
+        { label: 'Aktive Projekte', value: projAktiv, cls: projAktiv ? 'gold' : '' },
+        { label: 'Projekte gesamt', value: projGesamt, cls: '' },
+        { label: 'Gewonnene Aufträge', value: gewonnen, cls: gewonnen ? 'ok' : '' },
+        { label: 'Techniker verfügbar', value: techFrei + ' / ' + techGesamt, cls: '' },
+      ],
+      hinweis: null,
+    },
+  ];
+
+  // Gesamt-Header
+  const summary = {
+    aktiv: saeulen.filter((s) => s.status === 'aktiv').length,
+    saeulen: saeulen.length,
+    leadsTotal, kundenTotal: kunden.length, projAktiv, techFrei, techGesamt,
+  };
+  return { saeulen, summary };
 }
