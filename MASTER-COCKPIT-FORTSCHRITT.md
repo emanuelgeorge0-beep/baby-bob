@@ -272,6 +272,33 @@
 > 3. **Für Magic-Link (optional):** Supabase → Authentication → URL Configuration → **Redirect URLs**
 >    → `https://baby-bob.vercel.app/gs-intern-7k2x` eintragen. Für reinen Passwort-Login NICHT nötig.
 
+### ✅ Session 10 — Jarvis-Stimme = Baby BOB (ElevenLabs only) + manueller Stopp
+- [x] **Ursache der „schlechten Stimme" gefunden:** Jarvis rief zwar schon `/api/voice` auf (= Baby-BOB-
+      Stimme), kippte aber bei iOS-**Autoplay-Block** sofort auf die **Browser-Stimme** (`SpeechSynthesis`) —
+      v. a. im Sprach-Dialog (Antwort kommt aus dem STT-Callback, also ohne Tap-Geste). Baby BOB bleibt
+      dort robust. Live verifiziert: Prod-`/api/voice` liefert echtes ElevenLabs-Audio (HTTP 200, audio/mpeg,
+      ~40 KB), `ELEVENLABS_API_KEY` ist gesetzt → der Key war NIE das Problem.
+- [x] **Fix Stimme:** `SpeechSynthesis`-Fallback **komplett entfernt** (grep `speechSynthesis` = 0). Jarvis
+      spricht nur noch über `/api/voice` — **identischer Pfad/Voice-ID/Model wie `bobSpeak()` in app.html**
+      (ElevenLabs, `eleven_multilingual_v2`, voice_settings serverseitig). EIN persistentes Audio-Element,
+      im Tap-Kontext per stillem WAV **entsperrt** → Sprachantwort spielt auch ohne direkte Geste zuverlässig.
+      Bei Autoplay-Block: goldener **„🔊 Antippen zum Hören"**-Button (spielt dieselbe ElevenLabs-Aufnahme) —
+      NIE eine Roboterstimme. Bei `/api/voice`-Ausfall: nur Hinweis, Text steht ohnehin da.
+- [x] **Fix Mic/Spracherkennung:** weiterhin **manueller Stopp** (Tippen zum Starten, Tippen zum Stoppen),
+      **KEIN Auto-Cutoff** → der Anfang wird nie abgeschnitten. Klarer **STOP-Button** während der Aufnahme
+      (Mic-Icon → **⏹**, rot pulsierend, Status „● Ich höre zu… — zum Stoppen tippen"). STT unverändert
+      **scribe_v1** via `/api/voice` (wie Baby BOB).
+- [x] **Stille-Erkennung vorbereitet, DEFAULT AUS:** `_jSilenceAuto=false` + `armSilenceDetection()`
+      (WebAudio-AnalyserNode-RMS-Gerüst, greift erst nach Mindest-Sprechzeit → schneidet den Anfang nie ab).
+      Zum Nachrüsten nur Flag auf `true`.
+- [x] **Getestet:** Headless-Funktionstest (Chip → Antwort → Wiedergabe): `speechSynthesis benutzt=false`,
+      `audio.src=blob:` (ElevenLabs), `play()` aufgerufen, Status „Jarvis spricht". Prod nach Deploy: neuer
+      Code live (`speechSynthesis`=0, `⏹` vorhanden, `/api/voice` aktiv). `outputDirectory "."` unberührt.
+- [x] **Hinweis Voice-ID:** Baby BOB & Jarvis nutzen real `/api/voice` → Voice-ID `nPczCjzI2devNBz1zQrb`
+      (echter ElevenLabs „Brian") + `eleven_multilingual_v2`. Die genannte ID `Gubgw9l4dtIoQA9YZHgx` steht
+      NICHT im Code (ähnelt dem ungenutzten Legacy-`api/bob-speak.js` `nGgbw9l4dtIoQA9YZHgx`). Soll bewusst
+      eine ANDERE Stimme genutzt werden, ist es eine 1-Zeilen-Änderung in `api/voice.js` (gilt dann für beide).
+
 ## 20x Bug-/Mobile-Analyse (Session 8 · Reel-Finish Command-Center) — Ergebnis
 1. **Titel nie abgeschnitten:** SVG-`textLength`+`preserveAspectRatio` skaliert „MASTER GEORGE" exakt in
    `width:min(100%,360px)` → garantiert randlos auf 320–768 px. Render auf 500 px bestätigt (textW<svgW<Hero).
