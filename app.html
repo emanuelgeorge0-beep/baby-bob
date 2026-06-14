@@ -3243,7 +3243,10 @@ function bobIsGsSilent(){
   return __gsSilentCache;
 }
 function bobShowUnlockBtn(){
-  if(bobIsGsSilent()) return;        // GS-Kontext: niemals "Ton aktivieren" zeigen
+  // Single source of truth: der "Ton aktivieren"-Button erscheint NUR dort, wo Voice
+  // überhaupt erlaubt ist (Baby-BOB-Scanner bzw. künftiger Partner/Techniker-Assistent).
+  // Im GS-Kundenflow (und Admin/Login/Techniker) ist Voice aus → Button nie sichtbar.
+  if(typeof bobVoiceAllowed==='function' && !bobVoiceAllowed()) return;
   var b=document.getElementById('audio-unlock-btn'); if(b) b.style.display='flex';
   if(isInAppBrowser()){ var h=document.getElementById('inapp-hint'); if(h) h.style.display='block'; }
 }
@@ -3395,19 +3398,22 @@ function _numStr(m){
   return w;
 }
 var __bobSpeakSeq=0;
-// Voice is bound to the FUNCTION (BOB scanner: greeting + diagnosis), NOT the account type.
-// Everywhere else (admin, all techniker + partner views) BOB is completely muted.
-// FUTURE: when the in-app AI assistant ships (techniker/partner), set
-// window.__bobAssistantActive=true while it's open — the assistant IS BOB and may speak,
-// without weakening the mute rule anywhere else.
+// ── Zentrale Voice-Erlaubnis (single source of truth) ──────────────────────────
+// Voice gehört AUSSCHLIESSLICH in den Baby-BOB-Scanner (Begrüßung + Diagnose).
+// Der George-Solutions-Kundenflow ist komplett stumm: keine TTS, kein "Ton aktivieren".
+// Ebenso Admin / Login / Techniker-Views.
+// RE-ENABLE (Partner/Techniker-Sprachassistent, später): bobSetAssistantVoice(true)
+// schaltet Voice gezielt frei (window.__bobAssistantActive). Solange dieser Flag aus ist,
+// bleibt der GS-Flow garantiert stumm – kein anderer Codepfad kann ihn sprechen lassen.
 function bobVoiceAllowed(){
-  if(bobIsGsSilent()) return false;                            // GS-Einstieg: komplett stumm
-  if(window.__bobAssistantActive) return true;                 // reserved for the later assistant
-  if(typeof appMode!=='undefined'&&appMode!=='bob') return false;
-  // any non-scanner surface active → muted
+  if(window.__bobAssistantActive) return true;                 // expliziter Re-Enable-Hook (Rollen-/Modus-Flag)
+  if(bobIsGsSilent()) return false;                            // GS-Einstieg (?gs=1): komplett stumm
+  if(typeof appMode!=='undefined'&&appMode!=='bob') return false;  // GS/Admin/Techniker/Login → stumm
   if(document.querySelector('.gs-screen.active,.admin-screen.active,.tech-screen.active,.login-screen.active')) return false;
-  return !!document.querySelector('.screen.active'); // a BOB scanner screen must be active
+  return !!document.querySelector('.screen.active'); // nur bei aktivem Baby-BOB-Scanner-Screen
 }
+// Re-Enablement-API: Voice gezielt für einen späteren Partner/Techniker-Assistenten ein-/ausschalten.
+function bobSetAssistantVoice(on){ window.__bobAssistantActive=!!on; if(!on){ try{ if(typeof bobStopSpeak==='function') bobStopSpeak(); }catch(e){} } }
 function bobSpeak(rawText,opts){
   opts=opts||{};
   if(!rawText) return;
@@ -3581,6 +3587,12 @@ var gsSelectedTarifPrice=null;
 function setMode(mode){
   if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop voice on mode switch
   appMode=mode;
+  // Voice gehört ausschliesslich in den Baby-BOB-Scanner. Beim Wechsel in GS (oder
+  // jeden Nicht-BOB-Modus) Tonausgabe stoppen und den "Ton aktivieren"-Button verstecken.
+  if(mode!=='bob'){
+    if(typeof bobHideUnlockBtn==='function') bobHideUnlockBtn();
+    var __ih=document.getElementById('inapp-hint'); if(__ih) __ih.style.display='none';
+  }
   var bobScreens=['home','scan','result','contact','success','feedback','about'];
   var gsScreens=['gs-home','gs-erfassung','gs-datenblatt','gs-tarif','gs-techniker','gs-verfuegbarkeit','gs-bestaetigung','gs-buchung'];
 
