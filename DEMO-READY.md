@@ -96,15 +96,22 @@ Im Projektdatenblatt: Sektion **„Materialliste senden"** → Empfänger-E-Mail
   (Secret: Vercel → Projekt baby-bob → Settings → Deployment Protection →
   Protection Bypass for Automation.)
 
-## SCHRITT 5 — WhatsApp-Button ✅
+## SCHRITT 5 — WhatsApp-Button ✅ (final)
 
-Im Projektdatenblatt neben dem Mail-Button: **„💬 Per WhatsApp öffnen (Text)"**.
+Im Projektdatenblatt neben dem Mail-Button:
+**„💬 Per WhatsApp teilen (Empfänger frei wählbar)"**.
 
-- Öffnet `https://wa.me/<NR>?text=<Materialliste als Text>` (Positionen vorausgefüllt).
-- **Kein Dateianhang** über WhatsApp (technisch nicht möglich) — nur Öffnen mit Text.
-  Dateiversand (PDF) bleibt bei der E-Mail.
-- Solange die Platzhalternummer drinsteht, zeigt der Button einen Hinweis-Toast statt zu
-  öffnen (kein Öffnen mit kaputter Nummer).
+- Öffnet `https://api.whatsapp.com/send?text=<Materialliste als Text>` **OHNE festen
+  Empfänger** → WhatsApp zeigt die Kontaktauswahl, der Nutzer wählt selbst (Projektleiter,
+  Kollege, Gruppe). Funktioniert am Handy (iOS + Android).
+- Material ist als Text vorausgefüllt (Projekt + Projektnummer, alle Positionen mit Menge).
+- **Kein automatischer Versand** (technisch unmöglich) — der Nutzer drückt in WhatsApp
+  selbst „Senden".
+- **Kein Dateianhang** über WhatsApp (technisch nicht möglich); Dateiversand (PDF) bleibt
+  bei der E-Mail.
+- **`GS_WHATSAPP_NR='41764829428'`** ist als optionale GS-Schnellkontakt-/Support-Nummer
+  hinterlegt (für einen evtl. „Kontakt GS"-Button). Der Materiallisten-Versand nutzt diese
+  Nummer bewusst NICHT (freie Empfängerwahl).
 
 ---
 
@@ -121,19 +128,10 @@ E-Mail + WhatsApp → „← Zurück zum Admin"-Button.**
 ## Manuelle Schritte für Emanuel
 
 1. ✅ E2E-Mailtest 20× grün ausgeführt (siehe Schritt 4). Re-Run jederzeit möglich.
-2. **WhatsApp-Nummer eintragen** (siehe unten) — sonst zeigt der Button nur den Hinweis.
+2. ✅ WhatsApp final eingebaut — Materiallisten-Versand mit freier Empfängerwahl;
+   keine Nummer mehr nötig. Support-Nummer `41764829428` ist hinterlegt.
 3. `RESEND_API_KEY` ist in Vercel für **production + preview** gesetzt (geprüft). ✓
 4. `outputDirectory: "."` in `vercel.json` ist unverändert erhalten geblieben. ✓
 5. Wenn alles im Browser passt: `fix/kritische-bugs` nach Production mergen/deployen.
-
-## WhatsApp-Nummer eintragen
-
-In **`app.html`** die Konstante setzen (klar markiert mit ⚠️, direkt über
-`function pbIsoWeek`):
-
-```js
-var GS_WHATSAPP_NR='41XXXXXXXXX';   // ← echte Nummer, Ländercode + Nummer, OHNE "+",
-                                    //    OHNE Leerzeichen. Beispiel Schweiz: 41791234567
-```
 
 Nur dieser eine Wert muss geändert werden; der WhatsApp-Button nutzt ihn automatisch.

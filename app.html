@@ -5320,9 +5320,10 @@ function loadProjekte(){
 // ── ADMIN: PROJEKTDATENBLATT (Detailansicht) ──
 var pbProjekt=null,pbAllTechs=[],pbPartners=[],pbAssigned=[],pbMateriallisten=[];
 var PB_STATUS=['aktiv','laufend','pausiert','abgeschlossen'];
-// ⚠️⚠️ ECHTE FIRMEN-WHATSAPP-NUMMER HIER EINTRAGEN ⚠️⚠️
-// Format: Ländercode + Nummer, OHNE "+", OHNE Leerzeichen/Schrägstriche. Beispiel: 41791234567
-var GS_WHATSAPP_NR='41XXXXXXXXX';
+// Optionale GS-Schnellkontakt-/Support-WhatsApp-Nummer (für einen evtl. "Kontakt GS"-Button).
+// Format: Ländercode + Nummer, OHNE "+", OHNE Leerzeichen. Hinweis: Der MATERIALLISTEN-
+// WhatsApp-Versand nutzt diese Nummer NICHT — dort wählt der Nutzer den Empfänger frei.
+var GS_WHATSAPP_NR='41764829428';
 // ISO-Kalenderwoche (für Rapport-Status "läuft noch in dieser KW").
 function pbIsoWeek(d){
   var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
@@ -5427,9 +5428,9 @@ function pbRender(p,rapporte,materiallisten){
       +'<div class="ob-lbl">Notiz (optional)</div>'
       +'<input class="login-inp" id="pb-ml-notiz" type="text" placeholder="z.B. Bitte bis Freitag bestellen"/>'
       +'<button class="admin-add-btn" style="margin:12px 0 0;width:100%;" onclick="pbSendMaterialMail()">📧 Materialliste per E-Mail senden</button>'
-      +'<button type="button" style="margin:8px 0 0;width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;min-height:46px;font-weight:800;font-size:14px;cursor:pointer;" onclick="pbWhatsAppMaterial()">💬 Per WhatsApp öffnen (Text)</button>'
+      +'<button type="button" style="margin:8px 0 0;width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;min-height:46px;font-weight:800;font-size:14px;cursor:pointer;" onclick="pbWhatsAppMaterial()">💬 Per WhatsApp teilen (Empfänger frei wählbar)</button>'
       +'<div class="login-msg" id="pb-ml-msg"></div>'
-      +'<div style="font-size:11px;color:rgba(232,237,245,0.42);margin-top:8px;line-height:1.5;">E-Mail via Resend (Absender info@george-solutions.ch), Material sauber formatiert + PDF-Anhang. WhatsApp öffnet nur mit vorausgefülltem Text – ein Dateianhang ist über WhatsApp technisch nicht möglich.</div>'
+      +'<div style="font-size:11px;color:rgba(232,237,245,0.42);margin-top:8px;line-height:1.5;">E-Mail via Resend (Absender info@george-solutions.ch), Material sauber formatiert + PDF-Anhang. WhatsApp öffnet mit vorausgefülltem Text und OHNE festen Empfänger – du wählst in WhatsApp selbst aus (Projektleiter, Kollege, Gruppe) und drückst dort selbst Senden. Ein Dateianhang ist über WhatsApp technisch nicht möglich.</div>'
     +'</div>'
     +'<div class="pb-sec"><div class="pb-sec-t">Projekt-Notiz</div><textarea class="login-inp" id="pb-notiz" rows="3" placeholder="Interne Notiz zum Projekt…">'+gsEsc(p.notiz||'')+'</textarea></div>'
     +'<button class="admin-add-btn" style="margin:0 18px;width:calc(100% - 36px);" onclick="pbSave()">💾 Änderungen speichern</button>'
@@ -5471,14 +5472,16 @@ function pbSendMaterialMail(){
     else setMsg('pb-ml-msg',(d&&(d.error||d.mail_error))||'E-Mail konnte nicht gesendet werden','err');
   }).catch(function(){if(btn){btn.disabled=false;btn.textContent='📧 Materialliste per E-Mail senden';}setMsg('pb-ml-msg','Verbindungsfehler','err');});
 }
-// Schritt 5: WhatsApp mit vorausgefülltem Text (KEIN Dateianhang – technisch nicht möglich).
+// Schritt 5: WhatsApp mit vorausgefülltem Text, OHNE festen Empfänger – der Nutzer wählt
+// in WhatsApp selbst aus (Projektleiter / Kollege / Gruppe). KEIN Dateianhang (technisch
+// nicht möglich) und KEIN automatischer Versand – im WhatsApp drückt der Nutzer selbst Senden.
+// Empfängerlose Share-URL (api.whatsapp.com/send?text=) öffnet die Kontaktauswahl auf iOS+Android.
 function pbWhatsAppMaterial(){
-  if(GS_WHATSAPP_NR.indexOf('X')>-1){toast('⚠️ WhatsApp-Nummer noch nicht hinterlegt (GS_WHATSAPP_NR in app.html)');return;}
   var positionen=pbCollectPositionen();
   var lines=positionen.map(function(p){var mq=[p.menge,p.einheit].filter(Boolean).join(' ');return '• '+p.position+(mq?(' – '+mq):'');});
   var txt='Materialliste – '+((pbProjekt&&pbProjekt.name)||'Projekt')+((pbProjekt&&pbProjekt.projektnummer)?(' ('+pbProjekt.projektnummer+')'):'')
     +'\n'+(lines.join('\n')||'(keine Positionen)')+'\n\nGeorge Solutions';
-  window.open('https://wa.me/'+encodeURIComponent(GS_WHATSAPP_NR)+'?text='+encodeURIComponent(txt),'_blank');
+  window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(txt),'_blank');
 }
 function pbToggleTech(uid){
   var i=pbAssigned.indexOf(uid);
