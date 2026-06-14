@@ -386,7 +386,9 @@ button:active{transform:scale(0.97);}
 .gs-badge-hdr{background:rgba(74,158,255,0.12);border:1px solid rgba(74,158,255,0.3);color:#4a9eff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:20px;}
 
 /* GS Nav Header (sub-screens) */
-.gs-nav{display:flex;align-items:center;padding:52px 18px 0;gap:10px;}
+.gs-nav{display:flex;align-items:center;padding:52px 18px 0;gap:10px;flex-wrap:wrap;}
+/* Bug 1: Sprachumschalter auf JEDEM GS-Flow-Screen – eigene Zeile unter der Nav, damit nichts gequetscht wird. */
+.gs-nav-lang{flex-basis:100%;justify-content:center;margin-top:8px;}
 .gs-back-btn{width:38px;height:38px;min-width:38px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;color:#e8edf5;}
 .gs-nav-tit{font-family:'Syne',sans-serif;font-size:17px;font-weight:800;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .gs-nav-logo{height:20px;width:auto;flex-shrink:0;}
@@ -1552,6 +1554,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_erfassung">Projekterfassung</div>
     <div class="gs-step-chip">1 / 6</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" id="gp1" style="width:16%"></div></div>
   <div class="gs-aktion" style="margin-top:14px;">
@@ -1604,6 +1607,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_datenblatt">Projektdatenblatt</div>
     <div class="gs-step-chip">2 / 6</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:33%"></div></div>
   <div class="gs-result-card">
@@ -1637,6 +1641,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_tarif">Tarif-Auswahl</div>
     <div class="gs-step-chip">3 / 6</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:50%"></div></div>
   <div class="gs-ai-rec" id="gs-tarif-ai-rec">🤖 KI-Empfehlung wird geladen...</div>
@@ -1669,6 +1674,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_team">Unser Team</div>
     <div class="gs-step-chip">4 / 7</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:57%"></div></div>
   <!-- Simulierte Karte (CSS/SVG – keine Google-Maps-API; echte Integration folgt später) -->
@@ -1734,6 +1740,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_kontakt">Kontakt & Verfügbarkeit</div>
     <div class="gs-step-chip">5 / 7</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:71%"></div></div>
   <div class="gs-form">
@@ -1787,6 +1794,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <img class="gs-nav-logo" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
     <div class="gs-nav-tit" data-i18n="gsf_nav_bestaet">Anfrage bestätigen</div>
     <div class="gs-step-chip">6 / 7</div>
+    <div class="lang-switch gs-nav-lang" role="radiogroup" aria-label="Sprache wählen"></div>
   </div>
   <div class="gs-prog-wrap"><div class="gs-prog-bar" style="width:86%"></div></div>
   <div style="padding:14px 18px 0;font-size:13px;color:rgba(232,237,245,0.5);" data-i18n="gsf_bestaet_intro">Bitte prüfen Sie Ihre Anfrage vor dem Absenden:</div>
@@ -3142,14 +3150,14 @@ function toggleVoice(){
 function bobResultSpeech(r){
   if(!r) return '';
   var L=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
-  function T(de,es,en){ return L==='es'?es:(L==='en'?en:de); }
+  function T(o){ return o[L]||o.de; }
   var p=[];
-  if(r.notfall) p.push(T('Achtung, Notfall.','Atención, urgencia.','Attention, emergency.'));
+  if(r.notfall) p.push(T({de:'Achtung, Notfall.',es:'Atención, urgencia.',en:'Attention, emergency.',fr:'Attention, urgence.',it:'Attenzione, emergenza.'}));
   var prob=r.erkannt_als||r.titel;
   if(prob) p.push(String(prob).trim().replace(/[.\s]+$/,'')+'.');
-  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') p.push(T('Empfehlung: ','Recomendación: ','Recommendation: ')+r.fachmann+'.');
+  if(r.fachmann&&r.fachmann!=='Noch nicht bestimmbar') p.push(T({de:'Empfehlung: ',es:'Recomendación: ',en:'Recommendation: ',fr:'Recommandation : ',it:'Raccomandazione: '})+r.fachmann+'.');
   var hasKost=r.kosten&&['CHF --','n/a','–','CHF –','-'].indexOf(r.kosten)===-1;
-  if(hasKost) p.push(T('Kosten etwa ','Coste aproximado ','Cost approximately ')+r.kosten+'.');
+  if(hasKost) p.push(T({de:'Kosten etwa ',es:'Coste aproximado ',en:'Cost approximately ',fr:'Coût environ ',it:'Costo circa '})+r.kosten+'.');
   return p.join(' ');
 }
 // JARVIS-style voice: deep, calm, confident male. British-English preference.
@@ -3309,6 +3317,8 @@ function bobGreetingText(){
   var l=(typeof bobLang!=='undefined'&&bobLang)?bobLang:'de';
   if(l==='es') return 'Hola, me llamo Bob. Te ayudo con cualquier problema, ya sea de oficios o de belleza. ¿Cómo puedo ayudarte?';
   if(l==='en') return 'Hey, my name is Bob! I help you with any problem, whether trades or beauty. How can I help you?';
+  if(l==='fr') return 'Bonjour, je m\'appelle Bob. Je t\'aide pour tout problème, qu\'il s\'agisse d\'artisanat ou de beauté. Comment puis-je t\'aider ?';
+  if(l==='it') return 'Ciao, mi chiamo Bob. Ti aiuto con qualsiasi problema, che sia di artigianato o di bellezza. Come posso aiutarti?';
   return 'Hey, mein Name ist Bob! Ich helfe dir bei jedem Problem – egal ob Handwerk oder Beauty. Wie kann ich dir helfen?';
 }
 // Greeting once per page load (guarded against fast-reload double / overlapping triggers).
@@ -4086,7 +4096,7 @@ function gsApplyTeamToData(){
 function gsLoadTechniker(){
   var list=document.getElementById('gs-tech-list');
   if(gsTechniker.length){gsRenderTechniker();return;}
-  if(list) list.innerHTML='<div class="gs-tech-empty" id="gs-tech-loading">Techniker werden geladen…</div>';
+  if(list) list.innerHTML='<div class="gs-tech-empty" id="gs-tech-loading">'+gsEsc(bbTr('gs_tech_loading'))+'</div>';
   var bereich=encodeURIComponent(gsData.bereich||'');
   fetch('/api/techniker'+(bereich?('?bereich='+bereich):''))
     .then(function(r){return r.json();})
@@ -4099,7 +4109,7 @@ function gsLoadTechniker(){
       gsRenderTechniker();
     })
     .catch(function(){
-      if(list) list.innerHTML='<div class="gs-tech-empty">Techniker konnten nicht geladen werden. Sie können trotzdem fortfahren – das Team wird zugeteilt.</div>';
+      if(list) list.innerHTML='<div class="gs-tech-empty">'+gsEsc(bbTr('gsf_dyn_load_err'))+'</div>';
     });
 }
 
@@ -4109,9 +4119,9 @@ function gsFmtDate(iso){
   return p.length===3?(p[2]+'.'+p[1]+'.'+p[0]):iso;
 }
 function gsAgo(ts){
-  if(!ts)return 'gerade eben';
+  if(!ts)return bbTr('gsf_dyn_just_now');
   var m=Math.floor((Date.now()-ts)/60000);
-  return m<=0?'gerade eben':('vor '+m+' Min');
+  return m<=0?bbTr('gsf_dyn_just_now'):bbTr('gsf_dyn_min_ago').replace('%n',m);
 }
 
 // ── Simulierte Karte: Geo-Koordinaten (% auf der Schweiz-Silhouette) ──
@@ -4192,7 +4202,7 @@ function gsRenderMap(){
   if(gsNearXY){
     html+='<div class="gs-map-pin you" style="left:'+gsClamp(gsNearXY[0]).toFixed(1)+'%;top:'+gsClampY(gsNearXY[1]).toFixed(1)+'%">'
       +'<div class="gs-map-pin-bub"><span class="gs-map-pin-em">📍</span></div>'
-      +'<div class="gs-map-pin-lbl">Sie</div></div>';
+      +'<div class="gs-map-pin-lbl">'+gsEsc(bbTr('gsf_dyn_you'))+'</div></div>';
   }
   pins.innerHTML=html;
 }
@@ -4211,11 +4221,11 @@ function gsTechCardHtml(t){
     return '<span class="gs-tech-tag'+on+'">'+gsEsc(s)+'</span>';
   }).join('');
   var rating=t.rating!=null?('★ '+Number(t.rating).toFixed(1)):'';
-  var years=t.years_experience!=null?(t.years_experience+' J. Erfahrung'):'';
+  var years=t.years_experience!=null?(t.years_experience+' '+bbTr('gsf_dyn_years')):'';
   var loc=t.location?('📍 '+gsEsc(t.location)):'';
   var meta=[years,loc].filter(Boolean).map(function(m){return '<span>'+m+'</span>';}).join('');
-  var statusLine=avail?'<span class="gs-tech-avail"><span class="gs-tech-dot live"></span>Verfügbar</span>':'';
-  var req=(avail&&gsTechReq[t.id])?'<span class="gs-tech-req-badge">🔥 Gerade angefragt</span>':'';
+  var statusLine=avail?'<span class="gs-tech-avail"><span class="gs-tech-dot live"></span>'+gsEsc(bbTr('gsf_dyn_available'))+'</span>':'';
+  var req=(avail&&gsTechReq[t.id])?'<span class="gs-tech-req-badge">'+gsEsc(bbTr('gsf_dyn_just_requested'))+'</span>':'';
   var onclick=avail?(' onclick="gsSelectTechniker(\''+t.id+'\')"'):'';
   return '<div class="gs-tech-card'+sel+matchCls+bookedCls+'" data-tid="'+gsEsc(t.id)+'"'+onclick+'>'
     +'<div class="gs-tech-avatar">'+(t.photo_emoji||'👷')+'</div>'
@@ -4223,8 +4233,8 @@ function gsTechCardHtml(t){
       +'<div class="gs-tech-top"><span class="gs-tech-name">'+gsEsc(t.name)+' '+gsHerkunftHtml(t.herkunft)+req+'</span>'
         +(rating?'<span class="gs-tech-rating">'+rating+'</span>':'')+'</div>'
       +(t.qualification?'<div class="gs-tech-qual">'+gsEsc(t.qualification)+'</div>':'')
-      +(isMatch?'<div class="gs-tech-match-badge">✓ Passt zu '+gsEsc(gsData.bereich)+'</div>':'')
-      +(avail?'':'<div class="gs-tech-booked-badge">🔴 Ausgebucht bis '+gsFmtDate(t.booked_until)+'</div>')
+      +(isMatch?'<div class="gs-tech-match-badge">'+gsEsc(bbTr('gsf_dyn_matches'))+' '+gsEsc(gsData.bereich)+'</div>':'')
+      +(avail?'':'<div class="gs-tech-booked-badge">'+gsEsc(bbTr('gsf_dyn_booked_until'))+' '+gsFmtDate(t.booked_until)+'</div>')
       +'<div class="gs-tech-tags">'+tags+'</div>'
       +'<div class="gs-tech-meta">'+meta+statusLine+'</div>'
     +'</div>'
@@ -4242,7 +4252,7 @@ function gsRenderTechniker(){
   var hint=document.getElementById('gs-tech-hint');
   if(hint){
     hint.innerHTML='<div class="gs-net-hdr"><span class="gs-net-count"><strong>'+gsTechAvail+' '+bbTr('gsf_dyn_avail_now')+'</strong> · '+gsTechTotal+' '+bbTr('gsf_dyn_in_network')+'</span>'
-      +'<span class="gs-live-ind">Live</span></div>';
+      +'<span class="gs-live-ind">'+gsEsc(bbTr('gsf_dyn_live'))+'</span></div>';
   }
   var avail=gsTechniker.filter(function(t){return t.availability!==false;});
   var booked=gsTechniker.filter(function(t){return t.availability===false;});
