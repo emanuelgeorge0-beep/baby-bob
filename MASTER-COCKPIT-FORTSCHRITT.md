@@ -272,6 +272,39 @@
 > 3. **Für Magic-Link (optional):** Supabase → Authentication → URL Configuration → **Redirect URLs**
 >    → `https://baby-bob.vercel.app/gs-intern-7k2x` eintragen. Für reinen Passwort-Login NICHT nötig.
 
+### ✅ Session 12 — Jarvis auf Baby-BOB-Niveau: Zahl-Aussprache + stärkere Intelligenz/Gedächtnis
+- [x] **Vergleich Baby BOB ↔ Jarvis durchgeführt.** Baby BOB hat: `sanitizeForSpeech` (Zahl→Wort, aber OHNE
+      Datum/Uhrzeit), `bob_knowledge` (RAG in `api/bob.js`), `bob-learn.js` (täglicher Cron destilliert aus
+      B2C-Feedback neue Wissens-Einträge). Jarvis hatte: `gs_jarvis_wissen` (Gedächtnis, bei jeder Antwort
+      gelesen + „merk dir"-Schreiben), Verlauf→Claude, aber KEINE Zahl-Aussprache und nutzte das Gedächtnis
+      im Prompt nicht explizit.
+- [x] **Zahl-Aussprache (Hauptbug) — `jSanitizeSpeech` in gs-intern.html, NUR vor dem TTS-Call:** übernimmt
+      Baby BOBs Zahl-zu-Wort-Logik und ist **umfangreicher** — zusätzlich **Datum + Uhrzeit**:
+      • Geld: CHF 34'384 → „vierunddreissigtausenddreihundertvierundachtzig Franken" (+ Rappen bei Dezimal).
+      • Datum: 24.06. → „vierundzwanzigster Juni"; 24.06.2026 → „… zweitausendsechsundzwanzig"; auch
+        „24. Juni" → „vierundzwanzigster Juni".
+      • Uhrzeit: 20:17 → „zwanzig Uhr siebzehn"; 14:00 → „vierzehn Uhr" (doppeltes „Uhr" wird geschluckt).
+      • Prozent, Dezimal (3,5 → „drei Komma fünf"), Zahlen-/CHF-Bereiche, Millionen, m². Zahl-Token endet
+        auf einer Ziffer → **Satzzeichen bleiben** (saubere Sprech-Pausen). **Der Chat zeigt weiter CHF 34'384.**
+- [x] **System-Prompt stärker (`JARVIS_SYSTEM` in cockpit.js):** CEO-Berater-Persona + **HKLS/Facility-
+      Expertise** (Baby-BOB-Stärke „kompetenter Experte", auf Master/CEO zugeschnitten), proaktiv-aber-knapp
+      (ein konkreter Handlungshinweis), **explizite Gedächtnisnutzung** (gespeichertes_wissen aktiv einbeziehen,
+      „merk dir" kurz bestätigen via soeben_gemerkt), Vorlese-Format-Regeln. **Datenschutz-, Umsatz- und
+      Schätz-Regeln unverändert.**
+- [x] **Gedächtnis/Lernen bestätigt:** (a) „merk dir …" → `gs_jarvis_wissen` (MERK_RE), (b) bei JEDER Antwort
+      gelesen (top 30 → `gespeichertes_wissen`), (c) Verlauf→Claude-Messages. Jarvis hat damit ein **explizites
+      Gedächtnis, das Baby BOBs Chat fehlt**; der Prompt nutzt es jetzt aktiv.
+- [x] **Getestet:** Sanitizer-Unit-Tests (alle Beispiele korrekt); Headless: Chat-Bubble zeigt „CHF 34'384",
+      an `/api/voice` geht die ausgesprochene Version. **LIVE Backend-Test** (echter Login + Claude): Antwort
+      sauber, echte Zahlen, Geschäftskontext, proaktive Einschätzung, `fallback:false`. `outputDirectory "."`
+      unberührt; Stimme/STT-Logik nicht angefasst.
+- [x] **Ehrlicher Vergleich:** Jarvis BESSER bei Zahl-Aussprache (inkl. Datum/Uhrzeit), explizitem
+      Gedächtnis, Datenschutz (Regionen statt Namen), Live-Geschäftszahlen. Baby BOB hat als EINZIGES mehr:
+      einen **automatischen Lern-Cron** (`bob-learn`), der aus B2C-Diagnose-Feedback selbstständig
+      `bob_knowledge` erweitert — für den CEO-Cockpit-Fall (persönliche Notizen + Live-Zahlen) ist das
+      explizite „merk dir"-Gedächtnis aber die passendere Form. Optionaler Nachbau wäre ein analoger
+      Jarvis-Cron, der Gespräche zu dauerhaften Notizen destilliert (noch nicht gebaut).
+
 ### ✅ Session 11 — Jarvis-Voice-Bugfix am iPhone (2 echte Bugs gefunden & behoben)
 - [x] **BUG 1 „Stimme spielt nie" → URSACHE: ElevenLabs-GUTHABEN ERSCHÖPFT (kein Code-Bug).**
       Live-Test gegen Prod-`/api/voice` (5×, iPhone-User-Agent): **alle HTTP 502**, ElevenLabs-Detail
