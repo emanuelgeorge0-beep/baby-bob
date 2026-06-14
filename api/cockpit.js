@@ -821,12 +821,62 @@ async function getSaeulen() {
 //  aktion, keine Agenten-Steuerung. TTS läuft im Frontend über /api/voice.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── DATENSCHUTZ: PLZ → grobe Region (Schweizer Leitregionen, 1. Ziffer) ──
+// Liefert eine BEWUSST grobe Region statt einer identifizierenden Adresse, damit
+// Jarvis über das "Wo" sprechen kann, ohne Kunden-/Firmennamen preiszugeben.
+// Erste Ziffer der PLZ = offizielle Schweizer Postleitregion → nie ein falscher
+// Kanton, weil nur grob klassifiziert wird.
+const PLZ_REGION = {
+  '1': 'Westschweiz (Waadt/Genf/Wallis/Freiburg)',
+  '2': 'Region Neuenburg/Jura',
+  '3': 'Region Bern/Wallis',
+  '4': 'Region Basel/Solothurn',
+  '5': 'Region Aargau',
+  '6': 'Zentralschweiz/Tessin',
+  '7': 'Region Graubünden',
+  '8': 'Region Zürich/Ostschweiz',
+  '9': 'Ostschweiz (St. Gallen/Thurgau)',
+};
+function regionVonPlz(plz) {
+  const d = String(plz || '').trim().match(/^\d/);
+  return d ? (PLZ_REGION[d[0]] || 'Region unbekannt') : 'Region unbekannt';
+}
+
+// ── Fester Geschäftskontext (Wissensbasis für Jarvis) ──
+// NUR diese Fakten — keine erfundenen Zahlen. Wird dem Modell als Kontext gegeben.
+const GESCHAEFTSKONTEXT = `GESCHÄFTSKONTEXT GEORGE SOLUTIONS (feste Wissensbasis — nur diese Fakten, nichts dazuerfinden):
+- Phase: Die Pilotphase ist abgeschlossen (2 Pilotprojekte, zusammen rund 35'000 Franken in den ersten Monaten, noch zu günstigeren Pilot-Tarifen gerechnet). Jetzt beginnt der Übergang in die Skalierungsphase.
+- Team: Ein 4er-Team in zwei Teams. Team 1: Emanuel und Dimitri Grill. Team 2: Patrick Notter und Vasil Ignatov.
+- Aktuell: Patrick ist noch bei einem Kunden im Raum Wädenswil (Kanton Zürich) im Einsatz, bis Ende Juni. Danach ein kurzer Übergang, evtl. rund eine Woche mit geringerer Auslastung, die durch Folgeumsätze gedeckt ist.
+- Ab dem 24. Juni startet die Werbung (Meta-Kampagnen). App und Master-Cockpit sind fertig, die Leadmaschine wird aktiviert.
+- Die Tarife steigen jetzt auf die aktuellen, höheren Sätze (über den Pilot-Tarifen) → die Umsätze sind tendenziell steigend.
+- Leadmaschine = George Solutions plus alle aktiven Kanäle (App-Leads, Marketing-Kanäle, Meta-Kampagnen ab 24. Juni).
+- Bei Wachstums- oder Prognosefragen darfst du optimistisch-realistisch hochrechnen, aber kennzeichne das IMMER klar als Schätzung — niemals als Faktum.`;
+
 // Alle relevanten Kennzahlen in EINEM Objekt — ausschliesslich aus echten
 // Tabellen. Optionale (evtl. nicht migrierte) Quellen sind resilient (try/catch).
-async function getJarvisFacts() {
-  const { anfragen, kunden } = await loadCore();
+// opts.freigabe=true → es werden zusätzlich echte Kunden-/Firmennamen beigelegt
+// (nur wenn der Nutzer im Gespräch ausdrücklich freigegeben hat).
+async function getJarvisFacts(opts = {}) {
+  const { anfragen, kunden, kundenById } = await loadCore();
   const today = todayISO();
   const monthPrefix = today.slice(0, 7);
+
+  // ── DATENSCHUTZ: Kunden/Leads NUR als grobe Region aggregieren (keine Namen) ──
+  const regKunden = {}, regLeads = {};
+  for (const k of kunden) {
+    const r = regionVonPlz(k.plz);
+    regKunden[r] = (regKunden[r] || 0) + 1;
+  }
+  for (const a of anfragen) {
+    const k = a.kunde_id ? kundenById[a.kunde_id] : null;
+    const r = regionVonPlz(k && k.plz);
+    regLeads[r] = (regLeads[r] || 0) + 1;
+  }
+  const regionToArr = (m) => Object.entries(m)
+    .filter(([r]) => r !== 'Region unbekannt')
+    .map(([region, anzahl]) => ({ region, anzahl }))
+    .sort((x, y) => y.anzahl - x.anzahl);
 
   const perStufe = { neu: 0, kontaktiert: 0, angebot: 0, gewonnen: 0, verloren: 0 };
   const perKanal = {};
@@ -897,8 +947,27 @@ async function getJarvisFacts() {
   // Umsatz pro Monat (gs_umsatz_monat) — die einzige Quelle für Umsatzfragen.
   const ums = await getUmsatzStats();
 
+  // ── DATENSCHUTZ: Namen NUR bei ausdrücklicher Freigabe im Gespräch beilegen ──
+  // Ohne Freigabe verlässt KEIN Kunden-/Firmenname den Server (Schutz auf
+  // Datenebene, nicht nur per Prompt). Mit Freigabe → Klartext-Liste für Claude.
+  let kunden_namen = null;
+  if (opts.freigabe) {
+    kunden_namen = kunden
+      .map((k) => ({
+        firma: k.firma || k.kontaktperson || k.ansprechpartner || '—',
+        ort: k.ort || null,
+        region: regionVonPlz(k.plz),
+      }))
+      .slice(0, 50);
+  }
+
   return {
     datum: today,
+    // DATENSCHUTZ-FLAG: ob in diesem Gespräch Namen freigegeben wurden.
+    namen_freigegeben: !!opts.freigabe,
+    leads_pro_region: regionToArr(regLeads),
+    kunden_pro_region: regionToArr(regKunden),
+    ...(kunden_namen ? { kunden_namen } : {}),
     leads_gesamt: anfragen.length,
     leads_heute_neu: heuteNeu,
     leads_offen: perStufe.neu + perStufe.kontaktiert + perStufe.angebot,
@@ -933,26 +1002,87 @@ async function getJarvisFacts() {
   };
 }
 
-const JARVIS_SYSTEM = `Du bist „Jarvis", der persönliche Sprach-Assistent im internen Master-Cockpit von George Solutions (B2B-Handwerks- und Facility-Firma, Schweiz). Der Geschäftsführer stellt dir Fragen zu seinem Betrieb. Du erhältst die ECHTEN, aktuellen Kennzahlen aus der Datenbank als JSON.
+const JARVIS_SYSTEM = `Du bist „Jarvis", der persönliche Sprach-Assistent im internen Master-Cockpit von George Solutions (B2B-Handwerks- und Facility-Firma, Schweiz). Der Geschäftsführer stellt dir Fragen zu seinem Betrieb. Du erhältst die ECHTEN, aktuellen Kennzahlen aus der Datenbank als JSON sowie einen festen Geschäftskontext.
+
+${GESCHAEFTSKONTEXT}
+
+DATENSCHUTZ (HÖCHSTE PRIORITÄT — strikt einhalten):
+- Nenne NIEMALS Kunden- oder Firmennamen, AUSSER der Nutzer hat sie im selben Gespräch ausdrücklich freigegeben (das Feld namen_freigegeben ist dann true und es liegt eine Liste kunden_namen bei). Ist namen_freigegeben false, existiert KEINE Namensliste — dann kannst und darfst du keine Namen nennen.
+- Statt eines Firmennamens sprichst du standardmässig über die Region oder den Kanton, z. B. „ein Einsatz im Raum Wädenswil, Kanton Zürich" oder „ein Kunde in der Region Zürich". Nutze dafür die Felder leads_pro_region und kunden_pro_region.
+- Fragt der Nutzer direkt nach einem Namen OHNE Freigabe, antworte sinngemäss: „Firmendaten nenne ich aus Datenschutzgründen nur mit deiner Freigabe — die Eckdaten wie Datum, Umsatz und Region gebe ich dir aber gerne." und liefere danach genau diese Eckdaten.
+- VIDEO / SOCIAL MEDIA: Sagt der Nutzer, es sei für ein Video, einen Reel, Social Media oder eine Aufnahme, hältst du dich BESONDERS streng an den Datenschutz: nur Regionen und Zahlen, keine Namen — auch nicht versehentlich — bis eine ausdrückliche Freigabe erfolgt.
 
 REGELN:
-- Beantworte die Frage AUSSCHLIESSLICH auf Basis der bereitgestellten Zahlen. Erfinde nichts.
-- Steht die Antwort nicht in den Daten, sag ehrlich, dass du dazu im Cockpit keine Zahl hast — und nenne, falls passend, eine verwandte Zahl die du hast.
-- Antworte kurz und gesprochen, 1 bis 3 Sätze. Deine Antwort wird laut vorgelesen.
+- Beantworte die Frage auf Basis der bereitgestellten Zahlen UND des Geschäftskontexts. Zahlen erfindest du nie.
+- Steht eine konkrete Zahl nicht in den Daten, sag ehrlich, dass du dazu im Cockpit keine Zahl hast — und nenne, falls passend, eine verwandte Zahl die du hast.
+- Du kannst u. a. beantworten: „Wie laufen die Finanzen?" (Umsatz/Marge/Pipeline + Phase aus dem Kontext), „Wie sieht die Leadmaschine aus?" (Leads pro Kanal/Region, Marketing, Meta ab 24. Juni), „Was muss ich noch erledigen?" (offene To-Dos und Follow-ups), „Was schätzt du für die nächsten 3-4 Monate?" (klar gekennzeichnete Schätzung), „In welcher Phase sind wir?" (aus dem Geschäftskontext).
+- Bei Prognose-/Wachstumsfragen darfst du optimistisch-realistisch hochrechnen, MUSST es aber klar als Schätzung kennzeichnen (z. B. „grob geschätzt", „meine Einschätzung, keine Garantie") und dich an den realen Ausgangszahlen orientieren.
+- Antworte kurz und gesprochen, 1 bis 4 Sätze. Deine Antwort wird laut vorgelesen.
 - KEINE Markdown-Symbole, keine Sternchen, keine Aufzählungszeichen, keine Tabellen. Reiner Fliesstext.
 - Nenne konkrete Zahlen. Geldbeträge als „… Franken" (CHF-Werte sind in Schweizer Franken).
 - UMSATZFRAGEN beantwortest du ausschliesslich aus den Feldern umsatz_pro_monat, umsatz_erfasste_monate_chf, umsatz_dieses_jahr_chf und bester_umsatzmonat. Ist umsatz_daten_vorhanden false oder umsatz_pro_monat leer, sag ehrlich: „Es sind noch keine Umsatzdaten hinterlegt." — erfinde NIE Umsatzzahlen. (Die Felder rund um marge_* stammen aus der separaten Margen-Kalkulation, nicht aus der Monatsumsatz-Erfassung.)
 - Sprich Hochdeutsch, professionell, ruhig und prägnant — wie ein kompetenter Assistent. Du-Form.`;
 
+// Erkennt eine ausdrückliche Namens-Freigabe (NICHT eine blosse Namensfrage).
+const FREIGABE_RE = /\bfreigabe\b|freigegeben|du darfst (die |den |)?(namen|firmennamen|firma)|namen? darfst du nennen|ich gebe (dir |)?(die |den |)?(namen|firma|firmennamen)\s*frei|name(n)? (sind|ist) frei/i;
+// Erkennt eine Merk-/Notier-Anweisung an Jarvis.
+const MERK_RE = /\bmerk(e)? dir\b|\bnotier(e)? dir\b|\bspeicher(e|s)? (dir|das)\b|behalte .{0,14}im (kopf|hinterkopf)|für die planung\b|\bvergiss nicht\b/i;
+
 async function askJarvis(body) {
   const frage = String((body && body.frage) || '').trim().slice(0, 500);
   if (!frage) throw new Error('frage nötig');
-  const facts = await getJarvisFacts();
+
+  // Gesprächsverlauf (vom Frontend) → für In-Conversation-Freigabe + Kontext.
+  const verlauf = Array.isArray(body && body.verlauf) ? body.verlauf.slice(-12) : [];
+  const userTexte = verlauf.filter((m) => m && m.role === 'me').map((m) => String(m.text || ''));
+  // Freigabe gilt, wenn sie irgendwo im Gespräch ODER in der aktuellen Frage steht.
+  const freigabe = FREIGABE_RE.test(frage) || userTexte.some((t) => FREIGABE_RE.test(t));
+
+  const facts = await getJarvisFacts({ freigabe });
+
+  // ── Jarvis-Gedächtnis: gespeichertes Wissen mitlesen (falls Tabelle existiert) ──
+  try {
+    const wissen = await sbGet('gs_jarvis_wissen?select=kategorie,inhalt,erstellt_am&order=erstellt_am.desc&limit=30');
+    facts.gespeichertes_wissen = wissen.map((w) => ({
+      kategorie: w.kategorie || 'allgemein', inhalt: w.inhalt,
+      datum: String(w.erstellt_am || '').slice(0, 10),
+    }));
+  } catch (_) { facts.gespeichertes_wissen = []; }
+
+  // ── Merk-Anweisung → in gs_jarvis_wissen schreiben ──
+  if (MERK_RE.test(frage)) {
+    const inhalt = frage.replace(/^.*?(merk(e)? dir|notier(e)? dir|speicher(e|s)? (dir|das)|vergiss nicht|für die planung)[\s,:\-–]*/i, '').trim() || frage;
+    const kategorie = /planung|plan\b|ziel|strategie/i.test(frage) ? 'planung'
+      : /lead|kunde|umsatz|finanz|marketing/i.test(frage) ? 'business' : 'allgemein';
+    try {
+      await sbWrite('POST', 'gs_jarvis_wissen', { kategorie, inhalt }, 'return=minimal');
+      facts.soeben_gemerkt = inhalt;
+    } catch (_) { facts.merken_fehlgeschlagen = true; }
+  }
 
   // Ohne Claude-Key → einfache, ehrliche Kurzantwort aus den Zahlen (Fallback).
   if (!ANTHROPIC_KEY) {
     return { antwort: jarvisFallback(facts), facts, fallback: true };
   }
+
+  // Verlauf → Claude-Messages (nur Text, abwechselnd), aktuelle Frage zuletzt.
+  const messages = [];
+  for (const m of verlauf) {
+    if (!m || !m.text) continue;
+    const role = m.role === 'jv' ? 'assistant' : 'user';
+    const content = String(m.text).slice(0, 800);
+    if (content === '…') continue;
+    if (messages.length && messages[messages.length - 1].role === role) {
+      messages[messages.length - 1].content += '\n' + content;
+    } else messages.push({ role, content });
+  }
+  if (!messages.length || messages[messages.length - 1].role !== 'user' ||
+      messages[messages.length - 1].content !== frage) {
+    if (messages.length && messages[messages.length - 1].role === 'user') {
+      messages[messages.length - 1].content += '\n' + frage;
+    } else messages.push({ role: 'user', content: frage });
+  }
+  if (messages[0].role !== 'user') messages.unshift({ role: 'user', content: '(Gespräch)' });
 
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -962,7 +1092,7 @@ async function askJarvis(body) {
         model: 'claude-sonnet-4-6',
         max_tokens: 400,
         system: `${JARVIS_SYSTEM}\n\nHEUTE: ${facts.datum}\n\nAKTUELLE COCKPIT-DATEN (JSON):\n${JSON.stringify(facts)}`,
-        messages: [{ role: 'user', content: frage }],
+        messages,
       }),
     });
     if (!r.ok) throw new Error('Claude API: ' + r.status);

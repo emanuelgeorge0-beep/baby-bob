@@ -148,6 +148,85 @@
       bei Daten, „—" sonst, 6 System-Zeilen, Titel MASTER GEORGE. Claude-Call wie gehabt lokal nicht
       testbar (Platzhalter-Key) → byte-gleich zum produktiven bob-chat-Muster.
 
+### ✅ Session 7 — Jarvis: Geschäftskontext · Datenschutz · Gedächtnis
+- [x] **DATENSCHUTZ auf Datenebene** (`api/cockpit.js`): Jarvis nennt standardmässig KEINE
+      Kunden-/Firmennamen. `getJarvisFacts` gibt nur grobe **Regionen** statt Adressen heraus
+      (`leads_pro_region`/`kunden_pro_region`, abgeleitet aus PLZ → Schweizer Leitregion 1. Ziffer,
+      Helper `regionVonPlz`). **Namen verlassen den Server NUR bei ausdrücklicher Freigabe** im selben
+      Gespräch — sonst existiert das Feld `kunden_namen` gar nicht (Schutz auf Datenebene, nicht nur
+      per Prompt). Freigabe-Erkennung `FREIGABE_RE` (z. B. „Freigabe", „du darfst den Namen nennen",
+      „ich gebe die Namen frei") über den ganzen Gesprächsverlauf; eine blosse Namensfrage löst KEINE
+      Freigabe aus → Jarvis verweist höflich auf den Datenschutz und liefert Eckdaten (Datum/Umsatz/Region).
+- [x] **Video/Social besonders streng:** System-Prompt-Regel — sobald der Nutzer sagt, es sei für Video/
+      Reel/Social/Aufnahme, nur Regionen + Zahlen, keine Namen bis zur Freigabe (zusätzlich greift die
+      Datenebene-Sperre).
+- [x] **Fester Geschäftskontext** (`GESCHAEFTSKONTEXT`-Konstante, in den System-Prompt injiziert, NUR
+      die echten Fakten — nichts erfunden): Pilotphase abgeschlossen (2 Projekte, ~35'000 CHF zu Pilot-
+      Tarifen) → Übergang Skalierung; 4er-Team (Team1 Emanuel+Dimitri, Team2 Patrick+Vasil); Patrick bis
+      Ende Juni im Raum Wädenswil (ZH); Werbung/Meta-Kampagnen ab 24.06.; Tarife steigen → Umsatz steigend;
+      Leadmaschine = GS + alle Kanäle. Prognosen IMMER klar als Schätzung gekennzeichnet.
+- [x] **Verlauf wird mitgesendet** (`gs-intern.html` `jarvisAsk` → `verlauf`): Jarvis kennt den
+      Gesprächskontext (für In-Conversation-Freigabe und Anschlussfragen). Backend baut daraus
+      alternierende Claude-Messages (konsekutive gleiche Rollen gemerged, Start mit user erzwungen).
+- [x] **Jarvis-Gedächtnis** `scripts/master_cockpit_jarvis_wissen.sql` (idempotent, RLS master-only):
+      Tabelle `gs_jarvis_wissen(id, kategorie, inhalt, erstellt_am)`. Sagt der Nutzer „merk dir …",
+      „notier dir …", „für die Planung …" (`MERK_RE`), schreibt Jarvis den Inhalt dort hinein
+      (Kategorie heuristisch: planung/business/allgemein). Bei JEDER Frage liest Jarvis dieses Wissen
+      zusätzlich zum Live-DB-Stand mit (`gespeichertes_wissen` in den Facts) → erinnert sich an frühere
+      Planungen. → **EINMALIG im Supabase SQL Editor ausführen** (vorher: 404 → graceful `[]`).
+- [x] **Gemeinsame Wissensbasis Jarvis ↔ Claude-Code:** `gs_jarvis_wissen` kann auch von Claude-Code-
+      Agenten im Terminal gelesen/geschrieben werden (service_role / SQL Editor). Was Jarvis sich merkt,
+      sieht der Code-Agent — und umgekehrt (gemeinsames Gedächtnis). Dokumentiert im SQL-Header.
+- [x] Beantwortbare Fragen jetzt u. a.: „Wie laufen die Finanzen?", „Wie sieht die Leadmaschine aus?",
+      „Was muss ich noch erledigen?", „Was schätzt du für die nächsten 3–4 Monate?", „In welcher Phase
+      sind wir?" — alle aus echten DB-Daten + Geschäftskontext, Schätzungen klar gekennzeichnet.
+- [x] 20x-Analyse S7 (siehe unten) + **Live-Smoke gegen echte DB**: Region-Aggregation 9 Kunden →
+      „Region Zürich/Ostschweiz" (deckt sich mit Pilot/ZH), keine Namen nötig. `gs_jarvis_wissen` 404 →
+      graceful `[]`. `gs_umsatz_monat` 200 (März 3171 / April 17896 / Mai 13317.50 — wie hinterlegt).
+      Regex-Tests Freigabe/Merk grün. Claude-Call lokal nicht testbar (Platzhalter-Key) → byte-gleich
+      zum produktiven bob-chat/Jarvis-Muster.
+
+> **SQL für Emanuel (einmalig im Supabase SQL Editor, Projekt bmdmoehjwadvdlbrmpuq):**
+> `scripts/master_cockpit_jarvis_wissen.sql` ausführen → legt `gs_jarvis_wissen` + RLS (master-only) an.
+> Danach merkt sich Jarvis Planungen dauerhaft; bis dahin läuft alles, nur ohne Gedächtnis (graceful).
+
+## 20x Bug-/Datenschutz-Analyse (Session 7 · Kontext + Datenschutz + Gedächtnis) — Ergebnis
+1. **Namen-Sperre auf Datenebene:** Ohne Freigabe wird `kunden_namen` GAR NICHT in die Facts geschrieben
+   → Claude kann keine Namen nennen, selbst wenn es wollte (nicht nur Prompt-Regel).
+2. **Region statt Adresse:** `regionVonPlz` nutzt nur die 1. PLZ-Ziffer → bewusst grob, nie ein falscher
+   Kanton. PLZ ohne Treffer/leer → „Region unbekannt" (aus Aggregat herausgefiltert).
+3. **Freigabe nur explizit:** `FREIGABE_RE` matcht Freigabe-Formulierungen, NICHT eine blosse Namensfrage
+   („Wie heisst der Kunde?" → false). Getestet (6 Fälle grün).
+4. **Freigabe gilt fürs ganze Gespräch:** geprüft über `verlauf` + aktuelle Frage → einmal freigegeben,
+   bleibt im selben Chat frei (wie gefordert „im selben Gespräch").
+5. **Video/Social:** zusätzliche, betonte Prompt-Regel; Datenebene-Sperre greift ohnehin → doppelt sicher.
+6. **Kein Namensleck über Fallback:** `jarvisFallback` nennt nie Namen (nur Zahlen) — unverändert sicher.
+7. **Gedächtnis-Tabelle idempotent + RLS master-only:** CREATE IF NOT EXISTS, Index IF NOT EXISTS,
+   Policy DROP+CREATE; `gs_master_uid()` CREATE OR REPLACE. anon/authenticated geblockt.
+8. **Vor Migration nutzbar:** `gs_jarvis_wissen`-Read in try/catch → 404 → `gespeichertes_wissen=[]`
+   (Live verifiziert). Merk-Schreiben in try/catch → bei fehlender Tabelle `merken_fehlgeschlagen=true`,
+   keine Exception, Antwort kommt trotzdem.
+9. **Merk-Erkennung präzise:** `MERK_RE` matcht „merk dir/notier dir/speicher dir/für die planung/
+   vergiss nicht"; Inhalt sauber extrahiert (führende Trigger + Satzzeichen entfernt) — getestet.
+10. **Heuristische Kategorie:** planung/business/allgemein aus Stichworten — rein additiv, kein Risiko.
+11. **Verlauf → valide Claude-Messages:** konsekutive gleiche Rollen gemerged, Platzhalter „…" gefiltert,
+    Start mit `user` erzwungen, aktuelle Frage garantiert letzte user-Message → kein 400 (role-Wechsel-Pflicht).
+12. **Verlauf gekappt:** Front + Back auf die letzten 12 Einträge, je Text auf 800 Zeichen → kein
+    unbegrenzter Prompt, kein Token-Run-away.
+13. **Umsatz weiterhin nur echt:** Umsatzregel im Prompt unverändert; Region/Gedächtnis berühren die
+    Umsatzfelder nicht. Live: gs_umsatz_monat-Werte unverändert gelesen.
+14. **Geschäftskontext = nur Fakten:** `GESCHAEFTSKONTEXT` enthält ausschliesslich die vorgegebenen
+    Angaben; Prognosen sind im Prompt zwingend als Schätzung zu kennzeichnen → keine erfundenen „Fakten".
+15. **Gate unverändert:** `jarvis` weiter hinter `verifyMaster` (403); kein neuer ungegateter Endpoint;
+    Schreibzugriff auf `gs_jarvis_wissen` nur über den gegateten Server (service_role).
+16. **Kein Secret im Client:** Frontend sendet nur `frage`+`verlauf`; Keys/Schreibrechte serverseitig.
+17. **XSS/Vorlese-Text:** Antwort weiterhin von Markdown-Symbolen bereinigt; keine neuen ungeprüften
+    dynamischen DOM-Einfügungen (Region/Wissen fliessen als Text in die Bubble via bestehendes esc/paint).
+18. **Performance:** ein zusätzlicher kleiner Read (`gs_jarvis_wissen`, limit 30) pro Frage; Region-Agg
+    rein in-memory aus bereits geladenem `loadCore` → kein N+1, keine Extra-Kundenabfrage.
+19. **outputDirectory ".":** `vercel.json` unberührt — keine Routing-/404-Regression.
+20. **Syntax/Build:** `node --check api/cockpit.js` ok; Regex-/Extraktions-Tests grün; Live-Smoke grün.
+
 ## 20x Bug-/Mobile-Analyse (Session 6 · Command-Center + Umsatz) — Ergebnis
 1. **Umsatz nur echt:** Jarvis & Cockpit lesen ausschliesslich `gs_umsatz_monat`/aggregierte Felder —
    keine erfundenen Zahlen. Leere Tabelle → ehrlich „noch keine Umsatzdaten" (System-Prompt + Fallback + UI „—").

@@ -1013,11 +1013,14 @@ function jarvisAsk(frage){
   if(_jRecording) stopJarvisMic(true);
   // Audio-Objekt schon JETZT (im Tap-Kontext) erzeugen → iOS erlaubt späteres play().
   var au = _jVoiceOn ? new Audio() : null;
+  // Verlauf VOR dieser Frage (für In-Conversation-Freigabe + Kontext); ohne Platzhalter.
+  var verlauf=_jConv.filter(function(m){return m&&m.text&&m.text!=='…';})
+    .slice(-12).map(function(m){return {role:m.role,text:m.text};});
   _jConv.push({role:'me',text:frage});
   _jConv.push({role:'jv',text:'…'});
   paintJConv();
   jState('Jarvis denkt nach','think');
-  api('jarvis',{frage:frage}).then(function(d){
+  api('jarvis',{frage:frage,verlauf:verlauf}).then(function(d){
     var antwort=(d&&d.antwort)||'Dazu habe ich gerade keine Antwort.';
     _jConv[_jConv.length-1]={role:'jv',text:antwort};
     paintJConv();
