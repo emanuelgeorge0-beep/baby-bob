@@ -211,6 +211,49 @@
   .st-aktiv{background:rgba(62,207,142,.16);color:var(--ok);}
   .st-aufbau{background:rgba(245,185,66,.16);color:var(--warn);}
   .st-geplant{background:rgba(90,167,255,.14);color:var(--info);}
+
+  /* ── Jarvis (Sprach-Assistent) ── */
+  .jbtn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:linear-gradient(135deg,rgba(201,169,97,.18),rgba(201,169,97,.06));
+    border:1px solid var(--gold-line);border-radius:16px;padding:15px 16px;color:var(--txt);}
+  .jbtn .orb{width:42px;height:42px;border-radius:50%;flex:0 0 auto;
+    background:radial-gradient(circle at 35% 30%,#f0d089,#b8954d 70%);
+    box-shadow:0 0 18px rgba(201,169,97,.55);}
+  .jbtn .jt{font-weight:800;font-size:16px;letter-spacing:.3px;}
+  .jbtn .jd{font-size:12px;color:var(--muted);}
+  .jwrap{display:flex;flex-direction:column;min-height:calc(100vh - 230px);}
+  .jhero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px 0 14px;}
+  .jorb{width:84px;height:84px;border-radius:50%;margin-bottom:10px;
+    background:radial-gradient(circle at 35% 30%,#f0d089,#b8954d 72%);
+    box-shadow:0 0 0 0 rgba(201,169,97,.5);transition:box-shadow .2s;}
+  .jorb.idle{animation:jpulse 2.6s ease-in-out infinite;}
+  .jorb.think{animation:jspin 1s linear infinite;background:conic-gradient(#b8954d,#f0d089,#b8954d);}
+  .jorb.speak{animation:jspeak .7s ease-in-out infinite;}
+  @keyframes jpulse{0%,100%{box-shadow:0 0 22px 2px rgba(201,169,97,.35);}50%{box-shadow:0 0 34px 8px rgba(201,169,97,.6);}}
+  @keyframes jspin{to{transform:rotate(360deg);}}
+  @keyframes jspeak{0%,100%{transform:scale(1);}50%{transform:scale(1.12);box-shadow:0 0 36px 10px rgba(201,169,97,.7);}}
+  .jstate{font-size:12px;color:var(--muted);min-height:16px;letter-spacing:.3px;}
+  .jchips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;}
+  .jchips::-webkit-scrollbar{display:none;}
+  .jchip{flex:0 0 auto;background:var(--card);border:1px solid var(--gold-line);border-radius:50px;
+    padding:8px 14px;font-size:13px;color:var(--gold);white-space:nowrap;font-weight:600;}
+  .jconv{flex:1;display:flex;flex-direction:column;gap:10px;padding:6px 0 12px;}
+  .jbub{max-width:86%;padding:11px 14px;border-radius:16px;font-size:14.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+  .jbub.me{align-self:flex-end;background:var(--gold-soft);border:1px solid var(--gold-line);color:var(--txt);border-bottom-right-radius:5px;}
+  .jbub.jv{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:5px;}
+  .jbub.jv .who{display:block;font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:3px;}
+  .jbar{display:flex;gap:9px;align-items:flex-end;padding:12px 0 4px;margin-top:auto;}
+  .jbar textarea{flex:1;resize:none;max-height:120px;min-height:46px;padding:12px 14px;background:var(--card);
+    border:1px solid var(--line);border-radius:14px;color:var(--txt);outline:none;}
+  .jbar textarea:focus{border-color:var(--gold-line);}
+  .jmic,.jsend{width:46px;height:46px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;}
+  .jmic{background:var(--card);border:1px solid var(--gold-line);color:var(--gold);}
+  .jmic.rec{background:var(--bad);color:#fff;border-color:var(--bad);animation:jpulse 1s infinite;}
+  .jsend{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;border:none;}
+  .jspeak-toggle{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;justify-content:center;padding:2px 0 6px;}
+  .jdots{display:inline-block;}
+  .jdots::after{content:'';animation:jdotsa 1.2s steps(4,end) infinite;}
+  @keyframes jdotsa{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}}
 </style>
 </head>
 <body>
@@ -399,7 +442,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','marketing','todos','margen','saeulen'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -410,6 +453,7 @@ function go(v){
   else if(v==='leads') renderLeads();
   else if(v==='crm') renderCRM();
   else if(v==='mehr') renderMehr();
+  else if(v==='jarvis') renderJarvis();
   else if(v==='marketing') renderMarketing();
   else if(v==='todos') renderTodos();
   else if(v==='margen') renderMargen();
@@ -719,6 +763,10 @@ function renderMehr(){
     {v:'saeulen',ic:'🏛️',t:'4 Säulen',d:'S1 Baby BOB · S2 Marketplace · S3 George Solutions · S4 Facility'}
   ];
   $('view').innerHTML='<h2><span class="acc">⋯</span> Module</h2>'+
+    '<button class="jbtn" data-go="jarvis" style="margin-bottom:14px">'+
+      '<span class="orb"></span><span><span class="jt">Jarvis fragen</span>'+
+      '<span class="jd">Sprach-Assistent · echte Zahlen aus dem Cockpit</span></span>'+
+      '<span style="margin-left:auto;color:var(--gold);font-size:20px">🎙️</span></button>'+
     '<div class="list">'+mods.map(function(m){
       return '<div class="lcard"'+(m.v?' data-go="'+m.v+'"':' style="opacity:.6"')+'><div class="top"><div class="nm">'+m.ic+' '+m.t+'</div>'+
         (m.v?'<span class="src-tag" style="border-color:var(--gold-line);color:var(--gold)">öffnen ›</span>':'<span class="src-tag">bald</span>')+
@@ -733,6 +781,162 @@ function renderMehr(){
 function backRow(){ return '<div style="margin-bottom:14px"><span class="chip" id="back-mehr">‹ Module</span></div>'; }
 function wireBack(){ var b=$('back-mehr'); if(b) b.onclick=function(){ go('mehr'); }; }
 function migHint(){ return '<div class="empty">Modul-Tabellen noch nicht migriert.<br><span style="font-size:12px;color:var(--muted2)">scripts/master_cockpit_session2.sql im Supabase SQL Editor ausführen.</span></div>'; }
+
+// ════ JARVIS — Sprach-Assistent (Session 5, Teil A) ════
+// Frage (Text ODER Sprache) → /api/cockpit jarvis (echte Zahlen + Claude) →
+// Antwort als Text + Stimme (/api/voice TTS, Fallback SpeechSynthesis).
+var JARVIS_QUICK=[
+  'Wie viele Anfragen sind heute reingekommen?',
+  'Wie viele Leads gesamt?',
+  'Welche offenen Follow-ups gibt es?',
+  'Wie hoch ist der Pipeline-Wert?',
+  'Wie viele Kunden haben wir?',
+  'Wie ist die Marge gesamt?'
+];
+var _jConv=[];                 // {role:'me'|'jv', text}
+var _jBusy=false, _jVoiceOn=true;
+var _jRec=null, _jChunks=[], _jRecording=false;
+
+function renderJarvis(){
+  $('view').innerHTML='<h2><span class="acc">🎙️</span> Jarvis</h2>'+backRow()+
+    '<div class="jwrap">'+
+      '<div class="jhero">'+
+        '<div class="jorb idle" id="j-orb"></div>'+
+        '<div class="jstate" id="j-state">Bereit. Frag mich etwas über dein Geschäft.</div>'+
+      '</div>'+
+      '<div class="jspeak-toggle" id="j-vtoggle"></div>'+
+      '<div class="jchips" id="j-chips">'+JARVIS_QUICK.map(function(q){
+        return '<span class="jchip" data-q="'+esc(q)+'">'+esc(q)+'</span>'; }).join('')+'</div>'+
+      '<div class="jconv" id="j-conv"></div>'+
+      '<div class="jbar">'+
+        '<button class="jmic" id="j-mic" title="Sprechen">🎤</button>'+
+        '<textarea id="j-input" rows="1" placeholder="Frage eingeben…" enterkeyhint="send"></textarea>'+
+        '<button class="jsend" id="j-send" title="Senden">➤</button>'+
+      '</div>'+
+    '</div>';
+  wireBack();
+  paintJarvisVoiceToggle();
+  paintJConv();
+  Array.prototype.forEach.call($('j-chips').children,function(c){
+    c.onclick=function(){ jarvisAsk(c.getAttribute('data-q')); };
+  });
+  $('j-vtoggle').onclick=function(){ _jVoiceOn=!_jVoiceOn; paintJarvisVoiceToggle(); if(!_jVoiceOn) stopSpeak(); };
+  var inp=$('j-input');
+  inp.addEventListener('input',function(){ inp.style.height='auto'; inp.style.height=Math.min(120,inp.scrollHeight)+'px'; });
+  inp.addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); $('j-send').click(); } });
+  $('j-send').onclick=function(){ var t=inp.value.trim(); if(t){ inp.value=''; inp.style.height='auto'; jarvisAsk(t); } };
+  $('j-mic').onclick=toggleJarvisMic;
+}
+function paintJarvisVoiceToggle(){
+  var e=$('j-vtoggle'); if(!e) return;
+  e.innerHTML=(_jVoiceOn?'🔊':'🔇')+' Stimme '+(_jVoiceOn?'an':'aus')+' · tippen zum Umschalten';
+}
+function jState(txt,cls){
+  var s=$('j-state'); if(s) s.textContent=txt;
+  var o=$('j-orb'); if(o) o.className='jorb '+(cls||'idle');
+}
+function paintJConv(){
+  var c=$('j-conv'); if(!c) return;
+  c.innerHTML=_jConv.map(function(m){
+    if(m.role==='me') return '<div class="jbub me">'+esc(m.text)+'</div>';
+    return '<div class="jbub jv"><span class="who">Jarvis</span>'+esc(m.text)+'</div>';
+  }).join('');
+  window.scrollTo(0,document.body.scrollHeight);
+}
+
+function jarvisAsk(frage){
+  if(_jBusy||!frage) return;
+  _jBusy=true;
+  if(_jRecording) stopJarvisMic(true);
+  // Audio-Objekt schon JETZT (im Tap-Kontext) erzeugen → iOS erlaubt späteres play().
+  var au = _jVoiceOn ? new Audio() : null;
+  _jConv.push({role:'me',text:frage});
+  _jConv.push({role:'jv',text:'…'});
+  paintJConv();
+  jState('Jarvis denkt nach','think');
+  api('jarvis',{frage:frage}).then(function(d){
+    var antwort=(d&&d.antwort)||'Dazu habe ich gerade keine Antwort.';
+    _jConv[_jConv.length-1]={role:'jv',text:antwort};
+    paintJConv();
+    if(_jVoiceOn){ speakJarvis(antwort,au); } else { jState('Bereit für die nächste Frage.','idle'); }
+  }).catch(function(){
+    _jConv[_jConv.length-1]={role:'jv',text:'Verbindungsfehler — bitte nochmal versuchen.'};
+    paintJConv(); jState('Fehler. Bitte erneut fragen.','idle');
+  }).then(function(){ _jBusy=false; });
+}
+
+// ── Stimme: ElevenLabs via /api/voice, Fallback Browser-SpeechSynthesis ──
+var _jCurAudio=null;
+function stopSpeak(){
+  try{ if(_jCurAudio){ _jCurAudio.pause(); _jCurAudio=null; } }catch(e){}
+  try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(e){}
+}
+function speakJarvis(text, au){
+  stopSpeak();
+  jState('Jarvis spricht','speak');
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})})
+  .then(function(r){
+    if(!r.ok) throw new Error('tts');
+    return r.blob();
+  }).then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=au||new Audio();
+    _jCurAudio=a; a.src=url;
+    a.onended=function(){ URL.revokeObjectURL(url); jState('Bereit für die nächste Frage.','idle'); };
+    a.onerror=function(){ URL.revokeObjectURL(url); speakFallback(text); };
+    var p=a.play();
+    if(p&&p.catch) p.catch(function(){ speakFallback(text); });
+  }).catch(function(){ speakFallback(text); });
+}
+function speakFallback(text){
+  try{
+    if(!('speechSynthesis' in window)){ jState('Bereit für die nächste Frage.','idle'); return; }
+    var u=new SpeechSynthesisUtterance(text);
+    u.lang='de-DE'; u.rate=1.02; u.pitch=1;
+    u.onend=function(){ jState('Bereit für die nächste Frage.','idle'); };
+    window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+  }catch(e){ jState('Bereit für die nächste Frage.','idle'); }
+}
+
+// ── Spracheingabe: MediaRecorder → /api/voice STT ──
+function toggleJarvisMic(){ if(_jRecording) stopJarvisMic(false); else startJarvisMic(); }
+function startJarvisMic(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||typeof MediaRecorder==='undefined'){
+    toast('Spracheingabe hier nicht verfügbar'); return;
+  }
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    var mime=''; ['audio/webm','audio/mp4','audio/ogg'].some(function(m){ if(MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m)){ mime=m; return true; } return false; });
+    _jRec = mime ? new MediaRecorder(stream,{mimeType:mime}) : new MediaRecorder(stream);
+    _jChunks=[];
+    _jRec.ondataavailable=function(e){ if(e.data&&e.data.size) _jChunks.push(e.data); };
+    _jRec.onstop=function(){
+      stream.getTracks().forEach(function(t){ t.stop(); });
+      var blob=new Blob(_jChunks,{type:_jRec.mimeType||mime||'audio/webm'});
+      if(!blob.size){ jState('Nichts aufgenommen.','idle'); return; }
+      var fr=new FileReader();
+      fr.onload=function(){
+        jState('Verstehe dich','think');
+        fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'stt',audio:fr.result,mime:_jRec.mimeType||mime})})
+        .then(function(r){ return r.json(); }).then(function(d){
+          var txt=(d&&d.text||'').trim();
+          if(txt){ jarvisAsk(txt); } else { jState('Konnte nichts erkennen. Bitte nochmal.','idle'); toast('Nichts erkannt'); }
+        }).catch(function(){ jState('Spracherkennung fehlgeschlagen.','idle'); toast('STT-Fehler'); });
+      };
+      fr.readAsDataURL(blob);
+    };
+    _jRec.start();
+    _jRecording=true;
+    var b=$('j-mic'); if(b) b.classList.add('rec');
+    jState('Ich höre zu… (zum Stoppen tippen)','speak');
+  }).catch(function(){ toast('Mikrofon-Zugriff verweigert'); });
+}
+function stopJarvisMic(silent){
+  _jRecording=false;
+  var b=$('j-mic'); if(b) b.classList.remove('rec');
+  try{ if(_jRec&&_jRec.state!=='inactive') _jRec.stop(); }catch(e){}
+  if(silent){ /* von jarvisAsk ausgelöst — kein State-Reset nötig */ }
+}
 
 // ════ MARKETING ════
 var MKT_RANGES=[{k:'alle',l:'Alle'},{k:'30',l:'30 Tage'},{k:'90',l:'90 Tage'},{k:'month',l:'Dieser Monat'},{k:'year',l:'Dieses Jahr'}];
