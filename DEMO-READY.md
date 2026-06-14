@@ -49,18 +49,82 @@ Kein Leak: Für Nicht-Admins/Demo bleibt er aus (`isMasterContext()`).
 Damit ist der GS-Modus tonlos; nur der Baby-BOB-Scanner (`.screen.active` in BOB-Mode)
 spricht. Bereits in Commit `e2cf882` umgesetzt — hier nur bestätigt.
 
-## SCHRITT 3 — PM-Detailansicht ☐
+## SCHRITT 3 — PM-Detailansicht ✅
 
-## SCHRITT 4 — Materialliste per E-Mail ☐
+Projektmanagement → Projekt anklicken → Projektdatenblatt (`pbRender` in `app.html`).
+Komplett überarbeitet:
 
-## SCHRITT 5 — WhatsApp-Button ☐
+- **Zugeteilter Techniker / Team** — Chips (zuweisen/entfernen wie bisher).
+- **Rapporte (N)** — ALLE auf das Projekt gebuchten Rapporte aller Techniker, jeder mit
+  **Status-Badge**:
+  - `abgeschlossen` (grün) = Rapport eingereicht
+  - `läuft noch in dieser KW` (gelb) = Entwurf in der aktuellen ISO-Kalenderwoche
+  - `in Arbeit` (blau) = Entwurf aus einer früheren Woche
+  Pro Rapport: Datum, Techniker, Stunden, Arbeiten und das jeweilige Material inline.
+- **Stunden pro Techniker** — Admin-Auswertung (Summe je Techniker) + Gesamtsumme.
+- **Materiallisten (N)** — ALLE Materiallisten zum Projekt (aus `gs_nachrichten`,
+  gematcht über `projekt_id` ODER Projektname), mehrere Techniker / mehrere Listen.
+- **AGQR entfernt:** Das alte „Material (aggregiert)"-Element (×-Zähler) ist raus und
+  durch die echten Materiallisten ersetzt.
+- **Partner-Sicht:** Partner sehen ihre eigenen Projekte read-only (Tab „Projekte" →
+  Projekt öffnen): Stunden gesamt, Rapporte mit denselben Status-Labels inkl. Material,
+  und alle Materiallisten. (`pdRenderProjektDetail`.)
+
+## SCHRITT 4 — Materialliste per E-Mail (Resend + PDF) ✅
+
+Im Projektdatenblatt: Sektion **„Materialliste senden"** → Empfänger-E-Mail eingeben
+(Projektleiter vor Ort), optionale Notiz → **„📧 Materialliste per E-Mail senden"**.
+
+- Sammelt alle Material-Positionen des Projekts (strukturierte Materiallisten-Positionen
+  + Freitext-Material aus Rapporten, dedupliziert).
+- Versand über **Resend**, Absender fix **info@george-solutions.ch** (`lib/mail.js`).
+- Material sauber formatiert im **Mail-Body** (GS-Branding) **+ PDF-Anhang**
+  (`lib/pdf.js → buildMaterialPdf`, dependency-frei).
+- Backend: `api/nachrichten.js` (`action:'send', typ:'materialliste'`) hängt das PDF an.
+
+**Tests:**
+- `scripts/test-material-content.mjs` — **16/16 grün** (deploy-unabhängig, kein Key nötig):
+  beweist, dass Mail-Body UND PDF die korrekten Positionen, Mengen und die Notiz enthalten.
+- `scripts/test-material-mail.mjs` — echter End-to-End-Resend-Versand gegen das Deployment,
+  5 Durchläufe (für „20x" einfach Zahl erhöhen: `node scripts/test-material-mail.mjs <URL> 20`).
+  Empfänger ist die Resend-Test-Adresse `delivered@resend.dev` → akzeptiert + „zugestellt",
+  aber KEINE echte Mail an reale Postfächer → beliebig oft wiederholbar.
+  **Noch auszuführen gegen ein Deployment, das diesen Branch enthält** (siehe unten), weil
+  `RESEND_API_KEY` nur in Vercel liegt (nicht lokal in `.env.local`).
+
+## SCHRITT 5 — WhatsApp-Button ✅
+
+Im Projektdatenblatt neben dem Mail-Button: **„💬 Per WhatsApp öffnen (Text)"**.
+
+- Öffnet `https://wa.me/<NR>?text=<Materialliste als Text>` (Positionen vorausgefüllt).
+- **Kein Dateianhang** über WhatsApp (technisch nicht möglich) — nur Öffnen mit Text.
+  Dateiversand (PDF) bleibt bei der E-Mail.
+- Solange die Platzhalternummer drinsteht, zeigt der Button einen Hinweis-Toast statt zu
+  öffnen (kein Öffnen mit kaputter Nummer).
 
 ---
 
-## Manuelle Schritte für Emanuel (wird im Lauf ergänzt)
+## Manuelle Schritte für Emanuel
 
-- _folgt_
+1. **`scripts/test-material-mail.mjs` gegen ein Deployment mit diesem Branch laufen lassen**
+   (Branch `fix/kritische-bugs` ist gepusht → Vercel-Preview, oder nach Merge auf die
+   Produktions-URL). Beispiel 20×:
+   `node scripts/test-material-mail.mjs https://<deployment-url> 20` → muss grün sein.
+   (Geht an `delivered@resend.dev`, spammt niemanden.)
+2. **WhatsApp-Nummer eintragen** (siehe unten) — sonst zeigt der Button nur den Hinweis.
+3. Sicherstellen, dass in Vercel `RESEND_API_KEY` für die genutzte Umgebung gesetzt ist
+   (Production ist es bereits; für Preview-Deployments ggf. auch setzen, falls dort getestet
+   wird).
+4. `outputDirectory: "."` in `vercel.json` ist unverändert erhalten geblieben. ✓
 
 ## WhatsApp-Nummer eintragen
 
-- _folgt_
+In **`app.html`** die Konstante setzen (klar markiert mit ⚠️, direkt über
+`function pbIsoWeek`):
+
+```js
+var GS_WHATSAPP_NR='41XXXXXXXXX';   // ← echte Nummer, Ländercode + Nummer, OHNE "+",
+                                    //    OHNE Leerzeichen. Beispiel Schweiz: 41791234567
+```
+
+Nur dieser eine Wert muss geändert werden; der WhatsApp-Button nutzt ihn automatisch.
