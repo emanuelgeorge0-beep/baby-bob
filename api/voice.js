@@ -8,6 +8,9 @@
 const ELEVEN_KEY = process.env.ELEVENLABS_API_KEY;
 const VOICE_ID = 'nPczCjzI2devNBz1zQrb'; // Brian (verified working with this account/key)
 const TTS_MODEL = 'eleven_multilingual_v2';
+// Erlaubte TTS-Modelle (per Request wählbar). Flash/Turbo sind deutlich schneller
+// (niedrige Latenz) bei guter Qualität → Jarvis nutzt Flash für flüssige Sprachausgabe.
+const TTS_MODELS = { eleven_multilingual_v2: 1, eleven_turbo_v2_5: 1, eleven_flash_v2_5: 1 };
 const STT_MODEL = 'scribe_v1';
 
 export default async function handler(req, res) {
@@ -26,13 +29,14 @@ export default async function handler(req, res) {
 async function tts(res, body) {
   const text = (body.text ? String(body.text) : '').trim();
   if (!text) return res.status(400).json({ error: 'text erforderlich' });
+  const model = TTS_MODELS[body.model_id] ? body.model_id : TTS_MODEL;
   try {
-    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?output_format=mp3_44100_128`, {
       method: 'POST',
       headers: { 'xi-api-key': ELEVEN_KEY, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
       body: JSON.stringify({
         text: text.slice(0, 2000),
-        model_id: TTS_MODEL,
+        model_id: model,
         voice_settings: { stability: 0.55, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true },
       }),
     });

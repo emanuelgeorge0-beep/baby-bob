@@ -944,6 +944,17 @@ async function getJarvisFacts(opts = {}) {
     techFrei = te.filter((t) => t.verfuegbar === true).length;
   } catch (_) {}
 
+  // Tagesrapporte (gs_tagesrapporte): Gesamt + eingereicht.
+  let rapporteGesamt = 0, rapporteEingereicht = 0;
+  try {
+    const rp = await sbGet('gs_tagesrapporte?select=status');
+    rapporteGesamt = rp.length;
+    rapporteEingereicht = rp.filter((r) => String(r.status || '').toLowerCase() === 'eingereicht').length;
+  } catch (_) {}
+  // Material (gs_material) — Tabelle evtl. noch nicht migriert → null = Erfassung nicht aktiv.
+  let materialPositionen = null;
+  try { const mt = await sbGet('gs_material?select=id'); materialPositionen = mt.length; } catch (_) { materialPositionen = null; }
+
   // Umsatz pro Monat (gs_umsatz_monat) — die einzige Quelle für Umsatzfragen.
   const ums = await getUmsatzStats();
 
@@ -999,6 +1010,14 @@ async function getJarvisFacts(opts = {}) {
     projekte_aktiv: projAktiv,
     techniker_gesamt: techGesamt,
     techniker_frei: techFrei,
+    techniker_im_einsatz: Math.max(0, techGesamt - techFrei),
+    rapporte_gesamt: rapporteGesamt,
+    rapporte_eingereicht: rapporteEingereicht,
+    material_positionen: materialPositionen, // null = Materialerfassung noch nicht aktiv
+    material_status: materialPositionen === null ? 'Materialerfassung noch nicht aktiv' : 'erfasst',
+    // Kalender ist noch nicht angebunden — Termine ehrlich als „kommt bald" behandeln.
+    termine_quelle: 'Kalender noch nicht angebunden',
+    naechste_termine: null,
   };
 }
 
@@ -1022,10 +1041,14 @@ REGELN:
 - Steht eine konkrete Zahl nicht in den Daten, sag ehrlich, dass du dazu im Cockpit keine Zahl hast — und nenne, falls passend, eine verwandte Zahl die du hast.
 - Du kannst u. a. beantworten: „Wie laufen die Finanzen?" (Umsatz/Marge/Pipeline + Phase aus dem Kontext), „Wie sieht die Leadmaschine aus?" (Leads pro Kanal/Region, Marketing, Meta ab 24. Juni), „Was muss ich noch erledigen?" (offene To-Dos und Follow-ups), „Was schätzt du für die nächsten 3-4 Monate?" (klar gekennzeichnete Schätzung), „In welcher Phase sind wir?" (aus dem Geschäftskontext).
 - Bei Prognose-/Wachstumsfragen darfst du optimistisch-realistisch hochrechnen, MUSST es aber klar als Schätzung kennzeichnen (z. B. „grob geschätzt", „meine Einschätzung, keine Garantie") und dich an den realen Ausgangszahlen orientieren.
-- Antworte kurz und gesprochen, 1 bis 4 Sätze. Deine Antwort wird laut vorgelesen.
+- Antworte SEHR knapp und gesprochen: 1 bis 2 kurze Sätze, kommt sofort auf den Punkt. Deine Antwort wird laut vorgelesen — kurz = schnell. Kein Vorgeplänkel („Gute Frage", „Gerne") — direkt die Zahl/Antwort.
 - KEINE Markdown-Symbole, keine Sternchen, keine Aufzählungszeichen, keine Tabellen. Reiner Fliesstext.
 - Nenne konkrete Zahlen. Geldbeträge als „… Franken" (CHF-Werte sind in Schweizer Franken).
 - UMSATZFRAGEN beantwortest du ausschliesslich aus den Feldern umsatz_pro_monat, umsatz_erfasste_monate_chf, umsatz_dieses_jahr_chf und bester_umsatzmonat. Ist umsatz_daten_vorhanden false oder umsatz_pro_monat leer, sag ehrlich: „Es sind noch keine Umsatzdaten hinterlegt." — erfinde NIE Umsatzzahlen. (Die Felder rund um marge_* stammen aus der separaten Margen-Kalkulation, nicht aus der Monatsumsatz-Erfassung.)
+- TECHNIKER: nutze techniker_gesamt (Pool), techniker_frei (verfügbar) und techniker_im_einsatz. Formuliere z. B. „X Techniker im Pool, Y davon gerade frei".
+- RAPPORTE: aus rapporte_gesamt und rapporte_eingereicht. Sind es 0, sag ehrlich „es sind noch keine Tagesrapporte erfasst".
+- MATERIAL: aus material_positionen. Ist es null (siehe material_status), sag ehrlich „die Materialerfassung ist noch nicht aktiv — das kommt bald". Erfinde KEINE Material-Zahlen.
+- TERMINE / KALENDER: es gibt noch KEINE Kalender-Anbindung (termine_quelle). Sag ehrlich und freundlich „dein Kalender ist noch nicht angebunden, deine Termine kann ich dir bald hier anzeigen". Erfinde NIEMALS Termine.
 
 GEDÄCHTNIS & LERNEN:
 - Du hast ein dauerhaftes Gedächtnis im Feld gespeichertes_wissen (frühere Notizen, Planungen, Entscheidungen des Chefs). Lies es bei JEDER Antwort mit und beziehe Relevantes aktiv ein („wie du dir notiert hast …"). So baust du über die Zeit Kontext auf.
@@ -1103,8 +1126,10 @@ async function askJarvis(body) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 400,
+        // Haiku = deutlich schnellere Antwort (~1-2s statt ~5s) bei gleichbleibend guter
+        // Qualität für kurze, faktische Cockpit-Antworten → flüssiges Sprach-Erlebnis.
+        model: 'claude-haiku-4-5',
+        max_tokens: 256,
         system: `${JARVIS_SYSTEM}\n\nHEUTE: ${facts.datum}\n\nAKTUELLE COCKPIT-DATEN (JSON):\n${JSON.stringify(facts)}`,
         messages,
       }),
