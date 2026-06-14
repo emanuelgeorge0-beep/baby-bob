@@ -2,6 +2,7 @@
 // Techniker → Projektleiter (materialliste/rapport), inbox, unread badge.
 // Materialliste wird zusätzlich per E-Mail (Resend) an den Projektleiter geschickt.
 import { sendResendEmail, materialEmailHtml } from '../lib/mail.js';
+import { buildMaterialPdf } from '../lib/pdf.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -128,11 +129,21 @@ async function sendMaterialEmail(user, body, recipient, fallbackUsed = false, T 
     fallbackUsed,
   });
 
-  // Optionales Foto als Anhang (data-URL → base64 ohne Prefix).
-  let attachments;
+  // Anhänge: Materialliste als PDF (falls Positionen vorhanden) + optionales Foto.
+  const attachments = [];
+  if (positionen.length) {
+    try {
+      const pdf = buildMaterialPdf({
+        projektName, projektnummer: inhalt.projektnummer || '', vonName,
+        positionen, notiz: inhalt.notiz || '',
+      });
+      attachments.push({ filename: `Materialliste-${projektName}.pdf`.replace(/[^\w.\-]+/g, '_'), content: Buffer.from(pdf).toString('base64') });
+      T('pdf-attached', { bytes: pdf.length });
+    } catch (e) { T('pdf-failed', e.message); /* Mail geht trotzdem ohne PDF raus */ }
+  }
   const foto = inhalt.foto;
   if (typeof foto === 'string' && foto.indexOf('base64,') > -1) {
-    attachments = [{ filename: 'material-foto.jpg', content: foto.split('base64,')[1] }];
+    attachments.push({ filename: 'material-foto.jpg', content: foto.split('base64,')[1] });
   }
 
   const to = recipient || MATERIAL_OFFICE;
