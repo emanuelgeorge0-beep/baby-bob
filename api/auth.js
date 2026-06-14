@@ -16,11 +16,11 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { action, email, password, token } = req.body || {};
+    const { action, email, password, token, redirect_to } = req.body || {};
     switch (action) {
-      case 'magic_link':     return await sendMagicLink(res, email);
+      case 'magic_link':     return await sendMagicLink(res, email, redirect_to);
       case 'login':          return await loginWithPassword(res, email, password);
-      case 'reset_password': return await sendPasswordReset(res, email);
+      case 'reset_password': return await sendPasswordReset(res, email, redirect_to);
       case 'verify':         return await verifyToken(res, token);
       case 'refresh':        return await refreshSession(res, req.body?.refresh_token);
       default:               return res.status(400).json({ error: 'Unknown action' });
@@ -31,14 +31,27 @@ export default async function handler(req, res) {
   }
 }
 
-async function sendMagicLink(res, email) {
+// Nur eigene, bekannte Ziel-Pfade als Redirect zulassen (kein Open-Redirect).
+// Supabase erzwingt zusätzlich seine eigene Redirect-URL-Allowlist.
+function safeRedirectQuery(redirectTo) {
+  if (!redirectTo) return '';
+  try {
+    const u = new URL(redirectTo);
+    if (u.pathname === '/gs-intern-7k2x' && (u.protocol === 'https:' || u.protocol === 'http:')) {
+      return `?redirect_to=${encodeURIComponent(u.origin + u.pathname)}`;
+    }
+  } catch { /* ungültige URL → ignorieren */ }
+  return '';
+}
+
+async function sendMagicLink(res, email, redirectTo) {
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return res.status(400).json({ error: 'Bitte gültige E-Mail eingeben' });
   }
   // create_user:true → OTP works for ANY email (creates the user if new).
   // No whitelist/restriction. NOTE: deliverability + rate limits are a
   // Supabase Auth setting (custom SMTP required for production volume).
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/otp${safeRedirectQuery(redirectTo)}`, {
     method: 'POST',
     headers: SB_HEADERS,
     body: JSON.stringify({ email, create_user: true }),
@@ -54,11 +67,11 @@ async function sendMagicLink(res, email) {
 
 // Passwort-Reset/-Setzen: schickt eine Recovery-Mail (Supabase). Partner/Techniker können
 // sich so selbst ein Passwort setzen. Antwort immer ok (kein User-Enumeration-Leak).
-async function sendPasswordReset(res, email) {
+async function sendPasswordReset(res, email, redirectTo) {
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return res.status(400).json({ error: 'Bitte gültige E-Mail eingeben' });
   }
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/recover${safeRedirectQuery(redirectTo)}`, {
     method: 'POST',
     headers: SB_HEADERS,
     body: JSON.stringify({ email }),

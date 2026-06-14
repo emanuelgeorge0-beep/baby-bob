@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#0a0e14"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="GS Cockpit"/>
+<meta name="apple-mobile-web-app-title" content="Master George"/>
 <title>GS</title>
 <link rel="manifest" href="/cockpit-manifest.json"/>
 <!-- iOS ignoriert SVG-apple-touch-icons → echtes PNG, damit das Homescreen-Icon korrekt erscheint. -->
@@ -354,9 +354,9 @@
       <label>Passwort</label>
       <input id="li-pw" type="password" autocomplete="current-password" placeholder="••••••••"/>
     </div>
-    <button class="btn" id="li-go">Anmelden</button>
-    <button class="btn ghost" id="li-magic">Magic-Link per E-Mail</button>
-    <button class="btn ghost" id="li-reset" style="margin-top:6px;">Passwort vergessen / setzen</button>
+    <button class="btn" id="li-go">Master-Login</button>
+    <button class="btn ghost" id="li-magic">Kein Passwort? Magic-Link senden</button>
+    <button class="btn ghost" id="li-reset" style="margin-top:6px;">Passwort vergessen / neu setzen</button>
     <div class="login-msg" id="li-msg"></div>
   </div>
 </div>
@@ -491,20 +491,22 @@ $('li-go').onclick=function(){
     enterApp();
   }).catch(function(){ setMsg('Verbindungsfehler','err'); });
 };
+// Magic-Link & Reset landen EXAKT wieder im Cockpit (nicht auf /app).
+var COCKPIT_URL = location.origin + '/gs-intern-7k2x';
 $('li-magic').onclick=function(){
   var email=$('li-email').value.trim();
   if(!email){ setMsg('Zuerst E-Mail eingeben','err'); return; }
   setMsg('Sende Magic-Link…','');
-  authApi('magic_link',{email:email}).then(function(d){
-    setMsg(d.error?d.error:'Link gesendet – E-Mail prüfen.', d.error?'err':'ok');
+  authApi('magic_link',{email:email, redirect_to:COCKPIT_URL}).then(function(d){
+    setMsg(d.error?d.error:'Link gesendet – E-Mail prüfen, dann landest du direkt hier.', d.error?'err':'ok');
   }).catch(function(){ setMsg('Verbindungsfehler','err'); });
 };
 $('li-reset').onclick=function(){
   var email=$('li-email').value.trim();
   if(!email){ setMsg('Zuerst E-Mail eingeben','err'); return; }
   setMsg('Sende Link zum Passwort-Setzen…','');
-  authApi('reset_password',{email:email}).then(function(d){
-    setMsg(d.error?d.error:'Link gesendet – E-Mail prüfen.', d.error?'err':'ok');
+  authApi('reset_password',{email:email, redirect_to:COCKPIT_URL}).then(function(d){
+    setMsg(d.error?d.error:'Link gesendet – E-Mail prüfen, dann landest du direkt hier.', d.error?'err':'ok');
   }).catch(function(){ setMsg('Verbindungsfehler','err'); });
 };
 $('li-pw').addEventListener('keydown',function(e){ if(e.key==='Enter') $('li-go').click(); });
