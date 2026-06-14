@@ -252,16 +252,25 @@
 - [x] Syntaxchecks grün (`node --check` auth.js/Skript/Cockpit-JS), Redirect-Schutz unit-getestet, Login-Seite
       gerendert (sauber, schwarz-gold), nur eigene Dateien committet + sofort gepusht.
 
-> **MANUELLE AKTIONEN FÜR EMANUEL (Session 9):**
+### ✅ Session 9b — MERGE master-cockpit → main (LIVE auf Produktion)
+- [x] **Vorab-Checks (ohne Änderung):** Dry-Run-Merge `master-cockpit → main` = **0 Konflikte**;
+      gemergte `vercel.json` behält `outputDirectory "."` **und** Rewrite `/gs-intern-7k2x → /gs-intern.html`.
+- [x] **Konflikt-Hinweis fix/kritische-bugs:** dieser Branch (13 Commits, noch nicht in main) ändert
+      dieselben Dateien wie das Cockpit → künftiger Merge `fix/kritische-bugs → main` kollidiert in
+      **`app.html`** und **`DEMO-READY.md`** (dry-run bestätigt). Blockiert diesen Merge NICHT, aber beim
+      späteren Mergen von fix/kritische-bugs müssen diese beiden Dateien manuell aufgelöst werden.
+- [x] **Merge ausgeführt** (`--no-ff`), nach `origin/main` gepusht (`1d74486..a26a199`). Bringt zusätzlich
+      die B2C-Features aus den Cockpit-Sessions live: `app.html` (+162), `api/nachrichten.js`, `lib/pdf.js`.
+- [x] **LIVE verifiziert:** `https://baby-bob.vercel.app/gs-intern-7k2x` → **HTTP 200, zeigt das Cockpit**
+      (MASTER GEORGE / Master-Login / cockpit-manifest). Manifest 200 (`short_name "Master George"`),
+      Icon-180 200, Header `x-robots-tag: noindex` + `cache-control: no-store` erhalten. Login-Seite live gerendert.
+
+> **MANUELLE AKTIONEN FÜR EMANUEL (Stand Session 9b — Cockpit ist LIVE):**
 > 1. **Passwort setzen (einmalig):** im Projekt-Root `node scripts/set-master-password.mjs 'DeinPasswort'`.
-> 2. **Eine offene URL schaffen** — eine der beiden:
->    (A) **Vercel → Projekt `baby-bob` → Settings → Deployment Protection → Vercel Authentication →
->        „Disabled"** (oder „Only Production" so wählen, dass Preview offen ist) → Speichern. Danach offen:
->        `https://baby-bob-git-master-cockpit-baby-bob.vercel.app/gs-intern-7k2x`.
->    (B) ODER master-cockpit → main mergen (Freigabe nötig) → dann
->        `https://baby-bob.vercel.app/gs-intern-7k2x` (Prod ist NICHT geschützt).
-> 3. **Nur falls Magic-Link genutzt wird:** Supabase → Authentication → URL Configuration → **Redirect URLs**
->    → die Cockpit-URL aus Schritt 2 mit `/gs-intern-7k2x` eintragen. Für reinen Passwort-Login NICHT nötig.
+>    → Danach auf `https://baby-bob.vercel.app/gs-intern-7k2x` mit E-Mail + Passwort einloggen.
+> 2. **Vercel Deployment Protection ist NICHT mehr nötig** (Produktion ist offen, Cockpit ist login-gegated).
+> 3. **Für Magic-Link (optional):** Supabase → Authentication → URL Configuration → **Redirect URLs**
+>    → `https://baby-bob.vercel.app/gs-intern-7k2x` eintragen. Für reinen Passwort-Login NICHT nötig.
 
 ## 20x Bug-/Mobile-Analyse (Session 8 · Reel-Finish Command-Center) — Ergebnis
 1. **Titel nie abgeschnitten:** SVG-`textLength`+`preserveAspectRatio` skaliert „MASTER GEORGE" exakt in
