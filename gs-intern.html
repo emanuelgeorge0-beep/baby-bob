@@ -381,14 +381,20 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
+var MEHR_VIEWS=['mehr','marketing','todos','margen'];
 function go(v){
   curView=v;
-  Array.prototype.forEach.call($('nav').children,function(b){ b.classList.toggle('on', b.getAttribute('data-v')===v); });
+  // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
+  var navActive = MEHR_VIEWS.indexOf(v)>-1 ? 'mehr' : v;
+  Array.prototype.forEach.call($('nav').children,function(b){ b.classList.toggle('on', b.getAttribute('data-v')===navActive); });
   window.scrollTo(0,0);
   if(v==='dashboard') renderDashboard();
   else if(v==='leads') renderLeads();
   else if(v==='crm') renderCRM();
   else if(v==='mehr') renderMehr();
+  else if(v==='marketing') renderMarketing();
+  else if(v==='todos') renderTodos();
+  else if(v==='margen') renderMargen();
 }
 function router(){ go(curView); }
 
@@ -421,9 +427,13 @@ function paintDashboard(d){
       tile('Überfällig', fuOver, '', fuOver? 'bad':'ok')+
       tileWide('Pipeline-Wert <span class="sfx">(geschätzt)</span>', chf(d.pipelineWert), 'gold')+
       tile('Gewonnen / Monat', d.gewonnenMonat, '', 'ok')+
+      tileTap('todos','To-Dos heute', (d.todosHeute||0), ((d.todosUeberfaellig||0)? (d.todosUeberfaellig)+' überfällig':'offen: '+(d.todosOffen||0)), (d.todosUeberfaellig? 'bad': (d.todosHeute? 'gold':'')))+
+      tileTap('margen','Marge gesamt', chf(d.margeGesamt||0), (d.margeProzent||0)+'% · Umsatz '+chf(d.umsatzGesamt||0), 'ok')+
       tileWide('Pipeline pro Stufe','<div class="stufebars">'+stufeBars+'</div>','plain')+
       tileWide('Leads pro Quelle','<div class="src-chips">'+srcChips+'</div>','plain')+
     '</div>';
+  var tt=$('view').querySelector('[data-tap="todos"]'); if(tt) tt.onclick=function(){ go('todos'); };
+  var tm=$('view').querySelector('[data-tap="margen"]'); if(tm) tm.onclick=function(){ go('margen'); };
 }
 function tile(k,v,sfx,cls){
   return '<div class="tile"><div class="k">'+k+'</div><div class="v '+(cls||'')+' mono">'+v+
@@ -432,6 +442,11 @@ function tile(k,v,sfx,cls){
 function tileWide(k,inner,mode){
   if(mode==='plain') return '<div class="tile wide"><div class="k">'+k+'</div>'+inner+'</div>';
   return '<div class="tile wide"><div class="k">'+k+'</div><div class="v '+(mode||'')+' mono">'+inner+'</div></div>';
+}
+// Anklickbare Kachel (führt zu einem Modul).
+function tileTap(tap,k,v,sfx,cls){
+  return '<div class="tile" data-tap="'+tap+'" style="cursor:pointer"><div class="k">'+k+'</div>'+
+    '<div class="v '+(cls||'')+' mono">'+v+'</div>'+(sfx?'<div class="sfx">'+sfx+'</div>':'')+'</div>';
 }
 
 // ── LEADS (Block 1) ──
@@ -673,20 +688,272 @@ function openSheet(inner){
 function closeSheet(){ var b=$('sheet-bg'); if(b) b.remove(); document.body.style.overflow=''; sheetBody=null; }
 window.addEventListener('keydown',function(e){ if(e.key==='Escape') closeSheet(); });
 
-// ── "Mehr" — erweiterbare Platzhalter für künftige Module ──
+// ── "Mehr" — Modul-Menü (erweiterbar) ──
+var MITARBEITER=['Emanuel','Dimitri','Patrick','Vasil','Yasemin'];
+var KANAELE=['meta','google','app','linkedin','netzwerk','direkt'];
+var KANAL_LABEL={meta:'Meta',google:'Google',app:'App / BOB',linkedin:'LinkedIn',netzwerk:'Netzwerk',direkt:'Direkt',sonstige:'Sonstige'};
 function renderMehr(){
   var mods=[
-    {ic:'📣',t:'Marketing',d:'Kampagnen, Content-Pipeline, Kanäle'},
-    {ic:'✅',t:'To-Dos',d:'Aufgaben ohne Kundenbezug'},
-    {ic:'💰',t:'Verkauf & Einkauf',d:'Angebote, Marge, Material'},
-    {ic:'🏛️',t:'4 Säulen',d:'Übergreifende Geschäftsbereiche'}
+    {v:'marketing',ic:'📣',t:'Marketing',d:'Kanäle, Kosten/Lead, Conversion, Content-Plan'},
+    {v:'todos',ic:'✅',t:'To-Dos',d:'Interne Aufgaben (Team, Fälligkeit, Priorität)'},
+    {v:'margen',ic:'💰',t:'Verkauf & Margen',d:'Einkauf vs. Verkauf → Marge pro Projekt'},
+    {v:null,ic:'🏛️',t:'4 Säulen',d:'Übergreifende Geschäftsbereiche'}
   ];
-  $('view').innerHTML='<h2><span class="acc">⋯</span> Weitere Module</h2>'+
+  $('view').innerHTML='<h2><span class="acc">⋯</span> Module</h2>'+
     '<div class="list">'+mods.map(function(m){
-      return '<div class="lcard" style="opacity:.8"><div class="top"><div class="nm">'+m.ic+' '+m.t+'</div>'+
-        '<span class="src-tag">bald</span></div><div class="meta">'+esc(m.d)+'</div></div>';
-    }).join('')+'</div>'+
-    '<div class="soon" style="padding-top:34px"><div style="font-size:12px;color:var(--muted2)">Architektur erweiterbar — Module folgen in den nächsten Sessions.</div></div>';
+      return '<div class="lcard"'+(m.v?' data-go="'+m.v+'"':' style="opacity:.6"')+'><div class="top"><div class="nm">'+m.ic+' '+m.t+'</div>'+
+        (m.v?'<span class="src-tag" style="border-color:var(--gold-line);color:var(--gold)">öffnen ›</span>':'<span class="src-tag">bald</span>')+
+        '</div><div class="meta">'+esc(m.d)+'</div></div>';
+    }).join('')+'</div>';
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-go]'),function(c){
+    c.onclick=function(){ go(c.getAttribute('data-go')); };
+  });
+}
+
+// Shared: Zurück-Zeile + Migrations-Hinweis (Module).
+function backRow(){ return '<div style="margin-bottom:14px"><span class="chip" id="back-mehr">‹ Module</span></div>'; }
+function wireBack(){ var b=$('back-mehr'); if(b) b.onclick=function(){ go('mehr'); }; }
+function migHint(){ return '<div class="empty">Modul-Tabellen noch nicht migriert.<br><span style="font-size:12px;color:var(--muted2)">scripts/master_cockpit_session2.sql im Supabase SQL Editor ausführen.</span></div>'; }
+
+// ════ MARKETING ════
+function renderMarketing(){
+  $('view').innerHTML='<h2><span class="acc">📣</span> Marketing</h2>'+backRow()+'<div id="mkt-body"><div class="list">'+skeletonCards(3)+'</div></div>';
+  wireBack();
+  api('marketing').then(paintMarketing).catch(function(){ var b=$('mkt-body'); if(b) b.innerHTML=migHint(); });
+}
+function paintMarketing(d){
+  var t=d.totals||{leads:0,gewonnen:0,kosten:0,cpl:0};
+  var tiles='<div class="grid">'+
+    tile('Leads gesamt', t.leads, '')+
+    tile('Gewonnen', t.gewonnen, '', 'ok')+
+    tile('Kosten gesamt', chf(t.kosten), '', 'gold')+
+    tile('Ø Kosten/Lead', chf(t.cpl), '', t.cpl?'warn':'')+
+  '</div>';
+  var rows=(d.kanaele||[]).map(function(k){
+    return '<div class="lcard" data-kanal="'+esc(k.kanal)+'">'+
+      '<div class="top"><div class="nm">'+esc(KANAL_LABEL[k.kanal]||cap(k.kanal))+'</div>'+
+        '<span class="badge '+(k.conversion>=20?'b-gewonnen':k.conversion>0?'b-kontaktiert':'b-neu')+'">'+k.conversion+'% Conv.</span></div>'+
+      '<div class="meta" style="align-items:center">'+
+        '<span><b style="color:var(--txt)">'+k.leads+'</b> Leads</span>'+
+        '<span class="dot"><b style="color:var(--ok)">'+k.gewonnen+'</b> gewonnen</span>'+
+      '</div>'+
+      '<div class="meta" style="align-items:center">'+
+        '<span class="src-tag" style="border-color:var(--gold-line);color:var(--gold)">'+chf(k.kosten)+' Kosten</span>'+
+        '<span class="dot">CPL '+chf(k.cpl)+'</span>'+
+        '<span class="assign" style="margin-left:auto">tippen ›</span>'+
+      '</div></div>';
+  }).join('');
+  $('mkt-body').innerHTML=tiles+
+    '<div class="sec-t" style="border:none;margin-top:18px">Kanäle (Quelle ↔ Lead)</div>'+
+    '<div class="list">'+(rows||'<div class="empty">Keine Lead-Daten.</div>')+'</div>'+
+    '<div class="sec-t">Content-Plan</div>'+
+    '<button class="btn-sm" id="mkt-content-add" style="width:100%;margin-bottom:10px">+ Content-Idee</button>'+
+    '<div class="list" id="mkt-content-list">'+paintContent(d.content||[])+'</div>';
+  Array.prototype.forEach.call($('mkt-body').querySelectorAll('[data-kanal]'),function(c){
+    c.onclick=function(){ openKanalEdit(c.getAttribute('data-kanal'), d); };
+  });
+  $('mkt-content-add').onclick=function(){ openContentForm(); };
+  wireContentList();
+}
+function paintContent(list){
+  if(!list.length) return '<div class="empty" style="padding:18px">Noch keine Content-Ideen.</div>';
+  var sb={idee:'b-neu',geplant:'b-kontaktiert',veroeffentlicht:'b-gewonnen'};
+  return list.map(function(c){
+    return '<div class="lcard" data-content="'+c.id+'">'+
+      '<div class="top"><div class="nm">'+esc(c.idee)+'</div><span class="badge '+(sb[c.status]||'b-neu')+'">'+esc(c.status)+'</span></div>'+
+      '<div class="meta" style="align-items:center">'+
+        (c.kanal?'<span class="src-tag">'+esc(KANAL_LABEL[c.kanal]||c.kanal)+'</span>':'')+
+        (c.datum?'<span class="dot">'+deDate(c.datum)+'</span>':'')+
+        '<span class="assign" style="margin-left:auto" data-cdel="'+c.id+'">🗑 löschen</span>'+
+      '</div></div>';
+  }).join('');
+}
+function wireContentList(){
+  Array.prototype.forEach.call($('mkt-content-list').querySelectorAll('[data-content]'),function(c){
+    c.onclick=function(e){
+      var del=e.target.getAttribute&&e.target.getAttribute('data-cdel');
+      if(del){ e.stopPropagation();
+        api('mkt_content_del',{id:del}).then(function(){ toast('Gelöscht'); renderMarketing(); }).catch(function(){ toast('Fehler'); });
+        return;
+      }
+      openContentStatus(c.getAttribute('data-content'));
+    };
+  });
+}
+function openKanalEdit(kanal, d){
+  var cur=(d.kanaele||[]).filter(function(k){return k.kanal===kanal;})[0]||{kosten:0,notiz:''};
+  openSheet('');
+  sheetBody.innerHTML='<h3>'+esc(KANAL_LABEL[kanal]||cap(kanal))+'</h3>'+
+    '<div class="h-sub">Marketing-Kosten für diesen Kanal</div>'+
+    '<label style="font-size:12px;color:var(--muted)">Kosten gesamt</label>'+
+    '<input class="field" id="k-kosten" type="number" inputmode="decimal" value="'+(cur.kosten||0)+'"/>'+
+    '<textarea class="field" id="k-notiz" placeholder="Notiz (optional)">'+esc(cur.notiz||'')+'</textarea>'+
+    '<button class="btn-sm btn-gold" id="k-save" style="width:100%">Speichern</button>';
+  $('k-save').onclick=function(){
+    api('mkt_kosten_set',{kanal:kanal, kosten:$('k-kosten').value, notiz:$('k-notiz').value.trim()})
+      .then(function(){ toast('Gespeichert'); closeSheet(); renderMarketing(); refreshDashSilent(); })
+      .catch(function(){ toast('Migration nötig?'); });
+  };
+}
+function openContentForm(){
+  openSheet('');
+  sheetBody.innerHTML='<h3>Content-Idee</h3>'+
+    '<input class="field" id="c-idee" placeholder="Idee / Thema"/>'+
+    '<div class="row2"><select class="field" id="c-kanal">'+kanalOptions('')+'</select>'+
+    '<input class="field" id="c-datum" type="date"/></div>'+
+    '<select class="field" id="c-status"><option value="idee">Idee</option><option value="geplant">Geplant</option><option value="veroeffentlicht">Veröffentlicht</option></select>'+
+    '<button class="btn-sm btn-gold" id="c-save" style="width:100%">Anlegen</button>';
+  $('c-save').onclick=function(){
+    var idee=$('c-idee').value.trim(); if(!idee){ toast('Idee eingeben'); return; }
+    api('mkt_content_add',{idee:idee,kanal:$('c-kanal').value||null,datum:$('c-datum').value||null,status:$('c-status').value})
+      .then(function(){ toast('Angelegt'); closeSheet(); renderMarketing(); }).catch(function(){ toast('Migration nötig?'); });
+  };
+}
+function openContentStatus(id){
+  openSheet('');
+  sheetBody.innerHTML='<h3>Status ändern</h3><div class="stufe-pick">'+
+    ['idee','geplant','veroeffentlicht'].map(function(s){ return '<span class="chip" data-s="'+s+'">'+cap(s)+'</span>'; }).join('')+'</div>';
+  Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-s]'),function(c){
+    c.onclick=function(){ api('mkt_content_set',{id:id,status:c.getAttribute('data-s')}).then(function(){ toast('Aktualisiert'); closeSheet(); renderMarketing(); }).catch(function(){ toast('Fehler'); }); };
+  });
+}
+function kanalOptions(sel){
+  return '<option value="">Kanal…</option>'+KANAELE.map(function(k){ return '<option value="'+k+'"'+(sel===k?' selected':'')+'>'+KANAL_LABEL[k]+'</option>'; }).join('');
+}
+
+// ════ TO-DOS ════
+function renderTodos(){
+  $('view').innerHTML='<h2><span class="acc">✅</span> To-Dos</h2>'+backRow()+
+    '<button class="btn-sm btn-gold" id="todo-add" style="width:100%;margin-bottom:12px">+ Neue Aufgabe</button>'+
+    '<div class="list" id="todo-list">'+skeletonCards(4)+'</div>';
+  wireBack();
+  $('todo-add').onclick=function(){ openTodoForm(null); };
+  api('todos').then(function(d){ _todoCache=d.todos||[]; paintTodos(_todoCache); }).catch(function(){ var b=$('todo-list'); if(b) b.innerHTML=migHint(); });
+}
+var _todoCache=[];
+function paintTodos(todos){
+  var offen=todos.filter(function(t){return t.status==='offen';});
+  var done=todos.filter(function(t){return t.status==='erledigt';});
+  if(!todos.length){ $('todo-list').innerHTML='<div class="empty">Keine To-Dos. Lege die erste Aufgabe an.</div>'; return; }
+  var html=offen.map(todoCard).join('');
+  if(done.length) html+='<div class="sec-t" style="border:none">Erledigt ('+done.length+')</div>'+done.map(todoCard).join('');
+  $('todo-list').innerHTML=html;
+  wireTodoCards();
+}
+function prioBadge(p){
+  var m={hoch:'b-verloren',mittel:'b-angebot',niedrig:'b-neu'};
+  return '<span class="badge '+(m[p]||'b-neu')+'">'+esc(p||'mittel')+'</span>';
+}
+function todoCard(t){
+  var done=t.status==='erledigt';
+  var fu='';
+  if(!done && t.fu_state){ fu='<span class="fu '+t.fu_state+'">'+(t.fu_state==='ueberfaellig'?'⚠ '+deDate(t.faelligkeit):t.fu_state==='heute'?'★ heute':'⏱ '+deDate(t.faelligkeit))+'</span>'; }
+  return '<div class="task-item'+(t.fu_state==='ueberfaellig'&&!done?' over':'')+'" style="flex-wrap:wrap" data-todo="'+t.id+'" data-done="'+(done?1:0)+'">'+
+    '<button class="check" data-tdone="'+t.id+'" style="'+(done?'opacity:.5':'')+'">'+(done?'↩':'✓')+'</button>'+
+    '<span class="tx" style="'+(done?'text-decoration:line-through;color:var(--muted)':'')+'">'+esc(t.titel)+'</span>'+
+    prioBadge(t.prioritaet)+
+    '<div class="meta" style="flex-basis:100%;align-items:center;margin-top:4px">'+
+      (t.zustaendig?'<span class="assign">👤 '+esc(t.zustaendig)+'</span>':'')+
+      fu+
+      '<span class="assign" style="margin-left:auto" data-tedit="'+t.id+'">bearbeiten ›</span>'+
+    '</div></div>';
+}
+function wireTodoCards(){
+  Array.prototype.forEach.call($('todo-list').querySelectorAll('[data-tdone]'),function(b){
+    b.onclick=function(e){ e.stopPropagation();
+      var card=b.closest('[data-todo]'); var isDone=card&&card.getAttribute('data-done')==='1';
+      api('todo_update',{id:b.getAttribute('data-tdone'),status:isDone?'offen':'erledigt'})
+        .then(function(){ toast(isDone?'Reaktiviert':'Erledigt'); renderTodos(); refreshDashSilent(); }).catch(function(){ toast('Fehler'); });
+    };
+  });
+  Array.prototype.forEach.call($('todo-list').querySelectorAll('[data-tedit]'),function(b){
+    b.onclick=function(e){ e.stopPropagation(); var t=_todoCache.filter(function(x){return x.id===b.getAttribute('data-tedit');})[0]; if(t) openTodoForm(t); };
+  });
+}
+function openTodoForm(t){
+  t=t||{};
+  openSheet('');
+  sheetBody.innerHTML='<h3>'+(t.id?'Aufgabe bearbeiten':'Neue Aufgabe')+'</h3>'+
+    '<input class="field" id="t-titel" placeholder="Titel" value="'+esc(t.titel||'')+'"/>'+
+    '<textarea class="field" id="t-besch" placeholder="Beschreibung (optional)">'+esc(t.beschreibung||'')+'</textarea>'+
+    '<div class="row2"><select class="field" id="t-zust"><option value="">Zuständig…</option>'+
+      MITARBEITER.map(function(m){ return '<option'+(t.zustaendig===m?' selected':'')+'>'+m+'</option>'; }).join('')+'</select>'+
+    '<input class="field" id="t-faell" type="date" value="'+esc(t.faelligkeit||'')+'"/></div>'+
+    '<select class="field" id="t-prio">'+['niedrig','mittel','hoch'].map(function(p){ return '<option value="'+p+'"'+((t.prioritaet||'mittel')===p?' selected':'')+'>'+cap(p)+' Priorität</option>'; }).join('')+'</select>'+
+    '<button class="btn-sm btn-gold" id="t-save" style="width:100%">'+(t.id?'Speichern':'Anlegen')+'</button>'+
+    (t.id?'<button class="btn-sm" id="t-del" style="width:100%;margin-top:8px;color:var(--bad);border-color:rgba(255,93,93,.3)">Löschen</button>':'');
+  $('t-save').onclick=function(){
+    var titel=$('t-titel').value.trim(); if(!titel){ toast('Titel eingeben'); return; }
+    var p={titel:titel,beschreibung:$('t-besch').value.trim(),zustaendig:$('t-zust').value,faelligkeit:$('t-faell').value||null,prioritaet:$('t-prio').value};
+    var call = t.id ? api('todo_update',Object.assign({id:t.id},p)) : api('todo_add',p);
+    call.then(function(){ toast('Gespeichert'); closeSheet(); renderTodos(); refreshDashSilent(); }).catch(function(){ toast('Migration nötig?'); });
+  };
+  if(t.id) $('t-del').onclick=function(){ api('todo_del',{id:t.id}).then(function(){ toast('Gelöscht'); closeSheet(); renderTodos(); refreshDashSilent(); }).catch(function(){ toast('Fehler'); }); };
+}
+
+// ════ VERKAUF / MARGEN ════
+function renderMargen(){
+  $('view').innerHTML='<h2><span class="acc">💰</span> Verkauf &amp; Margen</h2>'+backRow()+
+    '<button class="btn-sm btn-gold" id="marge-add" style="width:100%;margin-bottom:12px">+ Projekt / Position</button>'+
+    '<div id="marge-totals"></div><div class="list" id="marge-list">'+skeletonCards(3)+'</div>';
+  wireBack();
+  $('marge-add').onclick=function(){ openMargeForm(null); };
+  api('margen').then(function(d){ paintMargen(d); }).catch(function(){ var b=$('marge-list'); if(b) b.innerHTML=migHint(); });
+}
+function paintMargen(d){
+  var t=d.totals||{umsatz:0,marge:0,prozent:0,einkauf:0};
+  $('marge-totals').innerHTML='<div class="grid">'+
+    tile('Umsatz gesamt', chf(t.umsatz), '', 'gold')+
+    tile('Einkauf gesamt', chf(t.einkauf), '')+
+    tileWide('Marge gesamt', chf(t.marge)+' <span class="sfx">· '+t.prozent+'%</span>', t.marge>=0?'ok':'bad')+
+  '</div><div style="height:14px"></div>';
+  var rows=(d.margen||[]);
+  if(!rows.length){ $('marge-list').innerHTML='<div class="empty">Noch keine Positionen. Lege ein Projekt an.</div>'; return; }
+  $('marge-list').innerHTML=rows.map(function(m){
+    return '<div class="lcard" data-marge="'+m.id+'">'+
+      '<div class="top"><div class="nm">'+esc(m.titel)+(m.anfrage_titel?' <span style="color:var(--muted);font-weight:500">· '+esc(m.anfrage_titel)+'</span>':'')+'</div>'+
+        '<span class="badge '+(m.marge>=0?'b-gewonnen':'b-verloren')+'">'+m.prozent+'%</span></div>'+
+      '<div class="meta" style="align-items:center">'+
+        '<span>Umsatz <b style="color:var(--gold)">'+chf(m.umsatz)+'</b></span>'+
+        '<span class="dot">Einkauf '+chf(m.einkauf)+'</span>'+
+        '<span class="dot">Marge <b style="color:'+(m.marge>=0?'var(--ok)':'var(--bad)')+'">'+chf(m.marge)+'</b></span>'+
+      '</div>'+
+      ((m.stundensatz||m.stunden)?'<div class="meta" style="color:var(--muted2)">'+m.stunden+' h × '+chf(m.stundensatz)+'</div>':'')+
+    '</div>';
+  }).join('');
+  Array.prototype.forEach.call($('marge-list').querySelectorAll('[data-marge]'),function(c){
+    var m=rows.filter(function(x){return x.id===c.getAttribute('data-marge');})[0];
+    c.onclick=function(){ openMargeForm(m); };
+  });
+}
+function openMargeForm(m){
+  m=m||{};
+  openSheet('');
+  sheetBody.innerHTML='<h3>'+(m.id?'Position bearbeiten':'Neue Position')+'</h3>'+
+    '<div class="h-sub">Umsatz = Stundensatz × Stunden (oder manuell). Marge = Umsatz − Einkauf.</div>'+
+    '<input class="field" id="m-titel" placeholder="Projekt / Bezeichnung" value="'+esc(m.titel||'')+'"/>'+
+    '<div class="row2"><div><label style="font-size:11px;color:var(--muted)">Stundensatz</label><input class="field" id="m-satz" type="number" inputmode="decimal" value="'+(m.stundensatz||'')+'"/></div>'+
+    '<div><label style="font-size:11px;color:var(--muted)">Stunden</label><input class="field" id="m-std" type="number" inputmode="decimal" value="'+(m.stunden||'')+'"/></div></div>'+
+    '<div class="row2"><div><label style="font-size:11px;color:var(--muted)">Einkauf / Material</label><input class="field" id="m-eink" type="number" inputmode="decimal" value="'+(m.einkauf||'')+'"/></div>'+
+    '<div><label style="font-size:11px;color:var(--muted)">Umsatz manuell (optional)</label><input class="field" id="m-ums" type="number" inputmode="decimal" value="'+(m.umsatz_manuell!=null?m.umsatz_manuell:'')+'"/></div></div>'+
+    '<textarea class="field" id="m-notiz" placeholder="Notiz (optional)">'+esc(m.notiz||'')+'</textarea>'+
+    '<div id="m-preview" class="tile" style="margin-bottom:10px"></div>'+
+    '<button class="btn-sm btn-gold" id="m-save" style="width:100%">'+(m.id?'Speichern':'Anlegen')+'</button>'+
+    (m.id?'<button class="btn-sm" id="m-del" style="width:100%;margin-top:8px;color:var(--bad);border-color:rgba(255,93,93,.3)">Löschen</button>':'');
+  function preview(){
+    var satz=parseFloat($('m-satz').value)||0, std=parseFloat($('m-std').value)||0, eink=parseFloat($('m-eink').value)||0;
+    var umsM=$('m-ums').value; var ums=(umsM!==''&&umsM!=null)?(parseFloat(umsM)||0):satz*std;
+    var marge=ums-eink, pz=ums>0?Math.round(marge/ums*100):0;
+    $('m-preview').innerHTML='<div class="k">Vorschau</div><div class="v mono '+(marge>=0?'ok':'bad')+'" style="font-size:22px">'+chf(Math.round(marge))+' <span class="sfx">'+pz+'% · Umsatz '+chf(Math.round(ums))+'</span></div>';
+  }
+  ['m-satz','m-std','m-eink','m-ums'].forEach(function(id){ $(id).addEventListener('input',preview); }); preview();
+  $('m-save').onclick=function(){
+    var titel=$('m-titel').value.trim(); if(!titel){ toast('Bezeichnung eingeben'); return; }
+    var p={titel:titel,stundensatz:$('m-satz').value,stunden:$('m-std').value,einkauf:$('m-eink').value,umsatz_manuell:$('m-ums').value,notiz:$('m-notiz').value.trim()};
+    var call = m.id ? api('marge_update',Object.assign({id:m.id},p)) : api('marge_add',p);
+    call.then(function(){ toast('Gespeichert'); closeSheet(); renderMargen(); refreshDashSilent(); }).catch(function(){ toast('Migration nötig?'); });
+  };
+  if(m.id) $('m-del').onclick=function(){ api('marge_del',{id:m.id}).then(function(){ toast('Gelöscht'); closeSheet(); renderMargen(); refreshDashSilent(); }).catch(function(){ toast('Fehler'); }); };
 }
 
 // ── Go ──
