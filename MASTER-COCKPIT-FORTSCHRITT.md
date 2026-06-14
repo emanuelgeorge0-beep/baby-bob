@@ -190,6 +190,60 @@
 > `scripts/master_cockpit_jarvis_wissen.sql` ausführen → legt `gs_jarvis_wissen` + RLS (master-only) an.
 > Danach merkt sich Jarvis Planungen dauerhaft; bis dahin läuft alles, nur ohne Gedächtnis (graceful).
 
+### ✅ Session 8 — Reel-Finish: Command-Center mobil gehärtet (visuelle QA mit echten Screenshots)
+- [x] **Echte Render-QA statt Annahmen:** Das Cockpit über Headless-Chrome mit gemocktem `fetch`
+      (echtes `gs-intern.html`, nur API-Antworten gestubbt) als iPhone-Hochformat gerendert und Pixel
+      für Pixel geprüft — Command-Center, Leerzustand (ohne Umsatzdaten), Jarvis, Mehr-Menü, Leads.
+- [x] **Titel-Clipping endgültig behoben:** „MASTER GEORGE" (Georgia, breite Versalien) lief auf schmalen
+      Geräten (≈390 px iPhone) knapp aus dem Hero. Messbasiertes JS-Skalieren war im Layout unzuverlässig
+      (Container-Cap / Timing). Jetzt **als Inline-SVG** (`viewBox` + `preserveAspectRatio` + `textLength`):
+      der Titel skaliert mathematisch exakt auf die verfügbare Breite und kann auf **keinem** Gerät
+      (iPhone SE 320 px bis Tablet) abgeschnitten werden — kein JS, kein Reflow-Risiko. (`width:min(100%,360px)`.)
+- [x] **Wichtige Erkenntnis dokumentiert:** Der „Clipping"-Eindruck früher war teils ein **Screenshot-Artefakt**
+      (Headless-Chrome erzwingt min. 500 px Viewport; ein 390-px-Screenshot schneidet die rechte Seite der
+      zentrierten Hero ab). Die SVG-Lösung ist trotzdem die korrekte Härtung (Original-`h1` clippte auf 390 px real knapp).
+- [x] **Jarvis-Hero-Button (Mehr-Menü):** Titel und Untertitel klebten zusammen („Jarvis fragenSprach-
+      Assistent…") → `.jt`/`.jd` auf `display:block` gestackt, sauber lesbar.
+- [x] **Loses-Enden-Check:** Boot + Navigation durch ALLE 9 Views (dashboard/leads/crm/mehr/jarvis/
+      marketing/todos/margen/saeulen) im Headless-Browser → **0 JS-Fehler**, keine kaputten Buttons,
+      keine leeren Crash-Views (Leerzustände zeigen ehrliche „keine Daten"-Texte).
+- [x] **Ehrlichkeit erneut verifiziert (Render):** Dashboard ohne Umsatzdaten zeigt „—" bei Umsatz/Bester
+      Monat, blendet den Chart aus, „Umsatz-Tracking: BEREIT" — kein NaN, keine erfundene Zahl.
+- [x] **API-Keys geprüft (Code-Ebene):** Jarvis-Antwort = `ANTHROPIC_API_KEY` (`api/cockpit.js`),
+      Jarvis-Stimme rein/raus = `ELEVENLABS_API_KEY` (`api/voice.js`: TTS Brian + STT scribe_v1).
+      Lokal nur Platzhalter → Live-Stimme/Claude muss in **Vercel** gesetzt sein (beide bereits in Gebrauch
+      durch bob-chat/voice). Ohne ElevenLabs-Key → Browser-Stimme; ohne Anthropic-Key → Fallback-Übersicht.
+
+> **SQL für Emanuel (Stand S8):** Nur noch `scripts/master_cockpit_jarvis_wissen.sql` ist offen (Gedächtnis,
+> optional). `gs_umsatz_monat` ist bereits live befüllt (März 3171 / April 17896 / Mai 13317.50) → Command-
+> Center zeigt echten Umsatz. S1–S3 nach Bedarf für Schreibfunktionen; Lesen/Reel läuft ohne.
+
+## 20x Bug-/Mobile-Analyse (Session 8 · Reel-Finish Command-Center) — Ergebnis
+1. **Titel nie abgeschnitten:** SVG-`textLength`+`preserveAspectRatio` skaliert „MASTER GEORGE" exakt in
+   `width:min(100%,360px)` → garantiert randlos auf 320–768 px. Render auf 500 px bestätigt (textW<svgW<Hero).
+2. **Kein JS-Messpfad mehr:** `fitCcTitle` (Container-Cap/Timing-anfällig) komplett entfernt → keine Reflows,
+   keine Race-Conditions, kein `_ccDbg`/Debug-Rest im Code (`node --check` grün, grep leer).
+3. **Pre-Paint-Fallback:** SVG hat `width="320" height="43"`-Attribute → korrektes Seitenverhältnis, auch
+   falls CSS `min()` mal nicht greift (alte Engines) → nie überbreit.
+4. **Hero-Tap → Jarvis+Mic unverändert:** `ccActivateJarvis` (Tap-Kontext) intakt; SVG ist nur Kind des
+   weiterhin klickbaren `#cc-hero` → Sprachstart fürs Reel funktioniert.
+5. **Jarvis-Hero-Text gestackt:** `.jt`/`.jd` `display:block` → Titel/Untertitel getrennt; kein Zusammenkleben.
+6. **0 Laufzeitfehler:** alle 9 Views im Headless-Boot ohne `window.onerror`/`unhandledrejection`-Treffer.
+7. **Ehrliche Leerzustände gerendert:** Umsatz/Bester Monat „—", Chart aus, System „BEREIT" statt Fake-on.
+8. **2-Spalten-KPI-Grid:** alle 8 Kacheln + lange CHF-Werte („CHF 34'384"/„CHF 17'896") passen ohne Umbruch.
+9. **Chart nur bei Daten:** 3 echte Pilot-Monate als Balken + Jahres-Summe; ohne Daten kein Chart (kein leerer Rahmen).
+10. **System-Status ehrlich:** 6 reale Module mit AKTIV/BEREIT aus echten Zahlen — keine erfundenen Agenten.
+11. **Swipe-Chips:** Jarvis-Quick-Fragen & Lead-Filter `overflow-x:auto` (bewusst horizontal scrollbar, kein Clip-Bug).
+12. **Input-Leiste über Nav:** `.jbar margin-top:auto` → sitzt über der fixen Bottom-Nav, keine Überlappung (Render bestätigt).
+13. **Safe-Area:** Topbar `env(safe-area-inset-top)`, Nav `env(safe-area-inset-bottom)`, Viewport `viewport-fit=cover` — unverändert.
+14. **Touch-Targets:** KPI-Kacheln/Nav/Buttons ≥44 px; Tap-Kacheln (`data-go`/`data-tap`) verdrahtet & geprüft.
+15. **Animationen rein CSS:** Orb-Spin/Puls/Sweep + Live-Blink; einziger JS-Timer ist die 20-s-Uhr (Selbst-Stopp) → flüssig.
+16. **Kein Secret im Client / Gate unberührt:** nur `/api/cockpit`+`/api/voice`; `verifyMaster`-403 & noindex/no-store unverändert.
+17. **outputDirectory ".":** `vercel.json` nicht angefasst — keine Routing-/404-Regression.
+18. **Nur eigene Datei committet:** ausschliesslich `gs-intern.html` gestaged (paralleler Worker auf dem Branch), sofort gepusht.
+19. **Build/Syntax:** `node --check` des eingebetteten Frontend-JS grün; SVG-String valide in der JS-Konkatenation.
+20. **API-Keys-Pfad ehrlich:** Live-Stimme/Claude nur über Vercel-Env testbar → klar als Emanuel-Aktion ausgewiesen, nicht „grün" behauptet.
+
 ## 20x Bug-/Datenschutz-Analyse (Session 7 · Kontext + Datenschutz + Gedächtnis) — Ergebnis
 1. **Namen-Sperre auf Datenebene:** Ohne Freigabe wird `kunden_namen` GAR NICHT in die Facts geschrieben
    → Claude kann keine Namen nennen, selbst wenn es wollte (nicht nur Prompt-Regel).
