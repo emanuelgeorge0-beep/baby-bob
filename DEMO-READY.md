@@ -28,9 +28,26 @@ zugeteilt (730172f2…), 0 echte Rapporte/Materiallisten — wird im echten Eins
 
 ---
 
-## SCHRITT 1 — Zurück-zum-Admin-Button überall ☐
+## SCHRITT 1 — Zurück-zum-Admin-Button überall ✅
 
-## SCHRITT 2 — Voice aus GS-Modus ☐
+**Befund:** Es gab bereits einen globalen Floating-Button `#admin-return-btn`
+(„← Zurück zum Admin", links oben fixiert). Seine Sichtbarkeit war aber an ein Flag
+`adminReturnArmed` gekoppelt, das nur gesetzt wurde, wenn man GS/BOB **über die
+Admin-Hub-Karte** betrat → an anderen Wegen fehlte der Button.
+
+**Fix:** `updateAdminReturnBtn()` zeigt den Button jetzt **immer**, sobald ein Admin
+(`master`/`gs_admin`, kein Demo) sich ausserhalb der Admin-Screens befindet — GS-Modus,
+Baby-BOB-Scanner, Login, Partner-/Techniker-Ansichten, alle Unterscreens. Alle
+Navigations-Funktionen (`go`, `showScreen`, `setMode`, `enterAdminMode`) rufen die
+Update-Funktion bereits auf. Klick → `adminReturnHome()` → `admin-home`.
+Kein Leak: Für Nicht-Admins/Demo bleibt er aus (`isMasterContext()`).
+
+## SCHRITT 2 — Voice aus GS-Modus ✅ (verifiziert, keine Änderung nötig)
+
+`bobVoiceAllowed()` blockiert jede aktive `.gs-screen`/`.admin-screen`/`.tech-screen`/
+`.login-screen` sowie alles mit `appMode!=='bob'` und respektiert `bobIsGsSilent()`.
+Damit ist der GS-Modus tonlos; nur der Baby-BOB-Scanner (`.screen.active` in BOB-Mode)
+spricht. Bereits in Commit `e2cf882` umgesetzt — hier nur bestätigt.
 
 ## SCHRITT 3 — PM-Detailansicht ☐
 
