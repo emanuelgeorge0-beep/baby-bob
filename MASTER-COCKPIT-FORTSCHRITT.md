@@ -272,6 +272,30 @@
 > 3. **Für Magic-Link (optional):** Supabase → Authentication → URL Configuration → **Redirect URLs**
 >    → `https://baby-bob.vercel.app/gs-intern-7k2x` eintragen. Für reinen Passwort-Login NICHT nötig.
 
+### ✅ Session 13 — Jarvis Reel-Finish: schneller, robuste Zahlen, Schnellbefehle, Wochenplan im Gedächtnis
+- [x] **P1 Zahl-Aussprache 100% robust** (`jSanitizeSpeech`, gs-intern.html): bis Millionen
+      (1'250'000 → „eine Million zweihundertfünfzigtausend"), Apostroph-/Punkt-Trenner, Dezimal, **negativ**
+      („minus …"), CHF **in beiden Reihenfolgen** + Rappen, Datum (numerisch + „24. Juni"), Uhrzeit, Prozent,
+      **Telefonnummern + PLZ** (Ziffern einzeln, z. B. „8045 Zürich" → „acht null vier fünf Zürich"). Token
+      endet auf Ziffer → Satzzeichen bleiben. Mit 20+ Beispielen getestet, alles sauber. Chat zeigt weiter „CHF 34'384".
+- [x] **P2 Sprachausgabe ~10s → ~3,5s** (warm): Flaschenhals gemessen — Claude ~5s, TTS ~1,5s, +
+      ~8 sequenzielle DB-Abfragen. Fixes: (a) Claude **claude-sonnet-4-6 → claude-haiku-4-5** (warm ~2,5s,
+      max_tokens 256, „1–2 kurze Sätze"); (b) `/api/voice` optionales **model_id** → Jarvis nutzt
+      **eleven_flash_v2_5** (gemessen **0,68s vs. 1,54s** multilingual = 2,3× schneller), Baby BOB unverändert;
+      (c) Cockpit-Abfragen + Gedächtnis **parallel** (`Promise.all`) statt sequenziell. Live gemessen: 6×
+      kurze Frage warm = **2,0–3,0s** Claude. (Erster Aufruf nach Idle = Cold-Start ~9s, danach schnell.)
+- [x] **P3 Spracherkennung robuster:** `maxAlternatives=1`, **letztes Interim gesichert** (kein Wortverlust,
+      wenn eine Session ohne finales Ergebnis endet), `de-CH`. Manueller Start/Stopp + Neustart bei Pause bleibt.
+- [x] **P4 Schnellbefehle:** 6 klar sichtbare Buttons im **2-Spalten-Raster** mit Icons (Finanzen, Leads,
+      Techniker, Rapporte, Material, Termine) — ziehen echte Cockpit-Daten. Neue Facts: `techniker_im_einsatz`,
+      `rapporte_gesamt/eingereicht` (echt), `material_positionen` (null = „kommt bald"), `termine_quelle`
+      („Kalender noch nicht angebunden"). Prompt-Regeln dazu. Live verifiziert: Techniker „12, 8 im Einsatz,
+      4 frei"; Material/Rapporte/Termine ehrlich „kommt bald" (nichts erfunden).
+- [x] **Wochenplan ins Gedächtnis geschrieben:** 12 Einträge (Kategorie `planung`) in `gs_jarvis_wissen`
+      (idempotent via service_role). Live bestätigt: Jarvis liest sie mit — auf „nächste Termine" nennt er
+      ehrlich „Kalender nicht angebunden" UND fasst den Plan bis Werbestart 24. Juni aus dem Gedächtnis zusammen.
+- [x] Stimme/STT-Grundlogik unberührt, `outputDirectory "."` unangetastet.
+
 ### ✅ Session 12 — Jarvis auf Baby-BOB-Niveau: Zahl-Aussprache + stärkere Intelligenz/Gedächtnis
 - [x] **Vergleich Baby BOB ↔ Jarvis durchgeführt.** Baby BOB hat: `sanitizeForSpeech` (Zahl→Wort, aber OHNE
       Datum/Uhrzeit), `bob_knowledge` (RAG in `api/bob.js`), `bob-learn.js` (täglicher Cron destilliert aus
