@@ -82,6 +82,30 @@
 - [ ] RLS-Härtung gs_anfragen/gs_kunden gegen anon (Abstimmung mit App-Team/main) — Status:
       bereits 0 Zeilen für anon (S1 verifiziert), also nur Doku/Bestätigung offen.
 
+### ✅ Session 5 — TEIL A: „Jarvis"-Sprach-Assistent · TEIL B: nur dokumentiert
+- [x] **Jarvis-Backend** (`api/cockpit.js`, Action `jarvis`): sammelt die ECHTEN GS-Zahlen
+      (`getJarvisFacts`) aus Supabase — Leads gesamt/heute/offen/pro Stufe/pro Kanal, Pipeline,
+      Follow-ups heute/überfällig, offene CRM-Aufgaben, To-Dos, Kunden, Umsatz/Marge (falls migriert),
+      Projekte aktiv/gesamt, Techniker frei. Diese Zahlen gehen als JSON-Kontext an Claude
+      (`claude-sonnet-4-6`, gleiches Muster wie `api/bob-chat.js`), das eine kurze, **gesprochene**
+      Antwort formuliert. NUR Lesezugriff — keine Schreibaktion, keine Agenten-Steuerung.
+- [x] **Jarvis-Frontend** (`gs-intern.html`, View `jarvis` + Hero-Button im „Mehr"-Tab):
+      Text-Eingabe UND Spracheingabe (Mikrofon → MediaRecorder → `/api/voice` STT). Antwort als
+      Text-Bubble UND Stimme (ElevenLabs über vorhandenes `/api/voice`, Fallback Browser-`SpeechSynthesis`).
+      Quick-Fragen-Chips, animierter „Orb" (idle/think/speak), Stimme an/aus-Schalter, mobile-first.
+- [x] **Voice-Reuse:** TTS+STT laufen über das **bereits verifizierte** `/api/voice` (ElevenLabs,
+      Voice-ID `nPczCjzI2devNBz1zQrb` „Brian", in Vercel als funktionierend markiert). Bewusste
+      Entscheidung statt eines neuen, ungetesteten Endpoints → production-ready. Die gewünschte
+      Voice-ID kann bei Bedarf in `api/voice.js` (`VOICE_ID`) getauscht werden.
+- [x] **Teil B (NUR DOKUMENTIERT, nicht gebaut):** Roadmap-Sektion „Agenten-Steuerung & Integrationen"
+      unten + idempotentes Schema `scripts/master_cockpit_session5.sql` (`agent_tasks`, `agent_wissen`,
+      RLS master-only) als Vorbereitung. KEIN Agenten-Code (API/Frontend) geschrieben.
+- [x] 20x-Analyse S5 (siehe unten) + **Live-Smoke gegen echte DB**: `getJarvisFacts` liefert
+      10 Leads / 10 Kunden / Projekte aktiv 1 / Techniker 4 von 12 frei / Pipeline ~CHF 65 (deckt sich
+      mit S1–S3). S2/S3-Tabellen (gs_todos/gs_margen/gs_crm_aufgaben) 404 → graceful (null/0/[]).
+      Claude-Call lokal NICHT testbar (lokaler `ANTHROPIC_API_KEY` ist ein Platzhalter `your_…`);
+      Aufruf ist byte-identisch zum produktiv laufenden `api/bob-chat.js` → in Vercel funktionsfähig.
+
 ## 20x Bug-/Security-Analyse (Session 1) — Ergebnis
 1. **RLS gegen DevTools/anon-Key — VERIFIZIERT:** Mit dem im Client (app.html) eingebetteten
    `sb_publishable_…`-Key liefert Supabase für gs_anfragen/gs_kunden/gs_projekte/user_roles
@@ -167,9 +191,82 @@
 19. **Gate gilt für alle neuen Actions** (saeulen, kampagne_*, marge_pickers): hinter verifyMaster (403).
 20. **outputDirectory ".":** in vercel.json unverändert erhalten (Rewrite /gs-intern-7k2x → /gs-intern.html).
 
-## NÄCHSTE SESSION (4) — Wiedereinstieg
-→ Diese Datei lesen. Offene Punkte unter „Offen für Session 4": Rapport→Vertrag-Kette,
-   Kampagnen-Lead-Attribution (utm_campaign), zeitraum-genaue Kosten/CPL, S1/S2-Datenquellen.
+## 20x Bug-/Security-Analyse (Session 5) — Ergebnis
+1. **Lesezugriff only:** `jarvis` ruft ausschliesslich `sbGet`-Reads — keine Schreib-/DDL-Operation,
+   keine Agenten-Steuerung (das ist bewusst erst Teil B). Angriffsfläche minimal.
+2. **Gate:** `jarvis` liegt hinter `verifyMaster` (403) im selben switch wie alle anderen Actions.
+3. **Resilient vor Migration:** S2/S3-Tabellen (gs_todos/gs_margen/gs_crm_aufgaben) via try/catch →
+   0/null/[]. Live-Smoke bestätigt (alle drei 404 → Facts trotzdem vollständig & korrekt).
+4. **Keine Halluzination:** System-Prompt zwingt Claude auf die mitgelieferten JSON-Zahlen; fehlt eine
+   Zahl, soll es ehrlich „keine Zahl im Cockpit" sagen. Zahlen werden serverseitig real berechnet.
+5. **Eingabe begrenzt:** `frage` auf 500 Zeichen gekappt; kein SQL-Pfad aus User-Text (nur fixe Reads).
+6. **Claude-Ausfall:** API-Fehler/kein Key → `jarvisFallback` liefert eine ehrliche Kurz-Übersicht
+   aus den echten Zahlen (nie erfunden), statt zu crashen. `{fallback:true}` signalisiert es.
+7. **TTS-Reuse statt Neubau:** `/api/voice` ist verifiziert (ElevenLabs Brian). Kein zweiter,
+   ungetesteter Voice-Endpoint → kein Risiko einer kaputten Demo-Stimme.
+8. **TTS-Fallback:** `/api/voice` non-200 (kein Key/Rate-Limit) → Frontend nutzt `SpeechSynthesis`
+   (de-DE). Antwort kommt IMMER als Text-Bubble, Stimme ist additiv.
+9. **iOS-Audio-Unlock:** `Audio`-Objekt wird im Tap-Kontext (`jarvisAsk`) erzeugt und später mit
+   `src` befüllt → iOS erlaubt `play()`. `play().catch` → SpeechSynthesis-Fallback.
+10. **Mic-Capability-Check:** ohne `mediaDevices`/`MediaRecorder` → Toast „nicht verfügbar", kein Crash;
+    Mime-Typ wird über `isTypeSupported` gewählt (webm/mp4/ogg) → Safari iOS & Chrome abgedeckt.
+11. **Mic-Permission verweigert:** `getUserMedia`-reject → Toast, kein Hängenbleiben; Stream-Tracks
+    werden in `onstop` sauber gestoppt (kein offenes Mikrofon/rote Status-Leiste).
+12. **XSS:** Frage, Antwort, Quick-Chips alle via `esc()`; `white-space:pre-wrap` rendert Zeilenumbrüche
+    ohne HTML. data-q über `esc()` ins Attribut, beim Lesen vom Browser dekodiert.
+13. **Doppel-Senden verhindert:** `_jBusy`-Guard blockt parallele Fragen; „…"-Platzhalter-Bubble wird
+    durch die Antwort ersetzt (kein Doppel-Append).
+14. **Markdown-frei für Vorlese:** Server entfernt `* # \` _` aus der Antwort → saubere Sprachausgabe,
+    konsistent mit der No-Markdown-Regel von bob-chat.
+15. **Nav-Integration:** `jarvis` in `MEHR_VIEWS` → „Mehr"-Tab bleibt markiert; `go('jarvis')` via
+    Hero-Button + Modul-Liste. Zurück-Zeile (`backRow`/`wireBack`) wie alle Module.
+16. **Layout-Bug behoben:** Eingabeleiste war `position:sticky;bottom:0` → hätte hinter der fixen
+    Bottom-Nav gelegen. Auf `margin-top:auto` im Flex-Column umgestellt (sitzt über der Nav).
+17. **Stimme-Schalter:** `_jVoiceOn` togglebar; beim Ausschalten `stopSpeak()` (Audio + SpeechSynthesis
+    abgebrochen) → keine weiterlaufende Sprachausgabe.
+18. **Kein Secret im Client:** Frontend ruft nur `/api/cockpit` (token-gated) & `/api/voice`; ElevenLabs-
+    und Claude-Keys bleiben serverseitig. noindex/no-store unverändert.
+19. **Teil B nicht gebaut:** `master_cockpit_session5.sql` legt `agent_tasks`/`agent_wissen` nur an
+    (idempotent, RLS master-only), KEIN API-/Frontend-Code. Tabellen leer = ohne Wirkung, kein Risiko.
+20. **outputDirectory ".":** in `vercel.json` unverändert erhalten (keine Routing-/404-Regression).
+
+## Roadmap — Agenten-Steuerung & Integrationen (TEIL B · NUR DOKUMENTIERT)
+> Status: **konzipiert, NICHT gebaut.** Schema-Vorbereitung liegt idempotent bereit
+> (`scripts/master_cockpit_session5.sql`). Kein Agenten-Code (API/Frontend) in Session 5.
+
+**Idee / Datenfluss**
+- Cockpit/Jarvis legt **vorbereitete Aufträge** mit **fertigem Prompt** in `agent_tasks` ab
+  (`status='offen'`). Optional sammelt `agent_wissen` allgemeinen Kontext für die Agenten.
+- Im **Terminal** sage ich „hol die Aufträge ab" → **Claude Code** liest offene `agent_tasks`,
+  arbeitet sie ab und schreibt `ergebnis` + `status` (`in_arbeit`/`erledigt`) zurück.
+- Cockpit zeigt danach Ergebnis/Status read-only an (späterer Ausbau).
+
+**Tabellen (RLS nur Master-UUID — siehe SQL)**
+- `agent_tasks(id, titel, beschreibung, status[offen|in_arbeit|erledigt], zugewiesener_agent,
+  vorbereiteter_prompt, ergebnis, erstellt_am, aktualisiert_am)`
+- `agent_wissen(id, thema, inhalt, tags, erstellt_am, aktualisiert_am)`
+
+**WICHTIGE technische GRENZE (ehrlich)**
+- Das Cockpit ist eine **Browser-App** und kann **KEIN Terminal öffnen** oder Claude Code direkt
+  starten. Es **bereitet nur vor** (Task + Prompt in der DB). Die **Ausführung löse ICH im Terminal
+  aus**. Das ist die Architektur-Grenze, kein Bug.
+
+**Integrationen — Machbarkeit (Roadmap)**
+- **E-Mail senden/lesen:** machbar. Senden via Resend (im Projekt vorhanden, vgl. `api/nachrichten.js`);
+  Lesen via Mailbox-API (IMAP/Gmail-API) als eigener Server-Job. Aufwand mittel.
+- **Kalender:** machbar via Google/Microsoft Calendar API (OAuth, Server-seitig). Aufwand mittel.
+- **WhatsApp:** **nur teilweise.** Ohne offizielles WhatsApp-Business-API kann die App lediglich einen
+  Chat **mit vorgefülltem Text öffnen** (`https://wa.me/<nr>?text=…`). **KEIN Vollzugriff, KEIN
+  Auslesen** eingehender Nachrichten. Vollzugriff bräuchte WhatsApp Business API (Meta-Freigabe,
+  Provider, Kosten). Grenze klar im Demo benennen.
+
+## NÄCHSTE SESSION (6) — Wiedereinstieg
+→ Diese Datei lesen. Teil A (Jarvis) steht & ist DB-verifiziert. Offene Ausbaupunkte:
+   • Jarvis: Multi-Turn-Verlauf (aktuell Einzel-Frage), optional gewünschte ElevenLabs-Voice-ID setzen,
+     evtl. Charts/Trends als Sprachantwort.
+   • **Teil B BAUEN** (falls gewünscht): `agent_tasks`-API (Lese-/Schreib-Actions hinter `verifyMaster`),
+     Cockpit-UI zum Anlegen von Aufträgen + Prompts, Terminal-Skript „hol die Aufträge ab".
+   • Weiter offen aus S4: Rapport→Vertrag-Kette, Kampagnen-Lead-Attribution (utm_campaign), CPL je Kampagne.
    Architektur steht: Nav (`MEHR_VIEWS` + `go()`), `renderXxx()`-Muster, API-Actions im switch, Picker via `*_pickers`.
 
 ## Manuelle Aktionen für Emanuel
@@ -177,5 +274,12 @@
 2. **`scripts/master_cockpit_session2.sql`** im Supabase SQL Editor ausführen (Marketing/To-Dos/Margen).
 3. **`scripts/master_cockpit_session3.sql`** im Supabase SQL Editor ausführen (Kampagnen + Marge.projekt_id).
    Reihenfolge **S1 → S2 → S3** (alle idempotent). Lesen/Dashboard/Säulen funktionieren auch ohne.
-4. Supabase Auth: Redirect-URL für Magic-Link auf `…/gs-intern-7k2x` zulassen (falls Magic-Login gewünscht).
-5. Login mit `emanuelgeorge0@gmail.com` (Master-UUID) testen → /gs-intern-7k2x.
+4. **`scripts/master_cockpit_session5.sql`** — **OPTIONAL / Vorbereitung für Teil B** (Agenten-Steuerung).
+   Für **Jarvis (Teil A) NICHT nötig** — Jarvis ist reiner Lesezugriff und läuft sofort. Nur ausführen,
+   wenn das Agenten-Modul später gebaut werden soll.
+5. **Vercel-Env prüfen:** `ANTHROPIC_API_KEY` (für Jarvis-Antworten) und `ELEVENLABS_API_KEY` (für die
+   Stimme) müssen im Vercel-Projekt gesetzt sein. Beide sind dort bereits in Gebrauch (bob-chat / voice).
+   Ohne ElevenLabs-Key spricht Jarvis per Browser-Stimme; ohne Anthropic-Key gibt es nur die Fallback-Übersicht.
+6. Supabase Auth: Redirect-URL für Magic-Link auf `…/gs-intern-7k2x` zulassen (falls Magic-Login gewünscht).
+7. Login mit `emanuelgeorge0@gmail.com` (Master-UUID) → /gs-intern-7k2x → Tab **„Mehr" → „Jarvis fragen"**.
+   Am Handy testen: Frage tippen oder Mikrofon antippen; Antwort kommt als Text + Stimme.
