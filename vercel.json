@@ -1,7 +1,8 @@
 {
   "outputDirectory": ".",
   "crons": [
-    { "path": "/api/bob-learn", "schedule": "0 1 * * *" }
+    { "path": "/api/bob-learn", "schedule": "0 1 * * *" },
+    { "path": "/api/blockaden", "schedule": "0 * * * *" }
   ],
   "rewrites": [
     { "source": "/app", "destination": "/app.html" },
