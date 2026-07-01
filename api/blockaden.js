@@ -59,6 +59,7 @@ export default async function handler(req, res) {
       case 'get':       return await getOne(res, user, role, body);
       case 'update':    return await update(res, user, role, body);
       case 'freigeben': return await freigeben(res, user, role, body);
+      case 'delete':    return await remove(res, user, role, body);
       case 'eskalieren':return await eskalieren(res, user, role, body);
       case 'report':    return await report(res, user, role, body);
       case 'speak_text':return await speakText(res, user, role, body);
@@ -356,6 +357,19 @@ async function freigeben(res, user, role, body) {
   const recipient = b.owner_email || await resolveReporterEmail(b.reporter_id) || GS_OFFICE_EMAIL;
   await notifyBlockade(updated, recipient, true);
   return res.status(200).json({ ok: true, blockade: updated, step_entsperrt: true });
+}
+
+// Löschen (Melder/Owner/Admin) – u.a. für self-cleaning E2E-Tests.
+async function remove(res, user, role, body) {
+  if (!body.id) return res.status(400).json({ error: 'id erforderlich' });
+  const rows = await sbSelect(`id=eq.${body.id}&limit=1`);
+  const b = rows[0];
+  if (!b) return res.status(200).json({ ok: true, deleted: 0 });
+  const isAdmin = role === 'gs_admin' || role === 'master';
+  if (!isAdmin && b.reporter_id !== user.id && b.owner_id !== user.id) return res.status(403).json({ error: 'Keine Berechtigung' });
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/gs_blockaden?id=eq.${body.id}`, { method: 'DELETE', headers: SB });
+  if (!r.ok) return res.status(500).json({ error: 'Löschen fehlgeschlagen' });
+  return res.status(200).json({ ok: true, deleted: 1 });
 }
 
 async function eskalieren(res, user, role, body) {
