@@ -428,33 +428,34 @@ function printReport(rep){
 }
 
 // ── Vorlesen: bestehende ElevenLabs-Stimme (/api/voice), Fallback SpeechSynthesis ──
+// Ein Button toggelt Play/Stop; nach Ende immer sauber in den „Vorlesen"-Zustand zurück.
 var _spkAudio=null, _spkUrl=null;
 function stopSpeak(){ try{if(_spkAudio)_spkAudio.pause();}catch(e){} if(_spkUrl){try{URL.revokeObjectURL(_spkUrl);}catch(e){}_spkUrl=null;}
   try{if('speechSynthesis'in window)window.speechSynthesis.cancel();}catch(e){} }
+function bindSpeak(btn,text){ if(!btn) return; btn._orig=btn._orig||btn.innerHTML;
+  btn.innerHTML=btn._orig; btn.onclick=function(){ speak(text,btn); }; }
+function setStop(btn,text){ if(!btn) return; btn.innerHTML='🔇 Stop';
+  btn.onclick=function(){ stopSpeak(); bindSpeak(btn,text); }; }
 function speak(text,btn){
   stopSpeak();
-  if(btn){ btn._orig=btn._orig||btn.innerHTML; btn.innerHTML='<span class="spin"></span> Lädt…'; }
+  if(btn){ btn._orig=btn._orig||btn.innerHTML; btn.innerHTML='<span class="spin"></span> Lädt…'; btn.onclick=function(){ stopSpeak(); bindSpeak(btn,text); }; }
   if(!_spkAudio){ _spkAudio=new Audio(); _spkAudio.preload='auto'; }
-  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,2000),model_id:'eleven_flash_v2_5'})})
-    .then(function(r){
-      if(!r.ok) throw new Error('tts');
-      return r.blob();
-    }).then(function(blob){
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:String(text).slice(0,2000),model_id:'eleven_flash_v2_5'})})
+    .then(function(r){ if(!r.ok) throw new Error('tts'); return r.blob(); })
+    .then(function(blob){
       _spkUrl=URL.createObjectURL(blob); _spkAudio.src=_spkUrl;
-      _spkAudio.onended=function(){ if(btn&&btn._orig)btn.innerHTML=btn._orig; };
-      _spkAudio.onerror=function(){ if(btn&&btn._orig)btn.innerHTML=btn._orig; };
+      _spkAudio.onended=function(){ bindSpeak(btn,text); };
+      _spkAudio.onerror=function(){ bindSpeak(btn,text); };
       var p=_spkAudio.play(); if(p&&p.catch)p.catch(function(){ browserSpeak(text,btn); });
-      if(btn&&btn._orig)btn.innerHTML='🔇 Stop';
-      if(btn) btn.onclick=function(){ stopSpeak(); btn.innerHTML=btn._orig; btn.onclick=function(){speak(text,btn);}; };
+      setStop(btn,text);
     }).catch(function(){ browserSpeak(text,btn); });
 }
 function browserSpeak(text,btn){
-  if(!('speechSynthesis'in window)){ toast('Sprachausgabe nicht verfügbar'); if(btn&&btn._orig)btn.innerHTML=btn._orig; return; }
-  try{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance(text); u.lang='de-DE'; u.rate=1;
-    u.onend=function(){ if(btn&&btn._orig)btn.innerHTML=btn._orig; };
-    window.speechSynthesis.speak(u); if(btn&&btn._orig)btn.innerHTML='🔇 Stop';
-    if(btn) btn.onclick=function(){ stopSpeak(); btn.innerHTML=btn._orig; btn.onclick=function(){speak(text,btn);}; };
-  }catch(e){ toast('Sprachausgabe fehlgeschlagen'); }
+  if(!('speechSynthesis'in window)){ toast('Sprachausgabe nicht verfügbar'); bindSpeak(btn,text); return; }
+  try{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance(String(text)); u.lang='de-DE'; u.rate=1;
+    u.onend=function(){ bindSpeak(btn,text); };
+    window.speechSynthesis.speak(u); setStop(btn,text);
+  }catch(e){ toast('Sprachausgabe fehlgeschlagen'); bindSpeak(btn,text); }
 }
 
 // ── Sheet infra ──
