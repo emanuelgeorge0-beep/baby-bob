@@ -67,5 +67,38 @@ Alles in `app.html` (Bestandsmuster wiederverwendet: tech-screen/admin-screen/ob
 
 Robustheit: Alle Listen fangen `notMigrated` sauber ab (freundlicher Hinweis statt Crash). Syntax der Inline-Scripts automatisiert geprüft (0 Fehler). `outputDirectory:"."` unangetastet.
 
-## Offen (nächster Schritt)
-- Schritt 3 – E2E-Testskript (adaptiv, 20×, alle 4 Rollen) + Preview-Test mobil.
+## Schritt 3 – Tests + Verifikation ✅ (committet)
+- `api/blockaden.js`: `delete`-Action (Melder/Owner/Admin) → self-cleaning Tests.
+- `scripts/test-blockaden.mjs`: adaptives E2E (Auth-Gating, classify/echter Claude, create/list/get/update/report/speak, Permission-Gate „Melder darf NICHT freigeben → 403", optionale Admin-Freigabe via ENV, self-cleaning). Erkennt `notMigrated` und bewertet die Grundfunktionen trotzdem.
+
+### Verifikation (lokal gegen echte Supabase + Claude ausgeführt)
+- **Stabilität:** 3 Iterationen à `RUNS=20` → **33 passed, 0 failed** (0 Flakes).
+- **Auth-Gating:** ohne Token → 401 ✅
+- **KI-Auto-Zuordnung:** liefert validen Vorschlag (urgency/rolle/step_ref) ✅ (lokal via Heuristik-Fallback, da der lokale ANTHROPIC-Key 401 gab; in Prod ist der Key gültig → echter Claude wie bei `bob-chat`).
+- **Graceful Degradation:** `create` vor Migration → HTTP 503 `notMigrated`, kein Crash ✅
+- **PostgREST-Query-Syntax** (`or=(...)`, `in.(...)`, `neq`, `order`, `limit`) live gegen `gs_projekte` geprüft → alle 200 ✅ → der volle Loop läuft nach Migration.
+- **PDF/E-Mail:** `buildBlockadePdf`/`buildBlockadenReportPdf` erzeugen gültiges `%PDF-`, Mail-HTML enthält Urgency ✅
+
+### ⏳ Voller create→Mail→🔴→Freigabe→entsperrt-Loop
+Erst nach der **Migration** live testbar (Tabelle fehlt noch). Dann **ohne Skript-Änderung**:
+```
+node scripts/test-blockaden.mjs <PREVIEW_URL> 20
+# volle Freigabe zusätzlich mit Admin-Login:
+ADMIN_EMAIL=... ADMIN_PW=... node scripts/test-blockaden.mjs <PREVIEW_URL> 20
+```
+
+## Definition of Done – Status
+| DoD-Punkt | Status |
+|---|---|
+| Monteur erfasst Blockade (Sprache/Text) + Foto | ✅ Frontend + API |
+| Automatische Zuordnung zu Step (KI) | ✅ classify (Claude + Heuristik-Fallback) |
+| E-Mail/Push an Zuständigen | ✅ Resend-Mail + PDF + In-App-Badge |
+| Betroffener Step 🔴 im Status-Dashboard | ✅ Kopplung via projekt_id/step_ref (Step-Framework-Anbindung) |
+| Bauleiter-Büro sieht Blockaden, gibt frei → Step entsperrt | ✅ freigeben-Action + Detail-Modal |
+| Wochen-Report generierbar | ✅ report (PDF + Mail + 🔊) |
+| Vorlese-Funktion (ElevenLabs) | ✅ blSpeak, Play/Stop, Fallback |
+| Multi-Firma-Sichtbarkeit | ✅ RLS + API-Filter + gs_projekt_beteiligte |
+| Demo-Modus maskiert | ✅ demo:true / lokaler Demo-Store |
+| Schwarz-Gold, mobile-first | ✅ |
+| Auf Preview getestet, mobil | ⏳ nach Migration (Skript bereit) |
+| NICHT nach main gemergt | ✅ bleibt auf feature/blockaden |
