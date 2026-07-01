@@ -56,10 +56,31 @@ Druckprobe). **Foto-Gate**: Abschluss nur mit Foto-Nachweis.
       Statusbericht-Modal + PDF-Druck + 🔊 Vorlesen). Routing `/gewerke` in vercel.json
       (outputDirectory "." unangetastet). `api/auth.js` erlaubt jetzt auch `/gewerke`
       als Magic-Link/Reset-Redirect (+ Query, z. B. `?demo=1`).
-- [ ] Schritt 3 – End-to-End gegen Live-DB testen (nach SQL-Migration), 5×/4 Rollen
+- [x] Schritt 3 – Automatischer End-to-End-Test (self-cleaning) in `scripts/test_gewerke.mjs`;
+      Handler-Smoke gegen Live-DB (templates ok, Auth-Gate 401, `gs_projekte` erreichbar,
+      `gs_gw_*` noch 404 = erwartet vor Migration). **Offen: E2E-Lauf NACH der SQL-Migration.**
 
 > Hinweis: Auf diesem Branch committet parallel ein zweiter Prozess (Blockaden-Feature).
 > Ich stage ausschließlich meine eigenen Dateien und pushe nach jedem Schritt.
+
+## ✅ So verifizierst du es (nach der SQL-Migration)
+
+1. `scripts/gewerke_step_framework.sql` im Supabase SQL Editor ausführen (einmalig).
+2. Deployen (Vercel Preview des Branch `feature/step-framework`).
+3. `/gewerke` öffnen → mit deinem Account (Techniker/Admin/Master) anmelden.
+4. Projekt wählen → **＋ Haus** → Gewerk(e) + Einheiten → Steps erscheinen automatisch.
+5. Step antippen → Status setzen. Test die Gates: Schritt 2 lässt sich nicht starten,
+   solange Schritt 1 nicht abgeschlossen ist; ein Foto-Gate-Schritt lässt sich nicht ohne
+   Foto abschließen.
+6. **📋 Statusbericht** → Zeitraum (heute/KW/Gesamt) → **Als PDF** + **🔊 vorlesen**.
+7. Automatischer End-to-End-Test (legt ein Test-Haus an, prüft alle Gates + Bericht,
+   löscht sich selbst wieder):
+   ```
+   # Access-Token: auf /gewerke einloggen, dann in der Browser-Konsole:
+   #   localStorage.getItem('bob_auth_token')
+   GW_TOKEN=<token> GW_BASE=https://<dein-preview-deploy> node scripts/test_gewerke.mjs
+   ```
+   Erwartet: „✅ ALLE TESTS GRÜN".
 
 ## Tests
 

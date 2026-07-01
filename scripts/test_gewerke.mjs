@@ -88,26 +88,72 @@ ok('Blockade im Text', rep2.text.includes('blockiert') && rep2.text.includes('Ma
 
 console.log(`\n${fail === 0 ? '✅' : '❌'} Logik-Tests: ${pass} pass, ${fail} fail`);
 
-// ── Teil B: API-Smoke-Test (nur wenn GW_TOKEN gesetzt) ──
+// ── Teil B: End-to-End gegen Live-API (nur wenn GW_TOKEN gesetzt) ──
+// Legt ein Test-Haus an, prüft Gates + Statusbericht und räumt sich selbst auf.
+//   GW_TOKEN=<access_token> [GW_BASE=https://<deploy>] [GW_PROJEKT=<uuid>] node scripts/test_gewerke.mjs
 if (process.env.GW_TOKEN) {
   const BASE = process.env.GW_BASE || 'http://localhost:3000';
   const call = (action, body) => fetch(`${BASE}/api/gewerke`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.GW_TOKEN}` },
     body: JSON.stringify({ action, ...body }),
-  }).then((r) => r.json().then((j) => ({ status: r.status, j })));
-  console.log('\n── H. API-Smoke ──');
+  }).then((r) => r.json().then((j) => ({ status: r.status, j })).catch(() => ({ status: r.status, j: {} })));
+
+  console.log('\n── H. API End-to-End ──');
   const t = await call('templates', {});
   ok('templates liefert 4', t.j.templates && t.j.templates.length === 4);
+
   const p = await call('projekte', {});
-  ok('projekte erreichbar', Array.isArray(p.j.projekte));
-  console.log(JSON.stringify(p.j).slice(0, 300));
-  if (process.env.GW_PROJEKT) {
-    const tr = await call('tree', { projekt_id: process.env.GW_PROJEKT });
-    ok('tree erreichbar', tr.status === 200 || tr.status === 403 || tr.status === 404);
-    console.log('tree status', tr.status, JSON.stringify(tr.j).slice(0, 200));
+  ok('projekte erreichbar', p.status === 200 && Array.isArray(p.j.projekte));
+  const projektId = process.env.GW_PROJEKT || (p.j.projekte && p.j.projekte[0] && p.j.projekte[0].id);
+
+  if (!projektId) {
+    console.log('  (ℹ️  Kein Projekt verfügbar → E2E-Aufbau übersprungen.)');
+  } else {
+    let hausId = null;
+    try {
+      const HAUS = 'E2E-Test ' + new Date().toISOString().slice(11, 19);
+      const su = await call('setup', { projekt_id: projektId, haus_name: HAUS, gewerke: ['sanitaer'], einheiten: ['Testwohnung'] });
+      ok('setup erzeugt Haus', su.status === 200 && su.j.ok);
+      ok('setup erzeugt 10 Steps', su.j.steps === 10);
+      hausId = su.j.haus && su.j.haus.id;
+
+      const tr = await call('tree', { projekt_id: projektId });
+      ok('tree erreichbar', tr.status === 200);
+      const haus = (tr.j.haeuser || []).find((h) => h.id === hausId);
+      ok('Test-Haus im Baum', !!haus);
+      const spur = haus && haus.einheiten[0].gewerke[0].steps;
+      ok('Spur hat 10 Steps, 0%', spur && spur.length === 10 && haus.progress.prozent === 0);
+
+      const step1 = spur[0], step2 = spur[1];
+      // Step 2 starten, während Vorgänger offen → Gate blockiert (409)
+      const g1 = await call('step_update', { step_id: step2.id, status: 'in_arbeit' });
+      ok('Vorgänger-Gate blockt Step 2 (409)', g1.status === 409 && g1.j.gate);
+      // Step 1 (Foto-Gate) abschließen ohne Foto → Gate blockiert
+      const g2 = await call('step_update', { step_id: step1.id, status: 'abgeschlossen' });
+      ok('Foto-Gate blockt Abschluss ohne Foto', g2.status === 409 && g2.j.gate);
+      // Step 1 mit Foto abschließen → ok
+      const g3 = await call('step_update', { step_id: step1.id, status: 'abgeschlossen', foto_url: 'e2e-foto' });
+      ok('Step 1 mit Foto abgeschlossen', g3.status === 200 && g3.j.step.status === 'abgeschlossen');
+      // Jetzt darf Step 2 starten
+      const g4 = await call('step_update', { step_id: step2.id, status: 'in_arbeit' });
+      ok('Step 2 startet nach Vorgänger-Abschluss', g4.status === 200);
+
+      // Statusbericht Gesamt
+      const br = await call('statusbericht', { projekt_id: projektId, haus_id: hausId, zeitraum: 'gesamt' });
+      ok('Statusbericht 200', br.status === 200);
+      ok('Statusbericht-Text vorhanden', br.j.text && br.j.text.includes('Statusbericht'));
+      ok('Statusbericht Fortschritt 10%', br.j.gesamt && br.j.gesamt.prozent === 10);
+      // Demo-Maskierung
+      const brD = await call('statusbericht', { projekt_id: projektId, haus_id: hausId, zeitraum: 'gesamt', demo: true });
+      ok('Demo-Statusbericht 200', brD.status === 200);
+    } finally {
+      if (hausId) { const del = await call('haus_delete', { haus_id: hausId }); ok('Cleanup: Test-Haus gelöscht', del.status === 200); }
+    }
   }
 } else {
-  console.log('\n(ℹ️  Kein GW_TOKEN → API-Smoke-Test übersprungen. Logik-Tests decken die Kernregeln ab.)');
+  console.log('\n(ℹ️  Kein GW_TOKEN → API-E2E übersprungen. Die 42 Logik-Tests decken alle Kernregeln ab.)');
+  console.log('   Nach der SQL-Migration: GW_TOKEN=<access_token> GW_BASE=https://<deploy> node scripts/test_gewerke.mjs');
 }
 
+console.log(`\n${fail === 0 ? '✅ ALLE TESTS GRÜN' : '❌ ' + fail + ' Test(s) rot'}: ${pass} pass, ${fail} fail`);
 process.exit(fail === 0 ? 0 : 1);
