@@ -2006,6 +2006,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       <div class="admin-hub-ico">📊</div>
       <div><div class="admin-hub-tit">Rapport-Status</div><div class="admin-hub-desc">Live-Übersicht aller Techniker (🟢🟡🔴)</div></div>
     </div>
+    <div class="admin-hub-card" onclick="showAdminBlockaden()">
+      <div class="admin-hub-ico">🚧</div>
+      <div><div class="admin-hub-tit">Blockaden</div><div class="admin-hub-desc">Alle Blockaden, Freigabe, 🔊 Vorlesen, Wochenreport</div></div>
+    </div>
     <div class="admin-hub-card" onclick="enterAdminMode('gs')">
       <div class="admin-hub-ico">🏢</div>
       <div><div class="admin-hub-tit">George Solutions Modus</div><div class="admin-hub-desc">Projekt-Buchungsportal öffnen</div></div>
@@ -2113,6 +2117,32 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div id="admin-status-list" class="admin-section"><div class="admin-empty">Lädt…</div></div>
 </div>
 
+<!-- ═══ ADMIN / BAULEITER-BÜRO: BLOCKADEN-ÜBERSICHT ═══ -->
+<div id="admin-blockaden" class="admin-screen">
+  <div class="admin-hdr">
+    <div><div class="admin-hdr-tit">🚧 Blockaden</div><div class="admin-hdr-sub" id="abl-sub">–</div></div>
+    <button class="admin-back" onclick="showScreen('admin-home')">← Zurück</button>
+  </div>
+  <div style="padding:14px 18px 4px;">
+    <div class="bl-filterbar" id="abl-filter"></div>
+    <button class="bl-speak" data-idle="🔊 Blockaden-Status abrufen" onclick="blSpeakOverview(this)">🔊 Blockaden-Status abrufen</button>
+    <button class="bl-speak" data-idle="📄 Wochenreport erstellen" style="border-color:rgba(255,210,74,.5);color:#FFD24A;" onclick="blWeekReport()">📄 Wochenreport „Was hat uns verzögert?"</button>
+    <div id="abl-report" style="display:none;"></div>
+  </div>
+  <div id="abl-list" class="admin-section"><div class="admin-empty">Lädt…</div></div>
+</div>
+
+<!-- ═══ BLOCKADEN-DETAIL (rollenübergreifendes Modal) ═══ -->
+<div id="bl-detail-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(4,8,14,.82);backdrop-filter:blur(4px);overflow-y:auto;padding:0;">
+  <div style="max-width:560px;margin:0 auto;min-height:100%;background:#0b0b0d;border-left:1px solid rgba(201,169,97,.2);border-right:1px solid rgba(201,169,97,.2);">
+    <div class="admin-hdr" style="position:sticky;top:0;z-index:2;background:#0b0b0d;">
+      <div><div class="admin-hdr-tit">🚧 Blockade</div><div class="admin-hdr-sub" id="bld-status">–</div></div>
+      <button class="admin-back" onclick="blCloseDetail()">✕ Schliessen</button>
+    </div>
+    <div id="bld-body" style="padding:16px 18px 40px;"><div class="admin-empty">Lädt…</div></div>
+  </div>
+</div>
+
 <!-- ═══ ADMIN: LEAD-DASHBOARD (S1–S4) ═══ -->
 <div id="admin-dashboard" class="admin-screen">
   <div class="admin-hdr">
@@ -2136,6 +2166,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <button class="tr-nav-btn act" onclick="showScreen('tech-rapport')">📋 Rapport</button>
     <button class="tr-nav-btn" onclick="showTechStunden()">⏱️ Stunden</button>
     <button class="tr-nav-btn" onclick="showTechMaterial()">📦 Material</button>
+    <button class="tr-nav-btn" onclick="showTechBlockade()">🚧 Blockade</button>
     <button class="tr-nav-btn" onclick="showTechProfil()">👷 Profil</button>
   </div>
   <div class="tr-tarif">💰 Dein Tarif: <strong>CHF 37.– bis 43.76/h</strong> <span>(Kundenpreis abweichend)</span></div>
@@ -2252,6 +2283,101 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   </div>
 </div>
 
+<!-- ═══ BLOCKADEN – gemeinsames Styling (schwarz/gold, mobile-first) ═══ -->
+<style>
+.bl-urg{display:inline-block;font-weight:800;font-size:11px;letter-spacing:.02em;padding:3px 10px;border-radius:50px;border:1px solid currentColor;white-space:nowrap;}
+.bl-urg.CRITICAL{color:#ff4d4f;background:rgba(255,77,79,.12);}
+.bl-urg.HIGH{color:#ff9838;background:rgba(255,152,56,.12);}
+.bl-urg.MEDIUM{color:#FFD24A;background:rgba(255,210,74,.12);}
+.bl-urg.LOW{color:#6bcb77;background:rgba(107,203,119,.12);}
+.bl-status{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:50px;background:rgba(255,255,255,.06);color:rgba(232,237,245,.7);}
+.bl-status.offen{color:#ff9838;background:rgba(255,152,56,.12);}
+.bl-status.in_bearbeitung{color:#4A9EFF;background:rgba(74,158,255,.12);}
+.bl-status.freigegeben{color:#6bcb77;background:rgba(107,203,119,.12);}
+.bl-status.eskaliert{color:#ff4d4f;background:rgba(255,77,79,.14);}
+.bl-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-left:4px solid #C9A961;border-radius:12px;padding:13px 15px;margin:10px 0;cursor:pointer;transition:border-color .15s;}
+.bl-card:active{border-color:#C9A961;}
+.bl-card.CRITICAL{border-left-color:#ff4d4f;}
+.bl-card.HIGH{border-left-color:#ff9838;}
+.bl-card.MEDIUM{border-left-color:#FFD24A;}
+.bl-card.LOW{border-left-color:#6bcb77;}
+.bl-card.freigegeben{opacity:.6;border-left-color:#6bcb77;}
+.bl-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+.bl-card-step{font-weight:800;color:#fff;font-size:15px;flex:1;min-width:60%;}
+.bl-card-meta{color:rgba(232,237,245,.55);font-size:12.5px;line-height:1.5;}
+.bl-card-desc{color:rgba(232,237,245,.85);font-size:13.5px;margin-top:5px;line-height:1.45;}
+.bl-suggest{background:rgba(201,169,97,.08);border:1px solid rgba(201,169,97,.28);border-radius:12px;padding:14px;margin-top:12px;}
+.bl-suggest h4{margin:0 0 10px;color:#C9A961;font-size:13px;text-transform:uppercase;letter-spacing:.03em;}
+.bl-filterbar{display:flex;gap:8px;flex-wrap:wrap;padding:0 2px 6px;}
+.bl-filter{font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:50px;background:rgba(255,255,255,.05);color:rgba(232,237,245,.7);border:1px solid transparent;cursor:pointer;}
+.bl-filter.act{background:rgba(201,169,97,.16);color:#C9A961;border-color:rgba(201,169,97,.4);}
+.bl-detail-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:14px;}
+.bl-detail-row .k{color:rgba(232,237,245,.55);white-space:nowrap;}
+.bl-detail-row .v{color:#fff;font-weight:600;text-align:right;}
+.bl-speak{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#1a1206,#2a1e08);border:1px solid #C9A961;color:#C9A961;font-weight:800;font-size:13.5px;padding:11px 16px;border-radius:12px;cursor:pointer;width:100%;justify-content:center;margin:4px 0;}
+.bl-speak:active{background:#2a1e08;}
+.bl-speak.playing{background:#C9A961;color:#0a0a0a;}
+.bl-foto-thumb{display:inline-block;width:74px;height:74px;object-fit:cover;border-radius:9px;margin:5px 5px 0 0;border:1px solid rgba(255,255,255,.12);}
+</style>
+
+<!-- ═══ TECHNIKER: BLOCKADE MELDEN ═══ -->
+<div id="tech-blockade" class="tech-screen">
+  <div class="tech-hdr">
+    <div class="tech-hdr-left">
+      <div class="tech-hdr-name">🚧 Blockade melden</div>
+      <div class="tech-hdr-role">hält einen Step auf?</div>
+    </div>
+    <button class="tech-logout" onclick="blBackFromCapture()">← Zurück</button>
+  </div>
+  <div class="tr-form">
+    <div class="ob-lbl">Projekt / Baustelle *</div>
+    <select class="login-inp" id="tb-projekt" onchange="tbProjektChange()"><option value="">– Projekt wählen –</option></select>
+
+    <!-- Sprache ODER Text → BOB schlägt Zuordnung vor -->
+    <div class="tr-voice">
+      <div class="ob-lbl" style="margin-top:0;">🎙️ Blockade schildern – per Sprache oder Text</div>
+      <textarea class="login-inp" id="tb-transcript" rows="3" placeholder="z.B. 'Im Bad OG Haus A kann ich die Steigleitung nicht montieren, das Rohr 22 Millimeter fehlt komplett. Blockiert alles hier.'"></textarea>
+      <div class="tr-voice-btns">
+        <button type="button" class="login-btn-pw" id="tb-dictate" onclick="tbDictate()">🎙️ Diktieren</button>
+        <button type="button" class="login-btn-pw" id="tb-classify-btn" onclick="tbClassify()">🧠 BOB: Zuordnen</button>
+      </div>
+      <div class="tr-bob-thinking" id="tb-thinking" style="display:none;"><span class="tr-spinner" aria-hidden="true"></span> BOB ordnet die Blockade zu…</div>
+    </div>
+
+    <!-- Zuordnung (Vorschlag, editierbar) -->
+    <div class="ob-lbl">Blockierter Step *</div>
+    <input class="login-inp" id="tb-step" type="text" placeholder="z.B. Steigleitung Montage"/>
+    <div class="tr-row2">
+      <div><div class="ob-lbl">Haus</div><input class="login-inp" id="tb-haus" type="text" placeholder="Haus A"/></div>
+      <div><div class="ob-lbl">Einheit</div><input class="login-inp" id="tb-einheit" type="text" placeholder="Whg 3"/></div>
+    </div>
+    <div class="ob-lbl">Zone / Bereich</div>
+    <input class="login-inp" id="tb-zone" type="text" placeholder="z.B. Bad OG, Steigzone"/>
+
+    <div class="ob-lbl">Dringlichkeit *</div>
+    <div class="ob-chips" id="tb-urgency"></div>
+    <div class="ob-lbl">Blockiert durch (wer muss lösen?) *</div>
+    <div class="ob-chips" id="tb-rolle"></div>
+
+    <div class="ob-lbl">Beschreibung *</div>
+    <textarea class="login-inp" id="tb-beschreibung" rows="3" placeholder="Was genau blockiert den Step?"></textarea>
+
+    <div class="ob-lbl">Foto (Beleg)</div>
+    <input type="file" id="tb-foto" accept="image/*" multiple capture="environment" onchange="tbFotoPreview()"/>
+    <div class="tr-foto-preview" id="tb-foto-preview"></div>
+
+    <div class="ob-lbl">Benachrichtigung an (E-Mail, optional)</div>
+    <input class="login-inp" id="tb-owner-email" type="email" inputmode="email" placeholder="bauleiter@buero.ch – leer = GS-Büro"/>
+
+    <button class="login-btn-magic" id="tb-send" style="margin-top:14px;" onclick="tbSend()">🚨 Blockade melden</button>
+    <div class="login-msg" id="tb-msg"></div>
+
+    <!-- Meine Blockaden -->
+    <div class="ob-lbl" style="margin-top:22px;">🚧 Meine gemeldeten Blockaden</div>
+    <div id="tb-list"><div class="admin-empty">Lädt…</div></div>
+  </div>
+</div>
+
 <!-- ═══ TECHNIKER: STUNDENERFASSUNG ═══ -->
 <div id="tech-stunden" class="tech-screen">
   <div class="tech-hdr">
@@ -2298,6 +2424,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="pd-tab act" id="pdt-inbox" onclick="pdTab('inbox')">📨 Inbox<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span></div>
     <div class="pd-tab" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
     <div class="pd-tab" id="pdt-rapporte" onclick="pdTab('rapporte')">Rapporte</div>
+    <div class="pd-tab" id="pdt-blockaden" onclick="pdTab('blockaden')">🚧 Blockaden</div>
     <div class="pd-tab" id="pdt-rechnungen" onclick="pdTab('rechnungen')">Rechnungen</div>
     <div class="pd-tab" id="pdt-settings" onclick="pdTab('settings')">⚙️</div>
   </div>
@@ -4550,6 +4677,7 @@ var authToken=null,authRole=null,authUser=null,authTechName=null;
 
 function showScreen(id){
   if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop voice when switching screens
+  if(typeof blStopSpeak==='function') blStopSpeak();     // Blockaden-Vorlese-Audio ebenfalls stoppen
   document.querySelectorAll('.screen,.gs-screen,.login-screen,.tech-screen,.admin-screen').forEach(function(s){
     s.classList.remove('active');
   });
@@ -6340,6 +6468,345 @@ function tmSend(){
 }
 function tmShowMsg(){ try{ var m=document.getElementById('tm-msg'); if(m) m.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){} }
 
+// ══════════════════════════════════════════════════════════
+// ══ BLOCKADEN-MODUL (Techniker + Admin/Bauleiter + Partner) ══
+// ══════════════════════════════════════════════════════════
+var BL_URG=[{v:'LOW',l:'🟢 Niedrig'},{v:'MEDIUM',l:'🟡 Mittel'},{v:'HIGH',l:'🟠 Hoch'},{v:'CRITICAL',l:'🔴 Kritisch'}];
+var BL_ROLLE=[{v:'material',l:'📦 Material'},{v:'planung',l:'📐 Planung'},{v:'extern',l:'🏗️ Anderes Gewerk'},{v:'gebaeudetechnik',l:'🔧 Gebäudetechnik'}];
+var BL_URG_DE={LOW:'Niedrig',MEDIUM:'Mittel',HIGH:'Hoch',CRITICAL:'Kritisch'};
+var BL_ST_DE={offen:'Offen',in_bearbeitung:'In Bearbeitung',freigegeben:'Freigegeben',eskaliert:'Eskaliert'};
+var BL_ROLLE_DE={material:'Material',planung:'Planung',extern:'Anderes Gewerk',gebaeudetechnik:'Gebäudetechnik'};
+
+// Demo-Datensatz (fiktiv/maskiert – nie echte Kundendaten).
+var blDemoSeq=3;
+var blDemoData=[
+  {id:'bd-1',projekt_id:'demo-1',projekt_name:'Heizungsrevision MFH Zürich',haus:'Haus A',einheit:'Whg 3',zone:'Bad OG',step_ref:'Steigleitung Montage',beschreibung:'Rohr 22 mm fehlt komplett – Steigleitung kann nicht montiert werden.',blockiert_von_rolle:'material',urgency:'CRITICAL',status:'offen',reporter_name:'P. N.',foto_count:1,created_at:new Date(Date.now()-3*3600e3).toISOString(),woche:blIsoWeek(new Date()),jahr:new Date().getFullYear()},
+  {id:'bd-2',projekt_id:'demo-1',projekt_name:'Heizungsrevision MFH Zürich',haus:'Haus A',einheit:'Whg 1',zone:'Technikraum',step_ref:'Verteiler Anschluss',beschreibung:'Elektro-Vorleistung fehlt – Verteiler kann nicht angeschlossen werden.',blockiert_von_rolle:'extern',urgency:'HIGH',status:'in_bearbeitung',reporter_name:'D. G.',foto_count:0,created_at:new Date(Date.now()-26*3600e3).toISOString(),woche:blIsoWeek(new Date()),jahr:new Date().getFullYear()},
+  {id:'bd-3',projekt_id:'demo-1',projekt_name:'Heizungsrevision MFH Zürich',haus:'Haus B',einheit:'',zone:'Steigzone',step_ref:'Brandschott',beschreibung:'Freigabe Brandschutzkonzept fehlt.',blockiert_von_rolle:'planung',urgency:'MEDIUM',status:'freigegeben',reporter_name:'V. I.',foto_count:0,created_at:new Date(Date.now()-72*3600e3).toISOString(),resolution:'Konzept nachgereicht, Schott freigegeben.',woche:blIsoWeek(new Date()),jahr:new Date().getFullYear()}
+];
+function blIsoWeek(d){var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));var day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);var ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil((((t-ys)/86400000)+1)/7);}
+// API-Wrapper: im Demo-Modus lokaler Store, sonst echte API (mit Token-Refresh via gsAuthApi).
+function blApi(body){
+  if(demoMode) return blDemoApi(body);
+  return gsAuthApi('blockaden',body);
+}
+function blDemoApi(b){
+  var a=b&&b.action;
+  if(a==='classify') return Promise.resolve({suggestion:{haus:'',einheit:'',zone:'',step_ref:'Nicht zugeordnet',urgency:'MEDIUM',blockiert_von_rolle:'extern',beschreibung:b.text||''},fallback:true});
+  if(a==='list'){var rows=blDemoData.slice();if(b.offen_only)rows=rows.filter(function(x){return x.status!=='freigegeben';});if(b.status)rows=rows.filter(function(x){return x.status===b.status;});if(b.urgency)rows=rows.filter(function(x){return x.urgency===b.urgency;});var rk={CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3};rows.sort(function(x,y){return (rk[x.urgency]||9)-(rk[y.urgency]||9);});return Promise.resolve({blockaden:rows,count:rows.length,can_freigeben:true});}
+  if(a==='get'){return Promise.resolve({blockade:blDemoData.filter(function(x){return x.id===b.id;})[0]||null});}
+  if(a==='create'){var n={id:'bd-'+(++blDemoSeq),projekt_id:b.projekt_id||'demo-1',projekt_name:b.projekt_name||'Demo-Projekt',haus:b.haus,einheit:b.einheit,zone:b.zone,step_ref:b.step_ref||'Nicht zugeordnet',beschreibung:b.beschreibung,blockiert_von_rolle:b.blockiert_von_rolle,urgency:b.urgency,status:'offen',reporter_name:'Demo',foto_count:(b.fotos||[]).length,created_at:new Date().toISOString(),woche:blIsoWeek(new Date()),jahr:new Date().getFullYear()};blDemoData.unshift(n);return Promise.resolve({ok:true,blockade:n,mail_sent:false,mail_to:'info@george-solutions.ch',notified:true});}
+  if(a==='freigeben'){var f=blDemoData.filter(function(x){return x.id===b.id;})[0];if(f){f.status='freigegeben';f.resolution=b.resolution||'Freigegeben';}return Promise.resolve({ok:true,blockade:f,step_entsperrt:true});}
+  if(a==='update'){var u=blDemoData.filter(function(x){return x.id===b.id;})[0];if(u){if(b.status)u.status=b.status;if(b.resolution!=null)u.resolution=b.resolution;}return Promise.resolve({ok:true,blockade:u});}
+  if(a==='report'){var rk2={CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3};var rr=blDemoData.slice().sort(function(x,y){return (rk2[x.urgency]||9)-(rk2[y.urgency]||9);});return Promise.resolve({ok:true,kw:blIsoWeek(new Date()),jahr:new Date().getFullYear(),count:rr.length,offen:rr.filter(function(x){return x.status!=='freigegeben';}).length,eskaliert:rr.filter(function(x){return x.status==='eskaliert';}).length,blockaden:rr,pdf_base64:null,speak_text:'Demo-Wochenreport: '+rr.length+' Blockaden.'});}
+  if(a==='speak_text'){return Promise.resolve({text:'Demo-Vorlesetext: es gibt '+blDemoData.filter(function(x){return x.status!=='freigegeben';}).length+' offene Blockaden.'});}
+  return Promise.resolve({});
+}
+
+// Labeled Single-Select-Chips (Label ≠ Wert).
+function blChips(containerId,items,sel){
+  var c=document.getElementById(containerId);if(!c)return;
+  c.innerHTML=items.map(function(it){return '<div class="ob-chip'+(sel===it.v?' sel':'')+'" data-val="'+gsEsc(it.v)+'">'+gsEsc(it.l)+'</div>';}).join('');
+  c.querySelectorAll('.ob-chip').forEach(function(el){el.onclick=function(){c.querySelectorAll('.ob-chip').forEach(function(x){x.classList.remove('sel');});el.classList.add('sel');};});
+}
+function blChipVal(containerId){var c=document.getElementById(containerId);if(!c)return null;var s=c.querySelector('.ob-chip.sel');return s?s.getAttribute('data-val'):null;}
+
+// ── Dedizierter Vorlese-Player (ElevenLabs via /api/voice; unabhängig vom BOB-Mute) ──
+var __blAudio=null,__blSeq=0;
+function blStopSpeak(){__blSeq++;if(__blAudio){try{__blAudio.pause();}catch(e){}__blAudio=null;}document.querySelectorAll('.bl-speak.playing').forEach(function(b){b.classList.remove('playing');b.textContent=b.dataset.idle||'🔊 Vorlesen';});}
+function blSpeak(text,btn){
+  if(!text)return;
+  if(typeof bobStopSpeak==='function')bobStopSpeak();
+  // Toggle: läuft dieser Button schon → stoppen.
+  if(btn&&btn.classList.contains('playing')){blStopSpeak();return;}
+  blStopSpeak();
+  var seq=++__blSeq;
+  if(btn){btn.dataset.idle=btn.dataset.idle||btn.textContent;btn.classList.add('playing');btn.textContent='⏸️ Stop';}
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:String(text).slice(0,2000),model_id:'eleven_flash_v2_5'})})
+    .then(function(r){var ct=r.headers.get('content-type')||'';return (r.ok&&ct.indexOf('audio')>-1)?r.blob():null;})
+    .then(function(blob){
+      if(seq!==__blSeq)return;
+      if(!blob){blSpeakFallback(text,btn);return;}
+      var url=URL.createObjectURL(blob);var el=new Audio(url);__blAudio=el;
+      el.onended=function(){try{URL.revokeObjectURL(url);}catch(e){}if(btn){btn.classList.remove('playing');btn.textContent=btn.dataset.idle||'🔊 Vorlesen';}};
+      el.onerror=function(){try{URL.revokeObjectURL(url);}catch(e){}blSpeakFallback(text,btn);};
+      var p=el.play();if(p&&p.catch)p.catch(function(){blSpeakFallback(text,btn);});
+    })
+    .catch(function(){if(seq===__blSeq)blSpeakFallback(text,btn);});
+}
+function blSpeakFallback(text,btn){
+  try{if('speechSynthesis' in window){window.speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(String(text));u.lang='de-DE';u.rate=0.98;u.onend=function(){if(btn){btn.classList.remove('playing');btn.textContent=btn.dataset.idle||'🔊 Vorlesen';}};window.speechSynthesis.speak(u);return;}}catch(e){}
+  if(btn){btn.classList.remove('playing');btn.textContent=btn.dataset.idle||'🔊 Vorlesen';}
+}
+
+// ── Gemeinsame Blockaden-Karten-/Detail-Renderer ──
+function blCardHtml(b,onclick){
+  var ort=[b.haus,b.einheit,b.zone].filter(Boolean).map(gsEsc).join(' · ');
+  var meta=[gsEsc(b.projekt_name||''),ort].filter(Boolean).join(' — ');
+  var esk=b.eskaliert||b.status==='eskaliert';
+  return '<div class="bl-card '+gsEsc(b.urgency)+' '+gsEsc(b.status)+'" onclick="'+onclick+'">'
+    +'<div class="bl-card-top"><span class="bl-card-step">'+gsEsc(b.step_ref||'Blockade')+'</span>'
+    +'<span class="bl-urg '+gsEsc(b.urgency)+'">'+gsEsc(BL_URG_DE[b.urgency]||b.urgency)+'</span>'
+    +'<span class="bl-status '+gsEsc(b.status)+'">'+(esk?'⚠ ':'')+gsEsc(BL_ST_DE[b.status]||b.status)+'</span></div>'
+    +(meta?'<div class="bl-card-meta">'+meta+'</div>':'')
+    +'<div class="bl-card-desc">'+gsEsc((b.beschreibung||'').slice(0,140))+'</div>'
+    +(b.foto_count?'<div class="bl-card-meta" style="margin-top:4px;">📷 '+b.foto_count+' Foto'+(b.foto_count>1?'s':'')+'</div>':'')
+    +'</div>';
+}
+
+// ═══ TECHNIKER / PARTNER: Blockade melden ═══
+var tbFotos=[],blCaptureCtx='tech';
+function blBackFromCapture(){if(blCaptureCtx==='partner'){showScreen('partner-dash');if(typeof pdTab==='function')pdTab('blockaden');}else{showScreen('tech-rapport');}}
+function showTechBlockade(ctx){
+  blCaptureCtx=ctx==='partner'?'partner':'tech';
+  showScreen('tech-blockade');
+  blStopSpeak();
+  var sel=document.getElementById('tb-projekt');
+  var src=blCaptureCtx==='partner'?(typeof pdProjekte!=='undefined'&&pdProjekte||[]):(trProjekte||[]);
+  function fill(list){sel.innerHTML='<option value="">– Projekt wählen –</option>'+list.map(function(p){return '<option value="'+p.id+'">'+gsEsc(p.name)+'</option>';}).join('');if(list.length===1)sel.value=list[0].id;}
+  fill(src);
+  // Falls Projekte noch nicht geladen (Direkteinstieg) → laden.
+  if(!src.length){
+    gsAuthApi('projekte',{action:'list'}).then(function(d){var ps=d.projekte||[];if(blCaptureCtx==='partner'){if(typeof pdProjekte!=='undefined')pdProjekte=ps;}else{trProjekte=ps;}fill(ps);});
+  }
+  blChips('tb-urgency',BL_URG,'MEDIUM');
+  blChips('tb-rolle',BL_ROLLE,'extern');
+  ['tb-transcript','tb-step','tb-haus','tb-einheit','tb-zone','tb-beschreibung','tb-owner-email'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  tbFotos=[];document.getElementById('tb-foto-preview').innerHTML='';
+  setMsg('tb-msg','','');
+  tbLoadList();
+}
+function tbProjektChange(){/* Projektname wird beim Senden aus dem Select gelesen */}
+// Diktat (Dauer, wie Materialliste) in tb-transcript.
+var tbRec=null,tbRecOn=false,tbStop=false,tbRestartT=null;
+function tbDictate(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var btn=document.getElementById('tb-dictate');
+  if(!SR){toast('Spracherkennung wird nicht unterstützt – bitte tippen');return;}
+  if(tbRecOn){tbStop=true;if(tbRec){try{tbRec.stop();}catch(e){}}return;}
+  tbStop=false;tbRec=new SR();tbRec.lang='de-CH';tbRec.interimResults=false;tbRec.continuous=true;
+  tbRec.onresult=function(e){var t='';for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;}t=t.trim();if(!t)return;var ta=document.getElementById('tb-transcript');if(ta)ta.value=(ta.value?ta.value+' ':'')+t;};
+  tbRec.onerror=function(ev){if(ev&&(ev.error==='not-allowed'||ev.error==='service-not-allowed'||ev.error==='audio-capture'))tbStop=true;};
+  tbRec.onend=function(){if(tbStop){tbRecOn=false;if(tbRestartT){clearTimeout(tbRestartT);tbRestartT=null;}if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}return;}tbRestartT=setTimeout(function(){if(tbStop)return;try{tbRec.start();}catch(e){tbRecOn=false;if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';}}},150);};
+  try{tbRec.start();tbRecOn=true;if(btn){btn.classList.add('rec');btn.textContent='⏺️ Aufnahme… (Stop drücken)';}}catch(e){tbRecOn=false;}
+}
+function tbClassify(){
+  var ta=document.getElementById('tb-transcript');var text=(ta&&ta.value||'').trim();
+  if(!text){toast('Bitte zuerst schildern (Sprache/Text)');return;}
+  if(tbRecOn){tbStop=true;if(tbRec){try{tbRec.stop();}catch(e){}}}
+  var btn=document.getElementById('tb-classify-btn'),think=document.getElementById('tb-thinking');
+  if(btn)btn.disabled=true;if(think)think.style.display='flex';
+  var psel=document.getElementById('tb-projekt');var pname=(psel.options[psel.selectedIndex]||{}).text||'';
+  blApi({action:'classify',text:text,projekt_name:pname&&pname.indexOf('–')<0?pname:''}).then(function(d){
+    if(think)think.style.display='none';if(btn)btn.disabled=false;
+    var s=d&&d.suggestion;if(!s){toast('⚠️ Konnte nicht zuordnen – bitte manuell ausfüllen');return;}
+    if(s.step_ref&&s.step_ref!=='Nicht zugeordnet')document.getElementById('tb-step').value=s.step_ref;
+    if(s.haus)document.getElementById('tb-haus').value=s.haus;
+    if(s.einheit)document.getElementById('tb-einheit').value=s.einheit;
+    if(s.zone)document.getElementById('tb-zone').value=s.zone;
+    if(s.beschreibung)document.getElementById('tb-beschreibung').value=s.beschreibung;
+    if(s.urgency)blChips('tb-urgency',BL_URG,s.urgency);
+    if(s.blockiert_von_rolle)blChips('tb-rolle',BL_ROLLE,s.blockiert_von_rolle);
+    toast('✓ BOB-Vorschlag übernommen – bitte prüfen & korrigieren');
+  }).catch(function(){if(think)think.style.display='none';if(btn)btn.disabled=false;toast('⚠️ Zuordnung fehlgeschlagen – bitte manuell ausfüllen');});
+}
+function tbFotoPreview(){
+  var files=document.getElementById('tb-foto').files;if(!files||!files.length)return;
+  Array.prototype.slice.call(files).slice(0,6).forEach(function(f){
+    var rd=new FileReader();
+    rd.onload=function(e){var img=new Image();img.onload=function(){var max=1000,sc=Math.min(1,max/Math.max(img.width,img.height));var cv=document.createElement('canvas');cv.width=img.width*sc;cv.height=img.height*sc;cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);var b64=cv.toDataURL('image/jpeg',0.7);if(tbFotos.length<6){tbFotos.push(b64);document.getElementById('tb-foto-preview').innerHTML+='<img class="bl-foto-thumb" src="'+b64+'"/>';}};img.src=e.target.result;};
+    rd.readAsDataURL(f);
+  });
+  document.getElementById('tb-foto').value='';
+}
+function tbSend(){
+  var psel=document.getElementById('tb-projekt');var projekt_id=psel.value;
+  var projekt_name=(psel.options[psel.selectedIndex]||{}).text||'';
+  var step=(document.getElementById('tb-step').value||'').trim();
+  var besch=(document.getElementById('tb-beschreibung').value||'').trim()||(document.getElementById('tb-transcript').value||'').trim();
+  if(!projekt_id){setMsg('tb-msg','Bitte Projekt wählen','err');return;}
+  if(!besch){setMsg('tb-msg','Bitte Blockade beschreiben (Sprache/Text)','err');return;}
+  var urgency=blChipVal('tb-urgency')||'MEDIUM';var rolle=blChipVal('tb-rolle')||'extern';
+  var oe=(document.getElementById('tb-owner-email').value||'').trim();
+  var btn=document.getElementById('tb-send');if(btn){btn.disabled=true;btn.textContent='Meldet…';}
+  setMsg('tb-msg','Meldet…','');
+  blApi({action:'create',projekt_id:projekt_id,projekt_name:projekt_name.indexOf('–')<0?projekt_name:'',
+    haus:(document.getElementById('tb-haus').value||'').trim(),einheit:(document.getElementById('tb-einheit').value||'').trim(),
+    zone:(document.getElementById('tb-zone').value||'').trim(),step_ref:step||'Nicht zugeordnet',
+    beschreibung:besch,urgency:urgency,blockiert_von_rolle:rolle,fotos:tbFotos,
+    reporter_name:authTechName||(authUser&&authUser.email)||'Techniker',
+    owner_email:oe||null}).then(function(d){
+    d=d||{};if(btn){btn.disabled=false;btn.textContent='🚨 Blockade melden';}
+    if(d.error){setMsg('tb-msg','⚠️ '+d.error,'err');toast('⚠️ '+d.error);return;}
+    setMsg('tb-msg','✓ Blockade gemeldet'+(d.mail_sent?' – Benachrichtigung an '+(d.mail_to||'Büro')+' raus':'')+'. Step erscheint 🔴 im Dashboard.','');
+    toast('🚨 Blockade gemeldet');
+    ['tb-transcript','tb-step','tb-haus','tb-einheit','tb-zone','tb-beschreibung','tb-owner-email'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+    tbFotos=[];document.getElementById('tb-foto-preview').innerHTML='';
+    blChips('tb-urgency',BL_URG,'MEDIUM');blChips('tb-rolle',BL_ROLLE,'extern');
+    tbLoadList();
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='🚨 Blockade melden';}setMsg('tb-msg','⚠️ Verbindungsfehler – bitte erneut','err');toast('⚠️ Verbindungsfehler');});
+}
+function tbLoadList(){
+  var l=document.getElementById('tb-list');if(!l)return;l.innerHTML='<div class="admin-empty">Lädt…</div>';
+  blApi({action:'list',demo:demoMode}).then(function(d){
+    var rows=(d&&d.blockaden)||[];
+    if(d&&d.notMigrated){l.innerHTML='<div class="admin-empty">Blockaden-Tabelle noch nicht aktiv (Migration ausstehend).</div>';return;}
+    if(!rows.length){l.innerHTML='<div class="admin-empty">Noch keine Blockaden gemeldet.</div>';return;}
+    l.innerHTML=rows.map(function(b){return blCardHtml(b,"blOpenDetail('"+b.id+"','tech')");}).join('');
+  }).catch(function(){l.innerHTML='<div class="admin-empty">'+demoOrError({})+'</div>';});
+}
+
+// ═══ ADMIN / BAULEITER-BÜRO: Übersicht ═══
+var blFilter={key:'offen',label:'Offen'};
+var BL_FILTERS=[{key:'offen',label:'Offen',q:{offen_only:true}},{key:'all',label:'Alle',q:{}},{key:'CRITICAL',label:'🔴 Kritisch',q:{urgency:'CRITICAL'}},{key:'eskaliert',label:'⚠ Eskaliert',q:{status:'eskaliert'}},{key:'freigegeben',label:'Freigegeben',q:{status:'freigegeben'}}];
+function showAdminBlockaden(){
+  showScreen('admin-blockaden');blStopSpeak();
+  var rep=document.getElementById('abl-report');if(rep){rep.style.display='none';rep.innerHTML='';}
+  document.getElementById('abl-filter').innerHTML=BL_FILTERS.map(function(f){return '<span class="bl-filter'+(f.key===blFilter.key?' act':'')+'" onclick="blSetFilter(\''+f.key+'\')">'+gsEsc(f.label)+'</span>';}).join('');
+  blAdminLoad();
+}
+function blSetFilter(key){var f=BL_FILTERS.filter(function(x){return x.key===key;})[0]||BL_FILTERS[0];blFilter={key:f.key,label:f.label};document.querySelectorAll('#abl-filter .bl-filter').forEach(function(el){el.classList.remove('act');});var idx=BL_FILTERS.indexOf(f);var els=document.querySelectorAll('#abl-filter .bl-filter');if(els[idx])els[idx].classList.add('act');blAdminLoad();}
+function blAdminLoad(){
+  var l=document.getElementById('abl-list');if(l)l.innerHTML='<div class="admin-empty">Lädt…</div>';
+  var f=BL_FILTERS.filter(function(x){return x.key===blFilter.key;})[0]||BL_FILTERS[0];
+  var body=Object.assign({action:'list',demo:demoMode},f.q);
+  blApi(body).then(function(d){
+    if(d&&d.notMigrated){if(l)l.innerHTML='<div class="admin-empty">⚠️ Blockaden-Tabelle noch nicht aktiv – bitte scripts/blockaden_migration.sql im Supabase SQL-Editor ausführen.</div>';return;}
+    var rows=(d&&d.blockaden)||[];
+    var sub=document.getElementById('abl-sub');if(sub)sub.textContent=rows.length+(blFilter.key==='offen'?' offen':' '+blFilter.label.toLowerCase());
+    if(!l)return;
+    if(!rows.length){l.innerHTML='<div class="admin-empty">Keine Blockaden – '+gsEsc(blFilter.label)+'.</div>';return;}
+    l.innerHTML=rows.map(function(b){return blCardHtml(b,"blOpenDetail('"+b.id+"','admin')");}).join('');
+  }).catch(function(){if(l)l.innerHTML='<div class="admin-empty">'+demoOrError({})+'</div>';});
+}
+// 🔊 Blockaden-Status vorlesen (fertigen Text vom Backend → /api/voice).
+function blSpeakOverview(btn){
+  if(btn&&btn.classList.contains('playing')){blStopSpeak();return;}
+  blApi({action:'speak_text',demo:demoMode}).then(function(d){var t=(d&&d.text)||'';if(!t){toast('Kein Text zum Vorlesen');return;}blSpeak(t,btn);}).catch(function(){toast('⚠️ Konnte nicht vorlesen');});
+}
+// 📄 Wochenreport erstellen (Summary + PDF-Download + Vorlesen).
+function blWeekReport(){
+  var rep=document.getElementById('abl-report');if(rep){rep.style.display='block';rep.innerHTML='<div class="admin-empty">Erstellt Report…</div>';}
+  blApi({action:'report',demo:demoMode,pdf:true}).then(function(d){
+    if(!rep)return;
+    if(d&&d.notMigrated){rep.innerHTML='<div class="admin-empty">Migration ausstehend.</div>';return;}
+    var pdfBtn=d.pdf_base64?'<button class="admin-act" onclick="blDownloadPdf(\'blk-pdf\')">⬇️ PDF herunterladen</button>':'';
+    rep.innerHTML='<div class="bl-suggest"><h4>📄 Wochenreport KW '+gsEsc(String(d.kw))+'/'+gsEsc(String(d.jahr))+'</h4>'
+      +'<div class="bl-detail-row"><span class="k">Blockaden gesamt</span><span class="v">'+d.count+'</span></div>'
+      +'<div class="bl-detail-row"><span class="k">Noch offen</span><span class="v" style="color:#ff9838;">'+d.offen+'</span></div>'
+      +'<div class="bl-detail-row"><span class="k">Eskaliert</span><span class="v" style="color:#ff4d4f;">'+d.eskaliert+'</span></div>'
+      +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">'
+      +'<button class="bl-speak" style="width:auto;flex:1;min-width:150px;" data-idle="🔊 Report vorlesen" onclick="blSpeakReportText(this)">🔊 Report vorlesen</button>'
+      +pdfBtn+'</div></div>';
+    if(d.pdf_base64){window.__blReportPdf=d.pdf_base64;window.__blReportName='Blockaden-Report-KW'+d.kw+'-'+d.jahr+'.pdf';}
+    window.__blReportSpeak=d.speak_text||'';
+  }).catch(function(){if(rep)rep.innerHTML='<div class="admin-empty">'+demoOrError({})+'</div>';});
+}
+function blSpeakReportText(btn){var t=window.__blReportSpeak||'';if(!t){toast('Kein Text');return;}if(btn&&btn.classList.contains('playing')){blStopSpeak();return;}blSpeak(t,btn);}
+function blDownloadPdf(){
+  var b64=window.__blReportPdf;if(!b64){toast('Kein PDF');return;}
+  try{var bin=atob(b64);var arr=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);var blob=new Blob([arr],{type:'application/pdf'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=window.__blReportName||'Blockaden-Report.pdf';document.body.appendChild(a);a.click();setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1500);}catch(e){toast('⚠️ Download fehlgeschlagen');}
+}
+
+// ═══ Detail-Modal (rollenübergreifend) ═══
+var blCurrent=null,blCurCtx='admin';
+function blOpenDetail(id,ctx){
+  blCurCtx=ctx||'admin';
+  var modal=document.getElementById('bl-detail-modal');modal.style.display='block';
+  document.getElementById('bld-body').innerHTML='<div class="admin-empty">Lädt…</div>';
+  blApi({action:'get',id:id,demo:demoMode}).then(function(d){
+    var b=d&&d.blockade;if(!b){document.getElementById('bld-body').innerHTML='<div class="admin-empty">'+(d&&d.error?gsEsc(d.error):'Nicht gefunden')+'</div>';return;}
+    blCurrent=b;blRenderDetail(b);
+  }).catch(function(){document.getElementById('bld-body').innerHTML='<div class="admin-empty">'+demoOrError({})+'</div>';});
+}
+function blCloseDetail(){blStopSpeak();var m=document.getElementById('bl-detail-modal');if(m)m.style.display='none';blCurrent=null;}
+function blCanFreigeben(){return demoMode||authRole==='gs_admin'||authRole==='master'||authRole==='gs_partner';}
+function blRenderDetail(b){
+  document.getElementById('bld-status').innerHTML='<span class="bl-urg '+gsEsc(b.urgency)+'">'+gsEsc(BL_URG_DE[b.urgency]||b.urgency)+'</span> <span class="bl-status '+gsEsc(b.status)+'">'+gsEsc(BL_ST_DE[b.status]||b.status)+'</span>';
+  var ort=[b.haus,b.einheit,b.zone].filter(Boolean).map(gsEsc).join(' · ')||'–';
+  var fotos=(b.fotos||[]).map(function(f){return '<img class="bl-foto-thumb" src="'+f+'" onclick="window.open(this.src)"/>';}).join('');
+  var dt=b.created_at?new Date(b.created_at).toLocaleString('de-CH',{dateStyle:'medium',timeStyle:'short'}):'–';
+  var speakText=(BL_URG_DE[b.urgency]||'')+' Blockade. '+(b.step_ref||'')+'. '+(b.beschreibung||'');
+  var h='';
+  h+='<h2 style="margin:0 0 4px;color:#fff;font-size:19px;">'+gsEsc(b.step_ref||'Blockade')+'</h2>';
+  h+='<p style="margin:0 0 14px;color:rgba(232,237,245,.6);font-size:13px;">Gemeldet von '+gsEsc(b.reporter_name||'–')+' · '+gsEsc(dt)+'</p>';
+  h+='<button class="bl-speak" data-idle="🔊 Blockade vorlesen" onclick="blSpeak('+JSON.stringify(speakText).replace(/"/g,'&quot;')+',this)">🔊 Blockade vorlesen</button>';
+  h+='<div style="margin-top:10px;">';
+  h+='<div class="bl-detail-row"><span class="k">Projekt</span><span class="v">'+gsEsc(b.projekt_name||'–')+'</span></div>';
+  h+='<div class="bl-detail-row"><span class="k">Ort (Haus/Einheit/Zone)</span><span class="v">'+ort+'</span></div>';
+  h+='<div class="bl-detail-row"><span class="k">Blockiert durch</span><span class="v">'+gsEsc(BL_ROLLE_DE[b.blockiert_von_rolle]||b.blockiert_von_rolle||'–')+'</span></div>';
+  h+='<div class="bl-detail-row"><span class="k">Dringlichkeit</span><span class="v">'+gsEsc(BL_URG_DE[b.urgency]||b.urgency)+'</span></div>';
+  if(b.eskaliert)h+='<div class="bl-detail-row"><span class="k">Eskaliert</span><span class="v" style="color:#ff4d4f;">⚠ ja</span></div>';
+  h+='</div>';
+  h+='<div style="margin-top:14px;padding:13px 15px;background:rgba(255,255,255,.04);border-radius:11px;border-left:3px solid #C9A961;"><div style="color:rgba(232,237,245,.5);font-size:12px;margin-bottom:4px;">Beschreibung</div><div style="color:#fff;">'+gsEsc(b.beschreibung||'–')+'</div></div>';
+  if(b.resolution)h+='<div style="margin-top:10px;padding:13px 15px;background:rgba(107,203,119,.08);border-radius:11px;"><div style="color:rgba(232,237,245,.5);font-size:12px;margin-bottom:4px;">Auflösung</div><div style="color:#fff;">'+gsEsc(b.resolution)+'</div></div>';
+  if(fotos)h+='<div style="margin-top:12px;">'+fotos+'</div>';
+  // Aktionen (nur Bauleiter-Büro/Owner/Admin/Partner) und nur solange nicht freigegeben.
+  if(blCanFreigeben()&&b.status!=='freigegeben'){
+    h+='<div style="margin-top:18px;border-top:1px solid rgba(255,255,255,.08);padding-top:14px;">';
+    h+='<div class="ob-lbl" style="margin-top:0;">Auflösung / Notiz (optional)</div>';
+    h+='<textarea class="login-inp" id="bld-resolution" rows="2" placeholder="Wie wurde die Blockade gelöst?"></textarea>';
+    h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">';
+    if(b.status==='offen')h+='<button class="admin-act" onclick="blSetStatus(\''+b.id+'\',\'in_bearbeitung\')">▶ In Bearbeitung</button>';
+    h+='<button class="login-btn-magic" style="flex:1;min-width:160px;margin:0;" onclick="blFreigeben(\''+b.id+'\')">✅ Freigeben – Step entsperren</button>';
+    h+='</div></div>';
+  } else if(b.status==='freigegeben'){
+    h+='<div style="margin-top:16px;padding:12px;background:rgba(107,203,119,.1);border-radius:10px;color:#6bcb77;text-align:center;font-weight:700;">✅ Freigegeben – Step kann wieder starten</div>';
+  }
+  document.getElementById('bld-body').innerHTML=h;
+}
+function blFreigeben(id){
+  var rEl=document.getElementById('bld-resolution');var resolution=(rEl&&rEl.value||'').trim();
+  blApi({action:'freigeben',id:id,resolution:resolution,demo:demoMode}).then(function(d){
+    if(d&&d.error){toast('⚠️ '+d.error);return;}
+    toast('✅ Freigegeben – Step entsperrt');blCloseDetail();
+    if(document.getElementById('admin-blockaden').classList.contains('active'))blAdminLoad();
+    if(document.getElementById('tech-blockade').classList.contains('active'))tbLoadList();
+    if(typeof pdBlockadenLoad==='function'&&document.getElementById('partner-dash').classList.contains('active'))pdBlockadenLoad();
+  }).catch(function(){toast('⚠️ Freigabe fehlgeschlagen');});
+}
+function blSetStatus(id,status){
+  blApi({action:'update',id:id,status:status,demo:demoMode}).then(function(d){
+    if(d&&d.error){toast('⚠️ '+d.error);return;}
+    toast('✓ Status: '+(BL_ST_DE[status]||status));blCurrent=d.blockade||blCurrent;if(blCurrent)blRenderDetail(blCurrent);
+    if(document.getElementById('admin-blockaden').classList.contains('active'))blAdminLoad();
+  }).catch(function(){toast('⚠️ Fehlgeschlagen');});
+}
+
+// ═══ PARTNER: Blockaden seiner Projekte (sieht ALLE seiner Projekte, kann selbst eröffnen) ═══
+function pdBlockadenLoad(){
+  var c=document.getElementById('pd-content');if(!c)return;
+  c.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+    +'<button class="admin-add-btn" style="flex:1;min-width:170px;margin:0;" onclick="showTechBlockade(\'partner\')">+ Blockade eröffnen</button>'
+    +'<button class="bl-speak" style="width:auto;flex:1;min-width:150px;" data-idle="🔊 Status abrufen" onclick="blSpeakOverview(this)">🔊 Status abrufen</button>'
+    +'</div>'
+    +'<button class="bl-speak" data-idle="📄 Wochenreport" style="border-color:rgba(255,210,74,.5);color:#FFD24A;" onclick="blWeekReportInto(\'pd-bl-report\')">📄 Wochenreport „Was hat uns verzögert?"</button>'
+    +'<div id="pd-bl-report" style="display:none;"></div>'
+    +'<div id="pd-bl-list" style="margin-top:10px;"><div class="admin-empty">Lädt…</div></div>';
+  var l=document.getElementById('pd-bl-list');
+  blApi({action:'list',demo:demoMode}).then(function(d){
+    if(d&&d.notMigrated){l.innerHTML='<div class="admin-empty">Blockaden-Modul wird gerade aktiviert.</div>';return;}
+    var rows=(d&&d.blockaden)||[];
+    if(!rows.length){l.innerHTML='<div class="admin-empty">Keine Blockaden in Ihren Projekten. 🎉</div>';return;}
+    l.innerHTML=rows.map(function(b){return blCardHtml(b,"blOpenDetail('"+b.id+"','partner')");}).join('');
+  }).catch(function(){l.innerHTML='<div class="admin-empty">'+demoOrError({})+'</div>';});
+}
+// Wochenreport in einen beliebigen Container rendern (Partner nutzt eigenen Container).
+function blWeekReportInto(containerId){
+  var rep=document.getElementById(containerId);if(!rep)return;rep.style.display='block';rep.innerHTML='<div class="admin-empty">Erstellt Report…</div>';
+  blApi({action:'report',demo:demoMode,pdf:true}).then(function(d){
+    if(d&&d.notMigrated){rep.innerHTML='<div class="admin-empty">Migration ausstehend.</div>';return;}
+    var pdfBtn=d.pdf_base64?'<button class="admin-act" onclick="blDownloadPdf()">⬇️ PDF herunterladen</button>':'';
+    rep.innerHTML='<div class="bl-suggest"><h4>📄 Wochenreport KW '+gsEsc(String(d.kw))+'/'+gsEsc(String(d.jahr))+'</h4>'
+      +'<div class="bl-detail-row"><span class="k">Gesamt</span><span class="v">'+d.count+'</span></div>'
+      +'<div class="bl-detail-row"><span class="k">Offen</span><span class="v" style="color:#ff9838;">'+d.offen+'</span></div>'
+      +'<div class="bl-detail-row"><span class="k">Eskaliert</span><span class="v" style="color:#ff4d4f;">'+d.eskaliert+'</span></div>'
+      +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;"><button class="bl-speak" style="width:auto;flex:1;min-width:150px;" data-idle="🔊 Report vorlesen" onclick="blSpeakReportText(this)">🔊 Report vorlesen</button>'+pdfBtn+'</div></div>';
+    if(d.pdf_base64){window.__blReportPdf=d.pdf_base64;window.__blReportName='Blockaden-Report-KW'+d.kw+'-'+d.jahr+'.pdf';}
+    window.__blReportSpeak=d.speak_text||'';
+  }).catch(function(){rep.innerHTML='<div class="admin-empty">'+demoOrError({})+'</div>';});
+}
+
 // ── PARTNER DASHBOARD ──
 function initPartnerDash(){
   document.getElementById('pd-welcome').textContent=(authUser&&authUser.email)||'George Solutions';
@@ -6367,11 +6834,12 @@ function pdLoadBadge(){
   });
 }
 function pdTab(tab){
-  ['inbox','projekte','rapporte','rechnungen','settings'].forEach(function(t){
+  ['inbox','projekte','rapporte','blockaden','rechnungen','settings'].forEach(function(t){
     var el=document.getElementById('pdt-'+t);if(el)el.classList.toggle('act',t===tab);
   });
   var c=document.getElementById('pd-content');c.innerHTML='<div class="admin-empty">Lädt…</div>';
   if(tab==='settings'){ pdRenderSettings(c); return; }
+  if(tab==='blockaden'){ pdBlockadenLoad(); return; }
   if(tab==='inbox'){
     gsAuthApi('nachrichten',{action:'inbox'}).then(function(d){
       var ns=d.nachrichten||[];

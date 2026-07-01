@@ -51,8 +51,21 @@ Validierung: `node --check` grün; PDF/E-Mail-Erzeugung getestet (gültiger %PDF
 
 ---
 
-## Offen (nächste Schritte)
-- Schritt 2 – Frontend Techniker: Blockade erfassen (Sprache/Text + Foto, Auto-Zuordnung).
-- Schritt 3 – Frontend Admin/Bauleiter: Übersicht, Freigabe, 🔊 Vorlesen, Wochenreport.
-- Schritt 4 – Frontend Partner: Blockaden-Sichtbarkeit.
-- Schritt 5 – E2E-Testskript (20×, alle 4 Rollen) + Preview-Test mobil.
+## Schritt 2 – Frontend (Techniker + Admin/Bauleiter + Partner) ✅ (committet)
+Alles in `app.html` (Bestandsmuster wiederverwendet: tech-screen/admin-screen/ob-chip/tr-voice; schwarz-gold, mobile-first).
+
+- **Techniker** – Nav-Tab „🚧 Blockade" → Screen `tech-blockade`:
+  Projektwahl, Sprache/Text-Schilderung (Dauer-Diktat), „🧠 BOB: Zuordnen" (classify → füllt Step/Haus/Einheit/Zone/Urgency/Rolle/Beschreibung, editierbar),
+  Foto (mehrfach, komprimiert), optionale Owner-E-Mail, „🚨 Blockade melden" → create. Darunter „Meine gemeldeten Blockaden".
+- **Admin/Bauleiter-Büro** – Hub-Card „🚧 Blockaden" → Screen `admin-blockaden`:
+  Filter (Offen/Alle/🔴Kritisch/⚠Eskaliert/Freigegeben), nach Dringlichkeit sortierte Karten,
+  „🔊 Blockaden-Status abrufen" (ElevenLabs), „📄 Wochenreport" (Summary + PDF-Download + 🔊 Vorlesen).
+- **Partner** – pd-Tab „🚧 Blockaden": alle Blockaden seiner Projekte, „+ Blockade eröffnen" (gleicher Erfassungs-Screen, kontext-aware Back), 🔊 Status, Wochenreport.
+- **Detail-Modal** (rollenübergreifend): alle Felder, Fotos, 🔊 „Blockade vorlesen"; Bauleiter-Büro/Owner/Admin/Partner: „▶ In Bearbeitung" + „✅ Freigeben – Step entsperren".
+- **Vorlese-Funktion**: dedizierter Audio-Player (`blSpeak`, ElevenLabs Voice, `eleven_flash_v2_5`), Play/Stop-Toggle, Fallback SpeechSynthesis; stoppt bei Screenwechsel. Nur der fertige Text geht an `/api/voice`.
+- **Demo-Modus**: `demoMode` → lokaler `blDemoApi`-Store mit fiktiven/maskierten Daten (keine echten Kundennamen).
+
+Robustheit: Alle Listen fangen `notMigrated` sauber ab (freundlicher Hinweis statt Crash). Syntax der Inline-Scripts automatisiert geprüft (0 Fehler). `outputDirectory:"."` unangetastet.
+
+## Offen (nächster Schritt)
+- Schritt 3 – E2E-Testskript (adaptiv, 20×, alle 4 Rollen) + Preview-Test mobil.
