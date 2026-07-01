@@ -51,8 +51,15 @@ Druckprobe). **Foto-Gate**: Abschluss nur mit Foto-Nachweis.
 ## Status
 
 - [x] Schritt 1 – Backend: SQL-Migration, `api/gewerke.js`, Logik-Tests (42/42 grün)
-- [ ] Schritt 2 – Frontend: `gewerke.html` Status-Dashboard + Setup + Statusbericht + 🔊
-- [ ] Schritt 3 – Routing (`/gewerke`), Demo-Modus, End-to-End getestet
+- [x] Schritt 2 – Frontend: `gewerke.html` (Login, Projekt-Picker, Status-Dashboard mit
+      Fortschritts-Ring + ✅🟡⏳🔴, Setup „＋ Haus", Step-Sheet mit Gate-Meldungen,
+      Statusbericht-Modal + PDF-Druck + 🔊 Vorlesen). Routing `/gewerke` in vercel.json
+      (outputDirectory "." unangetastet). `api/auth.js` erlaubt jetzt auch `/gewerke`
+      als Magic-Link/Reset-Redirect (+ Query, z. B. `?demo=1`).
+- [ ] Schritt 3 – End-to-End gegen Live-DB testen (nach SQL-Migration), 5×/4 Rollen
+
+> Hinweis: Auf diesem Branch committet parallel ein zweiter Prozess (Blockaden-Feature).
+> Ich stage ausschließlich meine eigenen Dateien und pushe nach jedem Schritt.
 
 ## Tests
 

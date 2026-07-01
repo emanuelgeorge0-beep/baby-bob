@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>George Solutions – Gewerke-Status</title>
+<style>
+  :root{ --gold:#C9A961; --gold-dim:#8a7440; --bg:#0A0A0B; --card:#141416; --card2:#1c1c20;
+    --line:#2a2a30; --txt:#EDEDED; --muted:#9a9aa2; --ok:#3fb06b; --warn:#e0b34a; --wait:#7a7a86; --block:#e0564a; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  body{padding-bottom:env(safe-area-inset-bottom);}
+  .hidden{display:none !important;}
+  button{font-family:inherit;cursor:pointer;}
+  .gold{color:var(--gold);}
+  /* Header */
+  header{position:sticky;top:0;z-index:20;background:rgba(10,10,11,.92);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));
+    display:flex;align-items:center;gap:10px;}
+  .brand{font-weight:800;letter-spacing:.5px;font-size:16px;}
+  .brand .sub{display:block;font-size:11px;font-weight:600;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;}
+  header .spacer{flex:1;}
+  .icon-btn{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:10px;
+    padding:8px 12px;font-size:13px;font-weight:600;}
+  .icon-btn.g{border-color:var(--gold-dim);color:var(--gold);}
+  .wrap{max-width:760px;margin:0 auto;padding:14px 14px 90px;}
+  /* Login */
+  #login{max-width:400px;margin:8vh auto 0;padding:26px 22px;}
+  #login h1{font-size:22px;margin:0 0 4px;}
+  #login p{color:var(--muted);font-size:13px;margin:0 0 22px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+  input,select,textarea{width:100%;background:var(--card);border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:12px 13px;font-size:15px;outline:none;}
+  input:focus,select:focus,textarea:focus{border-color:var(--gold-dim);}
+  .btn{width:100%;background:linear-gradient(180deg,#d8b96e,#C9A961);color:#151107;border:none;
+    border-radius:11px;padding:13px;font-size:15px;font-weight:800;letter-spacing:.3px;}
+  .btn.sec{background:var(--card2);color:var(--gold);border:1px solid var(--gold-dim);}
+  .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:600;}
+  .btn-row{display:flex;gap:8px;margin-top:8px;}
+  .btn-row .btn{flex:1;}
+  .lmsg{margin-top:12px;font-size:13px;min-height:18px;}
+  .lmsg.err{color:var(--block);} .lmsg.ok{color:var(--ok);}
+  .link{color:var(--muted);font-size:12px;text-align:center;margin-top:14px;}
+  .link a{color:var(--gold);text-decoration:none;}
+  /* Toolbar */
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+  .toolbar select{flex:1;min-width:150px;}
+  .demo-badge{background:#3a2a00;color:var(--gold);border:1px solid var(--gold-dim);border-radius:20px;
+    padding:4px 11px;font-size:11px;font-weight:700;letter-spacing:.5px;}
+  /* Cards */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:12px;overflow:hidden;}
+  .haus-head{display:flex;align-items:center;gap:12px;padding:14px 15px;cursor:pointer;}
+  .haus-title{font-size:16px;font-weight:700;flex:1;}
+  .haus-title small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:2px;}
+  .ring{position:relative;width:46px;height:46px;flex:none;}
+  .ring svg{transform:rotate(-90deg);}
+  .ring .pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;}
+  .bar{height:7px;border-radius:5px;background:var(--card2);overflow:hidden;margin:0 15px 12px;}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));border-radius:5px;}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;padding:0 15px 13px;}
+  .chip{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:16px;border:1px solid var(--line);color:var(--muted);}
+  .chip.ok{color:var(--ok);border-color:#255c3a;} .chip.warn{color:var(--warn);border-color:#5c4b1e;}
+  .chip.wait{color:#b8b8c0;} .chip.block{color:var(--block);border-color:#5c2a25;}
+  .haus-body{border-top:1px solid var(--line);padding:4px 0 6px;}
+  .einheit{padding:6px 15px;}
+  .einheit-name{font-size:13.5px;font-weight:700;color:var(--gold);margin:8px 0 6px;display:flex;align-items:center;gap:7px;}
+  .einheit-name .ep{font-size:11px;color:var(--muted);font-weight:600;}
+  .gewerk-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin:8px 0 4px;}
+  .step{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;
+    margin-bottom:6px;background:var(--card2);}
+  .step .sym{font-size:17px;width:22px;text-align:center;flex:none;}
+  .step .st-txt{flex:1;font-size:13px;line-height:1.3;}
+  .step .st-txt small{display:block;color:var(--muted);font-size:11px;margin-top:1px;}
+  .step .nr{font-size:11px;color:var(--muted);font-weight:700;flex:none;}
+  .step.done{opacity:.72;} .step.block{border-color:#5c2a25;}
+  .locked{opacity:.5;}
+  .foto-tag{font-size:10px;color:var(--gold);border:1px solid var(--gold-dim);border-radius:8px;padding:1px 5px;margin-left:4px;}
+  .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px;}
+  /* Sheet / Modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:flex;align-items:flex-end;justify-content:center;}
+  .sheet{background:var(--card);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:760px;
+    max-height:92vh;overflow:auto;padding:18px 16px calc(24px + env(safe-area-inset-bottom));}
+  @media(min-width:640px){ .overlay{align-items:center;} .sheet{border-radius:18px;} }
+  .sheet h3{margin:0 0 3px;font-size:17px;}
+  .sheet .sub{color:var(--muted);font-size:12.5px;margin:0 0 16px;}
+  .status-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0;}
+  .status-grid button{padding:12px;border-radius:11px;border:1px solid var(--line);background:var(--card2);
+    color:var(--txt);font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;justify-content:center;}
+  .status-grid button.active{border-color:var(--gold);color:var(--gold);background:#211d12;}
+  .row2{display:flex;gap:8px;} .row2 > *{flex:1;}
+  .mini-lbl{font-size:12px;color:var(--muted);margin:12px 0 5px;}
+  .gate-msg{background:#2a1512;border:1px solid #5c2a25;color:#f0a89f;border-radius:10px;padding:10px 12px;font-size:13px;margin:10px 0;}
+  .report{white-space:pre-wrap;font-size:13.5px;line-height:1.55;background:var(--card2);border:1px solid var(--line);
+    border-radius:12px;padding:15px;margin:12px 0;}
+  .cbx{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:7px;background:var(--card2);}
+  .cbx input{width:auto;} .cbx label{flex:1;font-size:14px;}
+  .cbx .cnt{font-size:11px;color:var(--muted);}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#000;border:1px solid var(--gold-dim);
+    color:var(--gold);padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:60;max-width:90%;text-align:center;}
+  .fab{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:30;display:flex;flex-direction:column;gap:10px;}
+  .fab button{border:none;border-radius:14px;padding:13px 16px;font-size:14px;font-weight:800;box-shadow:0 6px 20px rgba(0,0,0,.5);}
+  .fab .add{background:var(--card2);color:var(--gold);border:1px solid var(--gold-dim);}
+  .fab .rep{background:linear-gradient(180deg,#d8b96e,#C9A961);color:#151107;}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--gold-dim);border-top-color:var(--gold);
+    border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  .speak-btn{display:inline-flex;align-items:center;gap:7px;}
+  /* Print */
+  #printArea{display:none;}
+  @media print{
+    body>*{display:none !important;}
+    #printArea{display:block !important;color:#000;background:#fff;padding:22px;font-size:13px;}
+    #printArea h2{margin:0 0 4px;} #printArea .pmeta{color:#555;font-size:12px;margin-bottom:14px;}
+    #printArea pre{white-space:pre-wrap;font-family:inherit;line-height:1.5;}
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login" class="hidden">
+  <h1><span class="gold">George Solutions</span></h1>
+  <p>Gewerke-Status · Bauleiter-Cockpit</p>
+  <div class="field"><label>E-Mail</label><input id="li-email" type="email" autocomplete="username" placeholder="name@firma.ch"></div>
+  <div class="field"><label>Passwort</label><input id="li-pw" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+  <button class="btn" id="li-go">Anmelden</button>
+  <div class="btn-row">
+    <button class="btn ghost" id="li-magic">Magic-Link</button>
+    <button class="btn ghost" id="li-reset">Passwort setzen</button>
+  </div>
+  <div class="lmsg" id="li-msg"></div>
+  <div class="link">Für Bauleiter, Techniker &amp; Admin. Kein Zugang? Beim Büro melden.</div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header>
+    <div class="brand">George Solutions<span class="sub">Gewerke-Status</span></div>
+    <div class="spacer"></div>
+    <span id="demoBadge" class="demo-badge hidden">DEMO</span>
+    <button class="icon-btn" id="tb-logout">Abmelden</button>
+  </header>
+  <div class="wrap">
+    <div class="toolbar">
+      <select id="projSel"><option value="">Projekt wählen…</option></select>
+      <button class="icon-btn g" id="tb-reload">↻</button>
+    </div>
+    <div id="board"></div>
+  </div>
+  <div class="fab hidden" id="fab">
+    <button class="add" id="fab-add">＋ Haus</button>
+    <button class="rep" id="fab-rep">📋 Statusbericht</button>
+  </div>
+</div>
+
+<div id="printArea"></div>
+<div id="overlay"></div>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var TOKEN=null, USER=null, ROLE=null, PROJEKTE=[], CURPROJ=null, TREE=null;
+var DEMO=new URLSearchParams(location.search).get('demo')==='1';
+var SELF_URL=location.origin+'/gewerke'+(DEMO?'?demo=1':'');
+
+// ── utils ──
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function toast(m,ms){var t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(toast._t);toast._t=setTimeout(function(){t.classList.add('hidden');},ms||2600);}
+function maskName(n){ if(!DEMO||!n) return n; return String(n).split(/\s+/).map(function(w){return w.length<=1?w:w[0]+'••••'.slice(0,Math.min(w.length-1,4));}).join(' '); }
+function closeOverlay(){ $('overlay').innerHTML=''; }
+
+// ── API ──
+function authApi(action,extra){
+  return fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(Object.assign({action:action},extra||{}))}).then(function(r){return r.json();});
+}
+function api(action,params){
+  return fetch('/api/gewerke',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+    body:JSON.stringify(Object.assign({action:action},params||{}))})
+    .then(function(r){ return r.json().then(function(j){ return {status:r.status,j:j}; }); });
+}
+
+// ── Session ──
+function setSession(token,refresh,user,role){ TOKEN=token; USER=user||USER; ROLE=role;
+  try{localStorage.setItem('bob_auth_token',token); if(refresh)localStorage.setItem('bob_refresh',refresh);}catch(e){} }
+function logout(){ TOKEN=null;ROLE=null;USER=null;
+  try{localStorage.removeItem('bob_auth_token');localStorage.removeItem('bob_refresh');}catch(e){}
+  $('app').classList.add('hidden'); $('login').classList.remove('hidden'); }
+
+function boot(){
+  if(DEMO) $('demoBadge').classList.remove('hidden');
+  if(location.hash.indexOf('access_token=')>-1){
+    var p={};location.hash.substring(1).split('&').forEach(function(kv){var a=kv.split('=');p[a[0]]=decodeURIComponent(a[1]||'');});
+    if(p.access_token){ if(p.refresh_token){try{localStorage.setItem('bob_refresh',p.refresh_token);}catch(e){}}
+      history.replaceState(null,'',location.pathname+location.search); verifyEnter(p.access_token,p.refresh_token); return; }
+  }
+  var t=null;try{t=localStorage.getItem('bob_auth_token');}catch(e){}
+  if(t){ verifyEnter(t); return; }
+  $('login').classList.remove('hidden');
+}
+function verifyEnter(token,refresh){
+  authApi('verify',{token:token}).then(function(d){
+    if(d.error||!d.user){ logout(); return; }
+    if(['techniker','gs_admin','master'].indexOf(d.role)<0){
+      logout(); $('login').classList.remove('hidden');
+      setMsg('Dieser Account hat keinen Zugang zum Gewerke-Cockpit.','err'); return;
+    }
+    setSession(token,refresh,d.user,d.role); enterApp();
+  }).catch(function(){ logout(); });
+}
+function enterApp(){ $('login').classList.add('hidden'); $('app').classList.remove('hidden'); loadProjekte(); }
+
+// ── Login handlers ──
+function setMsg(m,c){var e=$('li-msg');e.textContent=m;e.className='lmsg'+(c?' '+c:'');}
+$('li-go').onclick=function(){
+  var email=$('li-email').value.trim(),pw=$('li-pw').value;
+  if(!email||!pw){setMsg('E-Mail und Passwort eingeben','err');return;}
+  setMsg('Anmelden…','');
+  authApi('login',{email:email,password:pw}).then(function(d){
+    if(d.error){setMsg(d.error,'err');return;}
+    if(['techniker','gs_admin','master'].indexOf(d.role)<0){setMsg('Kein Zugang zum Gewerke-Cockpit.','err');return;}
+    setSession(d.access_token,d.refresh_token,d.user,d.role); enterApp();
+  }).catch(function(){setMsg('Verbindungsfehler','err');});
+};
+$('li-magic').onclick=function(){ var email=$('li-email').value.trim(); if(!email){setMsg('Zuerst E-Mail eingeben','err');return;}
+  setMsg('Sende Magic-Link…',''); authApi('magic_link',{email:email,redirect_to:SELF_URL}).then(function(d){ setMsg(d.error||'Link gesendet – E-Mail prüfen.',d.error?'err':'ok'); }).catch(function(){setMsg('Verbindungsfehler','err');}); };
+$('li-reset').onclick=function(){ var email=$('li-email').value.trim(); if(!email){setMsg('Zuerst E-Mail eingeben','err');return;}
+  setMsg('Sende Link…',''); authApi('reset_password',{email:email,redirect_to:SELF_URL}).then(function(d){ setMsg(d.error||'Link gesendet – E-Mail prüfen.',d.error?'err':'ok'); }).catch(function(){setMsg('Verbindungsfehler','err');}); };
+$('li-pw').addEventListener('keydown',function(e){if(e.key==='Enter')$('li-go').click();});
+$('tb-logout').onclick=logout;
+
+// ── Projekte ──
+function loadProjekte(){
+  api('projekte',{}).then(function(r){
+    PROJEKTE=(r.j&&r.j.projekte)||[];
+    var sel=$('projSel');
+    sel.innerHTML='<option value="">Projekt wählen…</option>'+PROJEKTE.map(function(p){
+      return '<option value="'+p.id+'">'+esc(maskName(p.name))+(p.projektnummer?' · '+esc(p.projektnummer):'')+'</option>';
+    }).join('');
+    if(PROJEKTE.length===1){ sel.value=PROJEKTE[0].id; selectProjekt(PROJEKTE[0].id); }
+    else if(!PROJEKTE.length){ $('board').innerHTML='<div class="empty">Keine Projekte zugewiesen.<br>Bitte beim Büro ein Projekt zuweisen lassen.</div>'; }
+  });
+}
+$('projSel').onchange=function(){ selectProjekt(this.value); };
+$('tb-reload').onclick=function(){ if(CURPROJ) loadTree(CURPROJ); };
+function selectProjekt(id){ CURPROJ=id||null; if(!id){ $('board').innerHTML=''; $('fab').classList.add('hidden'); return; } loadTree(id); }
+
+// ── Dashboard ──
+function loadTree(id){
+  $('board').innerHTML='<div class="empty"><span class="spin"></span> Lade Status…</div>';
+  api('tree',{projekt_id:id}).then(function(r){
+    if(r.status!==200){ $('board').innerHTML='<div class="empty">'+esc((r.j&&r.j.error)||'Fehler beim Laden')+'</div>'; return; }
+    TREE=r.j; renderBoard();
+    $('fab').classList.remove('hidden');
+  });
+}
+function statusSym(s){return {offen:'⏳',in_arbeit:'🟡',abgeschlossen:'✅',blockiert:'🔴'}[s]||'⏳';}
+function ring(pct){
+  var r=19,c=2*Math.PI*r,off=c*(1-pct/100);
+  return '<div class="ring"><svg width="46" height="46"><circle cx="23" cy="23" r="'+r+'" fill="none" stroke="#26262c" stroke-width="4"/>'+
+    '<circle cx="23" cy="23" r="'+r+'" fill="none" stroke="#C9A961" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'"/></svg>'+
+    '<div class="pct">'+pct+'%</div></div>';
+}
+var STEPS_BY_ID={};
+function renderBoard(){
+  var b=$('board');
+  STEPS_BY_ID={};
+  (TREE.haeuser||[]).forEach(function(h){(h.einheiten||[]).forEach(function(e){(e.gewerke||[]).forEach(function(g){(g.steps||[]).forEach(function(s){STEPS_BY_ID[s.id]=s;});});});});
+  if(!TREE.haeuser.length){ b.innerHTML='<div class="empty">Noch keine Häuser.<br>Tippe unten auf <b class="gold">＋ Haus</b>, um zu starten.</div>'; return; }
+  b.innerHTML=TREE.haeuser.map(hausCard).join('');
+}
+function hausCard(h){
+  var p=h.progress;
+  var chips='<div class="chips">'+
+    '<span class="chip ok">✅ '+p.done+'</span>'+
+    '<span class="chip warn">🟡 '+p.in_arbeit+'</span>'+
+    '<span class="chip wait">⏳ '+p.offen+'</span>'+
+    (p.blockiert?'<span class="chip block">🔴 '+p.blockiert+'</span>':'')+'</div>';
+  var body='<div class="haus-body hidden" id="hb-'+h.id+'">'+ (h.einheiten.length?h.einheiten.map(einheitBlock).join(''):'<div class="empty" style="padding:18px">Keine Einheiten.</div>') +'</div>';
+  return '<div class="card">'+
+    '<div class="haus-head" onclick="toggleHaus(\''+h.id+'\')">'+ring(p.prozent)+
+      '<div class="haus-title">'+esc(h.name)+'<small>'+p.done+' / '+p.total+' Schritten · '+h.einheiten.length+' Einheiten</small></div>'+
+      '<div class="nr">▾</div></div>'+
+    '<div class="bar"><i style="width:'+p.prozent+'%"></i></div>'+chips+body+'</div>';
+}
+function einheitBlock(e){
+  var tracks=e.gewerke.map(function(g){
+    var steps=g.steps.map(function(s){ return stepRow(s,g.steps); }).join('');
+    return '<div class="gewerk-lbl">'+g.icon+' '+esc(g.label)+' · '+g.progress.prozent+'%</div>'+steps;
+  }).join('');
+  return '<div class="einheit"><div class="einheit-name">🏠 '+esc(e.name)+' <span class="ep">'+e.progress.done+'/'+e.progress.total+'</span></div>'+
+    (tracks||'<div class="ep">Keine Steps</div>')+'</div>';
+}
+function stepRow(s,spur){
+  var locked=false;
+  if(s.pflicht_vorgaenger_nr){ var vg=spur.filter(function(x){return x.reihenfolge_nr===s.pflicht_vorgaenger_nr;})[0];
+    if(vg && vg.status!=='abgeschlossen' && s.status==='offen') locked=true; }
+  var cls='step'+(s.status==='abgeschlossen'?' done':'')+(s.status==='blockiert'?' block':'')+(locked?' locked':'');
+  var foto=s.foto_gate?'<span class="foto-tag">📷 Foto</span>':'';
+  return '<div class="'+cls+'" onclick="openStepById(\''+s.id+'\')">'+
+    '<span class="nr">'+s.reihenfolge_nr+'</span>'+
+    '<span class="sym">'+statusSym(s.status)+'</span>'+
+    '<span class="st-txt">'+esc(s.titel)+foto+
+      (s.status==='blockiert'&&s.blockiert_grund?'<small>🔴 '+esc(s.blockiert_grund)+'</small>':'')+
+      (locked?'<small>🔒 wartet auf Schritt '+s.pflicht_vorgaenger_nr+'</small>':'')+'</span></div>';
+}
+window.toggleHaus=function(id){ var el=$('hb-'+id); if(el) el.classList.toggle('hidden'); };
+
+// ── Step-Sheet ──
+window.openStepById=function(id){ var s=STEPS_BY_ID[id]; if(s) openStep(s); };
+window.openStep=function(s){
+  var foGate=s.foto_gate, hasFoto=!!s.foto_url;
+  var body=''+
+    '<h3>Schritt '+s.reihenfolge_nr+'</h3>'+
+    '<p class="sub">'+esc(s.titel)+(foGate?'  ·  📷 Foto-Gate':'')+'</p>'+
+    '<div id="gateMsg"></div>'+
+    '<div class="status-grid">'+
+      ['offen','in_arbeit','abgeschlossen','blockiert'].map(function(st){
+        return '<button data-st="'+st+'" class="'+(s.status===st?'active':'')+'" onclick="pickStatus(this,\''+st+'\')">'+statusSym(st)+' '+({offen:'Offen',in_arbeit:'In Arbeit',abgeschlossen:'Fertig',blockiert:'Blockiert'}[st])+'</button>';
+      }).join('')+
+    '</div>'+
+    '<div id="blockWrap" class="'+(s.status==='blockiert'?'':'hidden')+'"><div class="mini-lbl">Grund der Blockade</div><input id="blockGrund" value="'+esc(s.blockiert_grund||'')+'" placeholder="z. B. Material fehlt"></div>'+
+    (foGate?'<div class="mini-lbl">Foto-Nachweis '+(hasFoto?'✅ vorhanden':'(für Abschluss nötig)')+'</div><div class="row2"><input id="fotoUrl" value="'+esc(s.foto_url||'')+'" placeholder="Foto-URL / Referenz"><button class="btn sec" style="width:auto;white-space:nowrap" onclick="markFoto()">📷 Erfasst</button></div>':'')+
+    '<div class="mini-lbl">Notiz</div><textarea id="stNotiz" rows="2" placeholder="optional">'+esc(s.notiz||'')+'</textarea>'+
+    '<div class="mini-lbl">Unterschrift / Abnahme</div><input id="stSig" value="'+esc(s.unterschrift||'')+'" placeholder="Name bei Abnahme">'+
+    '<div class="btn-row" style="margin-top:16px"><button class="btn ghost" onclick="closeOverlay()">Abbrechen</button><button class="btn" id="stSave">Speichern</button></div>';
+  showSheet(body);
+  window._stepCtx={s:s, status:s.status};
+  $('stSave').onclick=function(){ saveStep(s.id); };
+};
+window.pickStatus=function(btn,st){
+  Array.prototype.forEach.call(btn.parentNode.children,function(b){b.classList.remove('active');});
+  btn.classList.add('active'); window._stepCtx.status=st;
+  $('blockWrap').classList.toggle('hidden',st!=='blockiert');
+};
+window.markFoto=function(){ var f=$('fotoUrl'); if(!f.value) f.value='foto-erfasst-'+new Date().toISOString().slice(0,16); toast('Foto-Nachweis gesetzt'); };
+function saveStep(id){
+  var st=window._stepCtx.status;
+  var patch={step_id:id,status:st};
+  if($('stNotiz')) patch.notiz=$('stNotiz').value;
+  if($('stSig')) patch.unterschrift=$('stSig').value;
+  if($('fotoUrl')) patch.foto_url=$('fotoUrl').value;
+  if($('blockGrund')) patch.blockiert_grund=$('blockGrund').value;
+  $('stSave').innerHTML='<span class="spin"></span>';
+  api('step_update',patch).then(function(r){
+    if(r.status!==200){
+      var gm=$('gateMsg'); if(gm) gm.innerHTML='<div class="gate-msg">⚠️ '+esc((r.j&&r.j.error)||'Fehler')+'</div>';
+      $('stSave').textContent='Speichern'; return;
+    }
+    closeOverlay(); toast('Gespeichert'); loadTree(CURPROJ);
+  });
+}
+
+// ── Setup: Haus anlegen ──
+function openSetup(){
+  var tpls=window._templates||[];
+  var body='<h3>Neues Haus</h3><p class="sub">Gewerk wählen → Steps werden je Einheit automatisch erzeugt.</p>'+
+    '<div class="mini-lbl">Haus-Bezeichnung</div><input id="suHaus" placeholder="z. B. Haus A / Mehrfamilienhaus 3">'+
+    '<div class="mini-lbl">Einheiten / Wohnungen</div>'+
+    '<div class="row2"><input id="suAnzahl" type="number" min="1" max="60" value="4" placeholder="Anzahl"><input id="suNamen" placeholder="oder Namen, Komma-getrennt"></div>'+
+    '<div class="mini-lbl">Gewerke (Mischprojekt möglich)</div>'+
+    tpls.map(function(t){
+      return '<div class="cbx"><input type="checkbox" id="gw-'+t.key+'" value="'+t.key+'"><label for="gw-'+t.key+'">'+t.icon+' '+esc(t.label)+'</label><span class="cnt">'+t.steps.length+' Steps'+(t.editierbar?' · editierbar':'')+'</span></div>';
+    }).join('')+
+    '<div id="suMsg" class="lmsg"></div>'+
+    '<div class="btn-row" style="margin-top:14px"><button class="btn ghost" onclick="closeOverlay()">Abbrechen</button><button class="btn" id="suGo">Anlegen</button></div>';
+  showSheet(body);
+  $('suGo').onclick=submitSetup;
+}
+function submitSetup(){
+  var haus=$('suHaus').value.trim();
+  if(!haus){ $('suMsg').className='lmsg err'; $('suMsg').textContent='Haus-Bezeichnung fehlt'; return; }
+  var gewerke=(window._templates||[]).map(function(t){return t.key;}).filter(function(k){var el=$('gw-'+k);return el&&el.checked;});
+  if(!gewerke.length){ $('suMsg').className='lmsg err'; $('suMsg').textContent='Mindestens ein Gewerk wählen'; return; }
+  var params={projekt_id:CURPROJ,haus_name:haus,gewerke:gewerke};
+  var namen=$('suNamen').value.trim();
+  if(namen) params.einheiten=namen.split(',').map(function(x){return x.trim();}).filter(Boolean);
+  else params.anzahl_einheiten=parseInt($('suAnzahl').value,10)||1;
+  $('suGo').innerHTML='<span class="spin"></span>';
+  api('setup',params).then(function(r){
+    if(r.status!==200){ $('suMsg').className='lmsg err'; $('suMsg').textContent=(r.j&&r.j.error)||'Fehler'; $('suGo').textContent='Anlegen'; return; }
+    closeOverlay(); toast('Haus angelegt: '+r.j.steps+' Steps'); loadTree(CURPROJ);
+  });
+}
+$('fab-add').onclick=function(){ if(!CURPROJ){toast('Zuerst Projekt wählen');return;} if(window._templates) openSetup(); else loadTemplates(openSetup); };
+function loadTemplates(cb){ api('templates',{}).then(function(r){ window._templates=(r.j&&r.j.templates)||[]; if(cb)cb(); }); }
+
+// ── Statusbericht ──
+$('fab-rep').onclick=function(){ if(!CURPROJ){toast('Zuerst Projekt wählen');return;} openBericht(); };
+function openBericht(){
+  var haeuser=(TREE&&TREE.haeuser)||[];
+  var body='<h3>📋 Statusbericht</h3><p class="sub">Zeitpunkt &amp; Umfang wählen, generieren, als PDF oder 🔊 vorlesen.</p>'+
+    '<div class="mini-lbl">Zeitraum</div><select id="brZeit"><option value="gesamt">Gesamtstand</option><option value="heute">Heute</option><option value="kw">Bestimmte Kalenderwoche</option></select>'+
+    '<div id="kwWrap" class="hidden"><div class="mini-lbl">Kalenderwoche</div><div class="row2"><input id="brKw" type="number" min="1" max="53" placeholder="KW"><input id="brJahr" type="number" placeholder="Jahr"></div></div>'+
+    '<div class="mini-lbl">Haus</div><select id="brHaus"><option value="">Alle Häuser</option>'+haeuser.map(function(h){return '<option value="'+h.id+'">'+esc(h.name)+'</option>';}).join('')+'</select>'+
+    '<div class="btn-row" style="margin-top:14px"><button class="btn ghost" onclick="closeOverlay()">Schließen</button><button class="btn" id="brGo">Bericht generieren</button></div>'+
+    '<div id="brOut"></div>';
+  showSheet(body);
+  var now=new Date(); $('brJahr').value=now.getFullYear();
+  $('brZeit').onchange=function(){ $('kwWrap').classList.toggle('hidden',this.value!=='kw'); };
+  $('brGo').onclick=genBericht;
+}
+function genBericht(){
+  var params={projekt_id:CURPROJ,zeitraum:$('brZeit').value,demo:DEMO};
+  if(params.zeitraum==='kw'){ params.kw=parseInt($('brKw').value,10)||undefined; params.jahr=parseInt($('brJahr').value,10)||undefined; }
+  if($('brHaus').value) params.haus_id=$('brHaus').value;
+  $('brGo').innerHTML='<span class="spin"></span>';
+  api('statusbericht',params).then(function(r){
+    $('brGo').textContent='Bericht generieren';
+    if(r.status!==200){ $('brOut').innerHTML='<div class="gate-msg">'+esc((r.j&&r.j.error)||'Fehler')+'</div>'; return; }
+    window._report=r.j;
+    $('brOut').innerHTML='<div class="report" id="reportText">'+esc(r.j.text)+'</div>'+
+      '<div class="btn-row"><button class="btn sec speak-btn" id="brSpeak">🔊 Statusbericht vorlesen</button><button class="btn sec" id="brPdf">🖨️ Als PDF</button></div>';
+    $('brSpeak').onclick=function(){ speak(r.j.text, this); };
+    $('brPdf').onclick=function(){ printReport(r.j); };
+  });
+}
+function printReport(rep){
+  var meta='Zeitraum: '+rep.range.label+'  ·  Gesamt: '+rep.gesamt.prozent+'% ('+rep.gesamt.done+'/'+rep.gesamt.total+')  ·  erstellt '+new Date(rep.generiert_am).toLocaleString('de-CH');
+  $('printArea').innerHTML='<h2>Statusbericht – '+esc(rep.projekt.name)+(rep.projekt.projektnummer?' ('+esc(rep.projekt.projektnummer)+')':'')+'</h2>'+
+    '<div class="pmeta">'+esc(meta)+(rep.demo?'  ·  DEMO':'')+'</div><pre>'+esc(rep.text)+'</pre>';
+  window.print();
+}
+
+// ── Vorlesen: bestehende ElevenLabs-Stimme (/api/voice), Fallback SpeechSynthesis ──
+var _spkAudio=null, _spkUrl=null;
+function stopSpeak(){ try{if(_spkAudio)_spkAudio.pause();}catch(e){} if(_spkUrl){try{URL.revokeObjectURL(_spkUrl);}catch(e){}_spkUrl=null;}
+  try{if('speechSynthesis'in window)window.speechSynthesis.cancel();}catch(e){} }
+function speak(text,btn){
+  stopSpeak();
+  if(btn){ btn._orig=btn._orig||btn.innerHTML; btn.innerHTML='<span class="spin"></span> Lädt…'; }
+  if(!_spkAudio){ _spkAudio=new Audio(); _spkAudio.preload='auto'; }
+  fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text.slice(0,2000),model_id:'eleven_flash_v2_5'})})
+    .then(function(r){
+      if(!r.ok) throw new Error('tts');
+      return r.blob();
+    }).then(function(blob){
+      _spkUrl=URL.createObjectURL(blob); _spkAudio.src=_spkUrl;
+      _spkAudio.onended=function(){ if(btn&&btn._orig)btn.innerHTML=btn._orig; };
+      _spkAudio.onerror=function(){ if(btn&&btn._orig)btn.innerHTML=btn._orig; };
+      var p=_spkAudio.play(); if(p&&p.catch)p.catch(function(){ browserSpeak(text,btn); });
+      if(btn&&btn._orig)btn.innerHTML='🔇 Stop';
+      if(btn) btn.onclick=function(){ stopSpeak(); btn.innerHTML=btn._orig; btn.onclick=function(){speak(text,btn);}; };
+    }).catch(function(){ browserSpeak(text,btn); });
+}
+function browserSpeak(text,btn){
+  if(!('speechSynthesis'in window)){ toast('Sprachausgabe nicht verfügbar'); if(btn&&btn._orig)btn.innerHTML=btn._orig; return; }
+  try{ window.speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance(text); u.lang='de-DE'; u.rate=1;
+    u.onend=function(){ if(btn&&btn._orig)btn.innerHTML=btn._orig; };
+    window.speechSynthesis.speak(u); if(btn&&btn._orig)btn.innerHTML='🔇 Stop';
+    if(btn) btn.onclick=function(){ stopSpeak(); btn.innerHTML=btn._orig; btn.onclick=function(){speak(text,btn);}; };
+  }catch(e){ toast('Sprachausgabe fehlgeschlagen'); }
+}
+
+// ── Sheet infra ──
+function showSheet(html){ $('overlay').innerHTML='<div class="overlay" onclick="if(event.target===this)closeOverlay()"><div class="sheet">'+html+'</div></div>'; }
+window.closeOverlay=closeOverlay;
+
+boot();
+</script>
+</body>
+</html>

@@ -35,10 +35,12 @@ export default async function handler(req, res) {
 // Supabase erzwingt zusätzlich seine eigene Redirect-URL-Allowlist.
 function safeRedirectQuery(redirectTo) {
   if (!redirectTo) return '';
+  const ALLOWED_PATHS = ['/gs-intern-7k2x', '/gewerke'];
   try {
     const u = new URL(redirectTo);
-    if (u.pathname === '/gs-intern-7k2x' && (u.protocol === 'https:' || u.protocol === 'http:')) {
-      return `?redirect_to=${encodeURIComponent(u.origin + u.pathname)}`;
+    if (ALLOWED_PATHS.includes(u.pathname) && (u.protocol === 'https:' || u.protocol === 'http:')) {
+      // Query (z. B. ?demo=1) mitnehmen, damit der Nutzer im gleichen Kontext landet.
+      return `?redirect_to=${encodeURIComponent(u.origin + u.pathname + (u.search || ''))}`;
     }
   } catch { /* ungültige URL → ignorieren */ }
   return '';

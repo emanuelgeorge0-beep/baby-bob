@@ -6,7 +6,8 @@
   ],
   "rewrites": [
     { "source": "/app", "destination": "/app.html" },
-    { "source": "/gs-intern-7k2x", "destination": "/gs-intern.html" }
+    { "source": "/gs-intern-7k2x", "destination": "/gs-intern.html" },
+    { "source": "/gewerke", "destination": "/gewerke.html" }
   ],
   "headers": [
     {
@@ -23,6 +24,22 @@
     },
     {
       "source": "/gs-intern.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/gewerke",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/gewerke.html",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" },
         { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
