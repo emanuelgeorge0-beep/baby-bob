@@ -1240,20 +1240,98 @@ function showJUnlock(){
 }
 function hideJUnlock(){ var b=$('j-unlock'); if(b&&b.parentNode) b.parentNode.removeChild(b); }
 
-// ── Spracheingabe: native Browser-Erkennung — EXAKT wie Baby BOB (bobChatMic). ──
-// iOS Safari unterstützt webkitSpeechRecognition zuverlässig; MediaRecorder→scribe lieferte
-// am iPhone (audio/mp4) leeren Text. Native SR braucht keinen ElevenLabs-Endpoint/Guthaben.
-// Manueller Stopp: Tippen startet, Tippen stoppt. KEIN vorzeitiges Abschneiden — endet iOS
-// bei einer Sprechpause von selbst, wird die Erkennung neu gestartet, bis der Nutzer stoppt.
+// ── Spracheingabe: Aufnahme (MediaRecorder) → ElevenLabs Speech-to-Text (/api/voice). ──
+// Tippen startet, Tippen stoppt. iPhone/Safari nimmt audio/mp4 auf, Chrome/Android
+// audio/webm — der Server bekommt die MIME-Art mit und benennt die Datei passend.
+// Fällt der Recorder aus (sehr alter Browser), nutzen wir als Fallback die native
+// Browser-Erkennung (webkitSpeechRecognition). Beide landen in jarvisAsk().
+var _jMediaRec=null, _jMediaStream=null, _jChunks=[], _jRecMime='', _jMaxTimer=null, _jUseSR=false;
+
 function jSRsupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function mediaRecSupported(){
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+}
+function pickRecMime(){
+  var cands=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/mpeg','audio/aac','audio/ogg'];
+  if(window.MediaRecorder && MediaRecorder.isTypeSupported){
+    for(var i=0;i<cands.length;i++){ try{ if(MediaRecorder.isTypeSupported(cands[i])) return cands[i]; }catch(e){} }
+  }
+  return '';
+}
 function toggleJarvisMic(){ if(_jRecording){ stopJarvisMic(false); } else { startJarvisMic(); } }
 function startJarvisMic(){
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ toast('Spracheingabe hier nicht verfügbar'); return; }
+  if(_jRecording) return;
   stopSpeak();
   pauseWake();
+  if(mediaRecSupported()){ _jUseSR=false; startMediaMic(); return; }
+  if(jSRsupported()){ startSRMic(); return; }
+  resumeWake();
+  jState('Spracheingabe auf diesem Gerät nicht möglich — bitte Text eingeben.','idle');
+  toast('Spracheingabe nicht verfügbar');
+}
+function micBtnRec(){ var b=$('j-mic'); if(b){ b.classList.add('rec'); b.textContent='⏹'; b.title='Aufnahme stoppen'; } }
+function micFail(msg){
+  _jRecording=false; cleanupMedia(); jSRresetBtn();
+  jState(msg,'idle'); toast(msg); resumeWake();
+}
+function cleanupMedia(){
+  if(_jMaxTimer){ clearTimeout(_jMaxTimer); _jMaxTimer=null; }
+  try{ if(_jMediaStream){ _jMediaStream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} }); } }catch(e){}
+  _jMediaStream=null; _jMediaRec=null;
+}
+// Primär: echtes Audio aufnehmen und an den Server-STT schicken (zuverlässig, auch iPhone).
+function startMediaMic(){
+  jState('Mikrofon wird aktiviert…','think');
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    _jMediaStream=stream; _jChunks=[]; _jRecMime=pickRecMime();
+    try{ _jMediaRec=_jRecMime?new MediaRecorder(stream,{mimeType:_jRecMime}):new MediaRecorder(stream); }
+    catch(e){ try{ _jMediaRec=new MediaRecorder(stream); }catch(e2){ micFail('Aufnahme auf diesem Gerät nicht möglich'); return; } }
+    if(!_jRecMime) _jRecMime=_jMediaRec.mimeType||'audio/webm';
+    _jMediaRec.ondataavailable=function(ev){ if(ev.data&&ev.data.size>0) _jChunks.push(ev.data); };
+    _jMediaRec.onstop=onMediaStop;
+    try{ _jMediaRec.start(); }catch(e){ micFail('Aufnahme konnte nicht starten'); return; }
+    _jRecording=true; micBtnRec();
+    jState('● Ich höre zu… — zum Stoppen tippen','speak');
+    // Sicherheits-Stopp nach 30 s (verhindert riesige Uploads / Hänger).
+    _jMaxTimer=setTimeout(function(){ if(_jRecording&&!_jUseSR) stopJarvisMic(false); },30000);
+  }).catch(function(err){
+    var name=(err&&err.name)||'';
+    if(name==='NotAllowedError'||name==='SecurityError') micFail('Mikrofon-Zugriff verweigert — bitte in den Browser-Einstellungen erlauben.');
+    else if(name==='NotFoundError'||name==='OverconstrainedError') micFail('Kein Mikrofon gefunden.');
+    else micFail('Mikrofon nicht verfügbar.');
+  });
+}
+// Aufnahme fertig → Blob als base64 an /api/voice (action:'stt') → erkannter Text → Bob fragen.
+function onMediaStop(){
+  var chunks=_jChunks; _jChunks=[];
+  var fullMime=_jRecMime||'audio/webm';
+  var mime=fullMime.split(';')[0];
+  cleanupMedia(); jSRresetBtn();
+  if(!chunks.length){ jState('Nichts aufgenommen. Bitte nochmal.','idle'); toast('Nichts aufgenommen'); resumeWake(); return; }
+  var blob=new Blob(chunks,{type:fullMime});
+  jState('Verarbeite…','think');
+  var reader=new FileReader();
+  reader.onloadend=function(){
+    fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'stt',audio:String(reader.result||''),mime:mime})})
+    .then(function(r){ return r.json().catch(function(){return {};}); })
+    .then(function(d){
+      var txt=((d&&d.text)||'').trim();
+      if(txt){ jState('Verstehe dich','think'); jarvisAsk(txt); }
+      else if(d&&d.fallback&&jSRsupported()){ jState('Erkenne lokal…','think'); startSRMic(); }
+      else { jState('Konnte nichts erkennen. Bitte nochmal.','idle'); toast('Nichts erkannt'); resumeWake(); }
+    })
+    .catch(function(){ jState('Spracherkennung nicht erreichbar. Bitte nochmal.','idle'); toast('Verbindungsfehler'); resumeWake(); });
+  };
+  reader.readAsDataURL(blob);
+}
+// Fallback: native Browser-Erkennung (nur wenn MediaRecorder fehlt oder Server-STT ausfällt).
+function startSRMic(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ micFail('Spracheingabe hier nicht verfügbar'); return; }
+  _jUseSR=true;
   _jBase=''; _jSessionFinal=''; _jWantRec=true; _jRecording=true; _jSRrestarts=0;
-  var b=$('j-mic'); if(b){ b.classList.add('rec'); b.textContent='⏹'; b.title='Aufnahme stoppen'; }
+  micBtnRec();
   jState('● Ich höre zu… — zum Stoppen tippen','speak');
   jSRbegin(SR);
 }
@@ -1304,10 +1382,22 @@ function jSRfinalize(){
 }
 function jSRresetBtn(){ var b=$('j-mic'); if(b){ b.classList.remove('rec'); b.textContent='🎤'; b.title='Sprechen'; } }
 function stopJarvisMic(silent){
-  // Manueller Stopp (Nutzer-Tap) → kein Neustart mehr, Ergebnis verarbeiten.
-  _jWantRec=false;
-  try{ if(_jSR) _jSR.stop(); }catch(e){}
-  if(silent){ _jRecording=false; jSRresetBtn(); }  // von jarvisAsk → nur abbrechen
+  if(_jUseSR){
+    // Native Browser-Erkennung: kein Neustart mehr, Ergebnis verarbeiten (siehe jSRfinalize).
+    _jWantRec=false;
+    try{ if(_jSR) _jSR.stop(); }catch(e){}
+    if(silent){ _jRecording=false; jSRresetBtn(); }  // von jarvisAsk → nur abbrechen
+    return;
+  }
+  // MediaRecorder-Modus.
+  if(silent){
+    // Nur abbrechen (z. B. weil parallel eine Frage kam) → NICHT an STT schicken.
+    if(_jMediaRec){ try{ _jMediaRec.onstop=function(){ cleanupMedia(); }; _jMediaRec.stop(); }catch(e){} }
+    _jRecording=false; cleanupMedia(); jSRresetBtn(); return;
+  }
+  _jRecording=false;
+  if(_jMediaRec && _jMediaRec.state!=='inactive'){ try{ _jMediaRec.stop(); }catch(e){ onMediaStop(); } }
+  else { onMediaStop(); }
 }
 
 // ════ „HEY BOB" WAKE-WORD + BLOCKADEN-ANSICHT ════

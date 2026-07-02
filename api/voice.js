@@ -61,9 +61,15 @@ async function stt(res, body) {
   if (!b64) return res.status(400).json({ error: 'audio erforderlich' });
   try {
     const buf = Buffer.from(b64, 'base64');
+    // iPhone/Safari nimmt audio/mp4 auf, Chrome/Android audio/webm. Dateiname MUSS
+    // zur MIME-Art passen, sonst erkennt ElevenLabs „scribe" das Format nicht (leerer Text).
+    const mime = String(body.mime || 'audio/webm').split(';')[0].trim();
+    const EXT = { 'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/x-m4a': 'm4a' };
+    const ext = EXT[mime] || 'webm';
     const fd = new FormData();
     fd.append('model_id', STT_MODEL);
-    fd.append('file', new Blob([buf], { type: body.mime || 'audio/webm' }), 'audio.webm');
+    fd.append('language_code', 'de');
+    fd.append('file', new Blob([buf], { type: mime }), `audio.${ext}`);
     const r = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
       method: 'POST', headers: { 'xi-api-key': ELEVEN_KEY }, body: fd,
     });
