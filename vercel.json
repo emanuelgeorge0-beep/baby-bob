@@ -6,6 +6,12 @@
   ],
   "rewrites": [
     { "source": "/app", "destination": "/app.html" },
+    { "source": "/login", "destination": "/app.html" },
+    { "source": "/beta", "destination": "/beta.html" },
+    { "source": "/qr", "destination": "/qr.html" },
+    { "source": "/datenschutz", "destination": "/datenschutz.html" },
+    { "source": "/agb", "destination": "/agb.html" },
+    { "source": "/impressum", "destination": "/impressum.html" },
     { "source": "/gs-intern-7k2x", "destination": "/gs-intern.html" },
     { "source": "/gewerke", "destination": "/gewerke.html" }
   ],
@@ -45,6 +51,14 @@
         { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
         { "key": "Referrer-Policy", "value": "no-referrer" }
       ]
+    },
+    {
+      "source": "/qr",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/qr.html",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
     },
     {
       "source": "/cockpit-manifest.json",

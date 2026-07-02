@@ -3761,6 +3761,15 @@ function landingGoBob(){
 function routeAnonymousStart(){
   var qp=null; try{ qp=new URLSearchParams(location.search); }catch(e){}
   var start=((qp&&qp.get('start'))||'').toLowerCase();
+  // Beta-Teaser (QR-Code → /beta → „kostenlos ausprobieren"): ?demo=techniker|partner
+  // startet direkt den Demo-Modus (kein Login, keine echten Daten). Nur diese 2 Rollen.
+  var demo=((qp&&qp.get('demo'))||'').toLowerCase();
+  if(demo==='techniker'||demo==='partner'){
+    demoEnter(demo==='partner'?'gs_partner':'techniker');
+    return;
+  }
+  // Klarer Login-Einstieg auch via ?start=login (z. B. aus der Landing verlinkt).
+  if(start==='login'){ showScreen('login'); return; }
   // GS-Einstieg (von der GS-Landing): kein Audio/keine Stimme — Flag VOR setMode setzen.
   if(qp&&(qp.get('gs')==='1'||start==='bobgs')){ window.__GS_SILENT=true; try{sessionStorage.setItem('gs_silent','1');}catch(e){} }
   if(start==='gs'){ setMode('gs'); return; }
@@ -4714,6 +4723,13 @@ var pendingRecovery=false;  // true nach Klick auf Passwort-Recovery-Link (vor I
   if((location.pathname||'').indexOf('gs-intern-7k2x')>-1){
     applyRole(null,null,null,null);
     try{ var le=document.getElementById('login-email'); if(le) le.value='emanuelgeorge0@gmail.com'; }catch(e){}
+    showScreen('login');
+    return;
+  }
+  // 3b. Klarer, einziger Login-Einstieg: /login → direkt der (rollenbasierte) Login-Screen.
+  //     Ersetzt die früher nötigen geheimen Links; nach dem Login routet applyRole per Rolle.
+  if((location.pathname||'').indexOf('/login')>-1){
+    applyRole(null,null,null,null);
     showScreen('login');
     return;
   }

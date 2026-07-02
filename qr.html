@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>QR-Code · Beta-Vorschau · George Solutions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#07111f;--card:#0d1b2e;--text:#F5F4F1;--dim:#A9A8A4;--gold:#C9A961;--blue:#4A9EFF;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Nunito',sans-serif;background:radial-gradient(1000px 500px at 50% -10%,#0f2440,var(--bg));color:var(--text);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:28px;}
+.card{max-width:460px;width:100%;background:var(--card);border:1px solid rgba(74,158,255,0.22);border-radius:26px;padding:34px 30px;text-align:center;}
+.card img.logo{height:34px;margin-bottom:18px;}
+.badge{display:inline-block;background:rgba(201,169,97,0.14);border:1px solid rgba(201,169,97,0.4);color:var(--gold);font-weight:800;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:6px 13px;border-radius:50px;margin-bottom:16px;}
+h1{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:8px;}
+p.sub{color:var(--dim);font-size:15px;margin-bottom:24px;}
+.qrbox{background:#fff;border-radius:20px;padding:20px;display:inline-block;}
+.qrbox img{display:block;width:260px;height:260px;image-rendering:pixelated;}
+.url{margin:22px 0 6px;font-size:14px;color:var(--blue);font-weight:700;word-break:break-all;}
+.hint{color:var(--dim);font-size:13px;margin-bottom:22px;}
+.actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.btn{text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:50px;cursor:pointer;border:none;}
+.btn-gold{background:var(--gold);color:#07111f;}
+.btn-ghost{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:var(--text);}
+@media print{
+  body{background:#fff;color:#000;}
+  .card{border:none;background:#fff;box-shadow:none;}
+  .actions,.badge,.hint{display:none!important;}
+  .url{color:#000;}
+  h1,p.sub{color:#000;}
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="logo" src="https://baby-bob.vercel.app/lib/logo-gs.png" alt="George Solutions"/>
+  <div class="badge">🚀 Beta-Vorschau</div>
+  <h1>Scannen &amp; kostenlos testen</h1>
+  <p class="sub">QR-Code scannen → direkt in die George-Solutions-App-Demo. Ohne Anmeldung.</p>
+  <div class="qrbox">
+    <img src="/public/qr-beta.png" alt="QR-Code zur Beta-Vorschau (baby-bob.vercel.app/beta)"/>
+  </div>
+  <div class="url">baby-bob.vercel.app/beta</div>
+  <div class="hint">Für Flyer, Pitch-Deck oder Aushang — Seite drucken oder QR herunterladen.</div>
+  <div class="actions">
+    <button class="btn btn-gold" onclick="window.print()">🖨️ Drucken</button>
+    <a class="btn btn-ghost" href="/public/qr-beta.png" download="george-solutions-beta-qr.png">⬇️ PNG</a>
+    <a class="btn btn-ghost" href="/public/qr-beta.svg" download="george-solutions-beta-qr.svg">⬇️ SVG</a>
+  </div>
+</div>
+</body>
+</html>

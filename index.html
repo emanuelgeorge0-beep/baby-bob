@@ -54,6 +54,9 @@ header.scrolled{border-bottom-color:var(--gs-border);background:rgba(10,10,11,0.
 .nav-links{display:flex;align-items:center;gap:28px;}
 .nav-links a{font-size:14.5px;font-weight:500;color:var(--gs-textDim);transition:color .2s;}
 .nav-links a:hover{color:var(--gs-text);}
+.nav-cta{display:flex;align-items:center;gap:16px;}
+.nav-login{font-size:14px;font-weight:600;color:var(--gs-textDim);transition:color .2s;white-space:nowrap;}
+.nav-login:hover{color:var(--gs-gold,#FFD24A);}
 
 /* Hero */
 .hero{position:relative;overflow:hidden;padding:58px 0 56px;}
@@ -238,7 +241,7 @@ textarea{resize:vertical;min-height:96px;}
 
 /* Footer */
 footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px;background:var(--gs-surface);}
-.foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:34px;}
+.foot-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:34px;}
 .foot-brand .logo{height:36px;margin-bottom:14px;}
 .foot-brand p{color:var(--gs-textDim);font-size:14px;max-width:38ch;}
 .foot-col h4{color:var(--gs-gold);font-family:var(--font-head);font-size:14px;font-weight:700;margin-bottom:14px;letter-spacing:.02em;}
@@ -315,7 +318,10 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
       <a href="#preise">Preise</a>
       <a href="#faq">FAQ</a>
     </nav>
-    <a href="#anfrage" class="btn btn-primary btn-sm">Anfrage senden</a>
+    <div class="nav-cta">
+      <a href="/login" class="nav-login" aria-label="Login für Partner und Techniker">🔑 Login</a>
+      <a href="#anfrage" class="btn btn-primary btn-sm">Anfrage senden</a>
+    </div>
   </div>
 </header>
 
@@ -671,8 +677,14 @@ footer{border-top:1px solid var(--gs-border);padding:50px 0 36px;margin-top:30px
       </div>
       <div class="foot-col">
         <h4>Rechtliches</h4>
-        <a href="#impressum">Impressum</a>
-        <a href="#datenschutz">Datenschutz</a>
+        <a href="/impressum">Impressum</a>
+        <a href="/datenschutz">Datenschutz</a>
+        <a href="/agb">AGB</a>
+      </div>
+      <div class="foot-col">
+        <h4>Zugang</h4>
+        <a href="/login">🔑 Partner / Techniker Login</a>
+        <a href="/beta">✨ Beta-Vorschau (Demo)</a>
       </div>
     </div>
 
