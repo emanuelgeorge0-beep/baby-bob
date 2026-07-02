@@ -1475,6 +1475,18 @@ async function handleVoice(body) {
       return { intent: 'umsatz', antwort: 'Es sind noch keine Umsatzdaten hinterlegt.', view: 'dashboard', params: { focus: 'umsatz' } };
     }
     const jahr = new Date().getFullYear();
+    // Fragt der Nutzer nach einem KONKRETEN Monat („Umsatz im Juni")? Dann diesen
+    // gezielt beantworten (aus den echten Daten), statt nur den aktuellen Monat.
+    const MON_RE = [/januar|jänner/, /februar/, /m[äa]rz/, /april/, /mai/, /juni/, /juli/, /august/, /september/, /oktober/, /november/, /dezember/];
+    const gefragterMonat = MON_RE.findIndex((re) => re.test(low));
+    if (gefragterMonat !== -1) {
+      const treffer = ums.monate.filter((m) => m.monat === gefragterMonat + 1).sort((a, b) => b.jahr - a.jahr)[0];
+      const mName = MONATE_KURZ[gefragterMonat];
+      const antwort = treffer
+        ? `Im ${mName} ${treffer.jahr} lag der Umsatz bei ${treffer.umsatz.toLocaleString('de-CH')} Franken.`
+        : `Für den ${mName} sind noch keine Umsatzdaten hinterlegt.`;
+      return { intent: 'umsatz', antwort, view: 'dashboard', params: { focus: 'umsatz', umsatz: ums } };
+    }
     const monatName = MONATE_KURZ[new Date().getMonth()] + ' ' + jahr;
     const aktuell = ums.monate.find((m) => m.label === monatName);
     const wocheGefragt = /woche|diese woche|wöchentl/.test(low);
