@@ -897,7 +897,7 @@ async function getJarvisFacts(opts = {}) {
 
   // Alle unabhängigen Cockpit-Abfragen PARALLEL (statt sequenziell) → spürbar schnellere
   // Jarvis-Antwort (war zuvor ~8 Round-Trips hintereinander). Jede Abfrage einzeln abgesichert.
-  const [auf, todos, margen, pr, te, rp, mt, ums] = await Promise.all([
+  const [auf, todos, margen, pr, te, rp, mt, bl, ums] = await Promise.all([
     sbGet('gs_crm_aufgaben?status=eq.offen&select=faelligkeit').catch(() => []),
     sbGet('gs_todos?status=eq.offen&select=titel,zustaendig,faelligkeit,prioritaet&order=faelligkeit.asc.nullslast&limit=8').catch(() => []),
     sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell').catch(() => null),
@@ -905,6 +905,7 @@ async function getJarvisFacts(opts = {}) {
     sbGet('gs_techniker?select=verfuegbar').catch(() => []),
     sbGet('gs_tagesrapporte?select=status').catch(() => []),
     sbGet('gs_material?select=id').catch(() => null),
+    sbGet('gs_blockaden?select=status,urgency,haus,projekt_name,beschreibung&order=created_at.desc&limit=200').catch(() => null),
     getUmsatzStats(),
   ]);
 
@@ -933,6 +934,25 @@ async function getJarvisFacts(opts = {}) {
   let umsatz = 0, marge = 0;
   const margenDa = Array.isArray(margen) && margen.length > 0;
   if (margenDa) for (const m of margen) { const c = calcMarge(m); umsatz += c.umsatz; marge += c.marge; }
+
+  // Blockaden (nur falls migriert). null = Modul noch nicht aktiv.
+  // „offen" = alles Ungelöste (offen | in_bearbeitung | eskaliert); „geloest" = freigegeben.
+  const blockadenDa = bl !== null;
+  const blockaden = bl || [];
+  const AKTIV = ['offen', 'in_bearbeitung', 'eskaliert'];
+  const blOffen = blockaden.filter((b) => AKTIV.includes(String(b.status || '').toLowerCase())).length;
+  const blEskaliert = blockaden.filter((b) => String(b.status || '').toLowerCase() === 'eskaliert').length;
+  const blGeloest = blockaden.filter((b) => String(b.status || '').toLowerCase() === 'freigegeben').length;
+  const blKritisch = blockaden.filter((b) => String(b.urgency || '').toUpperCase() === 'CRITICAL'
+    && AKTIV.includes(String(b.status || '').toLowerCase())).length;
+  const topBlockaden = blockaden
+    .filter((b) => AKTIV.includes(String(b.status || '').toLowerCase()))
+    .slice(0, 5)
+    .map((b) => ({
+      projekt: b.projekt_name || null, haus: b.haus || null,
+      status: b.status, urgency: b.urgency,
+      beschreibung: String(b.beschreibung || '').slice(0, 160),
+    }));
 
   // Projekte / Techniker / Rapporte / Material.
   const projGesamt = (pr || []).length;
@@ -1000,6 +1020,14 @@ async function getJarvisFacts(opts = {}) {
     rapporte_eingereicht: rapporteEingereicht,
     material_positionen: materialPositionen, // null = Materialerfassung noch nicht aktiv
     material_status: materialPositionen === null ? 'Materialerfassung noch nicht aktiv' : 'erfasst',
+    // Blockaden (Bau-Blockaden pro Projekt/Haus). null-Flag = Modul nicht aktiv.
+    blockaden_modul_aktiv: blockadenDa,
+    blockaden_gesamt: blockadenDa ? blockaden.length : null,
+    blockaden_offen: blockadenDa ? blOffen : null,
+    blockaden_eskaliert: blockadenDa ? blEskaliert : null,
+    blockaden_kritisch: blockadenDa ? blKritisch : null,
+    blockaden_geloest: blockadenDa ? blGeloest : null,
+    top_offene_blockaden: blockadenDa ? topBlockaden : null,
     // Kalender ist noch nicht angebunden — Termine ehrlich als „kommt bald" behandeln.
     termine_quelle: 'Kalender noch nicht angebunden',
     naechste_termine: null,
