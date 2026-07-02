@@ -1115,8 +1115,331 @@ function showCockpitTempPw(email,pw){
   $('tp-copy').onclick=function(){ try{ navigator.clipboard.writeText(pw||''); toast('Kopiert'); }catch(e){ toast('Bitte manuell markieren'); } };
 }
 
-// Platzhalter — werden in den nächsten Abschnitten vollständig ersetzt.
-function renderProjekte(){ $('view').innerHTML='<h2><span class="acc">🏗️</span> Projektmanagement</h2>'+backRow()+'<div class="empty">Wird geladen…</div>'; wireBack(); }
+// ════ PROJEKTMANAGEMENT (Herzstück) — Projekte · Kunden · Techniker · Material · Blockaden ════
+var _pmData=null, _pmProjektId=null, _pmKunden=[];
+var PM_PROJ_STATUS=['aktiv','pausiert','abgeschlossen','kritisch'];
+var PM_MAT_STATUS=['offen','bestellt','geliefert','verbaut'];
+function pmStatusColor(s){ s=String(s||'').toLowerCase();
+  if(s.indexOf('krit')>-1||s==='eskaliert') return '#e5484d';
+  if(s.indexOf('abgeschl')>-1||s==='erledigt'||s==='verbaut'||s==='geliefert'||s==='freigegeben') return '#3dd68c';
+  if(s.indexOf('paus')>-1||s==='bestellt') return '#d8b96e';
+  return 'var(--gold)'; }
+function pmPill(txt,color){ return '<span class="src-tag" style="border-color:'+(color||'var(--line)')+';color:'+(color||'var(--muted)')+'">'+esc(txt)+'</span>'; }
+function waHref(tel){ var d=String(tel||'').replace(/[^\d]/g,''); if(!d) return null; if(d.charAt(0)==='0') d='41'+d.slice(1); return 'https://wa.me/'+d; }
+function contactBtns(tel,email){
+  var out='';
+  if(tel){ out+='<a class="chip" href="tel:'+esc(String(tel).replace(/\s+/g,''))+'">📞 Anrufen</a>';
+    var w=waHref(tel); if(w) out+='<a class="chip" href="'+esc(w)+'" target="_blank" rel="noopener">💬 WhatsApp</a>'; }
+  if(email){ out+='<a class="chip" href="mailto:'+esc(email)+'">✉️ E-Mail</a>'; }
+  return out; }
+
+function renderProjekte(){ renderProjektListe(); }
+function renderProjektListe(){
+  $('view').innerHTML='<h2><span class="acc">🏗️</span> Projektmanagement</h2>'+backRow()+
+    '<div class="meta" style="gap:8px;margin-bottom:14px">'+
+      '<button class="chip on" id="pm-new">＋ Neues Projekt</button>'+
+      '<button class="chip" id="pm-kunden">👤 Kunden verwalten</button></div>'+
+    '<div class="list" id="pm-list">'+skeletonCards(3)+'</div>';
+  wireBack();
+  $('pm-new').onclick=function(){ openProjektEdit(null); };
+  $('pm-kunden').onclick=openKundenListe;
+  api('pm_projekte').then(function(d){ _pmKunden=d.kunden||[]; paintProjektListe(d.projekte||[]); })
+    .catch(function(){ var el=$('pm-list'); if(el) el.innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+function paintProjektListe(list){
+  var el=$('pm-list'); if(!el) return;
+  if(!list.length){ el.innerHTML='<div class="empty">Noch keine Projekte. Leg das erste an.</div>'; return; }
+  el.innerHTML=list.map(function(p){
+    var kunde=p.kunde?(p.kunde.firma||p.kunde.kontaktperson||''):'';
+    var bl=p.blockaden_offen?'<span class="fu ueberfaellig">⚠ '+p.blockaden_offen+' offene Blockade'+(p.blockaden_offen>1?'n':'')+'</span>':'';
+    return '<div class="lcard" data-id="'+esc(p.id)+'">'+
+      '<div class="top"><div class="nm">'+esc(p.name||'Projekt')+'</div>'+pmPill(p.status||'—',pmStatusColor(p.status))+'</div>'+
+      '<div class="meta">'+
+        (p.projektnummer?'<span>'+esc(p.projektnummer)+'</span>':'')+
+        (p.standort?'<span class="dot">'+esc(p.standort)+'</span>':'')+
+        (p.bereich?'<span class="dot">'+esc(p.bereich)+'</span>':'')+
+        (kunde?'<span class="dot">'+esc(kunde)+'</span>':'')+'</div>'+
+      (bl?'<div class="meta" style="margin-top:6px">'+bl+'</div>':'')+'</div>';
+  }).join('');
+  Array.prototype.forEach.call(el.children,function(c){ if(c.getAttribute) c.onclick=function(){ openProjekt(c.getAttribute('data-id')); }; });
+}
+
+// ── Projekt-Detail: alles zu einem Projekt an einem Ort ──
+function openProjekt(id){
+  _pmProjektId=id;
+  $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Projekte</span></div><div class="empty">Lädt…</div>';
+  var b=$('pm-back'); if(b) b.onclick=renderProjektListe;
+  loadProjekt();
+}
+function loadProjekt(){
+  api('pm_projekt',{id:_pmProjektId}).then(function(d){
+    if(d.error){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Projekte</span></div><div class="empty">'+esc(d.error)+'</div>'; var b=$('pm-back'); if(b) b.onclick=renderProjektListe; return; }
+    _pmData=d; paintProjektDetail(d);
+  }).catch(function(){ toast('Ladefehler'); });
+}
+function migRow(txt){ return '<div class="empty" style="padding:12px;font-size:12.5px">'+esc(txt)+'<br><span style="color:var(--muted2)">scripts/master_cockpit_session6_pm.sql in Supabase ausführen.</span></div>'; }
+function pmSec(title,inner,action){ return '<div class="cc-sec" style="display:flex;justify-content:space-between;align-items:center">'+esc(title)+(action||'')+'</div>'+inner; }
+
+function paintProjektDetail(d){
+  var p=d.projekt||{}, k=d.kunde;
+  var head='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Projekte</span></div>'+
+    '<h2 style="margin-bottom:4px"><span class="acc">🏗️</span> '+esc(p.name||'Projekt')+'</h2>'+
+    '<div class="meta" style="margin-bottom:10px">'+pmPill(p.status||'—',pmStatusColor(p.status))+
+      (p.projektnummer?'<span class="dot">'+esc(p.projektnummer)+'</span>':'')+
+      (p.standort?'<span class="dot">'+esc(p.standort)+'</span>':'')+
+      (p.bereich?'<span class="dot">'+esc(p.bereich)+'</span>':'')+'</div>'+
+    '<button class="chip" id="pm-edit" style="margin-bottom:6px">✏️ Projekt bearbeiten</button>';
+
+  // Kunde
+  var kundeInner;
+  if(k){
+    kundeInner='<div class="lcard"><div class="top"><div class="nm">'+esc(k.firma||k.kontaktperson||'Kunde')+'</div></div>'+
+      '<div class="meta">'+(k.kontaktperson&&k.firma?'<span>'+esc(k.kontaktperson)+'</span>':'')+
+        (k.ort?'<span class="dot">'+esc([k.plz,k.ort].filter(Boolean).join(' '))+'</span>':'')+'</div>'+
+      '<div class="meta" style="margin-top:10px;gap:8px">'+contactBtns(k.telefon,k.email)+'</div></div>';
+  } else { kundeInner='<div class="empty" style="padding:12px">Kein Kunde zugeordnet.</div>'; }
+  var kundeSec=pmSec('Kunde',kundeInner,'<button class="chip" id="pm-kunde-set" style="font-size:11px">'+(k?'ändern':'zuordnen')+'</button>');
+
+  // Techniker
+  var techInner;
+  if(!d.mig.techniker){ techInner=migRow('Techniker-Zuweisung noch nicht migriert.'); }
+  else if(!d.techniker.length){ techInner='<div class="empty" style="padding:12px">Noch kein Techniker zugewiesen.</div>'; }
+  else {
+    techInner='<div class="list">'+d.techniker.map(function(t){
+      return '<div class="lcard"><div class="top"><div class="nm">🔧 '+esc(t.name||'Techniker')+'</div>'+
+        '<span class="chip" data-untech="'+esc(t.id)+'" style="font-size:11px">entfernen</span></div>'+
+        (t.taetigkeit?'<div class="meta"><span>'+esc(t.taetigkeit)+'</span></div>':'')+
+        '<div class="meta" style="margin-top:8px;gap:8px">'+contactBtns(t.telefon,t.email)+'</div></div>';
+    }).join('')+'</div>';
+  }
+  var techSec=pmSec('Techniker',techInner, d.mig.techniker?'<button class="chip" id="pm-tech-add" style="font-size:11px">＋ zuweisen</button>':'');
+
+  // Tätigkeiten
+  var taetInner;
+  if(!d.mig.taetigkeiten){ taetInner=migRow('Tätigkeiten noch nicht migriert.'); }
+  else if(!d.taetigkeiten.length){ taetInner='<div class="empty" style="padding:12px">Noch keine Arbeiten erfasst.</div>'; }
+  else {
+    taetInner='<div class="list">'+d.taetigkeiten.map(function(a){
+      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(a.beschreibung)+'</div>'+
+        '<span class="chip" data-deltaet="'+esc(a.id)+'" style="font-size:11px">×</span></div>'+
+        '<div class="meta">'+(a.techniker_name?'<span>'+esc(a.techniker_name)+'</span>':'')+
+          (a.datum?'<span class="dot">'+deDate(a.datum)+'</span>':'')+
+          (a.stunden!=null?'<span class="dot">'+esc(a.stunden)+' h</span>':'')+'</div></div>';
+    }).join('')+'</div>';
+  }
+  var taetSec=pmSec('Erfasste Arbeiten',taetInner, d.mig.taetigkeiten?'<button class="chip" id="pm-taet-add" style="font-size:11px">＋ erfassen</button>':'');
+
+  // Material
+  var matInner;
+  if(!d.mig.material){ matInner=migRow('Materialliste noch nicht migriert.'); }
+  else if(!d.material.length){ matInner='<div class="empty" style="padding:12px">Noch kein Material erfasst.</div>'; }
+  else {
+    matInner='<div class="list">'+d.material.map(function(m){
+      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(m.bezeichnung)+'</div>'+pmPill(m.status||'offen',pmStatusColor(m.status))+'</div>'+
+        '<div class="meta">'+((m.menge!=null)?'<span>'+esc(m.menge)+(m.einheit?' '+esc(m.einheit):'')+'</span>':'')+
+          (m.kategorie?'<span class="dot">'+esc(m.kategorie)+'</span>':'')+
+          '<span class="dot"><a data-delmat="'+esc(m.id)+'" style="color:var(--muted2);cursor:pointer">entfernen</a></span></div></div>';
+    }).join('')+'</div>';
+  }
+  var matSec=pmSec('Materialliste',matInner, d.mig.material?'<button class="chip" id="pm-mat-add" style="font-size:11px">＋ hinzufügen</button>':'');
+
+  // Blockaden (bestehendes Modul)
+  var blInner;
+  if(!d.blockaden.length){ blInner='<div class="empty" style="padding:12px">Keine Blockaden zu diesem Projekt. 👍</div>'; }
+  else {
+    blInner='<div class="list">'+d.blockaden.map(function(b){
+      var loc=[b.haus,b.einheit,b.zone].filter(Boolean).join(' · ');
+      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(b.beschreibung||'—')+'</div>'+
+        pmPill(({offen:'offen',in_bearbeitung:'in Arbeit',eskaliert:'kritisch',freigegeben:'freigegeben'})[b.status]||b.status||'',pmStatusColor(b.status))+'</div>'+
+        '<div class="meta">'+(loc?'<span>'+esc(loc)+'</span>':'')+(b.step_ref?'<span class="dot">'+esc(b.step_ref)+'</span>':'')+
+          (b.created_at?'<span class="dot">'+deDate(b.created_at)+'</span>':'')+'</div></div>';
+    }).join('')+'</div>';
+  }
+  var blSec=pmSec('Blockaden ('+d.blockaden_offen+' offen)',blInner,'<button class="chip" id="pm-bl-all" style="font-size:11px">alle</button>');
+
+  $('view').innerHTML=head+kundeSec+techSec+taetSec+matSec+blSec;
+
+  var back=$('pm-back'); if(back) back.onclick=renderProjektListe;
+  $('pm-edit').onclick=function(){ openProjektEdit(p); };
+  $('pm-kunde-set').onclick=openKundeZuordnen;
+  var ta=$('pm-tech-add'); if(ta) ta.onclick=openTechAssign;
+  var xa=$('pm-taet-add'); if(xa) xa.onclick=openTaetigkeitAdd;
+  var ma=$('pm-mat-add'); if(ma) ma.onclick=openMaterialAdd;
+  var blall=$('pm-bl-all'); if(blall) blall.onclick=function(){ _bobViewParams={gefunden:true,projekt:{name:p.name},blockaden:d.blockaden.filter(function(b){return ['offen','in_bearbeitung','eskaliert'].indexOf(b.status)>-1;}),alle:d.blockaden}; go('blockaden'); };
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-untech]'),function(b){ b.onclick=function(){ pmUnassignTech(b.getAttribute('data-untech')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-deltaet]'),function(b){ b.onclick=function(){ pmDel('pm_taetigkeit_del',b.getAttribute('data-deltaet')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-delmat]'),function(b){ b.onclick=function(){ pmDel('pm_material_del',b.getAttribute('data-delmat')); }; });
+}
+function pmDel(action,id){ api(action,{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
+function pmUnassignTech(id){ api('pm_tech_unassign',{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
+
+// ── Projekt anlegen / bearbeiten ──
+function pmSelect(id,opts,sel,ph){
+  return '<select class="field" id="'+id+'">'+(ph?'<option value="">'+esc(ph)+'</option>':'')+
+    opts.map(function(o){ return '<option value="'+esc(o.v)+'"'+(String(o.v)===String(sel)?' selected':'')+'>'+esc(o.t)+'</option>'; }).join('')+'</select>';
+}
+function openProjektEdit(p){
+  p=p||{};
+  var statusOpts=PM_PROJ_STATUS.map(function(s){ return {v:s,t:cap(s)}; });
+  var kundeOpts=_pmKunden.map(function(k){ return {v:k.id,t:(k.firma||k.kontaktperson||'Kunde')}; });
+  openSheet('<h3>'+(p.id?'Projekt bearbeiten':'Neues Projekt')+'</h3>'+
+    '<input class="field" id="pe-name" placeholder="Projektname *" value="'+esc(p.name||'')+'"/>'+
+    '<input class="field" id="pe-nr" placeholder="Projektnummer" value="'+esc(p.projektnummer||'')+'" style="margin-top:8px"/>'+
+    '<input class="field" id="pe-ort" placeholder="Standort" value="'+esc(p.standort||'')+'" style="margin-top:8px"/>'+
+    '<input class="field" id="pe-bereich" placeholder="Bereich (z. B. Sanierung, HKLS)" value="'+esc(p.bereich||'')+'" style="margin-top:8px"/>'+
+    '<div class="sec-t">Status</div>'+pmSelect('pe-status',statusOpts,p.status||'aktiv')+
+    '<div class="sec-t">Kunde</div>'+pmSelect('pe-kunde',kundeOpts,p.kunde_id||'','— kein Kunde —')+
+    '<div class="login-msg" id="pe-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="pe-save" style="margin-top:12px">Speichern</button>'+
+    '<button class="btn ghost" id="pe-cancel">Abbrechen</button>');
+  $('pe-cancel').onclick=closeSheet;
+  $('pe-save').onclick=function(){
+    var name=($('pe-name')||{}).value; name=(name||'').trim();
+    if(!name){ $('pe-msg').className='login-msg err'; $('pe-msg').textContent='Projektname erforderlich'; return; }
+    var body={id:p.id||undefined,name:name,projektnummer:($('pe-nr')||{}).value,standort:($('pe-ort')||{}).value,
+      bereich:($('pe-bereich')||{}).value,status:($('pe-status')||{}).value,kunde_id:($('pe-kunde')||{}).value};
+    var btn=$('pe-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
+    api('pm_projekt_save',body).then(function(d){
+      closeSheet();
+      if(p.id){ loadProjekt(); } else if(d&&d.projekt&&d.projekt.id){ openProjekt(d.projekt.id); } else { renderProjektListe(); }
+      toast('Gespeichert');
+    }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('pe-msg').className='login-msg err'; $('pe-msg').textContent='Fehler beim Speichern'; });
+  };
+}
+// Kunde einem Projekt zuordnen (bestehenden wählen oder neuen anlegen).
+function openKundeZuordnen(){
+  api('pm_kunden').then(function(d){
+    _pmKunden=d.kunden||[];
+    var opts=_pmKunden.map(function(k){ return {v:k.id,t:(k.firma||k.kontaktperson||'Kunde')}; });
+    openSheet('<h3>Kunde zuordnen</h3>'+
+      '<div class="sec-t">Bestehender Kunde</div>'+pmSelect('kz-kunde',opts,(_pmData&&_pmData.projekt&&_pmData.projekt.kunde_id)||'','— wählen —')+
+      '<button class="btn btn-gold" id="kz-save" style="margin-top:12px">Zuordnen</button>'+
+      '<button class="btn ghost" id="kz-new">＋ Neuen Kunden anlegen</button>'+
+      '<button class="btn ghost" id="kz-cancel" style="margin-top:6px">Abbrechen</button>');
+    $('kz-cancel').onclick=closeSheet;
+    $('kz-new').onclick=function(){ openKundeEdit(null,function(newk){ if(newk&&newk.id){ saveKundeZuordnung(newk.id); } }); };
+    $('kz-save').onclick=function(){ var v=($('kz-kunde')||{}).value; if(!v){ toast('Bitte Kunde wählen'); return; } saveKundeZuordnung(v); };
+  }).catch(function(){ toast('Ladefehler'); });
+}
+function saveKundeZuordnung(kundeId){
+  api('pm_projekt_save',{id:_pmProjektId,kunde_id:kundeId}).then(function(){ closeSheet(); loadProjekt(); toast('Kunde zugeordnet'); })
+    .catch(function(){ toast('Fehler'); });
+}
+
+// ── Kundenverwaltung ──
+function openKundenListe(){
+  api('pm_kunden').then(function(d){
+    _pmKunden=d.kunden||[];
+    var rows=_pmKunden.length?_pmKunden.map(function(k){
+      return '<div class="lcard" data-kid="'+esc(k.id)+'"><div class="top"><div class="nm">'+esc(k.firma||k.kontaktperson||'Kunde')+'</div></div>'+
+        '<div class="meta">'+(k.kontaktperson?'<span>'+esc(k.kontaktperson)+'</span>':'')+(k.telefon?'<span class="dot">'+esc(k.telefon)+'</span>':'')+(k.ort?'<span class="dot">'+esc(k.ort)+'</span>':'')+'</div></div>';
+    }).join(''):'<div class="empty" style="padding:12px">Noch keine Kunden.</div>';
+    openSheet('<h3>Kunden</h3>'+
+      '<button class="btn btn-gold" id="ku-new" style="margin-bottom:12px">＋ Neuer Kunde</button>'+
+      '<div class="list" id="ku-list">'+rows+'</div>'+
+      '<button class="btn ghost" id="ku-close" style="margin-top:10px">Schliessen</button>');
+    $('ku-close').onclick=closeSheet;
+    $('ku-new').onclick=function(){ openKundeEdit(null,openKundenListe); };
+    Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-kid]'),function(c){
+      c.onclick=function(){ var id=c.getAttribute('data-kid'); var kk=null; for(var i=0;i<_pmKunden.length;i++){ if(_pmKunden[i].id===id) kk=_pmKunden[i]; } openKundeEdit(kk,openKundenListe); };
+    });
+  }).catch(function(){ toast('Ladefehler'); });
+}
+function openKundeEdit(k,onDone){
+  k=k||{};
+  openSheet('<h3>'+(k.id?'Kunde bearbeiten':'Neuer Kunde')+'</h3>'+
+    '<input class="field" id="ke-firma" placeholder="Firma" value="'+esc(k.firma||'')+'"/>'+
+    '<input class="field" id="ke-kontakt" placeholder="Kontaktperson" value="'+esc(k.kontaktperson||'')+'" style="margin-top:8px"/>'+
+    '<input class="field" id="ke-tel" placeholder="Telefon" value="'+esc(k.telefon||'')+'" style="margin-top:8px"/>'+
+    '<input class="field" id="ke-mail" placeholder="E-Mail" value="'+esc(k.email||'')+'" style="margin-top:8px" type="email"/>'+
+    '<input class="field" id="ke-adr" placeholder="Adresse" value="'+esc(k.adresse||'')+'" style="margin-top:8px"/>'+
+    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+      '<input class="field" id="ke-plz" placeholder="PLZ" value="'+esc(k.plz||'')+'" style="max-width:110px"/>'+
+      '<input class="field" id="ke-ort" placeholder="Ort" value="'+esc(k.ort||'')+'"/></div>'+
+    '<div class="login-msg" id="ke-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="ke-save" style="margin-top:12px">Speichern</button>'+
+    '<button class="btn ghost" id="ke-cancel">Abbrechen</button>');
+  $('ke-cancel').onclick=closeSheet;
+  $('ke-save').onclick=function(){
+    var firma=($('ke-firma')||{}).value, kontakt=($('ke-kontakt')||{}).value;
+    if(!((firma||'').trim())&&!((kontakt||'').trim())){ $('ke-msg').className='login-msg err'; $('ke-msg').textContent='Firma oder Kontaktperson erforderlich'; return; }
+    var body={id:k.id||undefined,firma:firma,kontaktperson:kontakt,telefon:($('ke-tel')||{}).value,
+      email:($('ke-mail')||{}).value,adresse:($('ke-adr')||{}).value,plz:($('ke-plz')||{}).value,ort:($('ke-ort')||{}).value};
+    var btn=$('ke-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
+    api('pm_kunde_save',body).then(function(d){ toast('Gespeichert'); if(typeof onDone==='function') onDone(d&&d.kunde); else closeSheet(); })
+      .catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('ke-msg').className='login-msg err'; $('ke-msg').textContent='Fehler beim Speichern'; });
+  };
+}
+
+// ── Techniker zuweisen ──
+function openTechAssign(){
+  api('pm_techniker').then(function(d){
+    var techs=d.techniker||[];
+    if(!techs.length){ toast('Keine Techniker im Pool'); return; }
+    var opts=techs.map(function(t){ return {v:t.id,t:(t.name||'Techniker')+(t.verfuegbar?' · frei':'')}; });
+    openSheet('<h3>Techniker zuweisen</h3>'+
+      '<div class="sec-t">Techniker</div>'+pmSelect('ta-tech',opts,'','— wählen —')+
+      '<input class="field" id="ta-taet" placeholder="Tätigkeit (z. B. Servicearbeiten)" style="margin-top:10px"/>'+
+      '<div class="login-msg" id="ta-msg" style="margin-top:8px"></div>'+
+      '<button class="btn btn-gold" id="ta-save" style="margin-top:12px">Zuweisen</button>'+
+      '<button class="btn ghost" id="ta-cancel">Abbrechen</button>');
+    $('ta-cancel').onclick=closeSheet;
+    $('ta-save').onclick=function(){
+      var tid=($('ta-tech')||{}).value; if(!tid){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Bitte Techniker wählen'; return; }
+      api('pm_tech_assign',{projekt_id:_pmProjektId,techniker_id:tid,taetigkeit:($('ta-taet')||{}).value}).then(function(r){
+        if(r&&r.notMigrated){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Tabelle noch nicht migriert.'; return; }
+        closeSheet(); loadProjekt(); toast('Zugewiesen');
+      }).catch(function(){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Fehler'; });
+    };
+  }).catch(function(){ toast('Ladefehler'); });
+}
+
+// ── Tätigkeit erfassen ──
+function openTaetigkeitAdd(){
+  openSheet('<h3>Arbeit erfassen</h3>'+
+    '<textarea class="field" id="xt-desc" placeholder="Was wurde gemacht? *" rows="2"></textarea>'+
+    '<input class="field" id="xt-tech" placeholder="Techniker (Name)" style="margin-top:8px"/>'+
+    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+      '<input class="field" id="xt-datum" type="date" value="'+new Date().toISOString().slice(0,10)+'"/>'+
+      '<input class="field" id="xt-std" placeholder="Stunden" type="number" step="0.5" style="max-width:120px"/></div>'+
+    '<div class="login-msg" id="xt-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="xt-save" style="margin-top:12px">Speichern</button>'+
+    '<button class="btn ghost" id="xt-cancel">Abbrechen</button>');
+  $('xt-cancel').onclick=closeSheet;
+  $('xt-save').onclick=function(){
+    var desc=($('xt-desc')||{}).value; if(!((desc||'').trim())){ $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Beschreibung erforderlich'; return; }
+    api('pm_taetigkeit_add',{projekt_id:_pmProjektId,beschreibung:desc,techniker_name:($('xt-tech')||{}).value,datum:($('xt-datum')||{}).value,stunden:($('xt-std')||{}).value}).then(function(r){
+      if(r&&r.notMigrated){ $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Tabelle noch nicht migriert.'; return; }
+      closeSheet(); loadProjekt(); toast('Erfasst');
+    }).catch(function(){ $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Fehler'; });
+  };
+}
+
+// ── Material hinzufügen (mit HKLS-Vorlage) ──
+var PM_MAT_VORLAGE=['Rohrisolierung','Absperrventil','T-Stück','Bogen 90°','Reduktion','Flexschlauch','Siphon','Dichtungsset','Befestigungsschelle','Wärmepumpe','Umwälzpumpe','Ausdehnungsgefäss','Heizkörper','Lüftungsrohr','Filtermatte'];
+function openMaterialAdd(){
+  var statusOpts=PM_MAT_STATUS.map(function(s){ return {v:s,t:cap(s)}; });
+  openSheet('<h3>Material hinzufügen</h3>'+
+    '<input class="field" id="mm-bez" placeholder="Bezeichnung *" list="mm-vorlage"/>'+
+    '<datalist id="mm-vorlage">'+PM_MAT_VORLAGE.map(function(v){ return '<option value="'+esc(v)+'">'; }).join('')+'</datalist>'+
+    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+      '<input class="field" id="mm-menge" placeholder="Menge" type="number" step="0.5" style="max-width:120px"/>'+
+      '<input class="field" id="mm-einheit" placeholder="Einheit (Stk, m, kg)"/></div>'+
+    '<input class="field" id="mm-kat" placeholder="Kategorie (Sanitär, Heizung, Lüftung)" style="margin-top:8px"/>'+
+    '<div class="sec-t">Status</div>'+pmSelect('mm-status',statusOpts,'offen')+
+    '<div class="login-msg" id="mm-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="mm-save" style="margin-top:12px">Hinzufügen</button>'+
+    '<button class="btn ghost" id="mm-cancel">Abbrechen</button>');
+  $('mm-cancel').onclick=closeSheet;
+  $('mm-save').onclick=function(){
+    var bez=($('mm-bez')||{}).value; if(!((bez||'').trim())){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Bezeichnung erforderlich'; return; }
+    api('pm_material_add',{projekt_id:_pmProjektId,bezeichnung:bez,menge:($('mm-menge')||{}).value,einheit:($('mm-einheit')||{}).value,kategorie:($('mm-kat')||{}).value,status:($('mm-status')||{}).value}).then(function(r){
+      if(r&&r.notMigrated){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Tabelle noch nicht migriert.'; return; }
+      closeSheet(); loadProjekt(); toast('Hinzugefügt');
+    }).catch(function(){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Fehler'; });
+  };
+}
+
 function renderLizenz(){ $('view').innerHTML='<h2><span class="acc">🔑</span> Lizenzen</h2>'+backRow()+'<div class="empty">Kommt in Kürze.</div>'; wireBack(); }
 
 // ════ JARVIS — Sprach-Assistent (Session 5, Teil A) ════

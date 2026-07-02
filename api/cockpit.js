@@ -106,6 +106,20 @@ export default async function handler(req, res) {
       case 'voice':           return res.status(200).json(await handleVoice(req.body));
       case 'blockaden_liste': return res.status(200).json(await voiceBlockaden(req.body));
       case 'projekt_add':     return res.status(200).json(await addProjekt(req.body));
+      // ── Session 6: Projektmanagement (Herzstück) ──
+      case 'pm_projekte':      return res.status(200).json(await getPmProjekte());
+      case 'pm_projekt':       return res.status(200).json(await getPmProjekt(req.body.id));
+      case 'pm_projekt_save':  return res.status(200).json(await savePmProjekt(req.body));
+      case 'pm_kunden':        return res.status(200).json(await getPmKunden());
+      case 'pm_kunde_save':    return res.status(200).json(await savePmKunde(req.body));
+      case 'pm_techniker':     return res.status(200).json(await getPmTechniker());
+      case 'pm_tech_assign':   return res.status(200).json(await assignTech(req.body));
+      case 'pm_tech_unassign': return res.status(200).json(await unassignTech(req.body));
+      case 'pm_taetigkeit_add':return res.status(200).json(await addTaetigkeit(req.body));
+      case 'pm_taetigkeit_del':return res.status(200).json(await delPmRow('gs_taetigkeiten', req.body.id));
+      case 'pm_material_add':  return res.status(200).json(await addMaterial(req.body));
+      case 'pm_material_upd':  return res.status(200).json(await updMaterial(req.body));
+      case 'pm_material_del':  return res.status(200).json(await delPmRow('gs_material', req.body.id));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -431,6 +445,8 @@ async function taskDone(id) {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function uuid(v) { if (!UUID_RE.test(String(v || ''))) throw new Error('Ungültige id'); return v; }
 function num(v) { const n = Number(v); return isFinite(n) ? n : 0; }
+// Tabelle (noch) nicht migriert? → sauberer Fallback statt 500.
+function isNoTable(e) { return /PGRST205|not find the table|does not exist|42P01/i.test((e && e.message) || ''); }
 function fuState(dateStr, today) {
   if (!dateStr) return null;
   if (dateStr < today) return 'ueberfaellig';
@@ -1404,3 +1420,197 @@ async function handleVoice(body) {
   return { intent: 'frage', antwort: j.antwort, view: null, fallback: !!j.fallback };
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SESSION 6 — PROJEKTMANAGEMENT (Herzstück)
+//  Kern (Projekte, Kunden, Techniker-Liste, Blockaden) läuft auf BESTEHENDEN
+//  Tabellen. Zuweisungen/Tätigkeiten/Material nutzen neue Tabellen; fehlt die
+//  Migration, liefern die Endpunkte notMigrated:true (kein 500, UI zeigt Hinweis).
+// ═══════════════════════════════════════════════════════════════════════════
+const PM_OFFEN = ['offen', 'in_bearbeitung', 'eskaliert'];
+
+async function getPmProjekte() {
+  const [projekte, kunden] = await Promise.all([
+    sbGet('gs_projekte?select=*&order=created_at.desc').catch(() => []),
+    sbGet('gs_kunden?select=id,firma,kontaktperson,telefon,email,ort').catch(() => []),
+  ]);
+  const kById = {};
+  for (const k of kunden) kById[k.id] = k;
+  const blCount = {};
+  try {
+    const bl = await sbGet(`gs_blockaden?status=in.(${PM_OFFEN.join(',')})&select=projekt_id`);
+    for (const b of bl) if (b.projekt_id) blCount[b.projekt_id] = (blCount[b.projekt_id] || 0) + 1;
+  } catch (_) {}
+  return {
+    projekte: projekte.map((p) => ({
+      ...p,
+      kunde: p.kunde_id ? (kById[p.kunde_id] || null) : null,
+      blockaden_offen: blCount[p.id] || 0,
+    })),
+    kunden,
+  };
+}
+
+async function getPmProjekt(id) {
+  id = uuid(id);
+  const pr = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
+  const projekt = pr && pr[0];
+  if (!projekt) return { error: 'Projekt nicht gefunden' };
+  const kunde = projekt.kunde_id
+    ? (await sbGet(`gs_kunden?id=eq.${projekt.kunde_id}&select=*&limit=1`).catch(() => []))[0] || null
+    : null;
+
+  // Blockaden (bestehende Tabelle) — per projekt_id, sonst per denormalisiertem Namen.
+  let blockaden = [];
+  const blSel = 'id,beschreibung,status,urgency,haus,einheit,zone,step_ref,blockiert_von_rolle,created_at';
+  try {
+    blockaden = await sbGet(`gs_blockaden?projekt_id=eq.${id}&select=${blSel}&order=created_at.desc`);
+    if ((!blockaden || !blockaden.length) && projekt.name) {
+      blockaden = await sbGet(`gs_blockaden?projekt_name=eq.${encodeURIComponent(projekt.name)}&select=${blSel}&order=created_at.desc`).catch(() => []);
+    }
+  } catch (_) { blockaden = []; }
+
+  // Techniker-Zuweisungen (neue Tabelle) + Namen aus gs_techniker joinen.
+  let techniker = [], migTechniker = true;
+  try {
+    const rows = await sbGet(`gs_projekt_techniker?projekt_id=eq.${id}&select=id,techniker_id,taetigkeit,seit&order=seit.desc`);
+    const ids = rows.map((r) => r.techniker_id).filter(Boolean);
+    const tById = {};
+    if (ids.length) {
+      const ts = await sbGet(`gs_techniker?id=in.(${ids.join(',')})&select=id,name,telefon,email`).catch(() => []);
+      for (const t of ts) tById[t.id] = t;
+    }
+    techniker = rows.map((r) => ({ id: r.id, techniker_id: r.techniker_id, taetigkeit: r.taetigkeit, seit: r.seit, ...(tById[r.techniker_id] || {}) }));
+  } catch (e) { if (isNoTable(e)) migTechniker = false; else throw e; }
+
+  // Tätigkeiten (neue Tabelle).
+  let taetigkeiten = [], migTaet = true;
+  try { taetigkeiten = await sbGet(`gs_taetigkeiten?projekt_id=eq.${id}&select=*&order=datum.desc,created_at.desc`); }
+  catch (e) { if (isNoTable(e)) migTaet = false; else throw e; }
+
+  // Material (neue Tabelle).
+  let material = [], migMat = true;
+  try { material = await sbGet(`gs_material?projekt_id=eq.${id}&select=*&order=created_at.desc`); }
+  catch (e) { if (isNoTable(e)) migMat = false; else throw e; }
+
+  const blOffen = (blockaden || []).filter((b) => PM_OFFEN.includes(String(b.status || '').toLowerCase())).length;
+  return {
+    projekt, kunde,
+    blockaden: blockaden || [], blockaden_offen: blOffen,
+    techniker, taetigkeiten, material,
+    mig: { techniker: migTechniker, taetigkeiten: migTaet, material: migMat },
+  };
+}
+
+async function savePmProjekt(b) {
+  const patch = {};
+  if (b.name !== undefined) patch.name = String(b.name || '').trim().slice(0, 120);
+  if (b.projektnummer !== undefined) patch.projektnummer = String(b.projektnummer || '').trim().slice(0, 60) || null;
+  if (b.standort !== undefined) patch.standort = String(b.standort || '').trim().slice(0, 160) || null;
+  if (b.bereich !== undefined) patch.bereich = String(b.bereich || '').trim().slice(0, 80) || null;
+  if (b.status !== undefined) patch.status = String(b.status || '').trim().slice(0, 40) || 'aktiv';
+  if (b.kunde_id !== undefined) patch.kunde_id = b.kunde_id ? uuid(b.kunde_id) : null;
+  if (b.id) {
+    const id = uuid(b.id);
+    const r = await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, patch);
+    return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+  }
+  if (!patch.name) throw new Error('name nötig');
+  if (!patch.status) patch.status = 'aktiv';
+  const r = await sbWrite('POST', 'gs_projekte', patch);
+  return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+}
+
+async function getPmKunden() {
+  const kunden = await sbGet('gs_kunden?select=*&order=erstellt_am.desc').catch(() => []);
+  return { kunden };
+}
+
+async function savePmKunde(b) {
+  const patch = {};
+  ['firma', 'kontaktperson', 'email', 'telefon', 'adresse', 'ort', 'vertragstyp'].forEach((f) => {
+    if (b[f] !== undefined) patch[f] = String(b[f] || '').trim().slice(0, 160) || null;
+  });
+  if (b.plz !== undefined) patch.plz = String(b.plz || '').trim().slice(0, 12) || null;
+  if (b.id) {
+    const id = uuid(b.id);
+    const r = await sbWrite('PATCH', `gs_kunden?id=eq.${id}`, patch);
+    return { ok: true, kunde: Array.isArray(r) ? r[0] : r };
+  }
+  if (!patch.firma && !patch.kontaktperson) throw new Error('Firma oder Kontakt nötig');
+  const r = await sbWrite('POST', 'gs_kunden', patch);
+  return { ok: true, kunde: Array.isArray(r) ? r[0] : r };
+}
+
+async function getPmTechniker() {
+  const techniker = await sbGet('gs_techniker?select=id,name,telefon,email,qualifikation,verfuegbar&order=name.asc').catch(() => []);
+  return { techniker };
+}
+
+async function assignTech(b) {
+  const row = {
+    projekt_id: uuid(b.projekt_id),
+    techniker_id: uuid(b.techniker_id),
+    taetigkeit: b.taetigkeit ? String(b.taetigkeit).slice(0, 120) : null,
+  };
+  try {
+    const r = await sbWrite('POST', 'gs_projekt_techniker', row);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+async function unassignTech(b) {
+  const id = uuid(b.id);
+  try { await sbWrite('DELETE', `gs_projekt_techniker?id=eq.${id}`, {}, 'return=minimal'); return { ok: true }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+async function addTaetigkeit(b) {
+  const row = {
+    projekt_id: uuid(b.projekt_id),
+    beschreibung: String(b.beschreibung || '').slice(0, 500),
+    techniker_name: b.techniker_name ? String(b.techniker_name).slice(0, 120) : null,
+    datum: b.datum ? String(b.datum).slice(0, 10) : null,
+    stunden: (b.stunden != null && b.stunden !== '') ? num(b.stunden) : null,
+  };
+  if (!row.beschreibung) throw new Error('beschreibung nötig');
+  try {
+    const r = await sbWrite('POST', 'gs_taetigkeiten', row);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+async function addMaterial(b) {
+  const row = {
+    projekt_id: uuid(b.projekt_id),
+    bezeichnung: String(b.bezeichnung || '').slice(0, 200),
+    menge: (b.menge != null && b.menge !== '') ? num(b.menge) : null,
+    einheit: b.einheit ? String(b.einheit).slice(0, 20) : null,
+    kategorie: b.kategorie ? String(b.kategorie).slice(0, 60) : null,
+    status: b.status ? String(b.status).slice(0, 40) : 'offen',
+  };
+  if (!row.bezeichnung) throw new Error('bezeichnung nötig');
+  try {
+    const r = await sbWrite('POST', 'gs_material', row);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+async function updMaterial(b) {
+  const id = uuid(b.id);
+  const patch = {};
+  if (b.status !== undefined) patch.status = String(b.status).slice(0, 40);
+  if (b.menge !== undefined) patch.menge = b.menge === '' ? null : num(b.menge);
+  if (b.bezeichnung !== undefined) patch.bezeichnung = String(b.bezeichnung).slice(0, 200);
+  try {
+    const r = await sbWrite('PATCH', `gs_material?id=eq.${id}`, patch);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+// Generisches Löschen für PM-Zeilen (Tätigkeit/Material) mit Migrations-Fallback.
+async function delPmRow(table, id) {
+  id = uuid(id);
+  try { await sbWrite('DELETE', `${table}?id=eq.${id}`, {}, 'return=minimal'); return { ok: true }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
