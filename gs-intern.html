@@ -1501,11 +1501,13 @@ function paintLizenz(){
 // dieselbe Datei, die `bobSpeak()` in app.html nutzt). KEINE Browser-Stimme.
 // Schnellbefehle — ziehen echte Cockpit-Daten (Termine/Material: ehrlich „kommt bald").
 var JARVIS_QUICK=[
+  {ic:'🎬',q:'Was für eine Software ist das?'},
+  {ic:'🎯',q:'Worauf seid ihr spezialisiert?'},
+  {ic:'🛡️',q:'Welches Problem löst ihr?'},
+  {ic:'🧱',q:'Wie kannst du einem Fliesenleger helfen?'},
+  {ic:'🔧',q:'Wie hilfst du einer Sanitärfirma?'},
+  {ic:'👷',q:'Wie hilfst du einem Bauleiter?'},
   {ic:'🚧',q:'Wie viele offene Blockaden'},
-  {ic:'💰',q:'Zeig Umsätze diese Woche'},
-  {ic:'📊',q:'Wie viele Leads sind reingekommen?'},
-  {ic:'🛠️',q:'Wie viele Techniker habe ich, aktiv und gesamt?'},
-  {ic:'📋',q:'Wie schaut es mit den Rapporten aus?'},
   {ic:'💎',q:'Wie sehen meine Finanzen heute aus?'}
 ];
 var _jConv=[];                 // {role:'me'|'jv', text}
@@ -1526,7 +1528,7 @@ function renderJarvis(){
     '<div class="jwrap">'+
       '<div class="jhero">'+
         '<div class="jorb idle" id="j-orb"></div>'+
-        '<div class="jstate" id="j-state">Bereit. Sag „Hey Bob“ oder tippe aufs Mikrofon.</div>'+
+        '<div class="jstate" id="j-state">Hallo Master. Sag „Hey Bob“ oder tippe aufs Mikrofon.</div>'+
       '</div>'+
       '<div class="wakebar" id="wake-bar"><div class="wl" id="wake-lbl"></div><button class="wsw" id="wake-sw" title="Hey-Bob Dauer-Zuhoeren"></button></div>'+
       '<div class="jspeak-toggle" id="j-vtoggle"></div>'+
@@ -1961,8 +1963,8 @@ function wakeHeard(transcript){
   pauseWake();                          // Selbst-Trigger während Antwort vermeiden
   if(curView!=='jarvis') go('jarvis');
   if(!cmd){                             // nur „Hey Bob" → kurz bestätigen, Ohr auf
-    jState('● Ja, ich höre… sag deinen Befehl','speak');
-    if(_jVoiceOn) speakJarvis('Ja, ich höre.'); else resumeWake();
+    jState('● Hallo Master, ich bin hier… sag deinen Befehl','speak');
+    if(_jVoiceOn) speakJarvis('Hallo Master, ich bin hier. Wie kann ich dir helfen?'); else resumeWake();
     return;
   }
   jarvisAsk(cmd);
