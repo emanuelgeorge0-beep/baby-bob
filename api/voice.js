@@ -75,8 +75,10 @@ async function stt(res, body) {
     });
     if (!r.ok) {
       const t = await r.text().catch(() => '');
-      console.error('STT error', r.status, t.slice(0, 200));
-      return res.status(502).json({ error: 'STT failed', fallback: true, upstream_status: r.status });
+      let detail = t.slice(0, 240);
+      try { const j = JSON.parse(t); detail = j.detail?.message || j.detail?.status || j.detail || detail; } catch {}
+      console.error('STT error', r.status, detail);
+      return res.status(502).json({ error: 'STT failed', fallback: true, upstream_status: r.status, detail });
     }
     const d = await r.json();
     return res.status(200).json({ text: d.text || '' });
