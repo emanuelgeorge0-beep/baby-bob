@@ -445,8 +445,10 @@ async function taskDone(id) {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function uuid(v) { if (!UUID_RE.test(String(v || ''))) throw new Error('Ungültige id'); return v; }
 function num(v) { const n = Number(v); return isFinite(n) ? n : 0; }
-// Tabelle (noch) nicht migriert? → sauberer Fallback statt 500.
-function isNoTable(e) { return /PGRST205|not find the table|does not exist|42P01/i.test((e && e.message) || ''); }
+// Tabelle/Spalte (noch) nicht migriert? → sauberer Fallback statt 500.
+// PostgREST: PGRST205 = Tabelle fehlt (GET), PGRST204 = Spalte fehlt (Write) —
+// beide melden „… in the schema cache". Deshalb auch darauf matchen.
+function isNoTable(e) { return /PGRST20[45]|schema cache|not find the table|does not exist|42P01/i.test((e && e.message) || ''); }
 function fuState(dateStr, today) {
   if (!dateStr) return null;
   if (dateStr < today) return 'ueberfaellig';
