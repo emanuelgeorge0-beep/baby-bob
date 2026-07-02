@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Rechnung R-2026-0042 · Geiger AG · George Solutions (ENTWURF)</title>
+<!--
+  ═══════════════════════════════════════════════════════════════════════
+  PDF-READY RECHNUNGS-ENTWURF — George Solutions → Geiger AG
+  ---------------------------------------------------------------------
+  • Basis: erfasste Stunden (gs_tagesrapporte) × Stundensatz (CHF 95.00)
+  • Status: ENTWURF — NICHT automatisch versenden.
+    Yasemin: Review → ggf. IBAN / CHE-MWST-Nr / Firmenadresse ergänzen → als
+    PDF exportieren (Browser: Drucken → „Als PDF speichern", A4) → versenden.
+  • Deckungsgleich mit gs_rechnungen R-2026-0042 (47.5 h → CHF 4'512.50 netto).
+  ═══════════════════════════════════════════════════════════════════════
+-->
+<style>
+  :root{
+    --gold:#b8954d; --gold-lt:#d8b96e; --ink:#0a0e14; --ink-soft:#33404f;
+    --line:#e3e7ee; --muted:#7a8797; --bg:#f4f6fa; --paper:#ffffff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;padding:24px;}
+  .sheet{max-width:820px;margin:0 auto;background:var(--paper);border-radius:10px;
+    box-shadow:0 8px 40px rgba(10,14,20,.12);padding:56px 56px 44px;position:relative;overflow:hidden;}
+  /* ENTWURF-Wasserzeichen */
+  .sheet::before{content:"ENTWURF";position:absolute;top:46%;left:50%;
+    transform:translate(-50%,-50%) rotate(-24deg);font-size:150px;font-weight:800;
+    color:rgba(184,149,77,.07);letter-spacing:.05em;pointer-events:none;z-index:0;white-space:nowrap;}
+  .sheet > *{position:relative;z-index:1;}
+
+  .review{background:#fff8e8;border:1px solid var(--gold-lt);border-left:4px solid var(--gold);
+    border-radius:7px;padding:12px 16px;margin-bottom:34px;font-size:13px;color:#6b5726;}
+  .review b{color:#5a4718;}
+
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:40px;}
+  .brand .logo{height:40px;width:auto;display:block;margin-bottom:10px;}
+  .brand .name{font-size:20px;font-weight:800;letter-spacing:.01em;}
+  .brand .name .gold{color:var(--gold);}
+  .brand .tag{font-size:12px;color:var(--muted);margin-top:2px;letter-spacing:.02em;}
+  .doc{text-align:right;}
+  .doc h1{font-size:26px;font-weight:800;letter-spacing:.02em;}
+  .doc .no{font-size:14px;color:var(--gold);font-weight:700;margin-top:2px;}
+  .doc .status{display:inline-block;margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:#8a6d2a;background:#f7ead0;border:1px solid var(--gold-lt);
+    padding:3px 10px;border-radius:20px;}
+
+  .parties{display:flex;justify-content:space-between;gap:40px;margin-bottom:36px;}
+  .party{font-size:13px;}
+  .party .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px;}
+  .party .big{font-size:15px;font-weight:700;margin-bottom:2px;}
+  .party .ph{color:var(--gold);font-style:italic;}
+
+  .meta{display:flex;gap:34px;margin-bottom:26px;padding:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:13px;}
+  .meta div span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:2px;}
+
+  table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:13px;}
+  thead th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+    border-bottom:2px solid var(--ink);padding:0 10px 8px;}
+  thead th.r,tbody td.r{text-align:right;}
+  tbody td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tbody td.desc{color:var(--ink-soft);}
+  tbody tr:last-child td{border-bottom:1px solid var(--line);}
+
+  .sum{margin-left:auto;width:340px;margin-top:14px;font-size:13px;}
+  .sum .row{display:flex;justify-content:space-between;padding:7px 10px;}
+  .sum .row.sub{border-bottom:1px solid var(--line);}
+  .sum .row.total{font-size:17px;font-weight:800;background:var(--ink);color:#fff;border-radius:7px;margin-top:8px;padding:13px 12px;}
+  .sum .row.total .gold{color:var(--gold-lt);}
+
+  .pay{margin-top:40px;display:flex;gap:40px;font-size:12.5px;}
+  .pay .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px;}
+  .pay .ph{color:var(--gold);font-style:italic;}
+  .terms{margin-top:8px;color:var(--ink-soft);}
+
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted);}
+  .foot a{color:var(--gold);text-decoration:none;}
+
+  .noprint{text-align:center;margin:0 auto 18px;max-width:820px;}
+  .noprint button{font:inherit;font-weight:700;background:var(--ink);color:#fff;border:none;
+    padding:11px 22px;border-radius:8px;cursor:pointer;letter-spacing:.02em;}
+  .noprint button:hover{background:var(--gold);}
+
+  @media print{
+    body{background:#fff;padding:0;}
+    .sheet{box-shadow:none;border-radius:0;max-width:none;padding:22mm 18mm;}
+    .noprint{display:none;}
+    @page{size:A4;margin:0;}
+  }
+</style>
+</head>
+<body>
+
+<div class="noprint">
+  <button onclick="window.print()">🖨️ Als PDF speichern / drucken</button>
+</div>
+
+<div class="sheet">
+
+  <div class="review">
+    <b>⚠️ ENTWURF – noch nicht versenden.</b> Bitte vor dem Versand prüfen und die
+    <span style="color:var(--gold)">golden markierten Platzhalter</span> ergänzen
+    (IBAN / QR-Referenz, CHE-MWST-Nummer, vollständige Firmenadresse). Review &amp; Versand: <b>Yasemin</b>.
+  </div>
+
+  <!-- Kopf -->
+  <div class="top">
+    <div class="brand">
+      <img class="logo" src="https://baby-bob.vercel.app/lib/logo-gs.png" alt="George Solutions"/>
+      <div class="name">GEORGE <span class="gold">SOLUTIONS</span></div>
+      <div class="tag">Gebäudetechnik · Sanitär · Heizung · Klima · Zürich</div>
+    </div>
+    <div class="doc">
+      <h1>RECHNUNG</h1>
+      <div class="no">R-2026-0042</div>
+      <div class="status">Entwurf · nicht versendet</div>
+    </div>
+  </div>
+
+  <!-- Parteien -->
+  <div class="parties">
+    <div class="party">
+      <div class="lbl">Rechnungssteller</div>
+      <div class="big">George Solutions</div>
+      <div><span class="ph">[Strasse Nr., 80xx Zürich]</span></div>
+      <div>Zürich, Schweiz</div>
+      <div>info@george-solutions.ch</div>
+      <div>george-solutions.ch</div>
+      <div style="margin-top:6px;">MWST-Nr.: <span class="ph">[CHE-xxx.xxx.xxx MWST]</span></div>
+    </div>
+    <div class="party" style="text-align:right;">
+      <div class="lbl">Rechnungsempfänger</div>
+      <div class="big">Geiger AG</div>
+      <div>z. Hd. Markus Geiger (Bauleitung)</div>
+      <div>Seefeldstrasse 120</div>
+      <div>8008 Zürich</div>
+      <div>bauleitung@geiger-ag.ch</div>
+    </div>
+  </div>
+
+  <!-- Eckdaten -->
+  <div class="meta">
+    <div><span>Rechnungsdatum</span>02.07.2026</div>
+    <div><span>Projekt</span>P-2026-0042 · Wohnüberbauung Seefeld</div>
+    <div><span>Leistungszeitraum</span>16.06.–02.07.2026</div>
+    <div><span>Zahlungsziel</span>30 Tage netto</div>
+  </div>
+
+  <!-- Leistungsnachweis (aus erfassten Tagesrapporten) -->
+  <table>
+    <thead>
+      <tr>
+        <th style="width:92px;">Datum</th>
+        <th>Leistung (HKLS)</th>
+        <th class="r" style="width:70px;">Std.</th>
+        <th class="r" style="width:90px;">Satz CHF</th>
+        <th class="r" style="width:100px;">Betrag CHF</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>16.06.2026</td><td class="desc">Rohinstallation Haus A – Wasser-/Ablaufzonen (Kalt-/Warmwasser, Zirkulation)</td><td class="r">8.5</td><td class="r">95.00</td><td class="r">807.50</td></tr>
+      <tr><td>18.06.2026</td><td class="desc">Haus A – Druckprobe (10 bar) bestanden + Isolierung Wasserleitungen</td><td class="r">9.0</td><td class="r">95.00</td><td class="r">855.00</td></tr>
+      <tr><td>23.06.2026</td><td class="desc">Haus B – Einlegearbeiten / Stellbohrungen vor Betonage</td><td class="r">8.0</td><td class="r">95.00</td><td class="r">760.00</td></tr>
+      <tr><td>25.06.2026</td><td class="desc">Haus B – Wasser- und Ablaufzonen verlegt</td><td class="r">7.5</td><td class="r">95.00</td><td class="r">712.50</td></tr>
+      <tr><td>01.07.2026</td><td class="desc">Haus B – Druckprobe bestanden (Isolierung folgt nach Materiallieferung)</td><td class="r">8.5</td><td class="r">95.00</td><td class="r">807.50</td></tr>
+      <tr><td>02.07.2026</td><td class="desc">Haus C – Stellbohrungen begonnen, Aufmaß Einlegearbeiten</td><td class="r">6.0</td><td class="r">95.00</td><td class="r">570.00</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Summenblock -->
+  <div class="sum">
+    <div class="row sub"><div>Zwischensumme (47.5 Std. × CHF 95.00)</div><div>4'512.50</div></div>
+    <div class="row sub"><div>MWST 8.1 %</div><div>365.51</div></div>
+    <div class="row total"><div>Total CHF</div><div class="gold">4'878.01</div></div>
+  </div>
+
+  <!-- Zahlungsangaben -->
+  <div class="pay">
+    <div>
+      <div class="lbl">Zahlbar an</div>
+      <div>George Solutions</div>
+      <div>IBAN: <span class="ph">[CHxx xxxx xxxx xxxx xxxx x]</span></div>
+      <div>QR-Referenz: <span class="ph">[bei Versand ergänzen]</span></div>
+    </div>
+    <div style="flex:1;">
+      <div class="lbl">Konditionen</div>
+      <div class="terms">Zahlbar innert 30 Tagen netto ab Rechnungsdatum.
+      Bei Fragen zur Rechnung: info@george-solutions.ch. Vielen Dank für Ihren Auftrag.</div>
+    </div>
+  </div>
+
+  <!-- Fuss -->
+  <div class="foot">
+    <div>George Solutions · Gebäudetechnik · Zürich</div>
+    <div><a href="https://george-solutions.ch">george-solutions.ch</a> · info@george-solutions.ch</div>
+    <div>Rechnung R-2026-0042 · Projekt P-2026-0042</div>
+  </div>
+
+</div>
+
+</body>
+</html>
