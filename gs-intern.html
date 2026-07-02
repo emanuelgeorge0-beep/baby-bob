@@ -17,7 +17,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/cockpit-icon-192.png"/>
 <style>
   :root{
-    --bg:#070a0f; --bg2:#0c111a; --card:#10161f; --card2:#141c28;
+    --bg:#0A0A0B; --bg2:#0f1116; --card:#131519; --card2:#181b21;
     --gold:#C9A961; --gold-soft:rgba(201,169,97,.14); --gold-line:rgba(201,169,97,.28);
     --txt:#e8edf5; --muted:#8a97a8; --muted2:#5c6878;
     --ok:#3ecf8e; --warn:#f5b942; --bad:#ff5d5d; --info:#5aa7ff;
@@ -340,6 +340,35 @@
   .installbar .ibtn{flex:0 0 auto;background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;
     font-weight:800;font-size:13px;border-radius:10px;padding:9px 13px;}
   .installbar .ix{flex:0 0 auto;background:transparent;border:none;color:var(--muted2);font-size:20px;line-height:1;padding:2px 4px;}
+
+  /* Bob Wake-Word */
+  .wakebar{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--gold-line);
+    border-radius:14px;padding:11px 14px;margin-bottom:12px;transition:border-color .2s;}
+  .wakebar.live{border-color:var(--ok);box-shadow:0 0 0 1px rgba(62,207,142,.25);}
+  .wakebar .wl{flex:1;font-size:12.5px;color:var(--muted);line-height:1.35;}
+  .wakebar .wl b{color:var(--gold);}
+  .wakebar.live .wl b{color:var(--ok);}
+  .wsw{position:relative;width:50px;height:28px;border-radius:50px;background:var(--bg2);
+    border:1px solid var(--line);flex:0 0 auto;transition:.2s;}
+  .wsw::after{content:'';position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;
+    background:var(--muted2);transition:.2s;}
+  .wsw.on{background:var(--gold-soft);border-color:var(--gold-line);}
+  .wsw.on::after{left:24px;background:var(--gold);box-shadow:0 0 10px var(--gold);}
+  /* Blockaden */
+  .blk{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px;
+    display:flex;flex-direction:column;gap:8px;border-left:3px solid var(--muted2);}
+  .blk.CRITICAL,.blk.HIGH{border-left-color:var(--bad);}
+  .blk.MEDIUM{border-left-color:var(--warn);}
+  .blk.LOW{border-left-color:var(--info);}
+  .blk .btop{display:flex;gap:8px;align-items:flex-start;}
+  .blk .bt{flex:1;font-size:14px;font-weight:600;line-height:1.4;}
+  .blk .bm{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--muted);align-items:center;}
+  .u-badge{font-size:10px;font-weight:800;letter-spacing:.4px;padding:3px 8px;border-radius:50px;text-transform:uppercase;white-space:nowrap;}
+  .u-CRITICAL,.u-HIGH{background:rgba(255,93,93,.16);color:var(--bad);}
+  .u-MEDIUM{background:rgba(245,185,66,.16);color:var(--warn);}
+  .u-LOW{background:rgba(90,167,255,.14);color:var(--info);}
+  @media (min-width:720px){ .grid,.cc-grid{grid-template-columns:repeat(3,1fr);} .jchips{grid-template-columns:1fr 1fr 1fr;} }
+  @media (max-width:360px){ .cc-grid,.grid{grid-template-columns:1fr 1fr;gap:9px;} .cc-tile .ccv{font-size:22px;} }
 </style>
 </head>
 <body>
@@ -531,7 +560,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -547,6 +576,7 @@ function go(v){
   else if(v==='todos') renderTodos();
   else if(v==='margen') renderMargen();
   else if(v==='saeulen') renderSaeulen();
+  else if(v==='blockaden') renderBlockaden();
 }
 function router(){ go(curView); }
 
@@ -935,7 +965,7 @@ function renderMehr(){
   ];
   $('view').innerHTML='<h2><span class="acc">⋯</span> Module</h2>'+
     '<button class="jbtn" data-go="jarvis" style="margin-bottom:14px">'+
-      '<span class="orb"></span><span><span class="jt">Jarvis fragen</span>'+
+      '<span class="orb"></span><span><span class="jt">Bob fragen</span>'+
       '<span class="jd">Sprach-Assistent · echte Zahlen aus dem Cockpit</span></span>'+
       '<span style="margin-left:auto;color:var(--gold);font-size:20px">🎙️</span></button>'+
     '<div class="list">'+mods.map(function(m){
@@ -960,12 +990,12 @@ function migHint(){ return '<div class="empty">Modul-Tabellen noch nicht migrier
 // dieselbe Datei, die `bobSpeak()` in app.html nutzt). KEINE Browser-Stimme.
 // Schnellbefehle — ziehen echte Cockpit-Daten (Termine/Material: ehrlich „kommt bald").
 var JARVIS_QUICK=[
-  {ic:'💰',q:'Wie sehen meine Finanzen heute aus?'},
+  {ic:'🚧',q:'Wie viele offene Blockaden'},
+  {ic:'💰',q:'Zeig Umsätze diese Woche'},
   {ic:'📊',q:'Wie viele Leads sind reingekommen?'},
   {ic:'🛠️',q:'Wie viele Techniker habe ich, aktiv und gesamt?'},
   {ic:'📋',q:'Wie schaut es mit den Rapporten aus?'},
-  {ic:'📦',q:'Wie schaut es mit dem Material aus?'},
-  {ic:'📅',q:'Was sind meine nächsten Termine?'}
+  {ic:'💎',q:'Wie sehen meine Finanzen heute aus?'}
 ];
 var _jConv=[];                 // {role:'me'|'jv', text}
 var _jBusy=false, _jVoiceOn=true;
@@ -981,12 +1011,13 @@ var _jAudio=null, _jAudioUnlocked=false, _jCurUrl=null;
 var _J_SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
 
 function renderJarvis(){
-  $('view').innerHTML='<h2><span class="acc">🎙️</span> Jarvis</h2>'+backRow()+
+  $('view').innerHTML='<h2><span class="acc">🎙️</span> Bob</h2>'+backRow()+
     '<div class="jwrap">'+
       '<div class="jhero">'+
         '<div class="jorb idle" id="j-orb"></div>'+
-        '<div class="jstate" id="j-state">Bereit. Frag mich etwas über dein Geschäft.</div>'+
+        '<div class="jstate" id="j-state">Bereit. Sag „Hey Bob“ oder tippe aufs Mikrofon.</div>'+
       '</div>'+
+      '<div class="wakebar" id="wake-bar"><div class="wl" id="wake-lbl"></div><button class="wsw" id="wake-sw" title="Hey-Bob Dauer-Zuhoeren"></button></div>'+
       '<div class="jspeak-toggle" id="j-vtoggle"></div>'+
       '<div class="jq-title">Schnellbefehle</div>'+
       '<div class="jchips" id="j-chips">'+JARVIS_QUICK.map(function(o){
@@ -1000,6 +1031,7 @@ function renderJarvis(){
     '</div>';
   wireBack();
   paintJarvisVoiceToggle();
+  var wsw=$('wake-sw'); if(wsw) wsw.onclick=toggleWake; paintWake();
   paintJConv();
   Array.prototype.forEach.call($('j-chips').children,function(c){
     c.onclick=function(){ unlockJAudio(); jarvisAsk(c.getAttribute('data-q')); };
@@ -1025,7 +1057,7 @@ function paintJConv(){
   var c=$('j-conv'); if(!c) return;
   c.innerHTML=_jConv.map(function(m){
     if(m.role==='me') return '<div class="jbub me">'+esc(m.text)+'</div>';
-    return '<div class="jbub jv"><span class="who">Jarvis</span>'+esc(m.text)+'</div>';
+    return '<div class="jbub jv"><span class="who">Bob</span>'+esc(m.text)+'</div>';
   }).join('');
   window.scrollTo(0,document.body.scrollHeight);
 }
@@ -1040,12 +1072,13 @@ function jarvisAsk(frage){
   _jConv.push({role:'me',text:frage});
   _jConv.push({role:'jv',text:'…'});
   paintJConv();
-  jState('Jarvis denkt nach','think');
-  api('jarvis',{frage:frage,verlauf:verlauf}).then(function(d){
+  jState('Bob denkt nach','think');
+  api('voice',{text:frage,verlauf:verlauf}).then(function(d){
     var antwort=(d&&d.antwort)||'Dazu habe ich gerade keine Antwort.';
     _jConv[_jConv.length-1]={role:'jv',text:antwort};
     paintJConv();
-    if(_jVoiceOn){ speakJarvis(antwort); } else { jState('Bereit für die nächste Frage.','idle'); }
+    if(d&&d.view){ _bobViewParams=d.params||null; go(d.view); }
+    if(_jVoiceOn){ speakJarvis(antwort); } else { jState('Bereit für die nächste Frage.','idle'); resumeWake(); }
   }).catch(function(){
     _jConv[_jConv.length-1]={role:'jv',text:'Verbindungsfehler — bitte nochmal versuchen.'};
     paintJConv(); jState('Fehler. Bitte erneut fragen.','idle');
@@ -1158,7 +1191,7 @@ function jSanitizeSpeech(text){
 }
 function speakJarvis(text){
   stopSpeak();
-  jState('Jarvis spricht','speak');
+  jState('Bob spricht','speak');
   var spoken=jSanitizeSpeech(text);   // nur die vorgelesene Version; Chat bleibt unverändert
   // eleven_flash_v2_5 = niedrige Latenz → Stimme startet schneller (gute Qualität bleibt).
   fetch('/api/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:spoken,model_id:'eleven_flash_v2_5'})})
@@ -1173,8 +1206,8 @@ function playJBlob(blob){
   var url=URL.createObjectURL(blob); _jCurUrl=url;
   var a=jGetAudio();
   a.src=url; a.muted=false;
-  a.onended=function(){ stopSpeak(); jState('Bereit für die nächste Frage.','idle'); };
-  a.onerror=function(){ jState('Bereit für die nächste Frage.','idle'); };
+  a.onended=function(){ stopSpeak(); jState('Bereit für die nächste Frage.','idle'); resumeWake(); };
+  a.onerror=function(){ jState('Bereit für die nächste Frage.','idle'); resumeWake(); };
   var p=a.play();
   // Autoplay blockiert → KEINE Browser-Stimme, sondern Tap-Button für dieselbe ElevenLabs-Aufnahme.
   if(p&&p.catch) p.catch(function(){ showJUnlock(); });
@@ -1202,7 +1235,7 @@ function showJUnlock(){
   var b=document.createElement('button');
   b.id='j-unlock'; b.className='jchip'; b.style.cssText='display:block;margin:8px auto;background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;font-weight:800;border:none;';
   b.textContent='🔊 Antippen zum Hören';
-  b.onclick=function(){ _jAudioUnlocked=true; var a=jGetAudio(); var p=a.play(); if(p&&p.then) p.then(function(){ hideJUnlock(); jState('Jarvis spricht','speak'); }).catch(function(){}); };
+  b.onclick=function(){ _jAudioUnlocked=true; var a=jGetAudio(); var p=a.play(); if(p&&p.then) p.then(function(){ hideJUnlock(); jState('Bob spricht','speak'); }).catch(function(){}); };
   bar.appendChild(b);
 }
 function hideJUnlock(){ var b=$('j-unlock'); if(b&&b.parentNode) b.parentNode.removeChild(b); }
@@ -1218,6 +1251,7 @@ function startJarvisMic(){
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ toast('Spracheingabe hier nicht verfügbar'); return; }
   stopSpeak();
+  pauseWake();
   _jBase=''; _jSessionFinal=''; _jWantRec=true; _jRecording=true; _jSRrestarts=0;
   var b=$('j-mic'); if(b){ b.classList.add('rec'); b.textContent='⏹'; b.title='Aufnahme stoppen'; }
   jState('● Ich höre zu… — zum Stoppen tippen','speak');
@@ -1266,7 +1300,7 @@ function jSRfinalize(){
   jSRresetBtn();
   var txt=((_jBase+' '+(_jSessionFinal||_jLastInterim)).trim());
   if(txt){ jState('Verstehe dich','think'); jarvisAsk(txt); }
-  else { jState('Konnte nichts erkennen. Bitte nochmal.','idle'); toast('Nichts erkannt'); }
+  else { jState('Konnte nichts erkennen. Bitte nochmal.','idle'); toast('Nichts erkannt'); resumeWake(); }
 }
 function jSRresetBtn(){ var b=$('j-mic'); if(b){ b.classList.remove('rec'); b.textContent='🎤'; b.title='Sprechen'; } }
 function stopJarvisMic(silent){
@@ -1274,6 +1308,100 @@ function stopJarvisMic(silent){
   _jWantRec=false;
   try{ if(_jSR) _jSR.stop(); }catch(e){}
   if(silent){ _jRecording=false; jSRresetBtn(); }  // von jarvisAsk → nur abbrechen
+}
+
+// ════ „HEY BOB" WAKE-WORD + BLOCKADEN-ANSICHT ════
+// Zwei Wege zu Bob: (a) Dauer-Zuhören mit Wake-Word „Hey Bob" (Toggle im Bob-View),
+// (b) Tap-to-Talk-Mikrofon als zuverlässiger Fallback. Beide landen in jarvisAsk()
+// → /api/cockpit {action:'voice'} → echte Daten + Antwort + Navigation.
+var _bobViewParams=null;
+var _wakeOn=false, _wakeSR=null, _wakePaused=false;
+// Wake-Wort am Satzanfang: „hey bob", „bob", auch häufige Fehl-Erkennungen (bop/bab/pop).
+var _WAKE_RE=/\b(?:hey|hallo|okay|ok|he)?\s*(?:bob|bop|bobby|bab|pop|papp)\b/i;
+function wakeSupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function toggleWake(){
+  unlockJAudio();                       // Audio im Tap-Kontext entsperren (iOS)
+  if(_wakeOn) stopWake(); else startWake();
+}
+function startWake(){
+  if(!wakeSupported()){ toast('Dauer-Zuhören hier nicht unterstützt — nutze das Mikrofon'); return; }
+  if(_jRecording) stopJarvisMic(true);  // Tap-to-Talk und Wake nie gleichzeitig
+  _wakeOn=true; _wakePaused=false; wakeBegin(); paintWake();
+  toast('Bob hört zu — sag „Hey Bob …"');
+}
+function stopWake(){ _wakeOn=false; try{ if(_wakeSR) _wakeSR.stop(); }catch(e){} _wakeSR=null; paintWake(); }
+function pauseWake(){ if(!_wakeOn) return; _wakePaused=true; try{ if(_wakeSR) _wakeSR.stop(); }catch(e){} _wakeSR=null; }
+function resumeWake(){ if(!_wakeOn||!_wakePaused) return; _wakePaused=false; setTimeout(wakeBegin,300); }
+function wakeBegin(){
+  if(!_wakeOn||_wakePaused) return;
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  try{ _wakeSR=new SR(); }catch(e){ _wakeOn=false; paintWake(); return; }
+  _wakeSR.lang='de-CH'; _wakeSR.continuous=true; _wakeSR.interimResults=false;
+  try{ _wakeSR.maxAlternatives=1; }catch(e){}
+  _wakeSR.onresult=function(e){
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      if(!e.results[i].isFinal) continue;
+      var t=(e.results[i][0].transcript||'').trim();
+      if(_WAKE_RE.test(t)){ wakeHeard(t); return; }
+    }
+  };
+  _wakeSR.onerror=function(ev){
+    var err=(ev&&ev.error)||'';
+    if(err==='not-allowed'||err==='service-not-allowed'){ _wakeOn=false; toast('Mikrofon-Zugriff verweigert'); paintWake(); }
+    // no-speech/aborted/network → onend startet neu
+  };
+  _wakeSR.onend=function(){ _wakeSR=null; if(_wakeOn&&!_wakePaused) setTimeout(wakeBegin,300); };
+  try{ _wakeSR.start(); }
+  catch(e){ if(_wakeOn&&!_wakePaused) setTimeout(wakeBegin,400); }
+}
+function wakeHeard(transcript){
+  var m=transcript.match(_WAKE_RE);
+  var cmd=transcript.slice(m.index+m[0].length).replace(/^[\s,.:!?-]+/,'').trim();
+  pauseWake();                          // Selbst-Trigger während Antwort vermeiden
+  if(curView!=='jarvis') go('jarvis');
+  if(!cmd){                             // nur „Hey Bob" → kurz bestätigen, Ohr auf
+    jState('● Ja, ich höre… sag deinen Befehl','speak');
+    if(_jVoiceOn) speakJarvis('Ja, ich höre.'); else resumeWake();
+    return;
+  }
+  jarvisAsk(cmd);
+}
+function paintWake(){
+  var sw=$('wake-sw'); if(sw) sw.className='wsw'+(_wakeOn?' on':'');
+  var bar=$('wake-bar'); if(bar) bar.className='wakebar'+(_wakeOn?' live':'');
+  var lbl=$('wake-lbl'); if(!lbl) return;
+  lbl.innerHTML=_wakeOn
+    ? 'Wake-Word <b>aktiv</b> · sag einfach <b>„Hey Bob …"</b>'
+    : (wakeSupported()
+        ? 'Dauer-Zuhören: Schalter an, dann <b>„Hey Bob …"</b>. Oder tippe aufs 🎤.'
+        : 'Dauer-Zuhören hier nicht möglich — nutze das 🎤 (Tap-to-Talk).');
+}
+
+// ── BLOCKADEN-Ansicht (durch Sprachbefehl gefüllt: _bobViewParams) ──
+function renderBlockaden(){
+  var p=_bobViewParams||{}; var proj=p.projekt; var list=p.blockaden||[];
+  var title=proj?('Blockaden · '+esc(proj.name)):(p.gesamt?'Alle offenen Blockaden':'Blockaden');
+  var head='<h2><span class="acc">🚧</span> '+title+'</h2>'+backRow();
+  if(!list.length){
+    $('view').innerHTML=head+'<div class="empty">Keine offenen Blockaden'+(proj?' bei '+esc(proj.name):'')+'. 👍</div>';
+    wireBack(); return;
+  }
+  var cards=list.map(function(b){
+    var u=String(b.urgency||'MEDIUM').toUpperCase();
+    var st=({offen:'offen',in_bearbeitung:'in Bearbeitung',eskaliert:'eskaliert',freigegeben:'freigegeben'})[b.status]||b.status||'';
+    var meta=[];
+    if(b.projekt_name && !proj) meta.push(esc(b.projekt_name));
+    if(b.blockiert_von_rolle) meta.push(esc(cap(b.blockiert_von_rolle)));
+    if(b.step_ref) meta.push('Step '+esc(b.step_ref));
+    if(st) meta.push(esc(st));
+    if(b.created_at) meta.push(deDate(b.created_at));
+    var metaHtml=meta.map(function(x){return '<span>'+x+'</span>';}).join('<span style="color:var(--muted2)">·</span>');
+    return '<div class="blk '+esc(u)+'"><div class="btop"><div class="bt">'+esc(b.beschreibung||'—')+'</div>'+
+      '<span class="u-badge u-'+esc(u)+'">'+esc(u)+'</span></div><div class="bm">'+metaHtml+'</div></div>';
+  }).join('');
+  $('view').innerHTML=head+'<div class="ptag" style="margin:-4px 0 12px;color:var(--muted)">'+list.length+' offen</div>'+
+    '<div class="list">'+cards+'</div>';
+  wireBack();
 }
 
 // ════ MARKETING ════

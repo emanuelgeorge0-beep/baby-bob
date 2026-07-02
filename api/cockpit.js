@@ -102,6 +102,10 @@ export default async function handler(req, res) {
       case 'saeulen':         return res.status(200).json(await getSaeulen());
       // ── Session 5: Jarvis Sprach-Assistent (Lesezugriff/Auskunft) ──
       case 'jarvis':          return res.status(200).json(await askJarvis(req.body));
+      // ── Cockpit-Voice: „Bob"-Sprachbefehle → Intent + echte Daten + Navigation ──
+      case 'voice':           return res.status(200).json(await handleVoice(req.body));
+      case 'blockaden_liste': return res.status(200).json(await voiceBlockaden(req.body));
+      case 'projekt_add':     return res.status(200).json(await addProjekt(req.body));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -1144,3 +1148,231 @@ function jarvisFallback(f) {
   }
   return parts.join(' ');
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COCKPIT-VOICE — „Bob"-Sprachbefehle
+// ─────────────────────────────────────────────────────────────────────────
+// Deterministischer Intent-Router: erkennt die Kernbefehle lokal (kein Claude-
+// Round-Trip → Antwort < 3 s), zieht ECHTE Supabase-Daten und liefert dem
+// Frontend zusätzlich `view`/`params` (welche Ansicht öffnen). Nur unbekannte,
+// offene Fragen fallen an askJarvis (Claude) zurück.
+// Rückgabe: { intent, antwort, view, params, data }
+//   antwort  → wird angezeigt UND (via jSanitizeSpeech) vorgelesen
+//   view     → Ansicht, die das Cockpit öffnet ('blockaden'|'dashboard'|null)
+//   params   → an die Ansicht durchgereichte Daten
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Wake-Word / Anrede „Bob" (auch „Bop", „Bobby") + optionales „hey" entfernen.
+function stripWake(text) {
+  return String(text || '')
+    .replace(/^\s*(hey|hallo|okay|ok|he)\s+/i, '')
+    .replace(/^\s*(bob|bop|bobby|bab|papp)\b[\s,.:!?-]*/i, '')
+    .trim();
+}
+
+// Projektname aus einem Befehl herausschälen ("... von Geiger" → "geiger").
+function extractProjektName(t) {
+  const m = t.match(/(?:von|f[üu]r|bei|projekt|objekt|baustelle|zum projekt)\s+(?:dem |der |das |die |den )?(.+?)[\s]*[.?!]?$/i);
+  let name = m ? m[1] : '';
+  name = name.replace(/\b(projekt|objekt|baustelle|an|anzeigen|zeigen|zeig)\b/gi, '').trim();
+  return name;
+}
+
+// Normalisierung für Fuzzy-Match (klein, ohne Umlaute/Sonderzeichen).
+function norm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// Bestes Projekt zu einem gesprochenen Namen finden (Projektname, Nummer,
+// Standort ODER Kundenfirma). Liefert das Projekt-Objekt + zugehörige Firma.
+async function findProjekt(spoken) {
+  const target = norm(spoken);
+  if (!target) return null;
+  const [projekte, kunden] = await Promise.all([
+    sbGet('gs_projekte?select=id,name,projektnummer,standort,status,kunde_id&order=created_at.desc').catch(() => []),
+    sbGet('gs_kunden?select=id,firma,kontaktperson,ort').catch(() => []),
+  ]);
+  const kById = {};
+  for (const k of kunden) kById[k.id] = k;
+  let best = null, bestScore = 0;
+  for (const p of projekte) {
+    const k = p.kunde_id ? kById[p.kunde_id] : null;
+    const hay = [p.name, p.projektnummer, p.standort, k && k.firma, k && k.kontaktperson]
+      .map(norm).filter(Boolean);
+    let score = 0;
+    for (const h of hay) {
+      if (!h) continue;
+      if (h === target) score = Math.max(score, 100);
+      else if (h.includes(target) || target.includes(h)) score = Math.max(score, 70);
+      // Wort-für-Wort (z. B. gesprochenes "geiger ag" vs. "geiger")
+      else if (target.length >= 3 && h.startsWith(target)) score = Math.max(score, 60);
+    }
+    if (score > bestScore) { bestScore = score; best = { projekt: p, firma: k }; }
+  }
+  return bestScore >= 60 ? best : null;
+}
+
+const BLK_STATUS_LABEL = { offen: 'offen', in_bearbeitung: 'in Bearbeitung', eskaliert: 'eskaliert', freigegeben: 'freigegeben' };
+const BLK_OFFEN = ['offen', 'in_bearbeitung', 'eskaliert'];
+
+// Offene Blockaden eines Projekts laden (projekt_id ODER denormalisierter Name).
+async function fetchBlockaden(projekt) {
+  const p = projekt && projekt.projekt;
+  let rows = [];
+  try {
+    if (p && p.id) {
+      rows = await sbGet(`gs_blockaden?projekt_id=eq.${p.id}&select=id,beschreibung,status,urgency,blockiert_von_rolle,step_ref,haus,einheit,zone,created_at&order=created_at.desc`);
+    }
+    if ((!rows || !rows.length) && p && p.name) {
+      rows = await sbGet(`gs_blockaden?projekt_name=eq.${encodeURIComponent(p.name)}&select=id,beschreibung,status,urgency,blockiert_von_rolle,step_ref,haus,einheit,zone,created_at&order=created_at.desc`);
+    }
+  } catch (e) {
+    if (/PGRST205|not find the table/i.test(e.message)) return { notMigrated: true, rows: [] };
+    throw e;
+  }
+  return { rows: rows || [] };
+}
+
+// Handler für die Blockaden-Ansicht (auch direkt vom Frontend nutzbar).
+async function voiceBlockaden(body) {
+  const spoken = String((body && body.projektName) || '').trim();
+  const found = await findProjekt(spoken);
+  if (!found) return { gefunden: false, projektName: spoken, blockaden: [] };
+  const res = await fetchBlockaden(found);
+  const offen = (res.rows || []).filter((b) => BLK_OFFEN.includes(b.status));
+  return {
+    gefunden: true,
+    notMigrated: !!res.notMigrated,
+    projekt: { id: found.projekt.id, name: found.projekt.name, nummer: found.projekt.projektnummer, standort: found.projekt.standort },
+    blockaden: offen,
+    alle: res.rows || [],
+  };
+}
+
+// Neues Projekt anlegen (Sprachbefehl „leg Projekt an …").
+async function addProjekt(body) {
+  const name = String((body && body.name) || '').trim().slice(0, 120);
+  if (!name) throw new Error('name nötig');
+  const row = { name, status: 'aktiv' };
+  const created = await sbWrite('POST', 'gs_projekte', row);
+  const p = Array.isArray(created) ? created[0] : created;
+  return { ok: true, projekt: p || row };
+}
+
+// Wochen-Umsatzfenster: gs_umsatz_monat ist monatlich → "diese Woche" gibt es
+// nicht separat; wir liefern ehrlich die Monats-/Jahreszahlen aus dem Controlling.
+async function handleVoice(body) {
+  const raw = String((body && body.text) || '').trim().slice(0, 300);
+  if (!raw) throw new Error('text nötig');
+  const cmd = stripWake(raw);
+  const low = cmd.toLowerCase();
+
+  // Nur das Wake-Word ("Hey Bob") ohne Befehl → kurz bestätigen und weiter zuhören.
+  if (!cmd) return { intent: 'wake', antwort: 'Ja, ich höre.', view: null, listen: true };
+
+  // ── Intent 4: Projekt anlegen ──
+  if (/(leg|lege|erstell|erstelle|f[üu]ge|mach|neues?)\b.*\bprojekt\b|\bprojekt\b.*\b(anlegen|erstellen|hinzuf[üu]gen|an)\b/i.test(low)) {
+    const m = cmd.match(/projekt\s+(?:an(?:legen)?|namens|mit dem namen)?\s*[:"]?\s*(.+?)["\s]*$/i)
+      || cmd.match(/(?:leg|lege|erstell|erstelle)\s+(.+?)\s+(?:als projekt|an)\b/i);
+    let name = m ? m[1] : '';
+    name = name.replace(/\b(an|anlegen|erstellen|bitte|neu(es)?|projekt)\b/gi, '').replace(/["“”]/g, '').trim();
+    if (!name || name.length < 2) {
+      return { intent: 'projekt_add', antwort: 'Wie soll das Projekt heissen? Sag zum Beispiel: Bob, leg Projekt an Musterstrasse zwölf.', view: null };
+    }
+    try {
+      const r = await addProjekt({ name });
+      return {
+        intent: 'projekt_add',
+        antwort: `Erledigt. Ich habe das Projekt ${name} angelegt.`,
+        view: 'dashboard', params: { refresh: true, neuesProjekt: r.projekt },
+      };
+    } catch (e) {
+      if (/PGRST205|not find the table/i.test(e.message)) {
+        return { intent: 'projekt_add', antwort: 'Die Projekt-Tabelle ist noch nicht eingerichtet. Ich konnte das Projekt nicht anlegen.', view: null };
+      }
+      return { intent: 'projekt_add', antwort: `Das Projekt ${name} konnte ich gerade nicht anlegen. Bitte versuch es gleich nochmal.`, view: null };
+    }
+  }
+
+  // ── Intent 2: Anzahl offener Blockaden (mit/ohne Projekt) ──
+  if (/\bblockaden?\b/.test(low) && /(wie viele|wieviele|anzahl|zahl der|wie viel)/.test(low)) {
+    // Optional projektbezogen
+    const pn = extractProjektName(cmd);
+    if (pn) {
+      const b = await voiceBlockaden({ projektName: pn });
+      if (!b.gefunden) return { intent: 'blockaden_count', antwort: `Ein Projekt namens ${pn} habe ich nicht gefunden.`, view: null };
+      const n = b.blockaden.length;
+      return {
+        intent: 'blockaden_count',
+        antwort: n === 0 ? `Beim Projekt ${b.projekt.name} sind aktuell keine Blockaden offen.` : `Beim Projekt ${b.projekt.name} ${n === 1 ? 'ist eine Blockade' : 'sind ' + n + ' Blockaden'} offen.`,
+        view: 'blockaden', params: b,
+      };
+    }
+    let n = 0, notMig = false;
+    try {
+      const rows = await sbGet(`gs_blockaden?status=in.(${BLK_OFFEN.join(',')})&select=id`);
+      n = (rows || []).length;
+    } catch (e) { if (/PGRST205|not find the table/i.test(e.message)) notMig = true; }
+    if (notMig) return { intent: 'blockaden_count', antwort: 'Das Blockaden-Modul ist noch nicht eingerichtet.', view: null };
+    return {
+      intent: 'blockaden_count',
+      antwort: n === 0 ? 'Aktuell sind keine Blockaden offen. Alles läuft.' : `Aktuell ${n === 1 ? 'ist eine Blockade' : 'sind ' + n + ' Blockaden'} offen.`,
+      view: null,
+    };
+  }
+
+  // ── Intent 1: Blockaden eines Projekts zeigen ──
+  if (/\bblockaden?\b/.test(low)) {
+    const pn = extractProjektName(cmd);
+    if (!pn) {
+      // Ohne Projekt → Gesamtliste öffnen
+      let rows = [], notMig = false;
+      try { rows = await sbGet(`gs_blockaden?status=in.(${BLK_OFFEN.join(',')})&select=id,beschreibung,status,urgency,blockiert_von_rolle,projekt_name,created_at&order=created_at.desc&limit=50`); }
+      catch (e) { if (/PGRST205|not find the table/i.test(e.message)) notMig = true; }
+      if (notMig) return { intent: 'blockaden', antwort: 'Das Blockaden-Modul ist noch nicht eingerichtet.', view: null };
+      return {
+        intent: 'blockaden',
+        antwort: rows.length ? `Ich zeige dir alle ${rows.length} offenen Blockaden.` : 'Es sind keine Blockaden offen.',
+        view: 'blockaden',
+        params: { gefunden: true, projekt: null, blockaden: rows, alle: rows, gesamt: true },
+      };
+    }
+    const b = await voiceBlockaden({ projektName: pn });
+    if (!b.gefunden) return { intent: 'blockaden', antwort: `Ein Projekt namens ${pn} habe ich nicht gefunden. Sag den Namen bitte nochmal.`, view: null };
+    if (b.notMigrated) return { intent: 'blockaden', antwort: 'Das Blockaden-Modul ist noch nicht eingerichtet.', view: null };
+    const n = b.blockaden.length;
+    let antwort;
+    if (n === 0) antwort = `Beim Projekt ${b.projekt.name} sind keine Blockaden offen.`;
+    else {
+      const top = b.blockaden[0];
+      antwort = `Beim Projekt ${b.projekt.name} ${n === 1 ? 'ist eine Blockade' : 'sind ' + n + ' Blockaden'} offen. Die neueste: ${String(top.beschreibung || '').slice(0, 120)}.`;
+    }
+    return { intent: 'blockaden', antwort, view: 'blockaden', params: b };
+  }
+
+  // ── Intent 3: Umsätze / Controlling ──
+  if (/(umsatz|ums[äa]tze|umsatzzahlen|einnahmen|controlling|verdient|reingekommen)/.test(low)) {
+    const ums = await getUmsatzStats();
+    if (!ums.present) {
+      return { intent: 'umsatz', antwort: 'Es sind noch keine Umsatzdaten hinterlegt.', view: 'dashboard', params: { focus: 'umsatz' } };
+    }
+    const jahr = new Date().getFullYear();
+    const monatName = MONATE_KURZ[new Date().getMonth()] + ' ' + jahr;
+    const aktuell = ums.monate.find((m) => m.label === monatName);
+    const wocheGefragt = /woche|diese woche|wöchentl/.test(low);
+    const parts = [];
+    if (aktuell) parts.push(`Im ${monatName} ${aktuell.umsatz.toLocaleString('de-CH')} Franken`);
+    parts.push(`dieses Jahr insgesamt ${ums.jahrUmsatz.toLocaleString('de-CH')} Franken`);
+    if (ums.bester) parts.push(`bester Monat ${ums.bester.label} mit ${ums.bester.umsatz.toLocaleString('de-CH')} Franken`);
+    let antwort = parts.join(', ') + '.';
+    if (wocheGefragt) antwort = 'Den Umsatz führe ich monatlich, nicht wöchentlich. ' + antwort;
+    return { intent: 'umsatz', antwort, view: 'dashboard', params: { focus: 'umsatz', umsatz: ums } };
+  }
+
+  // ── Fallback: offene Frage → Jarvis (Claude) ──
+  const j = await askJarvis({ frage: cmd, verlauf: (body && body.verlauf) || [] });
+  return { intent: 'frage', antwort: j.antwort, view: null, fallback: !!j.fallback };
+}
+
