@@ -369,6 +369,15 @@
   .u-LOW{background:rgba(90,167,255,.14);color:var(--info);}
   @media (min-width:720px){ .grid,.cc-grid{grid-template-columns:repeat(3,1fr);} .jchips{grid-template-columns:1fr 1fr 1fr;} }
   @media (max-width:360px){ .cc-grid,.grid{grid-template-columns:1fr 1fr;gap:9px;} .cc-tile .ccv{font-size:22px;} }
+  /* Dezente Hover-Effekte NUR für Zeigegeräte (Desktop/Video) — Touch bleibt unberührt. */
+  @media (hover:hover){
+    .lcard,.cc-tile,.chip,.btn,.btn-sm{transition:border-color .15s ease,transform .15s ease,filter .15s ease,box-shadow .15s ease;}
+    .lcard:hover{border-color:var(--gold-line);}
+    .cc-tile.tap:hover{border-color:var(--gold-line);transform:translateY(-1px);box-shadow:0 6px 20px -12px rgba(201,169,97,.6);}
+    .chip:hover{border-color:var(--gold-line);color:var(--gold);cursor:pointer;}
+    .btn:hover,.btn-sm:hover{filter:brightness(1.06);}
+    .cc-hero{transition:transform .2s ease;} .cc-hero:hover{transform:translateY(-1px);}
+  }
 </style>
 </head>
 <body>
@@ -1440,7 +1449,50 @@ function openMaterialAdd(){
   };
 }
 
-function renderLizenz(){ $('view').innerHTML='<h2><span class="acc">🔑</span> Lizenzen</h2>'+backRow()+'<div class="empty">Kommt in Kürze.</div>'; wireBack(); }
+// ════ LIZENZEN — pro Kunde buchbare Bausteine (Demo fürs Verkaufsgespräch) ════
+// "Sie buchen nur, was Sie brauchen." Auswahl wird pro Kunde lokal gespeichert
+// (localStorage) — bewusst schlank, kein Backend nötig für die Verkaufs-Demo.
+var LIZENZ_BAUSTEINE=[
+  {k:'projektmanagement',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Einsätze zentral führen'},
+  {k:'disposition',ic:'🧭',t:'Techniker-Disposition',d:'Techniker Projekten zuweisen, Einsätze planen'},
+  {k:'blockaden',ic:'🚧',t:'Blockaden-Management',d:'Baustellen-Blockaden erfassen, eskalieren, freigeben'},
+  {k:'material',ic:'📦',t:'Materialverwaltung',d:'Materiallisten pro Projekt, HKLS-Vorlagen'},
+  {k:'reporting',ic:'📄',t:'Reporting & Berichte',d:'Mängel- und Blockadenberichte als PDF'},
+  {k:'controlling',ic:'💎',t:'Controlling',d:'Umsätze, Margen, Pipeline im Überblick'},
+  {k:'bob',ic:'🎙️',t:'Sprachassistent „Bob"',d:'Freihändige Auskunft & Steuerung per Sprache'}
+];
+var _lizKunden=[], _lizKundeId='';
+function lizKey(id){ return 'gs_lizenz_'+id; }
+function lizGet(id){ try{ return JSON.parse(localStorage.getItem(lizKey(id))||'{}')||{}; }catch(e){ return {}; } }
+function lizSet(id,map){ try{ localStorage.setItem(lizKey(id),JSON.stringify(map)); }catch(e){} }
+function renderLizenz(){
+  $('view').innerHTML='<h2><span class="acc">🔑</span> Lizenzen & Bausteine</h2>'+backRow()+
+    '<div class="empty" id="liz-body" style="border:none;background:none;padding:0">Lädt…</div>';
+  wireBack();
+  api('pm_kunden').then(function(d){ _lizKunden=d.kunden||[]; if(!_lizKundeId&&_lizKunden.length) _lizKundeId=_lizKunden[0].id; paintLizenz(); })
+    .catch(function(){ var b=$('liz-body'); if(b) b.innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+function paintLizenz(){
+  var body=$('liz-body'); if(!body) return;
+  if(!_lizKunden.length){ body.innerHTML='<div class="empty">Noch keine Kunden. Lege im Projektmanagement einen Kunden an.</div>'; return; }
+  var opts=_lizKunden.map(function(k){ return {v:k.id,t:(k.firma||k.kontaktperson||'Kunde')}; });
+  var map=lizGet(_lizKundeId);
+  var gebucht=LIZENZ_BAUSTEINE.filter(function(b){ return map[b.k]; }).length;
+  body.innerHTML=
+    '<div class="sec-t" style="margin-top:0">Kunde</div>'+pmSelect('liz-kunde',opts,_lizKundeId)+
+    '<div class="meta" style="margin:12px 0"><span style="color:var(--muted)">Gebuchte Bausteine:</span> '+pmPill(gebucht+' von '+LIZENZ_BAUSTEINE.length,'var(--gold)')+'</div>'+
+    '<div class="list">'+LIZENZ_BAUSTEINE.map(function(b){
+      var on=!!map[b.k];
+      return '<div class="lcard" style="opacity:'+(on?'1':'.6')+'"><div class="top">'+
+        '<div class="nm">'+b.ic+' '+esc(b.t)+'</div>'+
+        '<button class="chip'+(on?' on':'')+'" data-liz="'+b.k+'" style="font-size:12px">'+(on?'✓ gebucht':'buchen')+'</button></div>'+
+        '<div class="meta"><span>'+esc(b.d)+'</span></div></div>';
+    }).join('')+'</div>';
+  $('liz-kunde').onchange=function(){ _lizKundeId=$('liz-kunde').value; paintLizenz(); };
+  Array.prototype.forEach.call(body.querySelectorAll('[data-liz]'),function(btn){
+    btn.onclick=function(){ var m=lizGet(_lizKundeId); var key=btn.getAttribute('data-liz'); m[key]=!m[key]; lizSet(_lizKundeId,m); paintLizenz(); };
+  });
+}
 
 // ════ JARVIS — Sprach-Assistent (Session 5, Teil A) ════
 // Frage (Text ODER Sprache) → /api/cockpit jarvis (echte Zahlen + Claude) →
