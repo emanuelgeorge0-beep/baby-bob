@@ -560,7 +560,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -577,6 +577,9 @@ function go(v){
   else if(v==='margen') renderMargen();
   else if(v==='saeulen') renderSaeulen();
   else if(v==='blockaden') renderBlockaden();
+  else if(v==='users') renderUsers();
+  else if(v==='projekte') renderProjekte();
+  else if(v==='lizenz') renderLizenz();
 }
 function router(){ go(curView); }
 
@@ -958,6 +961,9 @@ var KANAELE=['meta','google','app','linkedin','netzwerk','direkt'];
 var KANAL_LABEL={meta:'Meta',google:'Google',app:'App / BOB',linkedin:'LinkedIn',netzwerk:'Netzwerk',direkt:'Direkt',sonstige:'Sonstige'};
 function renderMehr(){
   var mods=[
+    {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
+    {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
+    {v:'lizenz',ic:'🔑',t:'Lizenzen',d:'Pro Kunde Bausteine an/aus – „Sie buchen nur, was Sie brauchen"'},
     {v:'marketing',ic:'📣',t:'Marketing',d:'Kanäle, Kosten/Lead, Conversion, Content-Plan'},
     {v:'todos',ic:'✅',t:'To-Dos',d:'Interne Aufgaben (Team, Fälligkeit, Priorität)'},
     {v:'margen',ic:'💰',t:'Verkauf & Margen',d:'Einkauf vs. Verkauf → Marge pro Projekt'},
@@ -982,6 +988,136 @@ function renderMehr(){
 function backRow(){ return '<div style="margin-bottom:14px"><span class="chip" id="back-mehr">‹ Module</span></div>'; }
 function wireBack(){ var b=$('back-mehr'); if(b) b.onclick=function(){ go('mehr'); }; }
 function migHint(){ return '<div class="empty">Modul-Tabellen noch nicht migriert.<br><span style="font-size:12px;color:var(--muted2)">scripts/master_cockpit_session2.sql im Supabase SQL Editor ausführen.</span></div>'; }
+// Flexible Zurück-Zeile → zu einer bestimmten Ansicht (kein Sackgassen-Risiko).
+function backTo(view,label){ return '<div style="margin-bottom:14px"><span class="chip" data-backto="'+view+'">‹ '+esc(label||'Zurück')+'</span></div>'; }
+function wireBackTo(){ Array.prototype.forEach.call($('view').querySelectorAll('[data-backto]'),function(b){ b.onclick=function(){ go(b.getAttribute('data-backto')); }; }); }
+
+// ════ USERVERWALTUNG — Partner & Techniker (api/admin, Master-Token) ════
+// Ein Login: derselbe Cockpit-Token (gs_admin) steuert /api/admin. Kein separater Admin-Bereich.
+var _cockUsers=[];
+function adminApi(body){
+  return fetch('/api/admin',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+    body:JSON.stringify(body||{})}).then(function(r){ return r.json().catch(function(){return {};}); });
+}
+function renderUsers(){
+  $('view').innerHTML='<h2><span class="acc">👥</span> Userverwaltung</h2>'+backRow()+
+    '<button class="btn btn-gold" id="u-new" style="margin-bottom:14px">＋ Neuen Benutzer anlegen</button>'+
+    '<div class="usub" id="u-count" style="color:var(--muted);font-size:13px;margin-bottom:10px">Lädt…</div>'+
+    '<div class="list" id="u-list">'+skeletonCards(3)+'</div>';
+  wireBack();
+  $('u-new').onclick=openCreateUser;
+  loadCockpitUsers();
+}
+function loadCockpitUsers(){
+  adminApi({action:'list_users'}).then(function(d){
+    if(d.error){ $('u-list').innerHTML='<div class="empty">'+esc(d.error)+'</div>'; $('u-count').textContent=''; return; }
+    _cockUsers=d.users||[]; paintCockpitUsers();
+  }).catch(function(){ $('u-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+function paintCockpitUsers(){
+  var roleLbl={gs_partner:'🏢 Partner',techniker:'🔧 Techniker',gs_admin:'👑 Admin',bob_user:'BOB'};
+  var statusLbl={active:'Aktiv',must_change_password:'PW ändern',deactivated:'Deaktiviert'};
+  var cnt=$('u-count'); if(cnt) cnt.textContent=_cockUsers.length+' Benutzer';
+  var list=$('u-list'); if(!list) return;
+  if(!_cockUsers.length){ list.innerHTML='<div class="empty">Noch keine Benutzer angelegt.</div>'; return; }
+  list.innerHTML=_cockUsers.map(function(u){
+    var acts='';
+    if(u.role!=='gs_admin'){
+      acts='<div class="meta" style="margin-top:10px;gap:8px">'+
+        '<button class="chip" data-pw="'+esc(u.id)+'" data-mail="'+esc(u.email)+'">🔑 Passwort neu</button>'+
+        (u.active
+          ? '<button class="chip" data-act="'+esc(u.id)+'" data-on="0">Deaktivieren</button>'
+          : '<button class="chip on" data-act="'+esc(u.id)+'" data-on="1">Aktivieren</button>')+
+        '</div>';
+    }
+    return '<div class="lcard">'+
+      '<div class="top"><div class="nm">'+esc(u.name||u.email)+'</div>'+
+        '<span class="src-tag" style="border-color:var(--gold-line);color:var(--gold)">'+(roleLbl[u.role]||esc(u.role))+'</span></div>'+
+      '<div class="meta"><span>'+esc(u.email)+'</span>'+(u.firma?'<span class="dot">'+esc(u.firma)+'</span>':'')+
+        '<span class="dot" style="color:var(--muted2)">'+(statusLbl[u.status]||esc(u.status||''))+'</span></div>'+
+      acts+'</div>';
+  }).join('');
+  Array.prototype.forEach.call(list.querySelectorAll('[data-pw]'),function(b){
+    b.onclick=function(){ resetCockpitPw(b.getAttribute('data-pw'),b.getAttribute('data-mail')); };
+  });
+  Array.prototype.forEach.call(list.querySelectorAll('[data-act]'),function(b){
+    b.onclick=function(){ setCockpitActive(b.getAttribute('data-act'),b.getAttribute('data-on')==='1'); };
+  });
+}
+var _cuRole=null;
+function openCreateUser(){
+  _cuRole=null;
+  openSheet('<h3>Neuen Benutzer anlegen</h3>'+
+    '<div class="sec-t">Rolle</div>'+
+    '<div class="stufe-pick" id="cu-role">'+
+      '<span class="chip" data-role="gs_partner">🏢 Partner</span>'+
+      '<span class="chip" data-role="techniker">🔧 Techniker</span></div>'+
+    '<div class="sec-t">Daten</div>'+
+    '<input class="field" id="cu-name" placeholder="Name *"/>'+
+    '<input class="field" id="cu-email" placeholder="E-Mail *" style="margin-top:8px" type="email"/>'+
+    '<input class="field" id="cu-firma" placeholder="Firma (optional)" style="margin-top:8px"/>'+
+    '<div class="login-msg" id="cu-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="cu-btn" style="margin-top:12px">Account erstellen</button>'+
+    '<button class="btn ghost" id="cu-cancel">Abbrechen</button>');
+  Array.prototype.forEach.call(sheetBody.querySelectorAll('#cu-role .chip'),function(c){
+    c.onclick=function(){ _cuRole=c.getAttribute('data-role');
+      Array.prototype.forEach.call(sheetBody.querySelectorAll('#cu-role .chip'),function(x){x.classList.remove('on');});
+      c.classList.add('on'); };
+  });
+  $('cu-cancel').onclick=closeSheet;
+  $('cu-btn').onclick=submitCockpitUser;
+}
+function cuMsg(t,cls){ var m=$('cu-msg'); if(m){ m.textContent=t; m.className='login-msg '+(cls||''); } }
+function submitCockpitUser(){
+  var name=($('cu-name')||{}).value, email=($('cu-email')||{}).value, firma=($('cu-firma')||{}).value;
+  name=(name||'').trim(); email=(email||'').trim(); firma=(firma||'').trim();
+  if(!name){ cuMsg('Name erforderlich','err'); return; }
+  if(!email){ cuMsg('E-Mail erforderlich','err'); return; }
+  if(!_cuRole){ cuMsg('Bitte Rolle wählen','err'); return; }
+  var btn=$('cu-btn'); if(btn){ btn.disabled=true; btn.textContent='Erstellt…'; }
+  adminApi({action:'create_user',name:name,email:email,firma:firma,role:_cuRole}).then(function(d){
+    if(btn){ btn.disabled=false; btn.textContent='Account erstellen'; }
+    if(d.error){ cuMsg(d.error,'err'); return; }
+    closeSheet();
+    showCockpitTempPw(email,d.temp_password);
+    loadCockpitUsers();
+  }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Account erstellen'; } cuMsg('Verbindungsfehler','err'); });
+}
+function resetCockpitPw(id,email){
+  openSheet('<h3>Passwort zurücksetzen?</h3><div class="h-sub">'+esc(email)+'</div>'+
+    '<button class="btn btn-gold" id="rp-ok" style="margin-top:14px">Neues temporäres Passwort erzeugen</button>'+
+    '<button class="btn ghost" id="rp-no">Abbrechen</button>');
+  $('rp-no').onclick=closeSheet;
+  $('rp-ok').onclick=function(){
+    var b=$('rp-ok'); if(b){ b.disabled=true; b.textContent='…'; }
+    adminApi({action:'reset_password',user_id:id}).then(function(d){
+      if(d.error){ toast(d.error); closeSheet(); return; }
+      closeSheet(); showCockpitTempPw(email,d.temp_password); loadCockpitUsers();
+    }).catch(function(){ toast('Verbindungsfehler'); closeSheet(); });
+  };
+}
+function setCockpitActive(id,active){
+  adminApi({action:'set_active',user_id:id,active:active}).then(function(d){
+    if(d.error){ toast(d.error); return; }
+    toast(active?'Aktiviert':'Deaktiviert'); loadCockpitUsers();
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
+function showCockpitTempPw(email,pw){
+  openSheet('<h3>✓ Account bereit</h3>'+
+    '<div class="h-sub">'+esc(email)+'</div>'+
+    '<div class="sec-t">Temporäres Passwort (einmalig sichtbar)</div>'+
+    '<div class="field mono" style="font-size:18px;letter-spacing:1px;user-select:all;text-align:center">'+esc(pw||'––––––––')+'</div>'+
+    '<div style="color:var(--muted);font-size:12px;margin-top:8px">Bitte dem Benutzer sicher mitteilen. Er wird beim ersten Login zum Ändern aufgefordert.</div>'+
+    '<button class="btn btn-gold" id="tp-copy" style="margin-top:12px">Passwort kopieren</button>'+
+    '<button class="btn ghost" id="tp-close">Schliessen</button>');
+  $('tp-close').onclick=closeSheet;
+  $('tp-copy').onclick=function(){ try{ navigator.clipboard.writeText(pw||''); toast('Kopiert'); }catch(e){ toast('Bitte manuell markieren'); } };
+}
+
+// Platzhalter — werden in den nächsten Abschnitten vollständig ersetzt.
+function renderProjekte(){ $('view').innerHTML='<h2><span class="acc">🏗️</span> Projektmanagement</h2>'+backRow()+'<div class="empty">Wird geladen…</div>'; wireBack(); }
+function renderLizenz(){ $('view').innerHTML='<h2><span class="acc">🔑</span> Lizenzen</h2>'+backRow()+'<div class="empty">Kommt in Kürze.</div>'; wireBack(); }
 
 // ════ JARVIS — Sprach-Assistent (Session 5, Teil A) ════
 // Frage (Text ODER Sprache) → /api/cockpit jarvis (echte Zahlen + Claude) →
