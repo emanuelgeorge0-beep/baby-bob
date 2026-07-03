@@ -378,6 +378,54 @@
     .btn:hover,.btn-sm:hover{filter:brightness(1.06);}
     .cc-hero{transition:transform .2s ease;} .cc-hero:hover{transform:translateY(-1px);}
   }
+
+  /* ═══ WETTER-ZEILE (Command Center) — schwarz-gold, mobil-optimiert ═══ */
+  .cc-weather{background:var(--card);border:1px solid var(--gold-line);border-radius:14px;
+    padding:11px 14px 12px;margin-bottom:14px;}
+  .cc-weather .wx-h{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold);
+    font-weight:700;margin-bottom:9px;}
+  .cc-weather .wx-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .wx-city{display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--bg2);
+    border:1px solid var(--line);border-radius:11px;padding:9px 11px;min-width:0;}
+  .wx-city .wx-ic{font-size:18px;line-height:1;}
+  .wx-city .wx-name{font-size:11px;color:var(--muted);font-weight:600;max-width:100%;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .wx-city .wx-temp{font-size:19px;font-weight:800;color:var(--info);}
+  .wx-city .wx-txt{font-size:10.5px;color:var(--muted2);max-width:100%;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  @media (max-width:360px){ .cc-weather .wx-row{gap:6px;} .wx-city{padding:8px;} .wx-city .wx-temp{font-size:17px;} }
+
+  /* ═══ VEREDELUNG — NUR visuelle Effekte, Struktur/Layout/Texte unverändert ═══ */
+  @keyframes ccFadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes wxpulse{0%,100%{opacity:.35;transform:scale(.82)}50%{opacity:1;transform:scale(1)}}
+  @keyframes wakehit{0%{box-shadow:0 0 0 0 rgba(201,169,97,.55)}100%{box-shadow:0 0 0 14px rgba(201,169,97,0)}}
+  @media (prefers-reduced-motion:no-preference){ #view>*{animation:ccFadeUp .3s ease both;} }
+  /* Subtiles Command-Center-Raster hinter dem Inhalt (leuchtet oben sanft aus) */
+  body::after{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background-image:linear-gradient(rgba(201,169,97,.045) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(201,169,97,.045) 1px,transparent 1px);
+    background-size:46px 46px;
+    -webkit-mask-image:radial-gradient(130% 85% at 50% -6%,#000,transparent 72%);
+    mask-image:radial-gradient(130% 85% at 50% -6%,#000,transparent 72%);}
+  /* Dezente Gold-Glows auf Schlüssel-Elementen */
+  .btn{box-shadow:0 10px 24px -14px rgba(201,169,97,.8);}
+  .cc-cta{box-shadow:0 0 22px -9px rgba(201,169,97,.6);}
+  .cc-orb{filter:drop-shadow(0 0 18px rgba(201,169,97,.28));}
+  .nav button.on{text-shadow:0 0 12px rgba(201,169,97,.45);}
+  /* Wake-Word-Signale: „hört zu"-Puls (grün), Erkannt-Blitz (gold), Antwort-Pause (blau) */
+  .wdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);
+    box-shadow:0 0 9px var(--ok);margin-right:7px;vertical-align:middle;animation:wxpulse 1.3s ease-in-out infinite;}
+  .wakebar.paused{border-color:var(--info);box-shadow:0 0 0 1px rgba(90,167,255,.25);}
+  .wakebar.paused .wl b{color:var(--info);}
+  .wakebar.hit{border-color:var(--gold)!important;animation:wakehit .9s ease-out;}
+  /* Hover-Feinschliff (nur Zeigegeräte/Desktop — Touch bleibt unberührt) */
+  @media (hover:hover){
+    .jchip{transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;}
+    .jchip:hover{border-color:var(--gold-line);transform:translateY(-1px);box-shadow:0 6px 18px -12px rgba(201,169,97,.6);}
+    .wx-city{transition:border-color .15s ease,transform .15s ease;}
+    .wx-city:hover{border-color:var(--gold-line);transform:translateY(-1px);}
+    .btn:hover{box-shadow:0 12px 26px -12px rgba(201,169,97,.95);}
+  }
 </style>
 </head>
 <body>
@@ -666,6 +714,8 @@ function paintDashboard(d){
       '<div class="cc-cta">🎙️ Antippen &amp; sprechen</div>'+
     '</div>'+
 
+    '<div class="cc-weather" id="cc-weather" hidden></div>'+
+
     '<div class="cc-grid">'+
       ccTile('📊','Leads gesamt', d.leadsGesamt, d.leadsOffen+' offen', 'gold', 'leads')+
       ccTile('⏰','Follow-ups', fuTotal, (fuToday+' heute · '+fuOver+' überfällig'), (fuOver?'bad':(fuToday?'gold':'ok')), 'crm')+
@@ -699,6 +749,31 @@ function paintDashboard(d){
   var tt=$('view').querySelector('[data-tap="todos"]'); if(tt) tt.onclick=function(){ go('todos'); };
   var tm=$('view').querySelector('[data-tap="margen"]'); if(tm) tm.onclick=function(){ go('margen'); };
   startCcClock();
+  loadWeather();
+}
+// ── Wetter (Zürich, Wien, Barcelona) — dezente Zeile im Command Center ──
+// Quelle: /api/weather (open-meteo, kein Key). 15-Min-Cache im Browser; Fehler
+// sind unkritisch (die Zeile bleibt dann einfach ausgeblendet).
+var _wxCache=null, _wxAt=0;
+function loadWeather(){
+  var el=$('cc-weather'); if(!el) return;
+  if(_wxCache && Date.now()-_wxAt<900000){ paintWeather(_wxCache); return; }
+  fetch('/api/weather').then(function(r){ return r.json(); })
+    .then(function(d){ _wxCache=d; _wxAt=Date.now(); paintWeather(d); })
+    .catch(function(){ /* still: Zeile bleibt verborgen */ });
+}
+function paintWeather(d){
+  var el=$('cc-weather'); if(!el) return;
+  var cs=(d&&d.cities)||[];
+  if(!cs.length){ el.hidden=true; return; }
+  el.hidden=false;
+  el.innerHTML='<div class="wx-h">Wetter</div><div class="wx-row">'+
+    cs.map(function(c){
+      return '<div class="wx-city"><span class="wx-ic">'+esc(c.emoji||'🌡️')+'</span>'+
+        '<span class="wx-name">'+esc(c.name)+'</span>'+
+        '<span class="wx-temp mono">'+esc(String(c.temp))+'°</span>'+
+        '<span class="wx-txt">'+esc(c.text||'')+'</span></div>';
+    }).join('')+'</div>';
 }
 // Tap auf "MASTER GEORGE" → Jarvis öffnen und sofort zuhören (im Tap-Kontext,
 // damit iOS/Android das Mikrofon erlaubt).
@@ -1739,6 +1814,7 @@ function jTtsError(j){
     jState('Stimme momentan nicht verfügbar — Antwort steht oben.','idle');
     toast('Stimme nicht verfügbar');
   }
+  resumeWake();   // trotz Stimm-Fehler weiter zuhören
 }
 // „Antippen zum Hören" — erscheint nur, wenn der Browser das Autoplay blockiert.
 function showJUnlock(){
@@ -1750,6 +1826,7 @@ function showJUnlock(){
   b.textContent='🔊 Antippen zum Hören';
   b.onclick=function(){ _jAudioUnlocked=true; var a=jGetAudio(); var p=a.play(); if(p&&p.then) p.then(function(){ hideJUnlock(); jState('Bob spricht','speak'); }).catch(function(){}); };
   bar.appendChild(b);
+  resumeWake();   // Autoplay blockiert → trotzdem weiter aufs Wake-Word hören
 }
 function hideJUnlock(){ var b=$('j-unlock'); if(b&&b.parentNode) b.parentNode.removeChild(b); }
 
@@ -1918,34 +1995,79 @@ function stopJarvisMic(silent){
 // (b) Tap-to-Talk-Mikrofon als zuverlässiger Fallback. Beide landen in jarvisAsk()
 // → /api/cockpit {action:'voice'} → echte Daten + Antwort + Navigation.
 var _bobViewParams=null;
-var _wakeOn=false, _wakeSR=null, _wakePaused=false;
-// Wake-Wort am Satzanfang: „hey bob", „bob", auch häufige Fehl-Erkennungen (bop/bab/pop).
-var _WAKE_RE=/\b(?:hey|hallo|okay|ok|he)?\s*(?:bob|bop|bobby|bab|pop|papp)\b/i;
+var _wakeOn=false, _wakeSR=null, _wakePaused=false, _wakeRestarts=0, _wakeLastBegin=0;
+
+// iOS/Safari: SpeechRecognition ist dort unzuverlässig → Tap-to-Talk ist der
+// sichere Weg (MediaRecorder + Server-STT). Wird für den Hinweistext genutzt.
+function isIOS(){
+  return /iP(hone|ad|od)/.test(navigator.userAgent)
+    || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+}
+
+// ── Robuste „Bob"-Erkennung ─────────────────────────────────────────────────
+// de-CH-Spracherkennung verhört „Bob" oft (bop, bopp, bab, baby, pop, papp, bub …).
+// Wir normalisieren, prüfen mehrere Erkennungs-Alternativen und akzeptieren jedes
+// Token nach dem Muster: b/p – 1-3 Vokale – b/p (mit optionaler Endung).
+function _wnorm(s){ return String(s||'').toLowerCase()
+  .replace(/ä/g,'a').replace(/ö/g,'o').replace(/ü/g,'u').replace(/ß/g,'ss')
+  .replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(); }
+var _GREET_TOK=/^(?:h+e+y+|h[ae]l+o+|hallo|halo|h+e+|h+i+|hoi|hey|yo|na|ok|okay|okey|jo|ey|eh|hej)$/;
+var _BOB_TOK=/^[bp][aeiouy]{1,3}[bp]{1,2}(?:by|y|i|s|e|o|a)?$/;
+// Slice aus dem ORIGINAL (behält Umlaute/Zahlen im Befehl, z. B. „Wädenswil").
+var _WAKE_SLICE=/^\s*(?:(?:hey+|h[aä]l+o+|hallo|halo|he+|hi+|hoi|yo|na|ok|okay|okey|jo|ey|eh)\b[\s,.!?:-]*)?(?:[bp][aeiouyäöü]{1,3}[bp]{1,2}(?:by|y|i|s|e|o|a)?)\b[\s,.!?:-]*/i;
+function wakeParse(raw){
+  var orig=String(raw||'').trim(); if(!orig) return null;
+  var toks=_wnorm(orig).split(' '); if(!toks[0]) return null;
+  var idx=-1;
+  for(var i=0;i<toks.length && i<3;i++){
+    if(_BOB_TOK.test(toks[i]) && (i===0 || _GREET_TOK.test(toks[i-1]))){ idx=i; break; }
+  }
+  if(idx===-1) return null;
+  var cmd=toks.slice(idx+1).join(' ').trim();     // Fallback: normalisierter Rest
+  var mo=orig.match(_WAKE_SLICE);                 // besser: Rest aus dem Original
+  if(mo) cmd=orig.slice(mo[0].length).trim();
+  return { cmd: cmd };
+}
+
 function wakeSupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
 function toggleWake(){
   unlockJAudio();                       // Audio im Tap-Kontext entsperren (iOS)
   if(_wakeOn) stopWake(); else startWake();
 }
 function startWake(){
-  if(!wakeSupported()){ toast('Dauer-Zuhören hier nicht unterstützt — nutze das Mikrofon'); return; }
+  if(!wakeSupported()){ toast('Dauer-Zuhören hier nicht unterstützt — nutze das 🎤 Mikrofon'); return; }
   if(_jRecording) stopJarvisMic(true);  // Tap-to-Talk und Wake nie gleichzeitig
-  _wakeOn=true; _wakePaused=false; wakeBegin(); paintWake();
-  toast('Bob hört zu — sag „Hey Bob …"');
+  _wakeOn=true; _wakePaused=false; _wakeRestarts=0; wakeBegin(); paintWake();
+  toast(isIOS()? 'Hört zu — auf dem iPhone ist das 🎤 zuverlässiger' : 'Bob hört zu — sag „Hey Bob …"');
 }
 function stopWake(){ _wakeOn=false; try{ if(_wakeSR) _wakeSR.stop(); }catch(e){} _wakeSR=null; paintWake(); }
-function pauseWake(){ if(!_wakeOn) return; _wakePaused=true; try{ if(_wakeSR) _wakeSR.stop(); }catch(e){} _wakeSR=null; }
-function resumeWake(){ if(!_wakeOn||!_wakePaused) return; _wakePaused=false; setTimeout(wakeBegin,300); }
+function pauseWake(){ if(!_wakeOn) return; _wakePaused=true; try{ if(_wakeSR) _wakeSR.stop(); }catch(e){} _wakeSR=null; paintWake(); }
+function resumeWake(){ if(!_wakeOn||!_wakePaused) return; _wakePaused=false; _wakeRestarts=0; setTimeout(wakeBegin,250); paintWake(); }
 function wakeBegin(){
+  if(!_wakeOn||_wakePaused) return;
+  // Hot-Loop-Schutz: startet die Erkennung immer wieder sofort neu (z. B. wenn das
+  // Mikro belegt ist), bremsen wir progressiv statt Dauerfeuer.
+  var now=Date.now();
+  if(now-_wakeLastBegin<1200){ _wakeRestarts++; } else { _wakeRestarts=0; }
+  _wakeLastBegin=now;
+  var backoff=_wakeRestarts>3 ? Math.min(4000, 400*_wakeRestarts) : 0;
+  if(backoff){ setTimeout(function(){ if(_wakeOn&&!_wakePaused) wakeBegin2(); },backoff); return; }
+  wakeBegin2();
+}
+function wakeBegin2(){
   if(!_wakeOn||_wakePaused) return;
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   try{ _wakeSR=new SR(); }catch(e){ _wakeOn=false; paintWake(); return; }
   _wakeSR.lang='de-CH'; _wakeSR.continuous=true; _wakeSR.interimResults=false;
-  try{ _wakeSR.maxAlternatives=1; }catch(e){}
+  try{ _wakeSR.maxAlternatives=4; }catch(e){}   // mehrere Alternativen → „Bob" öfter dabei
   _wakeSR.onresult=function(e){
     for(var i=e.resultIndex;i<e.results.length;i++){
-      if(!e.results[i].isFinal) continue;
-      var t=(e.results[i][0].transcript||'').trim();
-      if(_WAKE_RE.test(t)){ wakeHeard(t); return; }
+      var r=e.results[i]; if(!r.isFinal) continue;
+      var alts=Math.min(r.length||1,4);
+      for(var a=0;a<alts;a++){
+        var w=wakeParse((r[a]&&r[a].transcript)||'');
+        if(w){ wakeHeard(w.cmd); return; }
+      }
     }
   };
   _wakeSR.onerror=function(ev){
@@ -1953,16 +2075,20 @@ function wakeBegin(){
     if(err==='not-allowed'||err==='service-not-allowed'){ _wakeOn=false; toast('Mikrofon-Zugriff verweigert'); paintWake(); }
     // no-speech/aborted/network → onend startet neu
   };
-  _wakeSR.onend=function(){ _wakeSR=null; if(_wakeOn&&!_wakePaused) setTimeout(wakeBegin,300); };
+  _wakeSR.onend=function(){ _wakeSR=null; if(_wakeOn&&!_wakePaused) setTimeout(wakeBegin,250); };
   try{ _wakeSR.start(); }
   catch(e){ if(_wakeOn&&!_wakePaused) setTimeout(wakeBegin,400); }
 }
-function wakeHeard(transcript){
-  var m=transcript.match(_WAKE_RE);
-  var cmd=transcript.slice(m.index+m[0].length).replace(/^[\s,.:!?-]+/,'').trim();
+function wakeFlash(){                    // kurzes visuelles Signal „erkannt"
+  var bar=$('wake-bar'); if(!bar) return;
+  bar.classList.add('hit'); setTimeout(function(){ bar.classList.remove('hit'); },900);
+}
+function wakeHeard(cmd){
+  cmd=(cmd||'').trim();
   pauseWake();                          // Selbst-Trigger während Antwort vermeiden
+  wakeFlash();
   if(curView!=='jarvis') go('jarvis');
-  if(!cmd){                             // nur „Hey Bob" → kurz bestätigen, Ohr auf
+  if(!cmd){                             // nur „Hey Bob" → begrüssen, dann Ohr auf
     jState('● Hallo Master, ich bin hier… sag deinen Befehl','speak');
     if(_jVoiceOn) speakJarvis('Hallo Master, ich bin hier. Wie kann ich dir helfen?'); else resumeWake();
     return;
@@ -1971,13 +2097,17 @@ function wakeHeard(transcript){
 }
 function paintWake(){
   var sw=$('wake-sw'); if(sw) sw.className='wsw'+(_wakeOn?' on':'');
-  var bar=$('wake-bar'); if(bar) bar.className='wakebar'+(_wakeOn?' live':'');
+  var bar=$('wake-bar');
+  if(bar) bar.className='wakebar'+(_wakeOn?(_wakePaused?' live paused':' live'):'');
   var lbl=$('wake-lbl'); if(!lbl) return;
   lbl.innerHTML=_wakeOn
-    ? 'Wake-Word <b>aktiv</b> · sag einfach <b>„Hey Bob …"</b>'
+    ? (_wakePaused ? 'Bob antwortet … <b>hört gleich wieder zu</b>'
+                   : '<span class="wdot"></span>Hört zu · sag <b>„Hey Bob …"</b>')
     : (wakeSupported()
-        ? 'Dauer-Zuhören: Schalter an, dann <b>„Hey Bob …"</b>. Oder tippe aufs 🎤.'
-        : 'Dauer-Zuhören hier nicht möglich — nutze das 🎤 (Tap-to-Talk).');
+        ? (isIOS()
+            ? 'Dauer-Zuhören ist auf dem iPhone unzuverlässig — am besten das <b>🎤 (Tap-to-Talk)</b> nutzen.'
+            : 'Dauer-Zuhören: Schalter an, dann <b>„Hey Bob …"</b>. Oder tippe aufs 🎤.')
+        : 'Dauer-Zuhören hier nicht möglich — nutze das <b>🎤 (Tap-to-Talk)</b>.');
 }
 
 // ── BLOCKADEN-Ansicht (durch Sprachbefehl gefüllt: _bobViewParams) ──

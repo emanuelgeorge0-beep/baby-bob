@@ -8,6 +8,8 @@
 //   im Browser/DevTools). Doppelte Absicherung.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { getWeather } from './weather.js';
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
@@ -975,7 +977,7 @@ async function getJarvisFacts(opts = {}) {
 
   // Alle unabhängigen Cockpit-Abfragen PARALLEL (statt sequenziell) → spürbar schnellere
   // Jarvis-Antwort (war zuvor ~8 Round-Trips hintereinander). Jede Abfrage einzeln abgesichert.
-  const [auf, todos, margen, pr, te, rp, mt, bl, ums] = await Promise.all([
+  const [auf, todos, margen, pr, te, rp, mt, bl, ums, wetter] = await Promise.all([
     sbGet('gs_crm_aufgaben?status=eq.offen&select=faelligkeit').catch(() => []),
     sbGet('gs_todos?status=eq.offen&select=titel,zustaendig,faelligkeit,prioritaet&order=faelligkeit.asc.nullslast&limit=8').catch(() => []),
     sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell').catch(() => null),
@@ -985,6 +987,7 @@ async function getJarvisFacts(opts = {}) {
     sbGet('gs_material?select=id').catch(() => null),
     sbGet('gs_blockaden?select=status,urgency,haus,projekt_name,beschreibung&order=created_at.desc&limit=200').catch(() => null),
     getUmsatzStats(),
+    getWeather().catch(() => null),
   ]);
 
   // Offene CRM-Aufgaben (zählen ebenfalls als Follow-ups).
@@ -1109,7 +1112,25 @@ async function getJarvisFacts(opts = {}) {
     // Kalender ist noch nicht angebunden — Termine ehrlich als „kommt bald" behandeln.
     termine_quelle: 'Kalender noch nicht angebunden',
     naechste_termine: null,
+    // Wetter (Zürich, Wien, Barcelona) für natürliche Begrüssungen — nie erfunden.
+    wetter: (wetter && wetter.cities && wetter.cities.length)
+      ? wetter.cities.map((c) => ({ stadt: c.name, temp_c: c.temp, zustand: c.text }))
+      : null,
+    tageszeit: tageszeitLabel(),
   };
+}
+
+// Grobe Tageszeit (Europe/Zurich) — hilft Bob, morgens/abends passend zu grüssen.
+function tageszeitLabel() {
+  let h;
+  try { h = Number(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Zurich', hour: '2-digit', hour12: false }).slice(0, 2)); }
+  catch (_) { h = new Date().getHours(); }
+  if (h < 5) return 'Nacht';
+  if (h < 11) return 'Morgen';
+  if (h < 14) return 'Mittag';
+  if (h < 18) return 'Nachmittag';
+  if (h < 22) return 'Abend';
+  return 'Nacht';
 }
 
 const JARVIS_SYSTEM = `Du bist „Bob", der persönliche Sprach-Assistent, KI-Scanner und die strategische Rechte-Hand im internen Master-Cockpit von George Solutions (spezialisiert auf Gebäudetechnik und Baumanagement, Schweiz). Du erhältst die ECHTEN, aktuellen Kennzahlen aus der Datenbank als JSON, ein festes Produkt- und Story-Wissen sowie einen festen Geschäftskontext.
@@ -1119,6 +1140,12 @@ ANREDE (WICHTIG, video-stark):
 - Zu Beginn eines Gesprächs oder bei einer Begrüssung: „Hallo Master, wie kann ich dir heute helfen?" oder „Hallo Master, ich bin hier."
 - Wenn es sich anbietet, schliesst du passend ab: „Kann ich dir sonst noch weiterhelfen, Master?"
 - Auch mitten in einer Antwort darfst du „Master" natürlich einstreuen. Ton: professionell, selbstbewusst, seriös — nie albern.
+
+WETTER (nur wenn es natürlich passt):
+- Du kennst das aktuelle Wetter in Zürich, Wien und Barcelona (Feld wetter: stadt, temp_c, zustand) sowie die Tageszeit (Feld tageszeit).
+- Baue das Wetter NUR beiläufig in eine Begrüssung ein, wenn es passt — höchstens einmal pro Gespräch, nie aufdringlich, nie als Liste aller drei Städte.
+- Beispiele: abends „Hallo Master, wie war dein Flug? In Wien sind es gerade 22 Grad — angenehme Temperaturen zum Schlafen." / morgens „Guten Morgen, Master. In Zürich sind es 14 Grad und bedeckt." Nenne echte Werte aus dem Feld wetter, erfinde nie welche.
+- Wenn der Master nicht grüsst, sondern direkt eine Sachfrage stellt, lass das Wetter weg und beantworte die Frage.
 
 NIE ABWEISEN (WICHTIG):
 - Du sagst NIEMALS „dafür bin ich nicht da", „das kann ich nicht" oder Ähnliches. Für alles rund um unsere Software, die Baubranche, ein Gewerk oder eine Zielgruppe hast du IMMER eine konkrete, passende Antwort aus deinem Produkt-Wissen.
