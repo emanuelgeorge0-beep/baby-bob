@@ -511,6 +511,67 @@
       box-shadow:inset 0 0 0 1px rgba(var(--sc-gold),.12),0 8px 26px -16px rgba(var(--sc-gold),.85);}
   }
 </style>
+<!-- ═══ KALKULATION · Tabellen + PDF-Druck (additiv, Schwarz-Gold) ═══════════ -->
+<style id="kalk-layer">
+  /* Kalkulations-Kacheln: grosse CHF-Werte dürfen auf schmalen iPhones nicht klippen. */
+  .kalk-tiles .ccv{font-size:21px;letter-spacing:-.3px;line-height:1.15;overflow-wrap:anywhere;}
+  @media (max-width:360px){ .kalk-tiles .ccv{font-size:18px;} }
+  .kalk-tbl.kalk-sums{min-width:0;}
+  .kalk-hint{font-size:11.5px;color:var(--muted);line-height:1.4;}
+  .kalk-hint b{color:var(--gold);}
+  .kalk-sub{font-size:10.5px;color:var(--muted2);margin-top:2px;}
+  .kalk-tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:14px;background:var(--card);}
+  .kalk-tbl{width:100%;border-collapse:collapse;font-size:12.5px;min-width:340px;}
+  .kalk-tbl th{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);font-weight:700;
+    text-align:left;padding:10px 10px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  .kalk-tbl td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--txt);}
+  .kalk-tbl tbody tr:last-child td{border-bottom:1px solid var(--line);}
+  .kalk-tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .kalk-tbl .gold{color:var(--gold);font-weight:700;}
+  .kalk-tbl .muted{color:var(--muted2);}
+  .kalk-tbl tfoot td{padding:11px 10px;font-weight:800;border-top:1px solid var(--gold-line);border-bottom:none;
+    background:var(--gold-soft);}
+  .kalk-sums td{padding:11px 10px;}
+  .kalk-sums .kalk-zw td{border-top:1px solid var(--line);font-weight:700;}
+  .kalk-sums .kalk-tot td{border-top:1px solid var(--gold-line);background:var(--gold-soft);font-weight:800;font-size:14px;}
+  .meta .dot.gold{color:var(--gold);font-weight:700;}
+  /* Druck-Dokument: am Screen ausgeblendet, nur beim Drucken sichtbar. */
+  #kalk-printdoc{display:none;}
+  @media print{
+    #app,#login,.nav,.topbar,.sheet-bg,.installbar,#kalk-printdoc .noprint{display:none !important;}
+    #kalk-printdoc{display:block !important;}
+    html,body{background:#0A0A0B !important;}
+    @page{margin:14mm;}
+    #kalk-printdoc,#kalk-printdoc *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+  }
+  #kalk-printdoc .pr-page{background:#0A0A0B;color:#e8edf5;padding:22px 24px;font-size:12px;line-height:1.5;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}
+  #kalk-printdoc .pr-top{display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:2px solid var(--gold);padding-bottom:10px;margin-bottom:14px;}
+  #kalk-printdoc .pr-brand{font:800 18px Georgia,serif;color:var(--gold);letter-spacing:1px;}
+  #kalk-printdoc .pr-doc{font-size:13px;font-weight:700;color:#e8edf5;letter-spacing:.5px;}
+  #kalk-printdoc .pr-meta{display:flex;justify-content:space-between;gap:16px;margin-bottom:16px;font-size:11.5px;color:#b9c2cf;}
+  #kalk-printdoc .pr-meta b{color:#fff;}
+  #kalk-printdoc .pr-right{text-align:right;}
+  #kalk-printdoc .pr-h2{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--gold);font-weight:800;
+    margin:16px 0 7px;border-bottom:1px solid rgba(201,169,97,.4);padding-bottom:4px;}
+  #kalk-printdoc .pr-tbl{width:100%;border-collapse:collapse;font-size:11px;}
+  #kalk-printdoc .pr-tbl th{text-align:left;color:#8a97a8;font-weight:700;text-transform:uppercase;font-size:9px;
+    letter-spacing:.4px;padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.14);}
+  #kalk-printdoc .pr-tbl td{padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.07);}
+  #kalk-printdoc .pr-tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  #kalk-printdoc .pr-tbl tfoot td{font-weight:800;color:var(--gold);border-top:1px solid var(--gold);border-bottom:none;}
+  #kalk-printdoc .pr-sub{color:#8a97a8;font-size:9.5px;}
+  #kalk-printdoc .pr-tot{width:100%;max-width:320px;margin-left:auto;border-collapse:collapse;font-size:12px;margin-top:6px;}
+  #kalk-printdoc .pr-tot td{padding:6px 6px;border-bottom:1px solid rgba(255,255,255,.08);}
+  #kalk-printdoc .pr-tot .num{text-align:right;font-variant-numeric:tabular-nums;}
+  #kalk-printdoc .pr-tot .pr-grand td{font-weight:800;font-size:14px;color:var(--gold);
+    border-top:2px solid var(--gold);border-bottom:none;padding-top:9px;}
+  #kalk-printdoc .pr-empty{color:#8a97a8;font-size:11px;padding:4px 0;}
+  #kalk-printdoc .pr-foot{margin-top:20px;padding-top:10px;border-top:1px solid rgba(255,255,255,.12);
+    font-size:9.5px;color:#8a97a8;line-height:1.5;}
+  #kalk-printdoc .pr-foot b{color:#c9a961;}
+</style>
 </head>
 <body>
 
@@ -1356,7 +1417,9 @@ function paintProjektDetail(d){
       (p.projektnummer?'<span class="dot">'+esc(p.projektnummer)+'</span>':'')+
       (p.standort?'<span class="dot">'+esc(p.standort)+'</span>':'')+
       (p.bereich?'<span class="dot">'+esc(p.bereich)+'</span>':'')+'</div>'+
-    '<button class="chip" id="pm-edit" style="margin-bottom:6px">✏️ Projekt bearbeiten</button>';
+    '<button class="chip" id="pm-edit" style="margin-bottom:6px">✏️ Projekt bearbeiten</button>'+
+    '<div class="meta" style="gap:8px;margin:6px 0 2px"><button class="chip on" id="pm-kalk">🧮 Kalkulation</button>'+
+      '<button class="chip" id="pm-auszug">📦 Materialauszug</button></div>';
 
   // Kunde
   var kundeInner;
@@ -1380,7 +1443,7 @@ function paintProjektDetail(d){
         '<div class="meta" style="margin-top:8px;gap:8px">'+contactBtns(t.telefon,t.email)+'</div></div>';
     }).join('')+'</div>';
   }
-  var techSec=pmSec('Techniker',techInner, d.mig.techniker?'<button class="chip" id="pm-tech-add" style="font-size:11px">＋ zuweisen</button>':'');
+  var techSec=pmSec('Techniker',techInner,'<span style="display:flex;gap:6px"><button class="chip" id="pm-tech-saetze" style="font-size:11px">💵 Sätze</button>'+(d.mig.techniker?'<button class="chip" id="pm-tech-add" style="font-size:11px">＋ zuweisen</button>':'')+'</span>');
 
   // Tätigkeiten
   var taetInner;
@@ -1388,11 +1451,13 @@ function paintProjektDetail(d){
   else if(!d.taetigkeiten.length){ taetInner='<div class="empty" style="padding:12px">Noch keine Arbeiten erfasst.</div>'; }
   else {
     taetInner='<div class="list">'+d.taetigkeiten.map(function(a){
-      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(a.beschreibung)+'</div>'+
+      var h=(a.stunden!=null&&a.stunden!=='')?kNum(a.stunden):0, vkR=kNum(a.stundensatz);
+      var erloes=(vkR>0)?'<span class="dot gold">'+kMoney(h*vkR)+'</span>':'';
+      return '<div class="lcard" data-edittaet="'+esc(a.id)+'"><div class="top"><div class="nm" style="font-size:14px">'+esc(a.beschreibung)+'</div>'+
         '<span class="chip" data-deltaet="'+esc(a.id)+'" style="font-size:11px">×</span></div>'+
         '<div class="meta">'+(a.techniker_name?'<span>'+esc(a.techniker_name)+'</span>':'')+
           (a.datum?'<span class="dot">'+deDate(a.datum)+'</span>':'')+
-          (a.stunden!=null?'<span class="dot">'+esc(a.stunden)+' h</span>':'')+'</div></div>';
+          (a.stunden!=null?'<span class="dot">'+esc(a.stunden)+' h'+(vkR>0?' × '+kMoney(vkR):'')+'</span>':'')+erloes+'</div></div>';
     }).join('')+'</div>';
   }
   var taetSec=pmSec('Erfasste Arbeiten',taetInner, d.mig.taetigkeiten?'<button class="chip" id="pm-taet-add" style="font-size:11px">＋ erfassen</button>':'');
@@ -1403,9 +1468,12 @@ function paintProjektDetail(d){
   else if(!d.material.length){ matInner='<div class="empty" style="padding:12px">Noch kein Material erfasst.</div>'; }
   else {
     matInner='<div class="list">'+d.material.map(function(m){
-      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(m.bezeichnung)+'</div>'+pmPill(m.status||'offen',pmStatusColor(m.status))+'</div>'+
+      var q=kMatQty(m), u=kMatUnit(m);
+      var vk=(u.vk>0)?'<span class="dot gold">'+kMoney(q*u.vk)+'</span>':'';
+      return '<div class="lcard" data-editmat="'+esc(m.id)+'"><div class="top"><div class="nm" style="font-size:14px">'+esc(m.bezeichnung)+'</div>'+pmPill(m.status||'offen',pmStatusColor(m.status))+'</div>'+
         '<div class="meta">'+((m.menge!=null)?'<span>'+esc(m.menge)+(m.einheit?' '+esc(m.einheit):'')+'</span>':'')+
-          (m.kategorie?'<span class="dot">'+esc(m.kategorie)+'</span>':'')+
+          (u.ek>0?'<span class="dot">EK '+kMoney(u.ek)+'</span>':'')+
+          (m.kategorie?'<span class="dot">'+esc(m.kategorie)+'</span>':'')+vk+
           '<span class="dot"><a data-delmat="'+esc(m.id)+'" style="color:var(--muted2);cursor:pointer">entfernen</a></span></div></div>';
     }).join('')+'</div>';
   }
@@ -1430,13 +1498,18 @@ function paintProjektDetail(d){
   var back=$('pm-back'); if(back) back.onclick=renderProjektListe;
   $('pm-edit').onclick=function(){ openProjektEdit(p); };
   $('pm-kunde-set').onclick=openKundeZuordnen;
+  var kalk=$('pm-kalk'); if(kalk) kalk.onclick=openKalkulation;
+  var auszug=$('pm-auszug'); if(auszug) auszug.onclick=openMaterialauszug;
+  var tsaetze=$('pm-tech-saetze'); if(tsaetze) tsaetze.onclick=openTechnikerSaetze;
   var ta=$('pm-tech-add'); if(ta) ta.onclick=openTechAssign;
   var xa=$('pm-taet-add'); if(xa) xa.onclick=openTaetigkeitAdd;
   var ma=$('pm-mat-add'); if(ma) ma.onclick=openMaterialAdd;
   var blall=$('pm-bl-all'); if(blall) blall.onclick=function(){ _bobViewParams={gefunden:true,projekt:{name:p.name},blockaden:d.blockaden.filter(function(b){return ['offen','in_bearbeitung','eskaliert'].indexOf(b.status)>-1;}),alle:d.blockaden}; go('blockaden'); };
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-untech]'),function(b){ b.onclick=function(){ pmUnassignTech(b.getAttribute('data-untech')); }; });
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-deltaet]'),function(b){ b.onclick=function(){ pmDel('pm_taetigkeit_del',b.getAttribute('data-deltaet')); }; });
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-delmat]'),function(b){ b.onclick=function(){ pmDel('pm_material_del',b.getAttribute('data-delmat')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-untech]'),function(b){ b.onclick=function(e){ if(e)e.stopPropagation(); pmUnassignTech(b.getAttribute('data-untech')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-deltaet]'),function(b){ b.onclick=function(e){ if(e)e.stopPropagation(); pmDel('pm_taetigkeit_del',b.getAttribute('data-deltaet')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-delmat]'),function(b){ b.onclick=function(e){ if(e)e.stopPropagation(); pmDel('pm_material_del',b.getAttribute('data-delmat')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-edittaet]'),function(c){ c.style.cursor='pointer'; c.onclick=function(){ var id=c.getAttribute('data-edittaet'); var aa=null; (d.taetigkeiten||[]).forEach(function(x){ if(x.id===id) aa=x; }); if(aa) openTaetigkeitForm(aa); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-editmat]'),function(c){ c.style.cursor='pointer'; c.onclick=function(){ var id=c.getAttribute('data-editmat'); var mm=null; (d.material||[]).forEach(function(x){ if(x.id===id) mm=x; }); if(mm) openMaterialForm(mm); }; });
 }
 function pmDel(action,id){ api(action,{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
 function pmUnassignTech(id){ api('pm_tech_unassign',{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
@@ -1562,50 +1635,293 @@ function openTechAssign(){
   }).catch(function(){ toast('Ladefehler'); });
 }
 
-// ── Tätigkeit erfassen ──
-function openTaetigkeitAdd(){
-  openSheet('<h3>Arbeit erfassen</h3>'+
-    '<textarea class="field" id="xt-desc" placeholder="Was wurde gemacht? *" rows="2"></textarea>'+
-    '<input class="field" id="xt-tech" placeholder="Techniker (Name)" style="margin-top:8px"/>'+
-    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
-      '<input class="field" id="xt-datum" type="date" value="'+new Date().toISOString().slice(0,10)+'"/>'+
-      '<input class="field" id="xt-std" placeholder="Stunden" type="number" step="0.5" style="max-width:120px"/></div>'+
-    '<div class="login-msg" id="xt-msg" style="margin-top:8px"></div>'+
-    '<button class="btn btn-gold" id="xt-save" style="margin-top:12px">Speichern</button>'+
-    '<button class="btn ghost" id="xt-cancel">Abbrechen</button>');
-  $('xt-cancel').onclick=closeSheet;
-  $('xt-save').onclick=function(){
-    var desc=($('xt-desc')||{}).value; if(!((desc||'').trim())){ $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Beschreibung erforderlich'; return; }
-    api('pm_taetigkeit_add',{projekt_id:_pmProjektId,beschreibung:desc,techniker_name:($('xt-tech')||{}).value,datum:($('xt-datum')||{}).value,stunden:($('xt-std')||{}).value}).then(function(r){
-      if(r&&r.notMigrated){ $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Tabelle noch nicht migriert.'; return; }
-      closeSheet(); loadProjekt(); toast('Erfasst');
-    }).catch(function(){ $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Fehler'; });
-  };
-}
+// ── Tätigkeit erfassen/bearbeiten → Formular im Kalkulations-Block (openTaetigkeitForm) ──
+function openTaetigkeitAdd(){ openTaetigkeitForm(null); }
 
 // ── Material hinzufügen (mit HKLS-Vorlage) ──
 var PM_MAT_VORLAGE=['Rohrisolierung','Absperrventil','T-Stück','Bogen 90°','Reduktion','Flexschlauch','Siphon','Dichtungsset','Befestigungsschelle','Wärmepumpe','Umwälzpumpe','Ausdehnungsgefäss','Heizkörper','Lüftungsrohr','Filtermatte'];
-function openMaterialAdd(){
+// ── Material hinzufügen/bearbeiten → Formular im Kalkulations-Block (openMaterialForm) ──
+function openMaterialAdd(){ openMaterialForm(null); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KALKULATION · MATERIALAUSZUG · PLANUNG  (additiv — neue Ansichten & Formulare)
+// Rechnet clientseitig aus dem bereits geladenen _pmData; keine Rechnungslogik.
+// ═══════════════════════════════════════════════════════════════════════════
+function kNum(v){ var n=Number(v); return isFinite(n)?n:0; }
+// Eigener Geld-Formatter fürs Kalk-Modul: immer 2 Nachkommastellen (CHF 2'779.70).
+// Lässt den app-weiten chf()-Helfer bewusst unangetastet.
+function kMoney(n){ return 'CHF ' + (Math.round((Number(n)||0)*100)/100).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function kPct(n){ return (Math.round((Number(n)||0)*10)/10)+' %'; }
+function kMatQty(m){ return (m.menge!=null&&m.menge!=='')?kNum(m.menge):1; }
+function kMatUnit(m){ var ek=kNum(m.einzelpreis); var vk=(m.verkaufspreis!=null&&m.verkaufspreis!=='')?kNum(m.verkaufspreis):ek*(1+kNum(m.marge_prozent)/100); return {ek:ek,vk:vk}; }
+
+// Kern-Rechnung (in Node isoliert getestet, 18 Fälle grün). d = _pmData.
+function kalkCompute(d){
+  var p=d.projekt||{}, mat=d.material||[], taet=d.taetigkeiten||[];
+  var aufschlag=kNum(p.aufschlag_prozent), rabatt=kNum(p.rabatt_prozent);
+  var matRows=mat.map(function(m){ var q=kMatQty(m), u=kMatUnit(m); return {m:m,qty:q,ekUnit:u.ek,vkUnit:u.vk,ekSum:q*u.ek,vkSum:q*u.vk}; });
+  var taetRows=taet.map(function(a){ var h=(a.stunden!=null&&a.stunden!=='')?kNum(a.stunden):0; var ekR=kNum(a.kostensatz), vkR=kNum(a.stundensatz); return {a:a,h:h,ekRate:ekR,vkRate:vkR,ekSum:h*ekR,vkSum:h*vkR}; });
+  var matEK=matRows.reduce(function(s,r){return s+r.ekSum;},0), matVK=matRows.reduce(function(s,r){return s+r.vkSum;},0);
+  var arbEK=taetRows.reduce(function(s,r){return s+r.ekSum;},0), arbVK=taetRows.reduce(function(s,r){return s+r.vkSum;},0);
+  var zwEK=matEK+arbEK, zwVK=matVK+arbVK;
+  var vkNachAufschlag=zwVK*(1+aufschlag/100);
+  var gesamtVK=vkNachAufschlag*(1-rabatt/100);
+  var gesamtEK=zwEK, gewinn=gesamtVK-gesamtEK, margePct=gesamtVK>0?(gewinn/gesamtVK*100):0;
+  return {matRows:matRows,taetRows:taetRows,matEK:matEK,matVK:matVK,arbEK:arbEK,arbVK:arbVK,zwEK:zwEK,zwVK:zwVK,
+    aufschlag:aufschlag,rabatt:rabatt,vkNachAufschlag:vkNachAufschlag,gesamtVK:gesamtVK,gesamtEK:gesamtEK,gewinn:gewinn,margePct:margePct};
+}
+
+// ── Material-Formular (Add + Edit): EK, Marge%, VK-Override live ──────────────
+function openMaterialForm(m){
+  m=m||{};
+  var isEdit=!!m.id;
   var statusOpts=PM_MAT_STATUS.map(function(s){ return {v:s,t:cap(s)}; });
-  openSheet('<h3>Material hinzufügen</h3>'+
-    '<input class="field" id="mm-bez" placeholder="Bezeichnung *" list="mm-vorlage"/>'+
+  openSheet('<h3>'+(isEdit?'Material bearbeiten':'Material hinzufügen')+'</h3>'+
+    '<input class="field" id="mm-bez" placeholder="Bezeichnung *" list="mm-vorlage" value="'+esc(m.bezeichnung||'')+'"/>'+
     '<datalist id="mm-vorlage">'+PM_MAT_VORLAGE.map(function(v){ return '<option value="'+esc(v)+'">'; }).join('')+'</datalist>'+
     '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
-      '<input class="field" id="mm-menge" placeholder="Menge" type="number" step="0.5" style="max-width:120px"/>'+
-      '<input class="field" id="mm-einheit" placeholder="Einheit (Stk, m, kg)"/></div>'+
-    '<input class="field" id="mm-kat" placeholder="Kategorie (Sanitär, Heizung, Lüftung)" style="margin-top:8px"/>'+
-    '<div class="sec-t">Status</div>'+pmSelect('mm-status',statusOpts,'offen')+
+      '<input class="field" id="mm-menge" placeholder="Menge" type="number" step="0.5" inputmode="decimal" value="'+esc(m.menge!=null?m.menge:'')+'" style="max-width:120px"/>'+
+      '<input class="field" id="mm-einheit" placeholder="Einheit (Stk, m, kg)" value="'+esc(m.einheit||'')+'"/></div>'+
+    '<div class="sec-t">Einkauf → Verkauf</div>'+
+    '<div class="row2" style="display:flex;gap:8px">'+
+      '<input class="field" id="mm-ek" placeholder="EK / Einheit" type="number" step="0.01" inputmode="decimal" value="'+esc(m.einzelpreis!=null?m.einzelpreis:'')+'"/>'+
+      '<input class="field" id="mm-marge" placeholder="Marge %" type="number" step="1" inputmode="decimal" value="'+esc(m.marge_prozent!=null?m.marge_prozent:'')+'"/></div>'+
+    '<input class="field" id="mm-vk" placeholder="VK / Einheit (optional – überschreibt Marge)" type="number" step="0.01" inputmode="decimal" value="'+esc(m.verkaufspreis!=null?m.verkaufspreis:'')+'" style="margin-top:8px"/>'+
+    '<div class="kalk-hint" id="mm-vkcalc" style="margin-top:6px"></div>'+
+    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+      '<input class="field" id="mm-lief" placeholder="Lieferant" value="'+esc(m.lieferant||'')+'"/>'+
+      '<input class="field" id="mm-kat" placeholder="Kategorie / Gewerk" value="'+esc(m.kategorie||'')+'"/></div>'+
+    '<input class="field" id="mm-pos" placeholder="Pos-Nr (optional, für LV)" value="'+esc(m.pos_nr||'')+'" style="margin-top:8px"/>'+
+    '<div class="sec-t">Status</div>'+pmSelect('mm-status',statusOpts,m.status||'offen')+
     '<div class="login-msg" id="mm-msg" style="margin-top:8px"></div>'+
-    '<button class="btn btn-gold" id="mm-save" style="margin-top:12px">Hinzufügen</button>'+
+    '<button class="btn btn-gold" id="mm-save" style="margin-top:12px">'+(isEdit?'Speichern':'Hinzufügen')+'</button>'+
+    (isEdit?'<button class="btn ghost" id="mm-del">Position löschen</button>':'')+
     '<button class="btn ghost" id="mm-cancel">Abbrechen</button>');
+  function refreshVK(){
+    var ek=kNum(($('mm-ek')||{}).value), marge=kNum(($('mm-marge')||{}).value);
+    var over=($('mm-vk')||{}).value;
+    var el=$('mm-vkcalc'); if(!el) return;
+    if(over!==''&&over!=null){ el.innerHTML='VK gesetzt: <b>'+kMoney(kNum(over))+'</b> / Einheit'; }
+    else { el.innerHTML='VK berechnet: <b>'+kMoney(ek*(1+marge/100))+'</b> / Einheit'; }
+  }
+  ['mm-ek','mm-marge','mm-vk'].forEach(function(id){ var e=$(id); if(e) e.oninput=refreshVK; });
+  refreshVK();
   $('mm-cancel').onclick=closeSheet;
+  var del=$('mm-del'); if(del) del.onclick=function(){ closeSheet(); pmDel('pm_material_del',m.id); };
   $('mm-save').onclick=function(){
     var bez=($('mm-bez')||{}).value; if(!((bez||'').trim())){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Bezeichnung erforderlich'; return; }
-    api('pm_material_add',{projekt_id:_pmProjektId,bezeichnung:bez,menge:($('mm-menge')||{}).value,einheit:($('mm-einheit')||{}).value,kategorie:($('mm-kat')||{}).value,status:($('mm-status')||{}).value}).then(function(r){
-      if(r&&r.notMigrated){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Tabelle noch nicht migriert.'; return; }
-      closeSheet(); loadProjekt(); toast('Hinzugefügt');
-    }).catch(function(){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Fehler'; });
+    var body={projekt_id:_pmProjektId,bezeichnung:bez,menge:($('mm-menge')||{}).value,einheit:($('mm-einheit')||{}).value,
+      einzelpreis:($('mm-ek')||{}).value,marge_prozent:($('mm-marge')||{}).value,verkaufspreis:($('mm-vk')||{}).value,
+      lieferant:($('mm-lief')||{}).value,kategorie:($('mm-kat')||{}).value,pos_nr:($('mm-pos')||{}).value,status:($('mm-status')||{}).value};
+    if(isEdit) body.id=m.id;
+    var btn=$('mm-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
+    api(isEdit?'pm_material_upd':'pm_material_add',body).then(function(r){
+      if(r&&r.notMigrated){ if(btn){btn.disabled=false;btn.textContent=isEdit?'Speichern':'Hinzufügen';} $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Tabelle noch nicht migriert.'; return; }
+      closeSheet(); loadProjekt();
+      toast((r&&r.migCols===false)?'Gespeichert (Preise: SQL noch ausführen)':'Gespeichert');
+    }).catch(function(){ if(btn){btn.disabled=false;btn.textContent=isEdit?'Speichern':'Hinzufügen';} $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Fehler'; });
   };
+}
+
+// ── Arbeit-Formular (Add + Edit): Techniker-Auswahl füllt EK/VK-Satz vor ──────
+var _kalkTechs=[];
+function openTaetigkeitForm(a){
+  a=a||{};
+  var isEdit=!!a.id;
+  api('pm_techniker').then(function(d){
+    _kalkTechs=d.techniker||[];
+    var techOpts=_kalkTechs.map(function(t,i){ return {v:String(i),t:(t.name||'Techniker')+(t.stundensatz!=null?' · '+kMoney(t.stundensatz)+'/h':'')}; });
+    openSheet('<h3>'+(isEdit?'Arbeit bearbeiten':'Arbeit erfassen')+'</h3>'+
+      '<textarea class="field" id="xt-desc" placeholder="Was wurde gemacht / geplant? *" rows="2">'+esc(a.beschreibung||'')+'</textarea>'+
+      '<div class="sec-t">Techniker (übernimmt Sätze)</div>'+pmSelect('xt-tech',techOpts,'','— aus Pool wählen —')+
+      '<input class="field" id="xt-name" placeholder="Techniker-Name" value="'+esc(a.techniker_name||'')+'" style="margin-top:8px"/>'+
+      '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+        '<input class="field" id="xt-datum" type="date" value="'+esc(a.datum||new Date().toISOString().slice(0,10))+'"/>'+
+        '<input class="field" id="xt-std" placeholder="Stunden" type="number" step="0.5" inputmode="decimal" value="'+esc(a.stunden!=null?a.stunden:'')+'" style="max-width:120px"/></div>'+
+      '<div class="sec-t">Sätze CHF/h</div>'+
+      '<div class="row2" style="display:flex;gap:8px">'+
+        '<input class="field" id="xt-ek" placeholder="Kostensatz (EK)" type="number" step="0.5" inputmode="decimal" value="'+esc(a.kostensatz!=null?a.kostensatz:'')+'"/>'+
+        '<input class="field" id="xt-vk" placeholder="Verkaufssatz (VK)" type="number" step="0.5" inputmode="decimal" value="'+esc(a.stundensatz!=null?a.stundensatz:'')+'"/></div>'+
+      '<div class="kalk-hint" id="xt-sum" style="margin-top:6px"></div>'+
+      '<input class="field" id="xt-kat" placeholder="Kategorie / Gewerk (optional)" value="'+esc(a.kategorie||'')+'" style="margin-top:8px"/>'+
+      '<div class="login-msg" id="xt-msg" style="margin-top:8px"></div>'+
+      '<button class="btn btn-gold" id="xt-save" style="margin-top:12px">'+(isEdit?'Speichern':'Erfassen')+'</button>'+
+      (isEdit?'<button class="btn ghost" id="xt-del">Position löschen</button>':'')+
+      '<button class="btn ghost" id="xt-cancel">Abbrechen</button>');
+    function refreshSum(){
+      var h=kNum(($('xt-std')||{}).value), ek=kNum(($('xt-ek')||{}).value), vk=kNum(($('xt-vk')||{}).value);
+      var el=$('xt-sum'); if(el) el.innerHTML='Kosten <b>'+kMoney(h*ek)+'</b> · Erlös <b>'+kMoney(h*vk)+'</b>';
+    }
+    ['xt-std','xt-ek','xt-vk'].forEach(function(id){ var e=$(id); if(e) e.oninput=refreshSum; });
+    refreshSum();
+    var sel=$('xt-tech'); if(sel) sel.onchange=function(){
+      var t=_kalkTechs[Number(sel.value)]; if(!t) return;
+      if($('xt-name')) $('xt-name').value=t.name||'';
+      if(t.kostensatz!=null&&$('xt-ek')) $('xt-ek').value=t.kostensatz;
+      if(t.stundensatz!=null&&$('xt-vk')) $('xt-vk').value=t.stundensatz;
+      if(t.id) sel.setAttribute('data-tid',t.id);
+      refreshSum();
+    };
+    $('xt-cancel').onclick=closeSheet;
+    var del=$('xt-del'); if(del) del.onclick=function(){ closeSheet(); pmDel('pm_taetigkeit_del',a.id); };
+    $('xt-save').onclick=function(){
+      var desc=($('xt-desc')||{}).value; if(!((desc||'').trim())){ $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Beschreibung erforderlich'; return; }
+      var tid=sel?sel.getAttribute('data-tid'):'';
+      var body={projekt_id:_pmProjektId,beschreibung:desc,techniker_name:($('xt-name')||{}).value,datum:($('xt-datum')||{}).value,
+        stunden:($('xt-std')||{}).value,kostensatz:($('xt-ek')||{}).value,stundensatz:($('xt-vk')||{}).value,kategorie:($('xt-kat')||{}).value};
+      if(tid) body.techniker_id=tid;
+      if(isEdit) body.id=a.id;
+      var btn=$('xt-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
+      api(isEdit?'pm_taetigkeit_upd':'pm_taetigkeit_add',body).then(function(r){
+        if(r&&r.notMigrated){ if(btn){btn.disabled=false;btn.textContent=isEdit?'Speichern':'Erfassen';} $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Tabelle noch nicht migriert.'; return; }
+        closeSheet(); loadProjekt();
+        toast((r&&r.migCols===false)?'Gespeichert (Sätze: SQL noch ausführen)':'Gespeichert');
+      }).catch(function(){ if(btn){btn.disabled=false;btn.textContent=isEdit?'Speichern':'Erfassen';} $('xt-msg').className='login-msg err'; $('xt-msg').textContent='Fehler'; });
+    };
+  }).catch(function(){ toast('Ladefehler'); });
+}
+
+// ── Stundensätze (EK/VK) der Techniker pflegen ───────────────────────────────
+function openTechnikerSaetze(){
+  api('pm_techniker').then(function(d){
+    var techs=d.techniker||[];
+    if(!techs.length){ toast('Keine Techniker im Pool'); return; }
+    var rows=techs.map(function(t){
+      return '<div class="lcard"><div class="top"><div class="nm">🔧 '+esc(t.name||'Techniker')+'</div></div>'+
+        '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+          '<input class="field" data-ek="'+esc(t.id)+'" placeholder="EK CHF/h" type="number" step="0.5" inputmode="decimal" value="'+esc(t.kostensatz!=null?t.kostensatz:'')+'"/>'+
+          '<input class="field" data-vk="'+esc(t.id)+'" placeholder="VK CHF/h" type="number" step="0.5" inputmode="decimal" value="'+esc(t.stundensatz!=null?t.stundensatz:'')+'"/></div>'+
+        '<button class="chip" data-savetech="'+esc(t.id)+'" style="margin-top:8px;font-size:11px">Satz speichern</button></div>';
+    }).join('');
+    openSheet('<h3>Stundensätze</h3><div class="kalk-hint" style="margin-bottom:10px">EK = interner Kostensatz · VK = Verkaufssatz. Neue Arbeitspositionen übernehmen diese Sätze automatisch.</div>'+
+      '<div class="list">'+rows+'</div><button class="btn ghost" id="ts-close" style="margin-top:12px">Schliessen</button>');
+    $('ts-close').onclick=closeSheet;
+    Array.prototype.forEach.call(sheetBody.querySelectorAll('[data-savetech]'),function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-savetech');
+        var ek=(sheetBody.querySelector('[data-ek="'+id+'"]')||{}).value;
+        var vk=(sheetBody.querySelector('[data-vk="'+id+'"]')||{}).value;
+        b.textContent='…';
+        api('pm_techniker_save',{id:id,kostensatz:ek,stundensatz:vk}).then(function(r){
+          b.textContent=(r&&r.migCols===false)?'SQL nötig':'✓ gespeichert';
+          if(r&&r.migCols===false) toast('Sätze: SQL noch ausführen');
+        }).catch(function(){ b.textContent='Fehler'; });
+      };
+    });
+  }).catch(function(){ toast('Ladefehler'); });
+}
+
+// ── Materialauszug: alle Positionen mit Menge, EK, VK, Summen ─────────────────
+function openMaterialauszug(){
+  var d=_pmData; if(!d){ toast('Projekt neu laden'); return; }
+  var c=kalkCompute(d);
+  var head='<div style="margin-bottom:14px"><span class="chip" id="ka-back">‹ Projekt</span></div>'+
+    '<h2 style="margin-bottom:4px"><span class="acc">📦</span> Materialauszug</h2>'+
+    '<div class="meta" style="margin-bottom:12px">'+esc((d.projekt||{}).name||'')+'</div>';
+  var body;
+  if(!c.matRows.length){ body='<div class="empty" style="padding:16px">Noch keine Materialpositionen.</div>'; }
+  else {
+    var rows=c.matRows.map(function(r){
+      var m=r.m;
+      return '<tr data-editmat="'+esc(m.id)+'"><td>'+(m.pos_nr?esc(m.pos_nr)+' ':'')+esc(m.bezeichnung||'')+
+          (m.kategorie?'<div class="kalk-sub">'+esc(m.kategorie)+'</div>':'')+'</td>'+
+        '<td class="num">'+esc(r.qty)+(m.einheit?' '+esc(m.einheit):'')+'</td>'+
+        '<td class="num">'+kMoney(r.ekUnit)+'</td>'+
+        '<td class="num">'+kMoney(r.vkUnit)+'</td>'+
+        '<td class="num">'+kMoney(r.ekSum)+'</td>'+
+        '<td class="num gold">'+kMoney(r.vkSum)+'</td></tr>';
+    }).join('');
+    body='<div class="kalk-tblwrap"><table class="kalk-tbl"><thead><tr>'+
+      '<th>Position</th><th class="num">Menge</th><th class="num">EK/E</th><th class="num">VK/E</th><th class="num">EK</th><th class="num">VK</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot><tr><td colspan="4">Summe Material</td><td class="num">'+kMoney(c.matEK)+'</td><td class="num gold">'+kMoney(c.matVK)+'</td></tr></tfoot>'+
+      '</table></div>'+
+      '<div class="kalk-hint" style="margin-top:8px">Tippe eine Zeile zum Bearbeiten.</div>'+
+      '<button class="btn ghost" id="ka-add" style="margin-top:12px">＋ Materialposition</button>'+
+      '<button class="btn btn-gold" id="ka-pdf" style="margin-top:6px">🖨️ Materialauszug als PDF</button>';
+  }
+  $('view').innerHTML=head+body;
+  $('ka-back').onclick=function(){ paintProjektDetail(_pmData); };
+  var add=$('ka-add'); if(add) add.onclick=function(){ openMaterialForm(null); };
+  var pdf=$('ka-pdf'); if(pdf) pdf.onclick=function(){ kalkPrint('material'); };
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-editmat]'),function(tr){
+    tr.style.cursor='pointer';
+    tr.onclick=function(){ var id=tr.getAttribute('data-editmat'); var mm=null; (_pmData.material||[]).forEach(function(x){ if(x.id===id) mm=x; }); if(mm) openMaterialForm(mm); };
+  });
+}
+
+// ── Kalkulation: Material + Arbeit zusammengezogen, Aufschlag/Rabatt, Marge ───
+function openKalkulation(){
+  var d=_pmData; if(!d){ toast('Projekt neu laden'); return; }
+  var p=d.projekt||{}, c=kalkCompute(d);
+  var tiles='<div class="cc-grid kalk-tiles" style="margin-bottom:14px">'+
+    '<div class="cc-tile"><div class="cck">Gesamt EK</div><div class="ccv">'+kMoney(c.gesamtEK)+'</div></div>'+
+    '<div class="cc-tile"><div class="cck">Gesamt VK</div><div class="ccv gold">'+kMoney(c.gesamtVK)+'</div></div>'+
+    '<div class="cc-tile"><div class="cck">Gewinn / Marge</div><div class="ccv '+(c.gewinn>=0?'ok':'bad')+'">'+kMoney(c.gewinn)+'</div><div class="ccs">'+kPct(c.margePct)+'</div></div>'+
+    '<div class="cc-tile"><div class="cck">Positionen</div><div class="ccv">'+(c.matRows.length+c.taetRows.length)+'</div><div class="ccs">'+c.matRows.length+' Mat · '+c.taetRows.length+' Arbeit</div></div>'+
+    '</div>';
+  // Zwischensummen
+  var subs='<div class="kalk-tblwrap"><table class="kalk-tbl kalk-sums"><tbody>'+
+    '<tr><td>Material (EK → VK)</td><td class="num">'+kMoney(c.matEK)+'</td><td class="num gold">'+kMoney(c.matVK)+'</td></tr>'+
+    '<tr><td>Arbeit (Std × Satz)</td><td class="num">'+kMoney(c.arbEK)+'</td><td class="num gold">'+kMoney(c.arbVK)+'</td></tr>'+
+    '<tr class="kalk-zw"><td>Zwischensumme</td><td class="num">'+kMoney(c.zwEK)+'</td><td class="num gold">'+kMoney(c.zwVK)+'</td></tr>'+
+    '<tr><td>+ Aufschlag '+kPct(c.aufschlag)+'</td><td class="num muted">–</td><td class="num">'+kMoney(c.vkNachAufschlag)+'</td></tr>'+
+    '<tr><td>− Rabatt '+kPct(c.rabatt)+'</td><td class="num muted">–</td><td class="num">'+kMoney(c.gesamtVK)+'</td></tr>'+
+    '<tr class="kalk-tot"><td>Gesamt VK</td><td class="num">EK '+kMoney(c.gesamtEK)+'</td><td class="num gold">'+kMoney(c.gesamtVK)+'</td></tr>'+
+    '</tbody></table></div>';
+  // Aufschlag/Rabatt bearbeiten
+  var ctrl='<div class="cc-sec">Aufschlag & Rabatt (Projektebene)</div>'+
+    '<div class="row2" style="display:flex;gap:8px">'+
+      '<input class="field" id="kk-auf" placeholder="Aufschlag %" type="number" step="1" inputmode="decimal" value="'+esc(p.aufschlag_prozent!=null?p.aufschlag_prozent:'')+'"/>'+
+      '<input class="field" id="kk-rab" placeholder="Rabatt %" type="number" step="1" inputmode="decimal" value="'+esc(p.rabatt_prozent!=null?p.rabatt_prozent:'')+'"/></div>'+
+    '<button class="chip on" id="kk-save" style="margin-top:8px;font-size:12px">Übernehmen & neu rechnen</button>';
+  var head='<div style="margin-bottom:14px"><span class="chip" id="kk-back">‹ Projekt</span></div>'+
+    '<h2 style="margin-bottom:4px"><span class="acc">🧮</span> Kalkulation</h2>'+
+    '<div class="meta" style="margin-bottom:12px">'+esc(p.name||'')+'</div>';
+  var actions='<button class="btn btn-gold" id="kk-pdf" style="margin-top:14px">🖨️ Kostenschätzung als PDF</button>'+
+    '<div class="kalk-hint" style="margin-top:8px">Nur Kostenschätzung – keine Rechnung. Beträge in CHF, unverbindlich.</div>';
+  $('view').innerHTML=head+tiles+subs+ctrl+actions;
+  $('kk-back').onclick=function(){ paintProjektDetail(_pmData); };
+  $('kk-pdf').onclick=function(){ kalkPrint('kalk'); };
+  $('kk-save').onclick=function(){
+    var body={id:_pmProjektId,aufschlag_prozent:($('kk-auf')||{}).value,rabatt_prozent:($('kk-rab')||{}).value};
+    var b=$('kk-save'); if(b){ b.textContent='…'; }
+    api('pm_projekt_save',body).then(function(r){
+      if(r&&r.migCols===false){ toast('Aufschlag/Rabatt: SQL noch ausführen'); }
+      // Projekt neu laden, dann Kalkulation neu zeichnen.
+      api('pm_projekt',{id:_pmProjektId}).then(function(dd){ if(!dd.error){ _pmData=dd; } openKalkulation(); toast('Neu gerechnet'); });
+    }).catch(function(){ if(b){ b.textContent='Übernehmen & neu rechnen'; } toast('Fehler'); });
+  };
+}
+
+// ── PDF-Druck (Schwarz-Gold) via @media print – „Als PDF sichern" ────────────
+function kalkPrint(kind){
+  var d=_pmData; if(!d){ toast('Projekt neu laden'); return; }
+  var p=d.projekt||{}, k=d.kunde, c=kalkCompute(d);
+  var heute=new Date().toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit',year:'numeric'});
+  var matTbl=c.matRows.length?('<table class="pr-tbl"><thead><tr><th>Pos</th><th>Bezeichnung</th><th class="num">Menge</th><th class="num">EK/E</th><th class="num">VK/E</th><th class="num">VK</th></tr></thead><tbody>'+
+    c.matRows.map(function(r){ var m=r.m; return '<tr><td>'+esc(m.pos_nr||'')+'</td><td>'+esc(m.bezeichnung||'')+(m.kategorie?' <span class="pr-sub">'+esc(m.kategorie)+'</span>':'')+'</td><td class="num">'+esc(r.qty)+(m.einheit?' '+esc(m.einheit):'')+'</td><td class="num">'+kMoney(r.ekUnit)+'</td><td class="num">'+kMoney(r.vkUnit)+'</td><td class="num">'+kMoney(r.vkSum)+'</td></tr>'; }).join('')+
+    '</tbody><tfoot><tr><td colspan="5">Summe Material</td><td class="num">'+kMoney(c.matVK)+'</td></tr></tfoot></table>'):'<div class="pr-empty">Kein Material.</div>';
+  var arbTbl=c.taetRows.length?('<table class="pr-tbl"><thead><tr><th>Leistung</th><th class="num">Stunden</th><th class="num">Satz/h</th><th class="num">VK</th></tr></thead><tbody>'+
+    c.taetRows.map(function(r){ var a=r.a; return '<tr><td>'+esc(a.beschreibung||'')+(a.techniker_name?' <span class="pr-sub">'+esc(a.techniker_name)+'</span>':'')+'</td><td class="num">'+esc(r.h)+'</td><td class="num">'+kMoney(r.vkRate)+'</td><td class="num">'+kMoney(r.vkSum)+'</td></tr>'; }).join('')+
+    '</tbody><tfoot><tr><td colspan="3">Summe Arbeit</td><td class="num">'+kMoney(c.arbVK)+'</td></tr></tfoot></table>'):'<div class="pr-empty">Keine Arbeit.</div>';
+  var totals='<table class="pr-tot"><tbody>'+
+    '<tr><td>Zwischensumme VK</td><td class="num">'+kMoney(c.zwVK)+'</td></tr>'+
+    '<tr><td>Aufschlag '+kPct(c.aufschlag)+'</td><td class="num">'+kMoney(c.vkNachAufschlag-c.zwVK)+'</td></tr>'+
+    '<tr><td>Rabatt '+kPct(c.rabatt)+'</td><td class="num">−'+kMoney(c.vkNachAufschlag-c.gesamtVK)+'</td></tr>'+
+    '<tr class="pr-grand"><td>Geschätzte Kosten (VK)</td><td class="num">'+kMoney(c.gesamtVK)+'</td></tr>'+
+    '</tbody></table>';
+  var title=(kind==='material')?'Materialauszug':'Kostenschätzung';
+  var sections=(kind==='material')?('<div class="pr-h2">Material</div>'+matTbl):('<div class="pr-h2">Material</div>'+matTbl+'<div class="pr-h2">Arbeit</div>'+arbTbl+'<div class="pr-h2">Zusammenfassung</div>'+totals);
+  var doc=$('kalk-printdoc'); if(!doc){ doc=document.createElement('div'); doc.id='kalk-printdoc'; document.body.appendChild(doc); }
+  doc.innerHTML='<div class="pr-page">'+
+    '<div class="pr-top"><div class="pr-brand">GEORGE SOLUTIONS</div><div class="pr-doc">'+esc(title)+'</div></div>'+
+    '<div class="pr-meta"><div><b>'+esc(p.name||'Projekt')+'</b>'+(p.projektnummer?' · '+esc(p.projektnummer):'')+(p.standort?'<br>'+esc(p.standort):'')+'</div>'+
+      '<div class="pr-right">'+(k?esc(k.firma||k.kontaktperson||'')+'<br>':'')+'Datum: '+esc(heute)+'</div></div>'+
+    sections+
+    '<div class="pr-foot">Unverbindliche '+esc(title)+' – <b>keine Rechnung</b>. Alle Beträge in CHF exkl. MwSt., Preisstand '+esc(heute)+'.</div>'+
+    '</div>';
+  window.print();
 }
 
 // ════ LIZENZEN — pro Kunde buchbare Bausteine (Demo fürs Verkaufsgespräch) ════
