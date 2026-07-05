@@ -354,6 +354,11 @@
     background:var(--muted2);transition:.2s;}
   .wsw.on{background:var(--gold-soft);border-color:var(--gold-line);}
   .wsw.on::after{left:24px;background:var(--gold);box-shadow:0 0 10px var(--gold);}
+  /* Wake-Word Master-Schalter — eigenes Settings-Element (Default AUS) */
+  .wakeset{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:11px 14px;margin-bottom:10px;}
+  .wakeset .wl{flex:1;font-size:12.5px;color:var(--muted);line-height:1.35;}
+  .wakeset .wl b{color:var(--gold);}
   /* Blockaden */
   .blk{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px;
     display:flex;flex-direction:column;gap:8px;border-left:3px solid var(--muted2);}
@@ -1605,6 +1610,7 @@ function renderJarvis(){
         '<div class="jorb idle" id="j-orb"></div>'+
         '<div class="jstate" id="j-state">Hallo Master. Sag „Hey Bob“ oder tippe aufs Mikrofon.</div>'+
       '</div>'+
+      '<div class="wakeset" id="wake-setting"><div class="wl" id="wake-set-lbl"></div><button class="wsw" id="wake-set-sw" title="Hey-Bob Wake-Word aktivieren/deaktivieren"></button></div>'+
       '<div class="wakebar" id="wake-bar"><div class="wl" id="wake-lbl"></div><button class="wsw" id="wake-sw" title="Hey-Bob Dauer-Zuhoeren"></button></div>'+
       '<div class="jspeak-toggle" id="j-vtoggle"></div>'+
       '<div class="jq-title">Schnellbefehle</div>'+
@@ -1619,6 +1625,7 @@ function renderJarvis(){
     '</div>';
   wireBack();
   paintJarvisVoiceToggle();
+  var wss=$('wake-set-sw'); if(wss) wss.onclick=toggleWakeFeature; paintWakeSetting();
   var wsw=$('wake-sw'); if(wsw) wsw.onclick=toggleWake; paintWake();
   paintJConv();
   Array.prototype.forEach.call($('j-chips').children,function(c){
@@ -2030,11 +2037,33 @@ function wakeParse(raw){
 }
 
 function wakeSupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+
+// ── Wake-Word Master-Schalter (Settings, Default AUS) ───────────────────────
+// Persistente Nutzer-Einstellung: ist „Hey Bob"-Dauer-Zuhören überhaupt erlaubt?
+// Default AUS → out-of-the-box nur Tap-to-Talk. Der komplette Wake-Word-Code bleibt
+// erhalten und wird nur hinter diesem Schalter freigegeben (nichts gelöscht).
+function wakeFeatureOn(){ try{ return localStorage.getItem('bob_wake_enabled')==='1'; }catch(e){ return false; } }
+function setWakeFeature(on){ try{ localStorage.setItem('bob_wake_enabled', on?'1':'0'); }catch(e){} }
+function toggleWakeFeature(){
+  var on=!wakeFeatureOn(); setWakeFeature(on);
+  if(!on) stopWake();                   // Feature aus → laufendes Zuhören sofort beenden
+  paintWakeSetting(); paintWake();
+  toast(on ? 'Hey-Bob Wake-Word aktiviert' : 'Hey-Bob Wake-Word aus — nur 🎤 Tap-to-Talk');
+}
+function paintWakeSetting(){
+  var sw=$('wake-set-sw'); if(sw) sw.className='wsw'+(wakeFeatureOn()?' on':'');
+  var lbl=$('wake-set-lbl'); if(!lbl) return;
+  lbl.innerHTML=wakeFeatureOn()
+    ? '🎙️ <b>Hey-Bob Wake-Word</b> ist an · Dauer-Zuhören unten möglich'
+    : '🎙️ <b>Hey-Bob Wake-Word</b> ist aus · nur 🎤 Tap-to-Talk. Schalter an, um es zu nutzen.';
+}
+
 function toggleWake(){
   unlockJAudio();                       // Audio im Tap-Kontext entsperren (iOS)
   if(_wakeOn) stopWake(); else startWake();
 }
 function startWake(){
+  if(!wakeFeatureOn()){ toast('Hey-Bob ist deaktiviert — nutze das 🎤 Mikrofon'); return; }
   if(!wakeSupported()){ toast('Dauer-Zuhören hier nicht unterstützt — nutze das 🎤 Mikrofon'); return; }
   if(_jRecording) stopJarvisMic(true);  // Tap-to-Talk und Wake nie gleichzeitig
   _wakeOn=true; _wakePaused=false; _wakeRestarts=0; wakeBegin(); paintWake();
@@ -2096,8 +2125,11 @@ function wakeHeard(cmd){
   jarvisAsk(cmd);
 }
 function paintWake(){
-  var sw=$('wake-sw'); if(sw) sw.className='wsw'+(_wakeOn?' on':'');
   var bar=$('wake-bar');
+  // Master-Schalter aus → Wakebar komplett ausblenden (nur Tap-to-Talk sichtbar).
+  if(bar) bar.style.display = wakeFeatureOn() ? '' : 'none';
+  if(!wakeFeatureOn()) return;
+  var sw=$('wake-sw'); if(sw) sw.className='wsw'+(_wakeOn?' on':'');
   if(bar) bar.className='wakebar'+(_wakeOn?(_wakePaused?' live paused':' live'):'');
   var lbl=$('wake-lbl'); if(!lbl) return;
   lbl.innerHTML=_wakeOn
