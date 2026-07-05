@@ -115,9 +115,11 @@ export default async function handler(req, res) {
       case 'pm_kunden':        return res.status(200).json(await getPmKunden());
       case 'pm_kunde_save':    return res.status(200).json(await savePmKunde(req.body));
       case 'pm_techniker':     return res.status(200).json(await getPmTechniker());
+      case 'pm_techniker_save':return res.status(200).json(await savePmTechniker(req.body));
       case 'pm_tech_assign':   return res.status(200).json(await assignTech(req.body));
       case 'pm_tech_unassign': return res.status(200).json(await unassignTech(req.body));
       case 'pm_taetigkeit_add':return res.status(200).json(await addTaetigkeit(req.body));
+      case 'pm_taetigkeit_upd':return res.status(200).json(await updTaetigkeit(req.body));
       case 'pm_taetigkeit_del':return res.status(200).json(await delPmRow('gs_taetigkeiten', req.body.id));
       case 'pm_material_add':  return res.status(200).json(await addMaterial(req.body));
       case 'pm_material_upd':  return res.status(200).json(await updMaterial(req.body));
@@ -451,6 +453,31 @@ function num(v) { const n = Number(v); return isFinite(n) ? n : 0; }
 // PostgREST: PGRST205 = Tabelle fehlt (GET), PGRST204 = Spalte fehlt (Write) —
 // beide melden „… in the schema cache". Deshalb auch darauf matchen.
 function isNoTable(e) { return /PGRST20[45]|schema cache|not find the table|does not exist|42P01/i.test((e && e.message) || ''); }
+// Nur „Spalte fehlt" (nicht ganze Tabelle) — für Felder aus der Kalkulations-
+// Migration, die evtl. noch nicht eingespielt ist. PGRST204 / 42703 / Meldung.
+function isMissingColumn(e) { return /PGRST204|42703|Could not find the .*column|column .* does not exist/i.test((e && e.message) || ''); }
+// Optionaler Zahlwert: leer/ungültig ⇒ null (statt 0), sonst Number.
+function numOrNull(v) { if (v == null || v === '') return null; const n = Number(v); return isFinite(n) ? n : null; }
+// Resilientes INSERT: schlägt die neue Spalte fehl (Migration nicht eingespielt),
+// werden die optionalen Keys entfernt und ohne sie geschrieben. Gibt migCols:false
+// zurück, damit die UI hinweisen kann „SQL noch ausführen".
+async function sbInsertCols(table, row, optKeys) {
+  try { const r = await sbWrite('POST', table, row); return { row: Array.isArray(r) ? r[0] : r, migCols: true }; }
+  catch (e) {
+    if (!isMissingColumn(e)) throw e;
+    const base = { ...row }; optKeys.forEach((k) => delete base[k]);
+    const r = await sbWrite('POST', table, base); return { row: Array.isArray(r) ? r[0] : r, migCols: false };
+  }
+}
+// Resilientes PATCH (analog).
+async function sbPatchCols(path, patch, optKeys) {
+  try { const r = await sbWrite('PATCH', path, patch); return { row: Array.isArray(r) ? r[0] : r, migCols: true }; }
+  catch (e) {
+    if (!isMissingColumn(e)) throw e;
+    const base = { ...patch }; optKeys.forEach((k) => delete base[k]);
+    const r = await sbWrite('PATCH', path, base); return { row: Array.isArray(r) ? r[0] : r, migCols: false };
+  }
+}
 function fuState(dateStr, today) {
   if (!dateStr) return null;
   if (dateStr < today) return 'ueberfaellig';
@@ -1628,15 +1655,17 @@ async function savePmProjekt(b) {
   if (b.bereich !== undefined) patch.bereich = String(b.bereich || '').trim().slice(0, 80) || null;
   if (b.status !== undefined) patch.status = String(b.status || '').trim().slice(0, 40) || 'aktiv';
   if (b.kunde_id !== undefined) patch.kunde_id = b.kunde_id ? uuid(b.kunde_id) : null;
+  if (b.aufschlag_prozent !== undefined) patch.aufschlag_prozent = numOrNull(b.aufschlag_prozent);
+  if (b.rabatt_prozent !== undefined) patch.rabatt_prozent = numOrNull(b.rabatt_prozent);
+  const OPT = ['aufschlag_prozent', 'rabatt_prozent'];
   if (b.id) {
-    const id = uuid(b.id);
-    const r = await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, patch);
-    return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+    const { row, migCols } = await sbPatchCols(`gs_projekte?id=eq.${uuid(b.id)}`, patch, OPT);
+    return { ok: true, projekt: row, migCols };
   }
   if (!patch.name) throw new Error('name nötig');
   if (!patch.status) patch.status = 'aktiv';
-  const r = await sbWrite('POST', 'gs_projekte', patch);
-  return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+  const { row, migCols } = await sbInsertCols('gs_projekte', patch, OPT);
+  return { ok: true, projekt: row, migCols };
 }
 
 async function getPmKunden() {
@@ -1661,8 +1690,26 @@ async function savePmKunde(b) {
 }
 
 async function getPmTechniker() {
-  const techniker = await sbGet('gs_techniker?select=id,name,telefon,email,qualifikation,verfuegbar&order=name.asc').catch(() => []);
+  // select=* → liefert auch kostensatz/stundensatz (falls migriert), ohne bei
+  // fehlender Spalte zu 500en.
+  const techniker = await sbGet('gs_techniker?select=*&order=name.asc').catch(() => []);
   return { techniker };
+}
+
+// Stundensätze (EK/VK) eines Technikers setzen. Optional Name (Anlegen möglich).
+async function savePmTechniker(b) {
+  const patch = {};
+  if (b.name !== undefined) patch.name = String(b.name || '').trim().slice(0, 120);
+  if (b.kostensatz !== undefined) patch.kostensatz = numOrNull(b.kostensatz);
+  if (b.stundensatz !== undefined) patch.stundensatz = numOrNull(b.stundensatz);
+  const OPT = ['kostensatz', 'stundensatz'];
+  if (b.id) {
+    const { row, migCols } = await sbPatchCols(`gs_techniker?id=eq.${uuid(b.id)}`, patch, OPT);
+    return { ok: true, techniker: row, migCols };
+  }
+  if (!patch.name) throw new Error('name nötig');
+  const { row, migCols } = await sbInsertCols('gs_techniker', patch, OPT);
+  return { ok: true, techniker: row, migCols };
 }
 
 async function assignTech(b) {
@@ -1683,6 +1730,18 @@ async function unassignTech(b) {
   catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
+// Optionale Kalkulations-/LV-Felder einer Arbeitsposition (aus der Migration).
+const TAET_OPT = ['kostensatz', 'stundensatz', 'techniker_id', 'kategorie', 'pos_nr', 'quelle'];
+function taetOptFields(b) {
+  const o = {};
+  if (b.kostensatz !== undefined) o.kostensatz = numOrNull(b.kostensatz);
+  if (b.stundensatz !== undefined) o.stundensatz = numOrNull(b.stundensatz);
+  if (b.techniker_id) o.techniker_id = uuid(b.techniker_id);
+  if (b.kategorie !== undefined) o.kategorie = b.kategorie ? String(b.kategorie).slice(0, 80) : null;
+  if (b.pos_nr !== undefined) o.pos_nr = b.pos_nr ? String(b.pos_nr).slice(0, 40) : null;
+  if (b.quelle !== undefined) o.quelle = String(b.quelle || 'manuell').slice(0, 20);
+  return o;
+}
 async function addTaetigkeit(b) {
   const row = {
     projekt_id: uuid(b.projekt_id),
@@ -1690,14 +1749,41 @@ async function addTaetigkeit(b) {
     techniker_name: b.techniker_name ? String(b.techniker_name).slice(0, 120) : null,
     datum: b.datum ? String(b.datum).slice(0, 10) : null,
     stunden: (b.stunden != null && b.stunden !== '') ? num(b.stunden) : null,
+    ...taetOptFields(b),
   };
   if (!row.beschreibung) throw new Error('beschreibung nötig');
   try {
-    const r = await sbWrite('POST', 'gs_taetigkeiten', row);
-    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+    const { row: r, migCols } = await sbInsertCols('gs_taetigkeiten', row, TAET_OPT);
+    return { ok: true, row: r, migCols };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+async function updTaetigkeit(b) {
+  const id = uuid(b.id);
+  const patch = {};
+  if (b.beschreibung !== undefined) patch.beschreibung = String(b.beschreibung || '').slice(0, 500);
+  if (b.techniker_name !== undefined) patch.techniker_name = b.techniker_name ? String(b.techniker_name).slice(0, 120) : null;
+  if (b.datum !== undefined) patch.datum = b.datum ? String(b.datum).slice(0, 10) : null;
+  if (b.stunden !== undefined) patch.stunden = (b.stunden === '' || b.stunden == null) ? null : num(b.stunden);
+  Object.assign(patch, taetOptFields(b));
+  try {
+    const { row, migCols } = await sbPatchCols(`gs_taetigkeiten?id=eq.${id}`, patch, TAET_OPT);
+    return { ok: true, row, migCols };
   } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
+// Optionale Kalkulations-/LV-Felder einer Materialposition (aus der Migration).
+const MAT_OPT = ['einzelpreis', 'marge_prozent', 'verkaufspreis', 'lieferant', 'datum', 'pos_nr', 'quelle'];
+function matOptFields(b) {
+  const o = {};
+  if (b.einzelpreis !== undefined) o.einzelpreis = numOrNull(b.einzelpreis);
+  if (b.marge_prozent !== undefined) o.marge_prozent = numOrNull(b.marge_prozent);
+  if (b.verkaufspreis !== undefined) o.verkaufspreis = numOrNull(b.verkaufspreis); // null ⇒ VK aus EK×Marge
+  if (b.lieferant !== undefined) o.lieferant = b.lieferant ? String(b.lieferant).slice(0, 120) : null;
+  if (b.datum !== undefined) o.datum = b.datum ? String(b.datum).slice(0, 10) : null;
+  if (b.pos_nr !== undefined) o.pos_nr = b.pos_nr ? String(b.pos_nr).slice(0, 40) : null;
+  if (b.quelle !== undefined) o.quelle = String(b.quelle || 'manuell').slice(0, 20);
+  return o;
+}
 async function addMaterial(b) {
   const row = {
     projekt_id: uuid(b.projekt_id),
@@ -1706,11 +1792,12 @@ async function addMaterial(b) {
     einheit: b.einheit ? String(b.einheit).slice(0, 20) : null,
     kategorie: b.kategorie ? String(b.kategorie).slice(0, 60) : null,
     status: b.status ? String(b.status).slice(0, 40) : 'offen',
+    ...matOptFields(b),
   };
   if (!row.bezeichnung) throw new Error('bezeichnung nötig');
   try {
-    const r = await sbWrite('POST', 'gs_material', row);
-    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+    const { row: r, migCols } = await sbInsertCols('gs_material', row, MAT_OPT);
+    return { ok: true, row: r, migCols };
   } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
@@ -1720,9 +1807,12 @@ async function updMaterial(b) {
   if (b.status !== undefined) patch.status = String(b.status).slice(0, 40);
   if (b.menge !== undefined) patch.menge = b.menge === '' ? null : num(b.menge);
   if (b.bezeichnung !== undefined) patch.bezeichnung = String(b.bezeichnung).slice(0, 200);
+  if (b.einheit !== undefined) patch.einheit = b.einheit ? String(b.einheit).slice(0, 20) : null;
+  if (b.kategorie !== undefined) patch.kategorie = b.kategorie ? String(b.kategorie).slice(0, 60) : null;
+  Object.assign(patch, matOptFields(b));
   try {
-    const r = await sbWrite('PATCH', `gs_material?id=eq.${id}`, patch);
-    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+    const { row, migCols } = await sbPatchCols(`gs_material?id=eq.${id}`, patch, MAT_OPT);
+    return { ok: true, row, migCols };
   } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
