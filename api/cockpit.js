@@ -287,7 +287,10 @@ const MONATE_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'S
 async function getUmsatzStats() {
   let rows = [];
   try {
-    rows = await sbGet('gs_umsatz_monat?select=jahr,monat,umsatz_chf,anzahl_projekte,notiz&order=jahr.asc,monat.asc');
+    // select=* (NICHT einzelne Spalten): anzahl_projekte/notiz sind optional und
+    // fehlen evtl. in der Live-Tabelle → gezielter Select würfe 400 und Bob meldete
+    // fälschlich „keine Umsatzdaten". Das Mapping unten liest die Felder defensiv.
+    rows = await sbGet('gs_umsatz_monat?select=*&order=jahr.asc,monat.asc');
   } catch (_) { rows = []; }
   const present = rows.length > 0;
   const monate = rows.map((r) => ({
@@ -1578,14 +1581,21 @@ async function getPmProjekt(id) {
     ? (await sbGet(`gs_kunden?id=eq.${projekt.kunde_id}&select=*&limit=1`).catch(() => []))[0] || null
     : null;
 
-  // Blockaden (bestehende Tabelle) — per projekt_id, sonst per denormalisiertem Namen.
+  // Blockaden (bestehende Tabelle) — per projekt_id UND per denormalisiertem Namen
+  // zusammenführen: der FK-Retry beim Anlegen (blockaden.js) kann projekt_id auf
+  // null setzen und nur projekt_name behalten. Beide Quellen mergen (dedupe per id),
+  // damit bei gemischter Verknüpfung KEINE Blockade verloren geht.
   let blockaden = [];
   const blSel = 'id,beschreibung,status,urgency,haus,einheit,zone,step_ref,blockiert_von_rolle,created_at';
   try {
-    blockaden = await sbGet(`gs_blockaden?projekt_id=eq.${id}&select=${blSel}&order=created_at.desc`);
-    if ((!blockaden || !blockaden.length) && projekt.name) {
-      blockaden = await sbGet(`gs_blockaden?projekt_name=eq.${encodeURIComponent(projekt.name)}&select=${blSel}&order=created_at.desc`).catch(() => []);
-    }
+    const byId = await sbGet(`gs_blockaden?projekt_id=eq.${id}&select=${blSel}&order=created_at.desc`).catch(() => []);
+    const byName = projekt.name
+      ? await sbGet(`gs_blockaden?projekt_name=eq.${encodeURIComponent(projekt.name)}&select=${blSel}&order=created_at.desc`).catch(() => [])
+      : [];
+    const merged = new Map();
+    for (const b of [...(byId || []), ...(byName || [])]) if (b && b.id) merged.set(b.id, b);
+    blockaden = Array.from(merged.values())
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   } catch (_) { blockaden = []; }
 
   // Techniker-Zuweisungen (neue Tabelle) + Namen aus gs_techniker joinen.
