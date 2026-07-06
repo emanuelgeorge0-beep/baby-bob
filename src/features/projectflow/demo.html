@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Projekt-Workflow · Test</title>
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    body { margin: 0; background: #07111f; }
+    .pfw-gate { max-width: 460px; margin: 40px auto; padding: 20px; }
+    .pfw-gate .pfw-card { background: #0d1b2e; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 18px; color: #e8edf5; font-family: -apple-system, system-ui, sans-serif; }
+    .pfw-gate input, .pfw-gate button { width: 100%; padding: 12px; margin-top: 8px; border-radius: 11px; font-size: 15px; border: 1px solid rgba(255,255,255,.1); }
+    .pfw-gate input { background: #0a1628; color: #fff; }
+    .pfw-gate button { background: linear-gradient(135deg,#FFD24A,#c9a961); color: #0a1628; font-weight: 700; cursor: pointer; border: none; }
+    .pfw-gate label { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 14px; }
+    .pfw-gate label input { width: auto; margin: 0; }
+  </style>
+</head>
+<body>
+  <!-- Standalone-Testharness. Ersetzt NICHT die Shell-Integration – dient dem Test am Handy.
+       Holt den Bearer-Token aus localStorage ('bob_auth_token'), sonst manuelle Eingabe. -->
+  <div id="app"></div>
+  <div id="gate" class="pfw-gate" hidden>
+    <div class="pfw-card">
+      <h3 style="margin:0 0 8px">🔐 Projekt-Workflow – Testzugang</h3>
+      <p style="color:#8fa0b5;font-size:13px;margin:0">Kein Login gefunden. Access-Token einfügen (aus der App: localStorage <code>bob_auth_token</code>).</p>
+      <input id="tok" placeholder="Bearer Access-Token" autocomplete="off">
+      <label><input type="checkbox" id="cap-rapport" checked> Rapport erlaubt (canRapport)</label>
+      <label><input type="checkbox" id="cap-order" checked> Bestellen erlaubt (canOrder)</label>
+      <button id="go">Starten</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { mountProjectWorkspace } from './ProjectWorkspace.js';
+
+    function start(token, canRapport, canOrder) {
+      document.getElementById('gate').hidden = true;
+      mountProjectWorkspace(document.getElementById('app'), {
+        companyId: 'george-solutions',
+        canRapport, canOrder,
+        token,
+        baseUrl: '',                                  // gleiche Origin (Vercel /api/*)
+        currentUser: { name: 'George Solutions' },    // Anzeige-/Absendername
+      });
+    }
+
+    const stored = (() => { try { return localStorage.getItem('bob_auth_token'); } catch { return null; } })();
+    if (stored) {
+      start(stored, true, true);
+    } else {
+      document.getElementById('gate').hidden = false;
+      document.getElementById('go').addEventListener('click', () => {
+        const t = document.getElementById('tok').value.trim();
+        if (!t) return;
+        try { localStorage.setItem('bob_auth_token', t); } catch {}
+        start(t, document.getElementById('cap-rapport').checked, document.getElementById('cap-order').checked);
+      });
+    }
+  </script>
+</body>
+</html>
