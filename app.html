@@ -805,6 +805,60 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .pd-item-click{cursor:pointer;transition:border-color .15s,background .15s;-webkit-tap-highlight-color:transparent;}
 .pd-item-click:hover,.pd-item-click:focus-visible{border-color:rgba(74,158,255,0.4);background:rgba(74,158,255,0.06);outline:none;}
 .pd-item-arrow{float:right;color:rgba(74,158,255,0.7);font-weight:900;font-size:14px;}
+
+/* ══ PARTNER COCKPIT – edles Master-Design (Schwarz/Gold), NUR Optik ══
+   Alles unter #partner-dash gescopt, damit Admin-/Tech-Screens unberührt bleiben.
+   Palette 1:1 aus gs-intern.html (Master Cockpit). */
+#partner-dash{
+  background:
+    radial-gradient(900px 500px at 80% -10%, rgba(201,169,97,.06), transparent 60%),
+    radial-gradient(700px 500px at -10% 10%, rgba(90,167,255,.05), transparent 55%),
+    #0A0A0B;
+  color:#e8edf5;
+}
+#partner-dash .admin-hdr-tit{color:#e8edf5;letter-spacing:.4px;}
+#partner-dash .admin-hdr-sub{color:#8a97a8;}
+#partner-dash .admin-back{background:transparent;border:1px solid rgba(255,255,255,.07);color:#8a97a8;border-radius:9px;}
+#partner-dash .admin-add-btn{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;border-radius:12px;}
+#partner-dash .admin-empty{color:#5c6878;}
+/* Tabs → Gold-Chips, horizontal scrollbar (10 Module passen mobil nicht nebeneinander) */
+#partner-dash .pd-tabs{gap:8px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;}
+#partner-dash .pd-tabs::-webkit-scrollbar{display:none;}
+#partner-dash .pd-tab{flex:0 0 auto;background:#131519;border:1px solid rgba(255,255,255,.07);color:#8a97a8;border-radius:50px;padding:9px 15px;white-space:nowrap;}
+#partner-dash .pd-tab.act{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#C9A961;}
+/* Listen-Items */
+#partner-dash .pd-item{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:14px;}
+#partner-dash .pd-item:hover{border-color:rgba(201,169,97,.28);}
+#partner-dash .pd-item-tit{color:#e8edf5;}
+#partner-dash .pd-item-meta{color:#8a97a8;}
+#partner-dash .pd-dl{color:#C9A961;}
+#partner-dash .admin-badge.active{background:rgba(62,207,142,.16);color:#3ecf8e;}
+#partner-dash .admin-badge.must_change_password{background:rgba(245,185,66,.16);color:#f5b942;}
+/* ── Übersicht: Kachel-Raster wie Master Cockpit ── */
+#partner-dash .pd-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:16px 18px 0;}
+#partner-dash .pd-tile{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:15px 16px;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent;transition:border-color .15s,transform .12s;}
+#partner-dash .pd-tile::after{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,rgba(201,169,97,.28),transparent);}
+#partner-dash .pd-tile.click{cursor:pointer;}
+#partner-dash .pd-tile.click:active{transform:translateY(1px);border-color:rgba(201,169,97,.28);}
+#partner-dash .pd-tile.wide{grid-column:1/-1;}
+#partner-dash .pd-tile.locked{opacity:.42;}
+#partner-dash .pd-tile.locked::after{display:none;}
+#partner-dash .pd-tile .pt-k{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#8a97a8;display:flex;align-items:center;gap:6px;}
+#partner-dash .pd-tile .pt-v{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;}
+#partner-dash .pd-tile .pt-v.gold{color:#C9A961;}
+#partner-dash .pd-tile .pt-v.ok{color:#3ecf8e;}
+#partner-dash .pd-tile .pt-v.warn{color:#f5b942;}
+#partner-dash .pd-tile .pt-sfx{font-size:12.5px;color:#8a97a8;font-weight:600;margin-top:3px;}
+/* ── Wetter-Kachel (open-meteo, kein Key) 1:1 aus Master ── */
+#partner-dash .pd-wx .pt-k{margin-bottom:10px;}
+#partner-dash .pd-wx .wx-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+#partner-dash .pd-wx .wx-city{display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:#0f1116;border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:9px 11px;min-width:0;}
+#partner-dash .pd-wx .wx-ic{font-size:18px;line-height:1;}
+#partner-dash .pd-wx .wx-name{font-size:11px;color:#8a97a8;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#partner-dash .pd-wx .wx-temp{font-size:19px;font-weight:800;color:#5aa7ff;font-variant-numeric:tabular-nums;}
+#partner-dash .pd-wx .wx-txt{font-size:10.5px;color:#5c6878;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media (max-width:360px){ #partner-dash .pd-wx .wx-row{gap:6px;} #partner-dash .pd-wx .wx-city{padding:8px;} #partner-dash .pd-wx .wx-temp{font-size:17px;} }
+
 /* BLOCK 6: Lead-Detailansicht (Overlay) */
 .lead-ov{display:none;position:fixed;inset:0;z-index:2000;background:rgba(4,9,17,0.78);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;}
 @media (min-width:560px){ .lead-ov{align-items:center;} }
@@ -2415,7 +2469,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 <!-- ═══ PARTNER DASHBOARD ═══ -->
 <div id="partner-dash" class="admin-screen">
   <div class="admin-hdr">
-    <div><div class="admin-hdr-tit">🏢 Mein Portal</div><div class="admin-hdr-sub" id="pd-welcome">George Solutions</div></div>
+    <div><div class="admin-hdr-tit">Partner <span style="color:#C9A961;">Cockpit</span></div><div class="admin-hdr-sub" id="pd-welcome">George Solutions</div></div>
     <button class="admin-back" onclick="logout()">Abmelden</button>
   </div>
   <div class="pd-cards" id="pd-cards"></div>
@@ -6959,18 +7013,72 @@ function initPartnerDash(){
     pdTab('inbox');
   });
 }
+// Eine Übersichts-Kachel im Master-Design. feature=Entitlement-Key (leer=immer frei).
+// Gesperrt → ausgegraut + 🔒, kein Wert (Sichtbarkeit steuern die Entitlements, s. pdHas).
+function pdTile(o){
+  var locked = !!(o.feature && !pdHas(o.feature));
+  var clickable = o.tab && !locked;
+  var cls='pd-tile'+(o.wide?' wide':'')+(locked?' locked':'')+(clickable?' click':'');
+  var onclick=clickable?(' onclick="pdTab(\''+o.tab+'\')"'):'';
+  var val=locked?'—':o.v;
+  return '<div class="'+cls+'"'+onclick+'>'
+    +'<div class="pt-k">'+(locked?'🔒 ':'')+gsEsc(o.k)+'</div>'
+    +'<div class="pt-v '+(locked?'':(o.cls||''))+'">'+val+'</div>'
+    +(o.sfx&&!locked?'<div class="pt-sfx">'+gsEsc(o.sfx)+'</div>':'')
+    +'</div>';
+}
 function pdLoadCards(){
   var el=document.getElementById('pd-cards');if(!el)return;
-  var proj=0,offen=0,neu=0;
+  var proj=0,tech=0,rapH=0,rapW=0,offen=0;
+  var heute=new Date().toISOString().slice(0,10);
+  var wStart=new Date(Date.now()-6*864e5).toISOString().slice(0,10);
   Promise.all([
-    gsAuthApi('projekte',{action:'list'}).then(function(d){proj=(d.projekte||[]).filter(function(p){return p.status!=='abgeschlossen';}).length;}),
-    gsAuthApi('rechnung',{action:'list'}).then(function(d){offen=(d.rechnungen||[]).filter(function(r){return r.status!=='bezahlt';}).length;}),
-    gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){neu=d.unread||0;})
+    gsAuthApi('projekte',{action:'list'}).then(function(d){
+      var ps=(d.projekte||[]).filter(function(p){return p.status!=='abgeschlossen';});
+      proj=ps.length;
+      var set={};
+      ps.forEach(function(p){(p.gs_projekt_techniker||[]).forEach(function(t){ if(t&&t.techniker_user_id) set[t.techniker_user_id]=1; });});
+      tech=Object.keys(set).length;
+    }).catch(function(){}),
+    gsAuthApi('tagesrapport',{action:'list'}).then(function(d){
+      (d.rapporte||[]).forEach(function(r){ var dt=(r.datum||'').slice(0,10);
+        if(dt===heute)rapH++; if(dt>=wStart&&dt<=heute)rapW++; });
+    }).catch(function(){}),
+    gsAuthApi('rechnung',{action:'list'}).then(function(d){
+      offen=(d.rechnungen||[]).filter(function(r){return r.status!=='bezahlt';}).length;
+    }).catch(function(){})
   ]).then(function(){
-    el.innerHTML='<div class="pd-card"><div class="pd-card-n">'+proj+'</div><div class="pd-card-l">Aktive Projekte</div></div>'
-      +'<div class="pd-card"><div class="pd-card-n">'+offen+'</div><div class="pd-card-l">Offene Rechnungen</div></div>'
-      +'<div class="pd-card"><div class="pd-card-n">'+neu+'</div><div class="pd-card-l">Neue Nachrichten</div></div>';
+    el.innerHTML=
+      pdTile({k:'Aktive Projekte',v:proj,cls:'gold',feature:'projektmanagement',tab:'projekte'})
+     +pdTile({k:'Zugeteilte Techniker',v:tech,sfx:'auf '+proj+' Projekt'+(proj===1?'':'en'),feature:'projektmanagement',tab:'projekte'})
+     +pdTile({k:'Rapporte',v:rapH,sfx:'heute · '+rapW+' diese Woche',feature:'reporting',tab:'rapporte'})
+     +pdTile({k:'Materiallisten',v:'›',cls:'gold',sfx:'Listen ansehen',feature:'material',tab:'material'})
+     +pdTile({k:'Controlling',v:'›',cls:'gold',sfx:'Auswertung öffnen',feature:'controlling',tab:'controlling'})
+     +pdTile({k:'Rechnungen',v:offen,cls:offen>0?'warn':'',sfx:offen>0?'offen':'alle bezahlt',tab:'rechnungen'})
+     +pdTile({k:'Systemstatus',v:'OK',cls:'ok',sfx:'Alle Dienste online'})
+     +'<div class="pd-tile wide pd-wx" id="pd-weather"><div class="pt-k">🌤️ Wetter</div><div class="pt-sfx">Lädt…</div></div>';
+    pdLoadWeather();
   });
+}
+// Wetter (Zürich/Wien/Barcelona) – Quelle /api/weather (open-meteo, kein Key),
+// 15-Min-Cache. Fehler unkritisch: Kachel wird dann ausgeblendet. Wie Master Cockpit.
+var _pdWx=null,_pdWxAt=0;
+function pdLoadWeather(){
+  var el=document.getElementById('pd-weather');if(!el)return;
+  function paint(d){
+    var cs=(d&&d.cities)||[];
+    if(!cs.length){ el.style.display='none'; return; }
+    el.innerHTML='<div class="pt-k">🌤️ Wetter</div><div class="wx-row">'+cs.map(function(c){
+      return '<div class="wx-city"><span class="wx-ic">'+gsEsc(c.emoji||'🌡️')+'</span>'
+        +'<span class="wx-name">'+gsEsc(c.name)+'</span>'
+        +'<span class="wx-temp">'+gsEsc(String(c.temp))+'°</span>'
+        +'<span class="wx-txt">'+gsEsc(c.text||'')+'</span></div>';
+    }).join('')+'</div>';
+  }
+  if(_pdWx&&Date.now()-_pdWxAt<900000){ paint(_pdWx); return; }
+  fetch('/api/weather').then(function(r){return r.json();})
+    .then(function(d){ _pdWx=d;_pdWxAt=Date.now(); paint(d); })
+    .catch(function(){ if(el)el.style.display='none'; });
 }
 function pdLoadBadge(){
   gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){
