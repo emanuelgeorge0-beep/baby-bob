@@ -93,7 +93,32 @@ async function changePassword(res, user, body) {
     if (/different|same/i.test(e)) return res.status(400).json({ error: 'Neues Passwort muss sich vom alten unterscheiden' });
     return res.status(500).json({ error: 'Passwortänderung fehlgeschlagen' });
   }
-  return res.status(200).json({ ok: true, must_change_password: false });
+
+  // WICHTIG: Der Admin-Passwortwechsel entwertet die bestehende Session (GoTrue
+  // revoked Sessions/Refresh-Tokens bei Passwortänderung). Der bisherige Token
+  // des Clients ist ab jetzt tot → würde beim nächsten Call "Ungültiger Token"
+  // liefern. Darum sofort mit dem NEUEN Passwort eine frische Session holen und
+  // zurückgeben, damit der Client nahtlos eingeloggt bleibt (kein Re-Login,
+  // kein doppelter "Passwort festlegen"-Screen).
+  let session = null;
+  try {
+    const grant = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST', headers: SB,
+      body: JSON.stringify({ email: user.email, password: new_password }),
+    });
+    if (grant.ok) session = await grant.json();
+  } catch { /* Fallback unten: Client macht dann ein sauberes Re-Login */ }
+
+  const role = await getRole(user.id);
+  return res.status(200).json({
+    ok: true,
+    must_change_password: false,
+    profile_complete: !!m.profile_complete,
+    role,
+    user: { id: user.id, email: user.email },
+    access_token: session?.access_token || null,
+    refresh_token: session?.refresh_token || null,
+  });
 }
 
 async function completeProfile(res, user, body) {

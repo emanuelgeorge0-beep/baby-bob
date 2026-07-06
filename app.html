@@ -5119,10 +5119,34 @@ function submitPwChange(){
     body:JSON.stringify({action:'change_password',new_password:p1})
   }).then(function(r){return r.json();}).then(function(d){
     if(btn){btn.disabled=false;btn.textContent='Passwort speichern';}
-    if(d.error){setMsg('pwc-msg',d.error,'err');return;}
+    if(d.error){
+      // Token tot (z.B. Session wurde durch einen Master-Reset entwertet, oder ein
+      // alter Token lag noch im Speicher): kein Sackgassen-Fehler, sondern klar
+      // zurück zum Login – mit dem Temp-Passwort klappt der erste Login sofort.
+      if(/Ungültiger Token|Nicht authentifiziert|Sitzung|abgelaufen/i.test(d.error)){
+        try{localStorage.removeItem('bob_auth_token');localStorage.removeItem('bob_refresh');}catch(e){}
+        authToken=null;authRefresh=null;
+        showScreen('login');
+        setLoginMsg('Bitte melde dich mit deinem Passwort neu an.','');
+        return;
+      }
+      setMsg('pwc-msg',d.error,'err');return;
+    }
     document.getElementById('pwc-new').value='';document.getElementById('pwc-confirm').value='';
     setMsg('pwc-msg','','');
-    // Re-check status → profile or dashboard.
+    // Das Passwort ist gesetzt; die alte Session wurde dadurch entwertet. Der Server
+    // liefert eine FRISCHE Session zurück → direkt übernehmen und routen (kein
+    // zweiter Call mit totem Token → kein doppelter "Passwort festlegen"-Screen).
+    if(d.access_token){
+      authToken=d.access_token;
+      try{localStorage.setItem('bob_auth_token',d.access_token);}catch(e){}
+      if(d.refresh_token){authRefresh=d.refresh_token;try{localStorage.setItem('bob_refresh',d.refresh_token);}catch(e){}}
+      authRole=d.role||authRole;
+      if((d.role==='gs_partner'||d.role==='techniker')&&!d.profile_complete){showProfileSetup(d.role);}
+      else{applyRole(authToken,d.user||authUser,d.role,authTechName);}
+      return;
+    }
+    // Fallback (Session konnte serverseitig nicht erneuert werden): Status neu prüfen.
     fetchMeAndRoute();
   }).catch(function(){
     if(btn){btn.disabled=false;btn.textContent='Passwort speichern';}
