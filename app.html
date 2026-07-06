@@ -2429,6 +2429,8 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     <div class="pd-tab" id="pdt-rechnungen" onclick="pdTab('rechnungen')">Rechnungen</div>
     <div class="pd-tab" id="pdt-settings" onclick="pdTab('settings')">⚙️</div>
   </div>
+  <!-- Bob-Einstiegspunkt je Bereich (nur sichtbar, wenn bob_assist_<area> frei ist) -->
+  <div id="pd-bob-slot"></div>
   <div id="pd-content" class="admin-section"><div class="admin-empty">Lädt…</div></div>
 </div>
 
@@ -6829,14 +6831,16 @@ function blWeekReportInto(containerId){
 // Module → Feature-Key. core:true = immer erreichbar (kein Lizenz-Baustein).
 // mount:true = leerer Andock-Container für George-Solutions-Komponenten (projectflow).
 var PD_MODULES=[
-  {tab:'inbox',       label:'📨 Inbox',      core:true, badge:true},
-  {tab:'projekte',    label:'Projekte',      feature:'projektmanagement'},
-  {tab:'rapporte',    label:'Rapporte',      feature:'reports'},
-  {tab:'material',    label:'📦 Material',   feature:'material', mount:true},
-  {tab:'blockaden',   label:'🚧 Blockaden',  feature:'blockaden'},
-  {tab:'kalkulation', label:'🧮 Kalkulation',feature:'kalkulation', mount:true},
-  {tab:'rechnungen',  label:'Rechnungen',    core:true},
-  {tab:'settings',    label:'⚙️',            core:true}
+  {tab:'inbox',       label:'📨 Inbox',       core:true, badge:true},
+  {tab:'projekte',    label:'Projekte',       feature:'projektmanagement'},
+  {tab:'disposition', label:'🧭 Disposition', feature:'disposition', mount:true},
+  {tab:'rapporte',    label:'Rapporte',       feature:'reporting'},
+  {tab:'material',    label:'📦 Material',    feature:'material', mount:true},
+  {tab:'blockaden',   label:'🚧 Blockaden',   feature:'blockaden'},
+  {tab:'kalkulation', label:'🧮 Kalkulation', feature:'kalkulation', mount:true},
+  {tab:'controlling', label:'📊 Controlling', feature:'controlling', mount:true},
+  {tab:'rechnungen',  label:'Rechnungen',     core:true},
+  {tab:'settings',    label:'⚙️',             core:true}
 ];
 // null = fail-open (Demo ODER Tabelle noch nicht eingespielt) → alles frei.
 var pdEntitlements=null, pdTableMissing=false;
@@ -6880,6 +6884,72 @@ function pdRenderMount(c,mod){
     +'<div class="admin-empty">Modul „'+gsEsc(mod.label)+'" – wird über George Solutions bereitgestellt.</div></div>';
   if(window.PF&&typeof window.PF.mount==='function'){ try{ window.PF.mount(mod.tab,document.getElementById('pf-'+mod.tab+'-mount'),co); }catch(e){} }
 }
+// ── Bob als Assistent, granular je Bereich (bob_assist_<area>) ──
+// Nutzt die BESTEHENDE Bob-Funktion wieder: Backend /api/bob-chat, Markdown-Stripper
+// bobStripMd und dasselbe Tap-to-Talk-Muster wie bobChatMic. Eigene IDs (pd-bob-*),
+// damit es NICHT mit dem Scanner-Bob kollidiert. "Bob" wird nicht umbenannt.
+function pdBobArea(tab){
+  return { projekte:'projekt', blockaden:'projekt', rapporte:'rapport', material:'material',
+           disposition:'planung', kalkulation:'planung', controlling:'admin',
+           rechnungen:'admin', settings:'admin', inbox:'admin' }[tab] || 'admin';
+}
+function pdBobBar(tab){
+  var area=pdBobArea(tab);
+  if(!pdHas('bob_assist_'+area)) return '';   // nur wenn für diesen Bereich freigeschaltet
+  return '<div style="margin:12px 18px 0;">'
+    +'<button class="pd-dl" style="display:inline-block;" onclick="pdBobToggle(\''+area+'\')">🎙️ Bob fragen</button>'
+    +'<div id="pd-bob-panel-'+area+'" class="bob-chat" style="display:none;margin:10px 0 0;">'
+    +'<div class="bob-chat-msgs" id="pd-bob-msgs-'+area+'"></div>'
+    +'<div class="bob-chat-input-row">'
+    +'<button class="bob-chat-mic" id="pd-bob-mic-'+area+'" onclick="pdBobMic(\''+area+'\')" title="Sprachmemo">🎙️</button>'
+    +'<input class="bob-chat-input" id="pd-bob-input-'+area+'" placeholder="Frag Bob…" onkeydown="if(event.key===\'Enter\')pdBobSend(\''+area+'\')"/>'
+    +'<button class="bob-chat-send" onclick="pdBobSend(\''+area+'\')">➤</button>'
+    +'</div></div></div>';
+}
+function pdBobToggle(area){
+  var p=document.getElementById('pd-bob-panel-'+area);if(!p)return;
+  p.style.display=(p.style.display==='none'||!p.style.display)?'block':'none';
+  if(p.style.display==='block'){ var i=document.getElementById('pd-bob-input-'+area); if(i) i.focus(); }
+}
+function pdBobAppend(area,role,text){
+  var box=document.getElementById('pd-bob-msgs-'+area);if(!box)return null;
+  var d=document.createElement('div');d.className='bob-msg '+role;d.textContent=text;
+  box.appendChild(d);box.scrollTop=box.scrollHeight;return d;
+}
+var pdBobHist={}, pdBobRec=null, pdBobRecOn=false;
+function pdBobSend(area){
+  var inp=document.getElementById('pd-bob-input-'+area);if(!inp)return;
+  var text=inp.value.trim();if(!text)return;inp.value='';
+  pdBobAppend(area,'user',text);
+  var hist=pdBobHist[area]||(pdBobHist[area]=[]);
+  hist.push({role:'user',content:text});
+  var typing=pdBobAppend(area,'bob','Bob tippt…');
+  fetch('/api/bob-chat',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({messages:hist.slice(-6),context:'George Solutions Partner-Portal · Bereich '+area,lang:'de'})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(typing&&typing.parentNode)typing.parentNode.removeChild(typing);
+    var raw=d.reply||(d.error?('Hoppla: '+d.error):'Entschuldigung, da ist etwas schiefgelaufen.');
+    var reply=(typeof bobStripMd==='function')?bobStripMd(raw):raw;
+    pdBobAppend(area,'bob',reply); hist.push({role:'assistant',content:reply});
+  }).catch(function(){
+    if(typing&&typing.parentNode)typing.parentNode.removeChild(typing);
+    pdBobAppend(area,'bob','Verbindungsfehler – bitte nochmal versuchen.');
+  });
+}
+function pdBobMic(area){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var btn=document.getElementById('pd-bob-mic-'+area);
+  if(!SR){toast('Spracherkennung nicht unterstützt');return;}
+  if(pdBobRecOn&&pdBobRec){pdBobRec.stop();return;}
+  pdBobRec=new SR(); pdBobRec.lang='de-CH'; pdBobRec.interimResults=false; pdBobRec.continuous=false;
+  pdBobRecOn=true; if(btn)btn.classList.add('rec');
+  pdBobRec.onresult=function(e){ var t=''; for(var i=0;i<e.results.length;i++)t+=e.results[i][0].transcript;
+    var inp=document.getElementById('pd-bob-input-'+area); if(inp)inp.value=t.trim(); };
+  pdBobRec.onend=function(){ pdBobRecOn=false; if(btn)btn.classList.remove('rec');
+    var inp=document.getElementById('pd-bob-input-'+area); if(inp&&inp.value.trim())pdBobSend(area); };
+  pdBobRec.onerror=function(){ pdBobRecOn=false; if(btn)btn.classList.remove('rec'); };
+  try{pdBobRec.start();}catch(e){pdBobRecOn=false;if(btn)btn.classList.remove('rec');}
+}
 function initPartnerDash(){
   document.getElementById('pd-welcome').textContent=(authUser&&authUser.email)||'George Solutions';
   pdLoadEntitlements(function(){
@@ -6912,9 +6982,13 @@ function pdTab(tab){
   PD_MODULES.forEach(function(m){ var el=document.getElementById('pdt-'+m.tab); if(el) el.classList.toggle('act',m.tab===tab); });
   var c=document.getElementById('pd-content');if(!c)return;
   var mod=pdModule(tab);
+  var locked=!!(mod&&mod.feature&&!pdHas(mod.feature));
+  // Bob-Einstiegspunkt für den Bereich einblenden (nur wenn bob_assist_<area> frei
+  // und Modul nicht gesperrt). Reused die bestehende Bob-Chat-Funktion (/api/bob-chat).
+  var slot=document.getElementById('pd-bob-slot'); if(slot) slot.innerHTML=locked?'':pdBobBar(tab);
   // Feature-Gate: gesperrtes Modul → Upgrade-Hinweis statt Inhalt (nicht nur optisch;
   // die Datenendpunkte lehnen ohne Freischaltung ohnehin mit 403 ab).
-  if(mod&&mod.feature&&!pdHas(mod.feature)){ pdRenderLocked(c,mod); return; }
+  if(locked){ pdRenderLocked(c,mod); return; }
   c.innerHTML='<div class="admin-empty">Lädt…</div>';
   if(mod&&mod.mount){ pdRenderMount(c,mod); return; }
   if(tab==='settings'){ pdRenderSettings(c); return; }

@@ -23,11 +23,16 @@ export default async function handler(req, res) {
 
   try {
     const { action } = req.body || {};
-    // Feature-Durchsetzung: Partner braucht 'reports', um Rapporte zu sehen.
-    // (Nur gs_partner; Techniker erfasst weiterhin ungehindert. Fail-open ohne Tabelle.)
-    if (role === 'gs_partner' && (action === 'list' || action === 'get' || action === 'week')) {
-      if (!(await isEntitled(user.id, 'reports'))) {
-        return res.status(403).json({ error: 'Berichte & Rapporte sind für Ihren Zugang nicht freigeschaltet.', locked: 'reports' });
+    // Feature-Durchsetzung (nur gs_partner; Techniker erfasst ungehindert):
+    //  • Rapporte/Berichte ansehen  → 'reporting'
+    //  • Rapport selbst erfassen    → 'rapport'
+    // Fail-open, solange die Entitlements-Tabelle fehlt.
+    if (role === 'gs_partner') {
+      if ((action === 'list' || action === 'get' || action === 'week') && !(await isEntitled(user.id, 'reporting'))) {
+        return res.status(403).json({ error: 'Berichte & Rapporte sind für Ihren Zugang nicht freigeschaltet.', locked: 'reporting' });
+      }
+      if (action === 'save' && !(await isEntitled(user.id, 'rapport'))) {
+        return res.status(403).json({ error: 'Rapport-Erfassung ist für Ihren Zugang nicht freigeschaltet.', locked: 'rapport' });
       }
     }
     switch (action) {

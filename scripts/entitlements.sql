@@ -21,16 +21,26 @@ CREATE TABLE IF NOT EXISTS gs_features (
 );
 
 -- Seed aller Feature-Keys (idempotent; label wird bei erneutem Lauf aktualisiert).
+-- Jeder Key ist im Master-Cockpit einzeln pro Partner freischaltbar.
 INSERT INTO gs_features (key, label) VALUES
-  ('projektmanagement', 'Projektmanagement'),
-  ('material',          'Materialverwaltung'),
-  ('reports',           'Berichte & Rapporte'),
-  ('rapport',           'Rapport-Erfassung'),
-  ('material_order',    'Materialbestellung'),
-  ('bob_scan',          'Bob Scan'),
-  ('kalkulation',       'Kalkulation'),
-  ('blockaden',         'Blockaden-Management'),
-  ('voice_memo',        'Sprachnotiz')
+  -- ── Module & Fähigkeiten ──
+  ('projektmanagement',  'Projektmanagement'),
+  ('disposition',        'Techniker-Disposition'),
+  ('blockaden',          'Blockaden-Management'),
+  ('material',           'Materialverwaltung'),
+  ('material_order',     'Materialbestellung'),
+  ('reporting',          'Berichte & Rapporte'),
+  ('rapport',            'Rapport-Erfassung'),
+  ('controlling',        'Controlling'),
+  ('kalkulation',        'Kalkulation'),
+  ('bob_scan',           'Bob Scan'),
+  ('voice_memo',         'Sprachnotiz'),
+  -- ── Bob als Assistent, granular pro Bereich ──
+  ('bob_assist_projekt', 'Bob im Projektmanagement'),
+  ('bob_assist_rapport', 'Bob bei Rapporten'),
+  ('bob_assist_material','Bob im Material'),
+  ('bob_assist_planung', 'Bob in der Planung'),
+  ('bob_assist_admin',   'Bob im Büro/Admin')
 ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label;
 
 -- ── 2. Freischaltungen pro Partner-Account ─────────────────────────────────
@@ -46,6 +56,14 @@ CREATE TABLE IF NOT EXISTS gs_partner_entitlements (
 
 CREATE INDEX IF NOT EXISTS gs_partner_entitlements_user_idx
   ON gs_partner_entitlements (partner_user_id);
+
+-- Migration: früherer Key 'reports' → 'reporting' (eindeutig). Bestehende
+-- Freischaltungen werden übernommen; danach wird 'reports' entfernt. Idempotent.
+UPDATE gs_partner_entitlements SET feature_key = 'reporting' WHERE feature_key = 'reports'
+  AND NOT EXISTS (SELECT 1 FROM gs_partner_entitlements e2
+                  WHERE e2.partner_user_id = gs_partner_entitlements.partner_user_id AND e2.feature_key = 'reporting');
+DELETE FROM gs_partner_entitlements WHERE feature_key = 'reports';
+DELETE FROM gs_features WHERE key = 'reports';
 
 -- ── 3. RLS (Defense-in-Depth) ──────────────────────────────────────────────
 -- Server nutzt service_role → umgeht RLS. Diese Policies schützen nur den Fall
