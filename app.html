@@ -914,6 +914,77 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #partner-dash .bob-chat-mic{background:#0f1116;border-color:rgba(201,169,97,.28);color:#C9A961;}
 #partner-dash .bob-chat-send{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
 
+/* ══ COMMAND CENTER · Hero + Bottom-Nav (Optik 1:1 aus Master gs-intern.html) ══ */
+#partner-dash .pd-hero{position:relative;text-align:center;overflow:hidden;cursor:default;
+  margin:calc(14px + var(--safe-top,0px)) 18px 18px;padding:30px 18px 24px;border-radius:24px;
+  background:
+    radial-gradient(130% 90% at 50% -10%, rgba(201,169,97,.16), transparent 62%),
+    linear-gradient(165deg,#181b21,#131519);
+  border:1px solid rgba(201,169,97,.28);box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);}
+#partner-dash .pd-hero::before{content:'';position:absolute;left:-40%;top:0;width:50%;height:100%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(201,169,97,.10),transparent);
+  transform:skewX(-18deg);animation:pdsweep 5.5s ease-in-out infinite;}
+@keyframes pdsweep{0%{left:-50%;}55%,100%{left:140%;}}
+#partner-dash .pd-hero>*{position:relative;z-index:1;}
+#partner-dash .pd-logout{position:absolute;top:12px;right:12px;z-index:2;background:transparent;
+  border:1px solid rgba(255,255,255,.10);color:#8a97a8;border-radius:9px;padding:6px 11px;font-size:11.5px;
+  font-weight:700;cursor:pointer;transition:border-color .15s,color .15s;-webkit-tap-highlight-color:transparent;}
+#partner-dash .pd-logout:hover{border-color:rgba(201,169,97,.4);color:#C9A961;}
+#partner-dash .pd-orb{position:relative;width:96px;height:96px;margin:0 auto 16px;filter:drop-shadow(0 0 18px rgba(201,169,97,.28));}
+#partner-dash .pd-orb .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(201,169,97,.28);animation:pdspin 9s linear infinite;}
+#partner-dash .pd-orb .ring::after{content:'';position:absolute;top:-3px;left:calc(50% - 4px);width:8px;height:8px;border-radius:50%;background:#C9A961;box-shadow:0 0 12px 2px #C9A961;}
+#partner-dash .pd-orb .ring.r2{inset:11px;border-style:dashed;border-color:rgba(201,169,97,.4);animation:pdspin 6s linear infinite reverse;}
+#partner-dash .pd-orb .core{position:absolute;inset:24px;border-radius:50%;
+  background:radial-gradient(circle at 34% 28%,#f6dca0,#c9a961 55%,#9a7a3c 100%);
+  box-shadow:0 0 34px 4px rgba(201,169,97,.55);animation:pdpulse 2.6s ease-in-out infinite;
+  display:flex;align-items:center;justify-content:center;font-size:26px;color:#0a0e14;}
+@keyframes pdspin{to{transform:rotate(360deg);}}
+@keyframes pdpulse{0%,100%{box-shadow:0 0 30px 3px rgba(201,169,97,.45);}50%{box-shadow:0 0 46px 12px rgba(201,169,97,.7);}}
+#partner-dash .pd-title{font-family:Georgia,'Times New Roman',serif;font-weight:800;color:#C9A961;
+  font-size:clamp(24px,7.5vw,34px);letter-spacing:clamp(1px,.8vw,3px);line-height:1.05;
+  filter:drop-shadow(0 0 18px rgba(201,169,97,.4));}
+#partner-dash .pd-subt{font-size:11px;letter-spacing:clamp(2px,1.2vw,5px);color:#8a97a8;margin-top:5px;}
+#partner-dash .pd-meta{font-size:11.5px;color:#5c6878;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;}
+#partner-dash .pd-meta .live{display:inline-flex;align-items:center;gap:6px;color:#3ecf8e;font-weight:700;}
+#partner-dash .pd-meta .live::before{content:'';width:7px;height:7px;border-radius:50%;background:#3ecf8e;box-shadow:0 0 8px #3ecf8e;animation:pdblink 1.6s ease-in-out infinite;}
+#partner-dash .pd-meta .pd-who{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#partner-dash .pd-meta .pd-who:not(:empty)::before{content:'·';margin-right:7px;color:#3a4553;}
+@keyframes pdblink{0%,100%{opacity:1;}50%{opacity:.35;}}
+#partner-dash .pd-cta{display:inline-flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer;
+  background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;font-weight:800;font-size:13.5px;
+  letter-spacing:.3px;padding:11px 20px;border-radius:50px;box-shadow:0 8px 22px rgba(201,169,97,.3);
+  transition:transform .12s ease,box-shadow .2s ease;-webkit-tap-highlight-color:transparent;}
+#partner-dash .pd-cta:hover{box-shadow:0 10px 28px rgba(201,169,97,.42);}
+#partner-dash .pd-cta:active{transform:translateY(1px) scale(.99);}
+#partner-dash #pd-hero-bob{margin:0 18px;}
+/* Bottom-Nav – fest am unteren Rand, wie Master .nav */
+#partner-dash .pd-nav{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:center;
+  padding-bottom:var(--safe-bottom,0px);
+  background:linear-gradient(180deg,rgba(10,10,11,.4),rgba(10,10,11,.92) 42%);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid rgba(255,255,255,.07);}
+#partner-dash .pd-nav-inner{display:flex;width:100%;max-width:680px;}
+#partner-dash .pd-nav button{flex:1;background:transparent;border:0;color:#5c6878;display:flex;flex-direction:column;
+  align-items:center;gap:3px;padding:9px 4px 10px;font-size:11px;font-weight:700;cursor:pointer;position:relative;
+  -webkit-tap-highlight-color:transparent;transition:color .15s;}
+#partner-dash .pd-nav button .ic{font-size:20px;line-height:1;}
+#partner-dash .pd-nav button.on{color:#C9A961;text-shadow:0 0 12px rgba(201,169,97,.45);}
+#partner-dash .pd-nav button.on .ic{filter:drop-shadow(0 0 8px rgba(201,169,97,.5));}
+#partner-dash .pd-nav button .nb{position:absolute;top:4px;left:calc(50% + 8px);min-width:16px;height:16px;
+  padding:0 4px;border-radius:9px;background:#ff5d5d;color:#fff;font-size:9.5px;font-weight:800;line-height:16px;text-align:center;}
+/* „Mehr"-Menü (Liste erlaubter Module; gesperrte dezent mit Schloss) */
+#partner-dash .pd-menu{padding:4px 18px 0;display:flex;flex-direction:column;gap:9px;}
+#partner-dash .pd-menu .pd-mrow{display:flex;align-items:center;gap:12px;background:#131519;border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:14px 15px;color:#e8edf5;font-weight:700;font-size:14px;cursor:pointer;
+  box-shadow:0 6px 16px rgba(0,0,0,.26);transition:transform .15s,border-color .18s,box-shadow .2s;}
+#partner-dash .pd-menu .pd-mrow:hover{transform:translateY(-1px);border-color:rgba(201,169,97,.28);box-shadow:0 12px 26px rgba(0,0,0,.4);}
+#partner-dash .pd-menu .pd-mrow.locked{opacity:.5;cursor:default;}
+#partner-dash .pd-menu .pd-mrow.locked:hover{transform:none;border-color:rgba(255,255,255,.07);box-shadow:0 6px 16px rgba(0,0,0,.26);}
+#partner-dash .pd-menu .pd-mrow .mic{font-size:18px;flex:0 0 auto;}
+#partner-dash .pd-menu .pd-mrow .marr{margin-left:auto;color:#C9A961;font-weight:900;}
+#partner-dash .pd-menu .pd-mrow.locked .marr{color:#5c6878;}
+#partner-dash .pd-menu .pd-mrow.danger{color:#ff8d8d;justify-content:center;}
+@media (max-width:360px){ #partner-dash .pd-hero{margin:calc(10px + var(--safe-top,0px)) 12px 14px;padding:26px 14px 20px;} }
+
 /* BLOCK 6: Lead-Detailansicht (Overlay) */
 .lead-ov{display:none;position:fixed;inset:0;z-index:2000;background:rgba(4,9,17,0.78);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;}
 @media (min-width:560px){ .lead-ov{align-items:center;} }
@@ -2526,24 +2597,27 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 
 <!-- ═══ PARTNER DASHBOARD ═══ -->
 <div id="partner-dash" class="admin-screen">
-  <div class="admin-hdr">
-    <div><div class="admin-hdr-tit">Partner <span style="color:#C9A961;">Cockpit</span></div><div class="admin-hdr-sub" id="pd-welcome">George Solutions</div></div>
-    <button class="admin-back" onclick="logout()">Abmelden</button>
+  <!-- ══ COMMAND CENTER · Hero (Optik 1:1 aus Master Cockpit gs-intern.html) ══
+       Orb/Glow + Titel + Live-Zeit + „Antippen & sprechen" (Bob, nur wenn freigeschaltet). -->
+  <div class="pd-hero" id="pd-hero">
+    <button class="pd-logout" onclick="logout()">Abmelden</button>
+    <div class="pd-orb"><span class="ring"></span><span class="ring r2"></span><span class="core">⌬</span></div>
+    <div class="pd-title">PARTNER COCKPIT</div>
+    <div class="pd-subt">COMMAND CENTER</div>
+    <div class="pd-meta"><span class="live">Live</span><span id="pd-clock"></span><span class="pd-who" id="pd-welcome"></span></div>
+    <div class="pd-cta" id="pd-cta" onclick="pdHeroBob()" style="display:none;">🎙️ Antippen &amp; sprechen</div>
   </div>
-  <div class="pd-cards" id="pd-cards"></div>
-  <button class="admin-add-btn" onclick="setMode('gs')">+ Neues Projekt buchen</button>
-  <!-- Tabs werden je nach Freischaltung dynamisch gebaut (pdBuildTabs). Statik = Fallback. -->
-  <div class="pd-tabs" id="pd-tabs">
-    <div class="pd-tab act" id="pdt-inbox" onclick="pdTab('inbox')">📨 Inbox<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span></div>
-    <div class="pd-tab" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
-    <div class="pd-tab" id="pdt-rapporte" onclick="pdTab('rapporte')">Rapporte</div>
-    <div class="pd-tab" id="pdt-blockaden" onclick="pdTab('blockaden')">🚧 Blockaden</div>
-    <div class="pd-tab" id="pdt-rechnungen" onclick="pdTab('rechnungen')">Rechnungen</div>
-    <div class="pd-tab" id="pdt-settings" onclick="pdTab('settings')">⚙️</div>
+  <div id="pd-hero-bob"></div>
+  <!-- Cockpit-Startseite: nur eigene Schnellzugriffe (echte Daten, nur wenn freigeschaltet) -->
+  <div id="pd-overview">
+    <div class="pd-cards" id="pd-cards"></div>
+    <button class="admin-add-btn" onclick="setMode('gs')">+ Neues Projekt buchen</button>
   </div>
   <!-- Bob-Einstiegspunkt je Bereich (nur sichtbar, wenn bob_assist_<area> frei ist) -->
   <div id="pd-bob-slot"></div>
-  <div id="pd-content" class="admin-section"><div class="admin-empty">Lädt…</div></div>
+  <div id="pd-content" class="admin-section" style="display:none;"><div class="admin-empty">Lädt…</div></div>
+  <!-- Bottom-Navigation wie Master Cockpit (Cockpit / … / Mehr) – dynamisch je Freischaltung -->
+  <nav class="pd-nav" id="pd-nav"></nav>
 </div>
 
 <script>
@@ -7111,13 +7185,103 @@ function pdBobMic(area){
   try{pdBobRec.start();}catch(e){pdBobRecOn=false;if(btn)btn.classList.remove('rec');}
 }
 function initPartnerDash(){
-  document.getElementById('pd-welcome').textContent=(authUser&&authUser.email)||'George Solutions';
+  var w=document.getElementById('pd-welcome'); if(w) w.textContent=(authUser&&authUser.email)||'';
   pdLoadEntitlements(function(){
-    pdBuildTabs();
+    pdBuildBottomNav();       // feste Bottom-Nav wie Master (Cockpit · Inbox · Projekte · Mehr)
+    pdSetupHeroCta();         // „Antippen & sprechen" nur, wenn Bob freigeschaltet
+    pdStartClock();           // Live-Zeit im Command-Center-Hero
     pdLoadBadge();
     pdLoadCards();
-    pdTab('inbox');
+    pdGoCockpit();            // Startseite = eigene Schnellzugriffe (Cockpit)
   });
+}
+// ── Command-Center-Hero: Live-Uhr + „Antippen & sprechen" (bestehende Bob-Funktion) ──
+function pdStartClock(){
+  if(window._pdClock) clearInterval(window._pdClock);
+  function upd(){ var e=document.getElementById('pd-clock'); if(!e){ clearInterval(window._pdClock); window._pdClock=null; return; }
+    try{ e.textContent=new Date().toLocaleString('de-CH',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(x){} }
+  upd(); window._pdClock=setInterval(upd,20000);
+}
+function pdBobAnyEnabled(){
+  if(pdEntitlements===null) return true;   // Demo/Fallback: Bob frei
+  for(var i=0;i<pdEntitlements.length;i++){ if(String(pdEntitlements[i]).indexOf('bob_assist_')===0) return true; }
+  return false;
+}
+function pdSetupHeroCta(){
+  var cta=document.getElementById('pd-cta'); if(!cta) return;
+  cta.style.display=pdBobAnyEnabled()?'inline-flex':'none';
+}
+// Hero-CTA → eigener „cockpit"-Bob-Kanal (reused pdBobSend/pdBobMic, /api/bob-chat).
+function pdHeroBob(){
+  var slot=document.getElementById('pd-hero-bob'); if(!slot) return;
+  if(!document.getElementById('pd-bob-panel-cockpit')){
+    slot.innerHTML='<div id="pd-bob-panel-cockpit" class="bob-chat" style="display:none;margin:0 0 14px;">'
+      +'<div class="bob-chat-msgs" id="pd-bob-msgs-cockpit"></div>'
+      +'<div class="bob-chat-input-row">'
+      +'<button class="bob-chat-mic" id="pd-bob-mic-cockpit" onclick="pdBobMic(\'cockpit\')" title="Sprachmemo">🎙️</button>'
+      +'<input class="bob-chat-input" id="pd-bob-input-cockpit" placeholder="Frag Bob…" onkeydown="if(event.key===\'Enter\')pdBobSend(\'cockpit\')"/>'
+      +'<button class="bob-chat-send" onclick="pdBobSend(\'cockpit\')">➤</button>'
+      +'</div></div>';
+  }
+  pdBobToggle('cockpit');
+}
+// ── Bottom-Navigation (wie Master): Cockpit · Inbox · Projekte · Mehr ──
+var PD_BOTNAV=[
+  {v:'cockpit',  ic:'◈',  label:'Cockpit'},
+  {v:'inbox',    ic:'📨', label:'Inbox', badge:true},
+  {v:'projekte', ic:'◆',  label:'Projekte'},
+  {v:'mehr',     ic:'⋯',  label:'Mehr'}
+];
+var PD_PRIMARY=['cockpit','inbox','projekte'];   // liegen direkt in der Nav → nicht zusätzlich unter „Mehr"
+function pdBuildBottomNav(){
+  var nav=document.getElementById('pd-nav'); if(!nav) return;
+  nav.innerHTML='<div class="pd-nav-inner">'+PD_BOTNAV.map(function(n){
+    var badge=n.badge?'<span class="nb" id="pd-inbox-badge" style="display:none;">0</span>':'';
+    return '<button data-v="'+n.v+'"><span class="ic">'+n.ic+'</span>'+n.label+badge+'</button>';
+  }).join('')+'</div>';
+  Array.prototype.forEach.call(nav.querySelectorAll('button'),function(b){
+    b.onclick=function(){ var v=b.getAttribute('data-v');
+      if(v==='cockpit') pdGoCockpit();
+      else if(v==='mehr') pdRenderMehr();
+      else pdTab(v);
+    };
+  });
+}
+function pdNavActive(v){
+  var slot=(PD_PRIMARY.indexOf(v)>-1)?v:'mehr';
+  var nav=document.getElementById('pd-nav'); if(!nav) return;
+  Array.prototype.forEach.call(nav.querySelectorAll('button'),function(b){ b.classList.toggle('on', b.getAttribute('data-v')===slot); });
+}
+function pdGoCockpit(){
+  var h=document.getElementById('pd-hero'), o=document.getElementById('pd-overview'),
+      c=document.getElementById('pd-content'), s=document.getElementById('pd-bob-slot');
+  if(h) h.style.display=''; if(o) o.style.display=''; if(c) c.style.display='none'; if(s) s.innerHTML='';
+  pdNavActive('cockpit');
+  try{ document.getElementById('partner-dash').scrollTop=0; }catch(e){}
+}
+// Modul-Ansicht: Hero + Übersicht aus, Inhalt an (fokussierte Detailseite wie Master).
+function pdShowModule(){
+  var h=document.getElementById('pd-hero'), o=document.getElementById('pd-overview'), c=document.getElementById('pd-content');
+  if(h) h.style.display='none'; if(o) o.style.display='none'; if(c) c.style.display='';
+  var p=document.getElementById('pd-bob-panel-cockpit'); if(p) p.style.display='none';
+  try{ document.getElementById('partner-dash').scrollTop=0; }catch(e){}
+}
+// „Mehr" = nur ERLAUBTE Module (PD_MODULES). Gesperrte dezent mit Schloss (Punkt 6).
+// Master-Interna (Umsatz/Leads/CRM/User/Lizenzen) stehen gar nicht in PD_MODULES → nie sichtbar.
+function pdRenderMehr(){
+  pdShowModule();
+  pdNavActive('mehr');
+  var slot=document.getElementById('pd-bob-slot'); if(slot) slot.innerHTML='';
+  var c=document.getElementById('pd-content'); if(!c) return;
+  var rows=PD_MODULES.filter(function(m){ return PD_PRIMARY.indexOf(m.tab)===-1; }).map(function(m){
+    var locked=!!(m.feature&&!pdHas(m.feature));
+    var lbl=(m.tab==='settings')?'⚙️ Einstellungen':m.label;
+    var oc=locked?'':(' onclick="pdTab(\''+m.tab+'\')"');
+    return '<div class="pd-mrow'+(locked?' locked':'')+'"'+oc+'>'
+      +'<span>'+gsEsc(lbl)+'</span>'
+      +'<span class="marr">'+(locked?'🔒':'›')+'</span></div>';
+  }).join('');
+  c.innerHTML='<div class="pd-menu">'+rows+'<div class="pd-mrow danger" onclick="logout()">Abmelden</div></div>';
 }
 // Eine Übersichts-Kachel im Master-Design. feature=Entitlement-Key (leer=immer frei).
 // Gesperrt → ausgegraut + 🔒, kein Wert (Sichtbarkeit steuern die Entitlements, s. pdHas).
@@ -7242,6 +7406,8 @@ function pdLoadBadge(){
 }
 function pdTab(tab){
   PD_MODULES.forEach(function(m){ var el=document.getElementById('pdt-'+m.tab); if(el) el.classList.toggle('act',m.tab===tab); });
+  pdShowModule();        // Hero/Übersicht ausblenden, Inhaltsbereich zeigen
+  pdNavActive(tab);      // passenden Bottom-Nav-Punkt markieren (Rest → „Mehr")
   var c=document.getElementById('pd-content');if(!c)return;
   var mod=pdModule(tab);
   var locked=!!(mod&&mod.feature&&!pdHas(mod.feature));
