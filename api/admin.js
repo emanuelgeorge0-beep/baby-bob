@@ -72,6 +72,7 @@ async function listUsers(res) {
       must_change_password: !!m.must_change_password,
       profile_complete: !!m.profile_complete,
       last_password_change: m.last_password_change || null,
+      last_sign_in_at: u.last_sign_in_at || null,   // letzter Login (aus Supabase Auth)
       created_at: u.created_at || null,
     };
   });
@@ -112,18 +113,48 @@ async function createUser(res, body) {
     return res.status(code).json({ error: code === 409 ? 'E-Mail ist bereits registriert' : msg });
   }
 
-  // Role mapping (idempotent upsert on user_id).
-  await fetch(`${SUPABASE_URL}/rest/v1/user_roles?on_conflict=user_id`, {
-    method: 'POST',
-    headers: { ...SB, Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ user_id: created.id, role }),
-  });
+  // Role mapping – KRITISCH: ohne diese Zeile liest der Login role='bob_user'
+  // und routet in den BOB-Scanner statt in die Partner-/Techniker-Ansicht.
+  // Darum verifiziert schreiben (Fallback ohne on_conflict) und bei Fehlschlag
+  // den gerade erstellten Auth-User wieder entfernen (kein rollenloser Waisen-User).
+  const roleOk = await ensureRole(created.id, role);
+  if (!roleOk) {
+    await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${created.id}`, { method: 'DELETE', headers: SB }).catch(() => {});
+    return res.status(500).json({ error: "Rolle konnte nicht gesetzt werden – bitte scripts/setup_auth.sql (Tabelle user_roles) in Supabase ausführen und erneut versuchen." });
+  }
 
   return res.status(200).json({
     ok: true,
     user: { id: created.id, email, name, firma: firma || null, role },
     temp_password: tempPassword, // shown ONCE
   });
+}
+
+// Schreibt die Rolle robust und bestätigt sie durch Rücklesen.
+// 1) Upsert (schnell, wenn user_roles den UNIQUE(user_id)-Constraint hat).
+// 2) Fallback ohne on_conflict: alte Zeile löschen + neu einfügen (funktioniert
+//    auch, wenn der Constraint im Live-Schema fehlt – dann scheitert der Upsert-
+//    Pfad mit 42P10). 3) Verifizieren, dass die Zeile mit der Rolle existiert.
+async function ensureRole(userId, role) {
+  const upsert = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?on_conflict=user_id`, {
+    method: 'POST',
+    headers: { ...SB, Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ user_id: userId, role }),
+  }).catch(() => null);
+
+  if (!upsert || !upsert.ok) {
+    // Fallback: kein on_conflict → delete + plain insert.
+    await fetch(`${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}`, { method: 'DELETE', headers: SB }).catch(() => {});
+    await fetch(`${SUPABASE_URL}/rest/v1/user_roles`, {
+      method: 'POST',
+      headers: { ...SB, Prefer: 'return=minimal' },
+      body: JSON.stringify({ user_id: userId, role }),
+    }).catch(() => {});
+  }
+
+  // Verifizieren.
+  const check = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}&select=role&limit=1`, { headers: SB }));
+  return Array.isArray(check) && check[0]?.role === role;
 }
 
 async function resetPassword(res, body) {

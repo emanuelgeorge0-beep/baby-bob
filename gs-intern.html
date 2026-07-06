@@ -483,6 +483,8 @@ function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 function toast(m){ var t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('show');},2200); }
 function deDate(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleDateString('de-CH',{day:'2-digit',month:'2-digit',year:'2-digit'}); }catch(e){ return iso; } }
+// Datum + Uhrzeit (für letzten Login / letzte Passwortänderung im Account-Status).
+function fmtDT(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('de-CH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
 function deDateTime(iso){ if(!iso) return '—'; try{ return new Date(iso).toLocaleString('de-CH',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return iso; } }
 function chf(n){ return 'CHF ' + (Number(n)||0).toLocaleString('de-CH'); }
 function cap(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
@@ -1101,7 +1103,6 @@ function loadCockpitUsers(){
 }
 function paintCockpitUsers(){
   var roleLbl={gs_partner:'🏢 Partner',techniker:'🔧 Techniker',gs_admin:'👑 Admin',bob_user:'BOB'};
-  var statusLbl={active:'Aktiv',must_change_password:'PW ändern',deactivated:'Deaktiviert'};
   var cnt=$('u-count'); if(cnt) cnt.textContent=_cockUsers.length+' Benutzer';
   var list=$('u-list'); if(!list) return;
   if(!_cockUsers.length){ list.innerHTML='<div class="empty">Noch keine Benutzer angelegt.</div>'; return; }
@@ -1115,11 +1116,19 @@ function paintCockpitUsers(){
           : '<button class="chip on" data-act="'+esc(u.id)+'" data-on="1">Aktivieren</button>')+
         '</div>';
     }
+    // Account-Status sicher & transparent (keine Klartext-Passwörter):
+    //  • aktiv/deaktiviert  • Passwort schon geändert vs. noch Temp-PW  • letzter Login.
+    var pwState=u.active
+      ? (u.must_change_password
+          ? '<span class="dot" style="color:var(--gold)">🔑 Temp-PW (noch nicht geändert)</span>'
+          : '<span class="dot" style="color:#3dd68c">✓ PW geändert'+(u.last_password_change?' · '+fmtDT(u.last_password_change):'')+'</span>')
+      : '<span class="dot" style="color:#e5484d">⛔ Deaktiviert</span>';
+    var lastLogin='<span class="dot" style="color:var(--muted2)">Letzter Login: '+(u.last_sign_in_at?fmtDT(u.last_sign_in_at):'noch nie')+'</span>';
     return '<div class="lcard">'+
       '<div class="top"><div class="nm">'+esc(u.name||u.email)+'</div>'+
         '<span class="src-tag" style="border-color:var(--gold-line);color:var(--gold)">'+(roleLbl[u.role]||esc(u.role))+'</span></div>'+
-      '<div class="meta"><span>'+esc(u.email)+'</span>'+(u.firma?'<span class="dot">'+esc(u.firma)+'</span>':'')+
-        '<span class="dot" style="color:var(--muted2)">'+(statusLbl[u.status]||esc(u.status||''))+'</span></div>'+
+      '<div class="meta"><span>'+esc(u.email)+'</span>'+(u.firma?'<span class="dot">'+esc(u.firma)+'</span>':'')+'</div>'+
+      '<div class="meta" style="margin-top:4px">'+pwState+lastLogin+'</div>'+
       acts+'</div>';
   }).join('');
   Array.prototype.forEach.call(list.querySelectorAll('[data-pw]'),function(b){

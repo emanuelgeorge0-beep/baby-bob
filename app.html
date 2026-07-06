@@ -1879,10 +1879,13 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
     </div>
     <div class="login-msg" id="login-msg"></div>
     <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner)</div>
-    <div class="login-sep">🧪 Demo-Modus (ohne Login)</div>
-    <div class="demo-row">
-      <button class="demo-btn" onclick="demoEnter('techniker')">👷 Techniker</button>
-      <button class="demo-btn" onclick="demoEnter('gs_partner')">🏢 Partner</button>
+    <!-- Demo-Direkteinstieg – standardmässig AUS (DEMO_ACCESS_ENABLED). Partner-/Techniker-Ansicht nur mit echtem Login. -->
+    <div id="demo-access-block" style="display:none;">
+      <div class="login-sep">🧪 Demo-Modus (ohne Login)</div>
+      <div class="demo-row">
+        <button class="demo-btn" onclick="demoEnter('techniker')">👷 Techniker</button>
+        <button class="demo-btn" onclick="demoEnter('gs_partner')">🏢 Partner</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3767,7 +3770,7 @@ function routeAnonymousStart(){
   // Beta-Teaser (QR-Code → /beta → „kostenlos ausprobieren"): ?demo=techniker|partner
   // startet direkt den Demo-Modus (kein Login, keine echten Daten). Nur diese 2 Rollen.
   var demo=((qp&&qp.get('demo'))||'').toLowerCase();
-  if(demo==='techniker'||demo==='partner'){
+  if(DEMO_ACCESS_ENABLED&&(demo==='techniker'||demo==='partner')){
     demoEnter(demo==='partner'?'gs_partner':'techniker');
     return;
   }
@@ -4687,6 +4690,12 @@ function gsReset(){
 
 var authToken=null,authRole=null,authUser=null,authTechName=null;
 
+// ── Demo-Zugang (ohne Login) – standardmässig AUS ──
+// Schliesst den früheren Direkteinstieg in Partner-/Techniker-Ansicht.
+// In Partner-/Techniker-Ansicht kommt man jetzt NUR mit echtem Login.
+// Nur zum internen UI-Testen manuell auf true setzen (steuert Buttons + ?demo=-Deeplink).
+var DEMO_ACCESS_ENABLED=false;
+
 function showScreen(id){
   if(typeof bobStopSpeak==='function') bobStopSpeak();  // FIX 1: stop voice when switching screens
   if(typeof blStopSpeak==='function') blStopSpeak();     // Blockaden-Vorlese-Audio ebenfalls stoppen
@@ -4695,6 +4704,8 @@ function showScreen(id){
   });
   var el=document.getElementById(id);
   if(el){el.classList.add('active');el.scrollTop=0;}
+  // Demo-Direkteinstieg nur zeigen, wenn ausdrücklich aktiviert (Standard AUS).
+  if(id==='login'){ var dab=document.getElementById('demo-access-block'); if(dab) dab.style.display=DEMO_ACCESS_ENABLED?'block':'none'; }
   if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
 }
 
@@ -4908,6 +4919,8 @@ function demoOrError(d){
   return gsEsc((d&&d.error)||'Fehler beim Laden');
 }
 function demoEnter(role){
+  // Demo-Zugang standardmässig AUS: kein Direkteinstieg ohne echten Login.
+  if(!DEMO_ACCESS_ENABLED){ showScreen('login'); return; }
   demoMode=true;authToken=null;authRole=role;
   authUser={email:'demo@george-solutions.ch'};authTechName='Demo';
   var b=document.getElementById('demo-banner');if(b)b.style.display='flex';
