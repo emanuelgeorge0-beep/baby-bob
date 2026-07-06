@@ -97,11 +97,23 @@ async function loginWithPassword(res, email, password) {
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
     const raw = err.error_description || err.msg || err.error || '';
-    // Häufigster Fall: noch kein Passwort gesetzt (nur Magic-Link-Nutzer) → klarer Hinweis.
-    if (/invalid login credentials|invalid_grant|invalid credentials/i.test(raw)) {
-      return res.status(401).json({ error: "Noch kein Passwort gesetzt? Nutze den Magic Link oder setze eines über 'Passwort vergessen'.", no_password: true });
+    // Alle Fehlerfelder zusammenfassen (GoTrue nutzt je nach Version error_code/code).
+    const sig = `${raw} ${err.error_code || ''} ${err.code || ''}`.toLowerCase();
+
+    // Deaktivierter Account (setActive → ban_duration): sauber & klar abweisen.
+    if (/banned|deactiv/.test(sig)) {
+      return res.status(403).json({ error: 'Dieser Account ist deaktiviert. Bitte wende dich an George Solutions.', deactivated: true });
     }
-    return res.status(401).json({ error: raw || 'Login fehlgeschlagen' });
+    // E-Mail noch nicht bestätigt (Randfall – Admin-Accounts sind bestätigt).
+    if (/not confirmed|email_not_confirmed/.test(sig)) {
+      return res.status(401).json({ error: 'E-Mail ist noch nicht bestätigt. Bitte nutze den Magic Link aus deiner E-Mail.' });
+    }
+    // Falsches Passwort ODER unbekannte E-Mail: GoTrue fasst beides bewusst zusammen
+    // (kein User-Enumeration-Leak) → freundlich, mit Hinweis auf Magic Link / Passwort neu.
+    if (/invalid login credentials|invalid_grant|invalid credentials/.test(sig)) {
+      return res.status(401).json({ error: "E-Mail oder Passwort ist nicht korrekt. Noch kein Passwort gesetzt? Nutze den Magic Link oder 'Passwort vergessen'.", no_password: true });
+    }
+    return res.status(401).json({ error: 'Anmeldung fehlgeschlagen – bitte erneut versuchen.' });
   }
   const data = await r.json();
   const role = await getUserRole(data.user?.id);

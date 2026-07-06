@@ -1117,18 +1117,19 @@ function paintCockpitUsers(){
         '</div>';
     }
     // Account-Status sicher & transparent (keine Klartext-Passwörter):
-    //  • aktiv/deaktiviert  • Passwort schon geändert vs. noch Temp-PW  • letzter Login.
-    var pwState=u.active
-      ? (u.must_change_password
-          ? '<span class="dot" style="color:var(--gold)">🔑 Temp-PW (noch nicht geändert)</span>'
-          : '<span class="dot" style="color:#3dd68c">✓ PW geändert'+(u.last_password_change?' · '+fmtDT(u.last_password_change):'')+'</span>')
-      : '<span class="dot" style="color:#e5484d">⛔ Deaktiviert</span>';
-    var lastLogin='<span class="dot" style="color:var(--muted2)">Letzter Login: '+(u.last_sign_in_at?fmtDT(u.last_sign_in_at):'noch nie')+'</span>';
+    // Konto aktiv/deaktiviert · Passwort-Status (temporär vs. geändert) · letzter Login.
+    var konto=u.active
+      ? '<span class="dot" style="color:#3dd68c">● Konto aktiv</span>'
+      : '<span class="dot" style="color:#e5484d">● Konto deaktiviert</span>';
+    var pwState=u.must_change_password
+      ? '<span class="dot" style="color:var(--gold)">Passwort: temporär – noch nicht geändert</span>'
+      : '<span class="dot" style="color:var(--muted2)">Passwort: geändert'+(u.last_password_change?' am '+fmtDT(u.last_password_change):'')+'</span>';
+    var lastLogin='<span class="dot" style="color:var(--muted2)">Letzter Login: '+(u.last_sign_in_at?fmtDT(u.last_sign_in_at):'noch nie angemeldet')+'</span>';
     return '<div class="lcard">'+
       '<div class="top"><div class="nm">'+esc(u.name||u.email)+'</div>'+
         '<span class="src-tag" style="border-color:var(--gold-line);color:var(--gold)">'+(roleLbl[u.role]||esc(u.role))+'</span></div>'+
       '<div class="meta"><span>'+esc(u.email)+'</span>'+(u.firma?'<span class="dot">'+esc(u.firma)+'</span>':'')+'</div>'+
-      '<div class="meta" style="margin-top:4px">'+pwState+lastLogin+'</div>'+
+      '<div class="meta" style="margin-top:4px">'+konto+pwState+lastLogin+'</div>'+
       acts+'</div>';
   }).join('');
   Array.prototype.forEach.call(list.querySelectorAll('[data-pw]'),function(b){

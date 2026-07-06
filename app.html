@@ -1934,8 +1934,8 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div class="login-card ob-card">
     <div class="login-logo">
       <div class="login-logo-icon">🔐</div>
-      <div class="login-logo-title">Neues Passwort</div>
-      <div class="login-logo-sub">Bitte vergeben Sie ein persönliches Passwort</div>
+      <div class="login-logo-title" id="pwc-title">Neues Passwort</div>
+      <div class="login-logo-sub" id="pwc-sub">Bitte vergeben Sie ein persönliches Passwort</div>
     </div>
     <input class="login-inp" id="pwc-new" type="password" placeholder="Neues Passwort (min. 8 Zeichen)" autocomplete="new-password"/>
     <input class="login-inp" id="pwc-confirm" type="password" placeholder="Passwort bestätigen" autocomplete="new-password" onkeydown="if(event.key==='Enter')submitPwChange()"/>
@@ -4773,12 +4773,26 @@ function verifyAndRoute(token){
 // ── Onboarding gate: forced password change → mandatory profile → dashboard ──
 function routeAfterAuth(token,d){
   authToken=token;authUser=d.user;authRole=d.role;authTechName=d.tech_name;
-  if(pendingRecovery){pendingRecovery=false;showScreen('pw-change');return;}
-  if(d.must_change_password){showScreen('pw-change');return;}
+  if(pendingRecovery){pendingRecovery=false;showPwChange('recovery');return;}
+  if(d.must_change_password){showPwChange('first');return;}
   if((d.role==='gs_partner'||d.role==='techniker')&&!d.profile_complete){
     showProfileSetup(d.role);return;
   }
   applyRole(token,d.user,d.role,d.tech_name);
+}
+
+// Passwort-ändern-Screen mit klarer Führung: Erst-Login (Temp-PW ersetzen) vs. Recovery.
+function showPwChange(mode){
+  var t=document.getElementById('pwc-title'), s=document.getElementById('pwc-sub');
+  if(mode==='first'){
+    if(t)t.textContent='Willkommen – bitte Passwort festlegen';
+    if(s)s.textContent='Dies ist Ihr erster Login. Bitte ersetzen Sie das temporäre Passwort durch ein eigenes (min. 8 Zeichen).';
+  }else{
+    if(t)t.textContent='Neues Passwort';
+    if(s)s.textContent='Bitte vergeben Sie ein neues, persönliches Passwort (min. 8 Zeichen).';
+  }
+  setMsg('pwc-msg','','');
+  showScreen('pw-change');
 }
 
 function applyRole(token,user,role,techName){
