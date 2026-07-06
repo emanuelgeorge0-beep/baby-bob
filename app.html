@@ -857,7 +857,58 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #partner-dash .pd-wx .wx-name{font-size:11px;color:#8a97a8;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #partner-dash .pd-wx .wx-temp{font-size:19px;font-weight:800;color:#5aa7ff;font-variant-numeric:tabular-nums;}
 #partner-dash .pd-wx .wx-txt{font-size:10.5px;color:#5c6878;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-@media (max-width:360px){ #partner-dash .pd-wx .wx-row{gap:6px;} #partner-dash .pd-wx .wx-city{padding:8px;} #partner-dash .pd-wx .wx-temp{font-size:17px;} }
+#partner-dash .pd-wx-now{display:flex;align-items:center;gap:14px;}
+#partner-dash .pd-wx-ic{font-size:40px;line-height:1;flex:0 0 auto;}
+#partner-dash .pd-wx-temp{font-size:38px;font-weight:800;color:#5aa7ff;letter-spacing:-1px;font-variant-numeric:tabular-nums;}
+#partner-dash .pd-wx-txt{font-size:13px;color:#8a97a8;line-height:1.5;}
+#partner-dash .pd-wx-hilo{font-size:12px;color:#5c6878;font-variant-numeric:tabular-nums;}
+@media (max-width:360px){ #partner-dash .pd-wx .wx-row{gap:6px;} #partner-dash .pd-wx .wx-city{padding:8px;} #partner-dash .pd-wx .wx-temp{font-size:17px;} #partner-dash .pd-wx-temp{font-size:32px;} #partner-dash .pd-wx-ic{font-size:34px;} }
+
+/* ══ WOW (nur Optik): Zürich-Abend-Hero, feine Schatten/Hover, Status-Badges ══ */
+/* Hero-Header: ruhiger Abend-/Nachtverlauf + dezente Skyline-Silhouette (inline SVG,
+   kein externes Bild → nichts kann brechen). Text bleibt hell auf dunkel = lesbar. */
+#partner-dash .admin-hdr{
+  position:relative;overflow:hidden;
+  padding:calc(52px + var(--safe-top,0px)) 20px 22px;
+  border-bottom:1px solid rgba(201,169,97,.20);
+  background:
+    radial-gradient(130% 90% at 50% 8%, rgba(201,169,97,.15), transparent 55%),
+    linear-gradient(168deg, #101c33 0%, #0c1320 46%, #0A0A0B 100%);
+}
+#partner-dash .admin-hdr>*{position:relative;z-index:1;}
+#partner-dash .admin-hdr::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:66px;z-index:0;pointer-events:none;
+  background:url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%201200%20240'%20preserveAspectRatio%3D'xMidYMax%20slice'%3E%3Cg%20fill%3D'rgba(0%2C0%2C0%2C0.42)'%3E%3Crect%20x%3D'0'%20y%3D'170'%20width%3D'48'%20height%3D'70'%2F%3E%3Crect%20x%3D'56'%20y%3D'140'%20width%3D'40'%20height%3D'100'%2F%3E%3Crect%20x%3D'104'%20y%3D'185'%20width%3D'60'%20height%3D'55'%2F%3E%3Crect%20x%3D'172'%20y%3D'155'%20width%3D'44'%20height%3D'85'%2F%3E%3Crect%20x%3D'224'%20y%3D'178'%20width%3D'52'%20height%3D'62'%2F%3E%3Crect%20x%3D'284'%20y%3D'150'%20width%3D'38'%20height%3D'90'%2F%3E%3Crect%20x%3D'330'%20y%3D'182'%20width%3D'66'%20height%3D'58'%2F%3E%3Crect%20x%3D'404'%20y%3D'160'%20width%3D'42'%20height%3D'80'%2F%3E%3Crect%20x%3D'454'%20y%3D'186'%20width%3D'56'%20height%3D'54'%2F%3E%3Crect%20x%3D'648'%20y%3D'176'%20width%3D'54'%20height%3D'64'%2F%3E%3Crect%20x%3D'710'%20y%3D'150'%20width%3D'40'%20height%3D'90'%2F%3E%3Crect%20x%3D'758'%20y%3D'184'%20width%3D'62'%20height%3D'56'%2F%3E%3Crect%20x%3D'828'%20y%3D'158'%20width%3D'44'%20height%3D'82'%2F%3E%3Crect%20x%3D'880'%20y%3D'182'%20width%3D'58'%20height%3D'58'%2F%3E%3Crect%20x%3D'946'%20y%3D'140'%20width%3D'36'%20height%3D'100'%2F%3E%3Crect%20x%3D'990'%20y%3D'178'%20width%3D'64'%20height%3D'62'%2F%3E%3Crect%20x%3D'1062'%20y%3D'158'%20width%3D'46'%20height%3D'82'%2F%3E%3Crect%20x%3D'1116'%20y%3D'185'%20width%3D'84'%20height%3D'55'%2F%3E%3Crect%20x%3D'556'%20y%3D'96'%20width%3D'32'%20height%3D'144'%2F%3E%3Cpolygon%20points%3D'556%2C96%20572%2C58%20588%2C96'%2F%3E%3Crect%20x%3D'600'%20y%3D'96'%20width%3D'32'%20height%3D'144'%2F%3E%3Cpolygon%20points%3D'600%2C96%20616%2C58%20632%2C96'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") repeat-x bottom center;
+  background-size:auto 66px;opacity:.5;
+  -webkit-mask:linear-gradient(180deg,transparent,#000 55%);mask:linear-gradient(180deg,transparent,#000 55%);
+}
+/* Feine Karten-Schatten + sanfte Hover-Übergänge (kein Blinken) */
+#partner-dash .pd-tile{box-shadow:0 8px 22px rgba(0,0,0,.34);}
+#partner-dash .pd-tile.click{transition:transform .16s ease,border-color .16s ease,box-shadow .2s ease;}
+#partner-dash .pd-tile.click:hover{transform:translateY(-2px);border-color:rgba(201,169,97,.28);box-shadow:0 14px 32px rgba(0,0,0,.48);}
+#partner-dash .pd-item{box-shadow:0 6px 16px rgba(0,0,0,.26);transition:transform .15s ease,border-color .18s ease,box-shadow .2s ease;}
+#partner-dash .pd-item:hover{transform:translateY(-1px);border-color:rgba(201,169,97,.28);box-shadow:0 12px 26px rgba(0,0,0,.4);}
+/* Status-Badges für Projekte (Palette wie Master .st-*) */
+#partner-dash .pd-st{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:50px;white-space:nowrap;}
+#partner-dash .pd-st.aktiv{background:rgba(62,207,142,.16);color:#3ecf8e;}
+#partner-dash .pd-st.geplant{background:rgba(90,167,255,.14);color:#5aa7ff;}
+#partner-dash .pd-st.pausiert{background:rgba(245,185,66,.16);color:#f5b942;}
+#partner-dash .pd-st.fertig{background:rgba(255,255,255,.06);color:#8a97a8;}
+/* Bob/Felix-Panel gold (bestehende Bob-Funktion, nur Optik) */
+#partner-dash .pd-bob-trigger{display:inline-flex;align-items:center;gap:9px;
+  background:linear-gradient(135deg,rgba(201,169,97,.18),rgba(201,169,97,.05));
+  border:1px solid rgba(201,169,97,.28);border-radius:14px;padding:10px 15px;color:#e8edf5;
+  font-weight:700;font-size:13.5px;cursor:pointer;transition:border-color .15s,transform .12s;}
+#partner-dash .pd-bob-trigger:hover{border-color:#C9A961;}
+#partner-dash .pd-bob-trigger:active{transform:translateY(1px);}
+#partner-dash .pd-bob-trigger .orb{width:26px;height:26px;border-radius:50%;flex:0 0 auto;
+  background:radial-gradient(circle at 35% 30%,#f0d089,#b8954d 70%);box-shadow:0 0 12px rgba(201,169,97,.5);}
+#partner-dash .bob-chat{background:#131519;border:1px solid rgba(201,169,97,.20);}
+#partner-dash .bob-msg.user{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#e8edf5;}
+#partner-dash .bob-msg.bob{background:#0f1116;border-color:rgba(255,255,255,.07);color:#e8edf5;}
+#partner-dash .bob-chat-input{background:#0f1116;border-color:rgba(255,255,255,.07);color:#e8edf5;}
+#partner-dash .bob-chat-mic{background:#0f1116;border-color:rgba(201,169,97,.28);color:#C9A961;}
+#partner-dash .bob-chat-send{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
 
 /* BLOCK 6: Lead-Detailansicht (Overlay) */
 .lead-ov{display:none;position:fixed;inset:0;z-index:2000;background:rgba(4,9,17,0.78);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;}
@@ -6951,7 +7002,7 @@ function pdBobBar(tab){
   var area=pdBobArea(tab);
   if(!pdHas('bob_assist_'+area)) return '';   // nur wenn für diesen Bereich freigeschaltet
   return '<div style="margin:12px 18px 0;">'
-    +'<button class="pd-dl" style="display:inline-block;" onclick="pdBobToggle(\''+area+'\')">🎙️ Bob fragen</button>'
+    +'<button class="pd-bob-trigger" onclick="pdBobToggle(\''+area+'\')"><span class="orb"></span>🎙️ Bob fragen</button>'
     +'<div id="pd-bob-panel-'+area+'" class="bob-chat" style="display:none;margin:10px 0 0;">'
     +'<div class="bob-chat-msgs" id="pd-bob-msgs-'+area+'"></div>'
     +'<div class="bob-chat-input-row">'
@@ -7027,6 +7078,15 @@ function pdTile(o){
     +(o.sfx&&!locked?'<div class="pt-sfx">'+gsEsc(o.sfx)+'</div>':'')
     +'</div>';
 }
+// Projekt-Status → farbiges Badge (Palette wie Master .st-*). Robust: unbekannte
+// Status fallen auf "aktiv" zurück, damit nie ein leeres/kaputtes Badge entsteht.
+function pdStatusBadge(status){
+  var s=(status||'').toLowerCase(), cls='aktiv', lbl=status||'aktiv';
+  if(/(abgeschlossen|fertig|erledigt|abgeschl)/.test(s)){cls='fertig';}
+  else if(/(geplant|neu|offen|angelegt)/.test(s)){cls='geplant';}
+  else if(/(paus|stopp|wartet|halten|blockiert)/.test(s)){cls='pausiert';}
+  return '<span class="pd-st '+cls+'">'+gsEsc(lbl)+'</span>';
+}
 function pdLoadCards(){
   var el=document.getElementById('pd-cards');if(!el)return;
   var proj=0,tech=0,rapH=0,rapW=0,offen=0;
@@ -7039,6 +7099,8 @@ function pdLoadCards(){
       var set={};
       ps.forEach(function(p){(p.gs_projekt_techniker||[]).forEach(function(t){ if(t&&t.techniker_user_id) set[t.techniker_user_id]=1; });});
       tech=Object.keys(set).length;
+      // Wetter-Ort: erster Projekt-Standort (DACH), sonst Fallback Zürich (s. pdGeocode).
+      for(var i=0;i<ps.length;i++){ if(ps[i].standort){ pdWxPlace=ps[i].standort; break; } }
     }).catch(function(){}),
     gsAuthApi('tagesrapport',{action:'list'}).then(function(d){
       (d.rapporte||[]).forEach(function(r){ var dt=(r.datum||'').slice(0,10);
@@ -7060,25 +7122,61 @@ function pdLoadCards(){
     pdLoadWeather();
   });
 }
-// Wetter (Zürich/Wien/Barcelona) – Quelle /api/weather (open-meteo, kein Key),
-// 15-Min-Cache. Fehler unkritisch: Kachel wird dann ausgeblendet. Wie Master Cockpit.
-var _pdWx=null,_pdWxAt=0;
+// Wetter nach Partner-/Projekt-Ort (DACH-fähig CH/AT/DE, Fallback Zürich).
+// Quelle: open-meteo (kostenlos, KEIN Key, keine neue Backend-Logik). 15-Min-Cache,
+// Fehler unkritisch → Kachel wird ausgeblendet. WMO-Code-Map wie api/weather.js.
+var _pdWx=null,_pdWxAt=0,_pdWxKey='',pdWxPlace=null;
+function pdWxCode(c){ c=Number(c);
+  if(c===0)return{t:'klar',e:'☀️'}; if(c===1)return{t:'überwiegend klar',e:'🌤️'};
+  if(c===2)return{t:'teils bewölkt',e:'⛅'}; if(c===3)return{t:'bedeckt',e:'☁️'};
+  if(c===45||c===48)return{t:'neblig',e:'🌫️'};
+  if(c>=51&&c<=57)return{t:'Nieselregen',e:'🌦️'};
+  if(c>=61&&c<=67)return{t:'Regen',e:'🌧️'};
+  if(c>=71&&c<=77)return{t:'Schnee',e:'🌨️'};
+  if(c>=80&&c<=82)return{t:'Regenschauer',e:'🌦️'};
+  if(c===85||c===86)return{t:'Schneeschauer',e:'🌨️'};
+  if(c>=95)return{t:'Gewitter',e:'⛈️'};
+  return{t:'wechselhaft',e:'🌡️'};
+}
+function pdGeocode(place){
+  var ZH={name:'Zürich',lat:47.3769,lon:8.5417};
+  if(/z(ü|ue?)rich/i.test(place)) return Promise.resolve(ZH);
+  var u='https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(place)
+    +'&count=5&language=de&format=json';
+  return fetch(u).then(function(r){return r.json();}).then(function(j){
+    var rs=(j&&j.results)||[];
+    if(!rs.length) return ZH;
+    var dach=rs.filter(function(x){return ['CH','AT','DE'].indexOf(x.country_code)>-1;});
+    var p=dach[0]||rs[0];
+    return {name:p.name||place, lat:p.latitude, lon:p.longitude};
+  }).catch(function(){ return ZH; });
+}
+function pdPaintWeather(d){
+  var el=document.getElementById('pd-weather'); if(!el) return;
+  el.style.display='';
+  var hilo=(d.max!=null&&d.min!=null)?('H '+d.max+'°  ·  T '+d.min+'°'):'';
+  el.innerHTML='<div class="pt-k">🌤️ Wetter · '+gsEsc(d.name)+'</div>'
+    +'<div class="pd-wx-now"><span class="pd-wx-ic">'+gsEsc(d.emoji)+'</span>'
+    +'<span class="pd-wx-temp">'+gsEsc(String(d.temp))+'°</span>'
+    +'<span class="pd-wx-txt">'+gsEsc(d.text)+(hilo?('<br><span class="pd-wx-hilo">'+gsEsc(hilo)+'</span>'):'')+'</span></div>';
+}
 function pdLoadWeather(){
-  var el=document.getElementById('pd-weather');if(!el)return;
-  function paint(d){
-    var cs=(d&&d.cities)||[];
-    if(!cs.length){ el.style.display='none'; return; }
-    el.innerHTML='<div class="pt-k">🌤️ Wetter</div><div class="wx-row">'+cs.map(function(c){
-      return '<div class="wx-city"><span class="wx-ic">'+gsEsc(c.emoji||'🌡️')+'</span>'
-        +'<span class="wx-name">'+gsEsc(c.name)+'</span>'
-        +'<span class="wx-temp">'+gsEsc(String(c.temp))+'°</span>'
-        +'<span class="wx-txt">'+gsEsc(c.text||'')+'</span></div>';
-    }).join('')+'</div>';
-  }
-  if(_pdWx&&Date.now()-_pdWxAt<900000){ paint(_pdWx); return; }
-  fetch('/api/weather').then(function(r){return r.json();})
-    .then(function(d){ _pdWx=d;_pdWxAt=Date.now(); paint(d); })
-    .catch(function(){ if(el)el.style.display='none'; });
+  var el=document.getElementById('pd-weather'); if(!el) return;
+  var place=(pdWxPlace&&String(pdWxPlace).trim())||'Zürich';
+  if(_pdWx&&_pdWxKey===place&&Date.now()-_pdWxAt<900000){ pdPaintWeather(_pdWx); return; }
+  pdGeocode(place).then(function(loc){
+    var url='https://api.open-meteo.com/v1/forecast?latitude='+loc.lat+'&longitude='+loc.lon
+      +'&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto';
+    return fetch(url).then(function(r){return r.json();}).then(function(j){
+      var cur=j.current||{}, day=j.daily||{}, info=pdWxCode(cur.weather_code);
+      var d={ name:loc.name, text:info.t, emoji:info.e,
+        temp:(cur.temperature_2m!=null?Math.round(Number(cur.temperature_2m)):null),
+        max:(day.temperature_2m_max&&day.temperature_2m_max[0]!=null?Math.round(Number(day.temperature_2m_max[0])):null),
+        min:(day.temperature_2m_min&&day.temperature_2m_min[0]!=null?Math.round(Number(day.temperature_2m_min[0])):null) };
+      if(d.temp==null) throw new Error('no temp');
+      _pdWx=d;_pdWxAt=Date.now();_pdWxKey=place; pdPaintWeather(d);
+    });
+  }).catch(function(){ if(el)el.style.display='none'; });
 }
 function pdLoadBadge(){
   gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){
@@ -7128,9 +7226,13 @@ function pdTab(tab){
       var ps=d.projekte||[];
       pdProjekte=ps;
       c.innerHTML=ps.length?ps.map(function(p){
+        var nT=(p.gs_projekt_techniker||[]).length;
         return '<div class="pd-item" style="cursor:pointer;" onclick="pdOpenProjekt(\''+p.id+'\')">'
-          +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name)+'</div><span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div>'
-          +'<div class="pd-item-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')+' · '+gsEsc(p.status||'')+'</div></div>';
+          +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name)+'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px;">'+pdStatusBadge(p.status)
+          +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
+          +'<div class="pd-item-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')
+          +(nT?(' · 👷 '+nT+' Techniker'):'')+'</div></div>';
       }).join(''):'<div class="admin-empty">Keine Projekte.</div>';
     });
   }else if(tab==='rapporte'){
