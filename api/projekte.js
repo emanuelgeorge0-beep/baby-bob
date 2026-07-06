@@ -1,4 +1,5 @@
 // api/projekte.js – Projektmanagement (admin CRUD + assignment, role-filtered reads)
+import { isEntitled } from '../lib/entitlements.js';
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const SB = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
@@ -22,6 +23,14 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
     const adminOnly = ['create', 'update', 'assign', 'technicians', 'partners'];
     if (adminOnly.includes(action) && role !== 'gs_admin') return res.status(403).json({ error: 'Nur für Administratoren' });
+
+    // Feature-Durchsetzung: Partner braucht 'projektmanagement' freigeschaltet.
+    // (Nur gs_partner; Admin/Techniker unberührt. Fail-open, falls Tabelle fehlt.)
+    if (role === 'gs_partner' && (action === 'list' || action === 'get')) {
+      if (!(await isEntitled(user.id, 'projektmanagement'))) {
+        return res.status(403).json({ error: 'Projektmanagement ist für Ihren Zugang nicht freigeschaltet.', locked: 'projektmanagement' });
+      }
+    }
 
     switch (action) {
       case 'list':        return await list(res, user, role);

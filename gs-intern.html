@@ -1047,7 +1047,7 @@ function renderMehr(){
   var mods=[
     {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
-    {v:'lizenz',ic:'🔑',t:'Lizenzen',d:'Pro Kunde Bausteine an/aus – „Sie buchen nur, was Sie brauchen"'},
+    {v:'lizenz',ic:'🔑',t:'Kunden & Lizenzen',d:'Pro Partner-Account Features freischalten – serverseitig durchgesetzt'},
     {v:'marketing',ic:'📣',t:'Marketing',d:'Kanäle, Kosten/Lead, Conversion, Content-Plan'},
     {v:'todos',ic:'✅',t:'To-Dos',d:'Interne Aufgaben (Team, Fälligkeit, Priorität)'},
     {v:'margen',ic:'💰',t:'Verkauf & Margen',d:'Einkauf vs. Verkauf → Marge pro Projekt'},
@@ -1524,49 +1524,64 @@ function openMaterialAdd(){
   };
 }
 
-// ════ LIZENZEN — pro Kunde buchbare Bausteine (Demo fürs Verkaufsgespräch) ════
-// "Sie buchen nur, was Sie brauchen." Auswahl wird pro Kunde lokal gespeichert
-// (localStorage) — bewusst schlank, kein Backend nötig für die Verkaufs-Demo.
-var LIZENZ_BAUSTEINE=[
-  {k:'projektmanagement',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Einsätze zentral führen'},
-  {k:'disposition',ic:'🧭',t:'Techniker-Disposition',d:'Techniker Projekten zuweisen, Einsätze planen'},
-  {k:'blockaden',ic:'🚧',t:'Blockaden-Management',d:'Baustellen-Blockaden erfassen, eskalieren, freigeben'},
-  {k:'material',ic:'📦',t:'Materialverwaltung',d:'Materiallisten pro Projekt, HKLS-Vorlagen'},
-  {k:'reporting',ic:'📄',t:'Reporting & Berichte',d:'Mängel- und Blockadenberichte als PDF'},
-  {k:'controlling',ic:'💎',t:'Controlling',d:'Umsätze, Margen, Pipeline im Überblick'},
-  {k:'bob',ic:'🎙️',t:'Sprachassistent „Bob"',d:'Freihändige Auskunft & Steuerung per Sprache'}
-];
-var _lizKunden=[], _lizKundeId='';
-function lizKey(id){ return 'gs_lizenz_'+id; }
-function lizGet(id){ try{ return JSON.parse(localStorage.getItem(lizKey(id))||'{}')||{}; }catch(e){ return {}; } }
-function lizSet(id,map){ try{ localStorage.setItem(lizKey(id),JSON.stringify(map)); }catch(e){} }
+// ════ KUNDEN & LIZENZEN — Feature-Freischaltung pro Partner-Account (Backend) ════
+// Admin schaltet pro Partner einzelne Features frei → /api/entitlements (Master-Token,
+// gs_admin-gated). Serverseitig durchgesetzt in api/projekte|tagesrapport|blockaden.
+// Ersetzt die frühere localStorage-Demo: jetzt echt & persistent.
+function entApi(body){
+  return fetch('/api/entitlements',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+    body:JSON.stringify(body||{})}).then(function(r){ return r.json().catch(function(){return {};}); });
+}
+var _lizFeatures=[], _lizPartners=[], _lizPartnerId='', _lizTableMissing=false;
 function renderLizenz(){
-  $('view').innerHTML='<h2><span class="acc">🔑</span> Lizenzen & Bausteine</h2>'+backRow()+
+  $('view').innerHTML='<h2><span class="acc">🔑</span> Kunden & Lizenzen</h2>'+backRow()+
+    '<button class="btn btn-gold" id="liz-new" style="margin-bottom:14px">＋ Partner anlegen</button>'+
     '<div class="empty" id="liz-body" style="border:none;background:none;padding:0">Lädt…</div>';
   wireBack();
-  api('pm_kunden').then(function(d){ _lizKunden=d.kunden||[]; if(!_lizKundeId&&_lizKunden.length) _lizKundeId=_lizKunden[0].id; paintLizenz(); })
-    .catch(function(){ var b=$('liz-body'); if(b) b.innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+  $('liz-new').onclick=openCreateUser;   // wiederverwendet die bestehende User-Anlage
+  entApi({action:'list'}).then(function(d){
+    var b=$('liz-body'); if(!b) return;
+    if(d.error){ b.innerHTML='<div class="empty">'+esc(d.error)+'</div>'; return; }
+    _lizFeatures=d.features||[]; _lizPartners=d.partners||[]; _lizTableMissing=!!d.tableMissing;
+    if((!_lizPartnerId||!lizPartner())&&_lizPartners.length) _lizPartnerId=_lizPartners[0].user_id;
+    paintLizenz();
+  }).catch(function(){ var b=$('liz-body'); if(b) b.innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
 }
+function lizPartner(){ for(var i=0;i<_lizPartners.length;i++){ if(_lizPartners[i].user_id===_lizPartnerId) return _lizPartners[i]; } return null; }
 function paintLizenz(){
   var body=$('liz-body'); if(!body) return;
-  if(!_lizKunden.length){ body.innerHTML='<div class="empty">Noch keine Kunden. Lege im Projektmanagement einen Kunden an.</div>'; return; }
-  var opts=_lizKunden.map(function(k){ return {v:k.id,t:(k.firma||k.kontaktperson||'Kunde')}; });
-  var map=lizGet(_lizKundeId);
-  var gebucht=LIZENZ_BAUSTEINE.filter(function(b){ return map[b.k]; }).length;
-  body.innerHTML=
-    '<div class="sec-t" style="margin-top:0">Kunde</div>'+pmSelect('liz-kunde',opts,_lizKundeId)+
-    '<div class="meta" style="margin:12px 0"><span style="color:var(--muted)">Gebuchte Bausteine:</span> '+pmPill(gebucht+' von '+LIZENZ_BAUSTEINE.length,'var(--gold)')+'</div>'+
-    '<div class="list">'+LIZENZ_BAUSTEINE.map(function(b){
-      var on=!!map[b.k];
+  if(!_lizPartners.length){ body.innerHTML='<div class="empty">Noch keine Partner-Accounts. Lege oben einen Partner an.</div>'; return; }
+  var p=lizPartner(); if(!p){ p=_lizPartners[0]; _lizPartnerId=p.user_id; }
+  var ent=p.entitlements||{};
+  var opts=_lizPartners.map(function(x){ return {v:x.user_id,t:(x.firma||x.name||x.email||'Partner')}; });
+  var frei=_lizFeatures.filter(function(f){ return ent[f.key]; }).length;
+  var warn=_lizTableMissing?'<div class="empty" style="padding:12px;font-size:12.5px;margin-bottom:12px">Tabelle noch nicht angelegt – Freischaltungen greifen erst nach <b>scripts/entitlements.sql</b> in Supabase. Bis dahin sind vorübergehend alle Features frei.</div>':'';
+  body.innerHTML=warn+
+    '<div class="sec-t" style="margin-top:0">Kunde (Partner-Account)</div>'+pmSelect('liz-partner',opts,_lizPartnerId)+
+    '<div class="meta" style="margin:12px 0"><span style="color:var(--muted)">'+esc(p.email||'')+'</span>'+
+      '<span class="dot">Freigeschaltet:</span> '+pmPill(frei+' von '+_lizFeatures.length,'var(--gold)')+'</div>'+
+    '<div class="list">'+_lizFeatures.map(function(f){
+      var on=!!ent[f.key];
       return '<div class="lcard" style="opacity:'+(on?'1':'.6')+'"><div class="top">'+
-        '<div class="nm">'+b.ic+' '+esc(b.t)+'</div>'+
-        '<button class="chip'+(on?' on':'')+'" data-liz="'+b.k+'" style="font-size:12px">'+(on?'✓ gebucht':'buchen')+'</button></div>'+
-        '<div class="meta"><span>'+esc(b.d)+'</span></div></div>';
+        '<div class="nm">'+esc(f.label)+'</div>'+
+        '<button class="chip'+(on?' on':'')+'" data-feat="'+esc(f.key)+'" style="font-size:12px">'+(on?'✓ frei':'freischalten')+'</button></div>'+
+        '<div class="meta"><span style="color:var(--muted2)">'+esc(f.key)+'</span></div></div>';
     }).join('')+'</div>';
-  $('liz-kunde').onchange=function(){ _lizKundeId=$('liz-kunde').value; paintLizenz(); };
-  Array.prototype.forEach.call(body.querySelectorAll('[data-liz]'),function(btn){
-    btn.onclick=function(){ var m=lizGet(_lizKundeId); var key=btn.getAttribute('data-liz'); m[key]=!m[key]; lizSet(_lizKundeId,m); paintLizenz(); };
+  $('liz-partner').onchange=function(){ _lizPartnerId=$('liz-partner').value; paintLizenz(); };
+  Array.prototype.forEach.call(body.querySelectorAll('[data-feat]'),function(btn){
+    btn.onclick=function(){ lizToggle(btn.getAttribute('data-feat')); };
   });
+}
+function lizToggle(key){
+  var p=lizPartner(); if(!p) return;
+  var ent=p.entitlements||(p.entitlements={});
+  var next=!ent[key];
+  ent[key]=next; paintLizenz();      // optimistisch, rollt bei Fehler zurück
+  entApi({action:'set',partner_user_id:p.user_id,feature_key:key,enabled:next}).then(function(d){
+    if(d.error){ ent[key]=!next; paintLizenz(); toast(d.error); return; }
+    toast(next?'Freigeschaltet':'Gesperrt');
+  }).catch(function(){ ent[key]=!next; paintLizenz(); toast('Verbindungsfehler'); });
 }
 
 // ════ JARVIS — Sprach-Assistent (Session 5, Teil A) ════

@@ -12,6 +12,7 @@
 // erzwingt diese API in der Anwendungsschicht (RLS ist Defense-in-Depth, siehe SQL).
 import { sendResendEmail, blockadeEmailHtml, blockadenReportEmailHtml, GS_OFFICE_EMAIL } from '../lib/mail.js';
 import { buildBlockadePdf, buildBlockadenReportPdf } from '../lib/pdf.js';
+import { isEntitled } from '../lib/entitlements.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -51,6 +52,14 @@ export default async function handler(req, res) {
   const user = await getUser(token);
   if (!user) return res.status(401).json({ error: 'Ungültiger Token' });
   const role = await getRole(user.id);
+
+  // Feature-Durchsetzung: Partner braucht 'blockaden' freigeschaltet.
+  // (Nur gs_partner; Techniker/Admin unberührt. Fail-open, falls Tabelle fehlt.)
+  if (role === 'gs_partner' && ['create', 'list', 'get', 'update', 'freigeben', 'eskalieren', 'report'].includes(body.action)) {
+    if (!(await isEntitled(user.id, 'blockaden'))) {
+      return res.status(403).json({ error: 'Blockaden-Management ist für Ihren Zugang nicht freigeschaltet.', locked: 'blockaden' });
+    }
+  }
 
   try {
     switch (body.action) {

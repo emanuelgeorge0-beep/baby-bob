@@ -1,5 +1,6 @@
 // api/tagesrapport.js – Daily rapport: capture, media, week view, status, auto PDF+invoice
 import { buildRapportPdf, buildRechnungPdf } from '../lib/pdf.js';
+import { isEntitled } from '../lib/entitlements.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -22,6 +23,13 @@ export default async function handler(req, res) {
 
   try {
     const { action } = req.body || {};
+    // Feature-Durchsetzung: Partner braucht 'reports', um Rapporte zu sehen.
+    // (Nur gs_partner; Techniker erfasst weiterhin ungehindert. Fail-open ohne Tabelle.)
+    if (role === 'gs_partner' && (action === 'list' || action === 'get' || action === 'week')) {
+      if (!(await isEntitled(user.id, 'reports'))) {
+        return res.status(403).json({ error: 'Berichte & Rapporte sind für Ihren Zugang nicht freigeschaltet.', locked: 'reports' });
+      }
+    }
     switch (action) {
       case 'list':            return await list(res, user, role, req.body);
       case 'get':             return await getOne(res, user, role, req.body);

@@ -2420,7 +2420,8 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   </div>
   <div class="pd-cards" id="pd-cards"></div>
   <button class="admin-add-btn" onclick="setMode('gs')">+ Neues Projekt buchen</button>
-  <div class="pd-tabs">
+  <!-- Tabs werden je nach Freischaltung dynamisch gebaut (pdBuildTabs). Statik = Fallback. -->
+  <div class="pd-tabs" id="pd-tabs">
     <div class="pd-tab act" id="pdt-inbox" onclick="pdTab('inbox')">📨 Inbox<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span></div>
     <div class="pd-tab" id="pdt-projekte" onclick="pdTab('projekte')">Projekte</div>
     <div class="pd-tab" id="pdt-rapporte" onclick="pdTab('rapporte')">Rapporte</div>
@@ -6824,11 +6825,69 @@ function blWeekReportInto(containerId){
 }
 
 // ── PARTNER DASHBOARD ──
+// ── Partner-Feature-Gating (Entitlements pro Partner-Account) ──
+// Module → Feature-Key. core:true = immer erreichbar (kein Lizenz-Baustein).
+// mount:true = leerer Andock-Container für George-Solutions-Komponenten (projectflow).
+var PD_MODULES=[
+  {tab:'inbox',       label:'📨 Inbox',      core:true, badge:true},
+  {tab:'projekte',    label:'Projekte',      feature:'projektmanagement'},
+  {tab:'rapporte',    label:'Rapporte',      feature:'reports'},
+  {tab:'material',    label:'📦 Material',   feature:'material', mount:true},
+  {tab:'blockaden',   label:'🚧 Blockaden',  feature:'blockaden'},
+  {tab:'kalkulation', label:'🧮 Kalkulation',feature:'kalkulation', mount:true},
+  {tab:'rechnungen',  label:'Rechnungen',    core:true},
+  {tab:'settings',    label:'⚙️',            core:true}
+];
+// null = fail-open (Demo ODER Tabelle noch nicht eingespielt) → alles frei.
+var pdEntitlements=null, pdTableMissing=false;
+function pdHas(key){ if(pdEntitlements===null) return true; return pdEntitlements.indexOf(key)>-1; }
+function pdCompany(){ return { id:(authUser&&authUser.id)||null, name:(authUser&&authUser.email)||'' }; }
+function pdLoadEntitlements(cb){
+  if(demoMode){ pdEntitlements=null; if(cb)cb(); return; }   // Demo: alles frei
+  gsAuthApi('entitlements',{action:'mine'}).then(function(d){
+    pdEntitlements=(d&&!d.error&&Array.isArray(d.features)&&!d.tableMissing)?d.features.slice():null;
+    pdTableMissing=!!(d&&d.tableMissing);
+    if(cb)cb();
+  }).catch(function(){ pdEntitlements=null; if(cb)cb(); });
+}
+function pdModule(tab){ for(var i=0;i<PD_MODULES.length;i++){ if(PD_MODULES[i].tab===tab) return PD_MODULES[i]; } return null; }
+function pdBuildTabs(){
+  var wrap=document.getElementById('pd-tabs'); if(!wrap) return;
+  wrap.innerHTML=PD_MODULES.map(function(m){
+    var locked=!!(m.feature&&!pdHas(m.feature));
+    var badge=m.badge?'<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span>':'';
+    var st=locked?' style="opacity:.45"':'';
+    return '<div class="pd-tab" id="pdt-'+m.tab+'"'+st+' onclick="pdTab(\''+m.tab+'\')">'+(locked?'🔒 ':'')+m.label+badge+'</div>';
+  }).join('');
+}
+function pdRenderLocked(c,mod){
+  var subj=encodeURIComponent('Freischaltung: '+mod.label);
+  c.innerHTML='<div class="pd-item" style="text-align:center;">'
+    +'<div class="pd-item-tit">🔒 '+gsEsc(mod.label)+' – nicht freigeschaltet</div>'
+    +'<div class="pd-item-meta" style="margin-top:8px;line-height:1.6;">Dieses Modul ist in Ihrem Zugang nicht aktiviert.<br>Für die Freischaltung wenden Sie sich an George Solutions.</div>'
+    +'<a href="mailto:info@george-solutions.ch?subject='+subj+'" class="pd-dl" style="margin-top:12px;display:inline-block;">✉️ Freischaltung anfragen</a></div>';
+}
+function pdRenderMount(c,mod){
+  var co=pdCompany();
+  // Leerer Mount-Punkt mit Props – der George-Solutions-Merge dockt hier an.
+  c.innerHTML='<div class="pf-mount" id="pf-'+mod.tab+'-mount"'
+    +' data-feature="'+gsEsc(mod.feature||'')+'"'
+    +' data-company-id="'+gsEsc(co.id||'')+'"'
+    +' data-can-rapport="'+(pdHas('rapport')?'1':'0')+'"'
+    +' data-can-order="'+(pdHas('material_order')?'1':'0')+'"'
+    +' data-can-scan="'+(pdHas('bob_scan')?'1':'0')+'"'
+    +' data-can-voice="'+(pdHas('voice_memo')?'1':'0')+'">'
+    +'<div class="admin-empty">Modul „'+gsEsc(mod.label)+'" – wird über George Solutions bereitgestellt.</div></div>';
+  if(window.PF&&typeof window.PF.mount==='function'){ try{ window.PF.mount(mod.tab,document.getElementById('pf-'+mod.tab+'-mount'),co); }catch(e){} }
+}
 function initPartnerDash(){
   document.getElementById('pd-welcome').textContent=(authUser&&authUser.email)||'George Solutions';
-  pdLoadBadge();
-  pdLoadCards();
-  pdTab('inbox');
+  pdLoadEntitlements(function(){
+    pdBuildTabs();
+    pdLoadBadge();
+    pdLoadCards();
+    pdTab('inbox');
+  });
 }
 function pdLoadCards(){
   var el=document.getElementById('pd-cards');if(!el)return;
@@ -6850,10 +6909,14 @@ function pdLoadBadge(){
   });
 }
 function pdTab(tab){
-  ['inbox','projekte','rapporte','blockaden','rechnungen','settings'].forEach(function(t){
-    var el=document.getElementById('pdt-'+t);if(el)el.classList.toggle('act',t===tab);
-  });
-  var c=document.getElementById('pd-content');c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  PD_MODULES.forEach(function(m){ var el=document.getElementById('pdt-'+m.tab); if(el) el.classList.toggle('act',m.tab===tab); });
+  var c=document.getElementById('pd-content');if(!c)return;
+  var mod=pdModule(tab);
+  // Feature-Gate: gesperrtes Modul → Upgrade-Hinweis statt Inhalt (nicht nur optisch;
+  // die Datenendpunkte lehnen ohne Freischaltung ohnehin mit 403 ab).
+  if(mod&&mod.feature&&!pdHas(mod.feature)){ pdRenderLocked(c,mod); return; }
+  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  if(mod&&mod.mount){ pdRenderMount(c,mod); return; }
   if(tab==='settings'){ pdRenderSettings(c); return; }
   if(tab==='blockaden'){ pdBlockadenLoad(); return; }
   if(tab==='inbox'){
