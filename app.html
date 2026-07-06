@@ -832,6 +832,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #partner-dash .pd-item-tit{color:#e8edf5;}
 #partner-dash .pd-item-meta{color:#8a97a8;}
 #partner-dash .pd-dl{color:#C9A961;}
+/* Kleine Stat-Cards in der Projekt-Detailansicht auf Gold/Schwarz ziehen */
+#partner-dash .pd-card{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:13px;}
+#partner-dash .pd-card-n{color:#C9A961;}
+#partner-dash .pd-card-l{color:#8a97a8;}
 #partner-dash .admin-badge.active{background:rgba(62,207,142,.16);color:#3ecf8e;}
 #partner-dash .admin-badge.must_change_password{background:rgba(245,185,66,.16);color:#f5b942;}
 /* ── Übersicht: Kachel-Raster wie Master Cockpit ── */
@@ -7089,7 +7093,8 @@ function pdStatusBadge(status){
 }
 function pdLoadCards(){
   var el=document.getElementById('pd-cards');if(!el)return;
-  var proj=0,tech=0,rapH=0,rapW=0,offen=0;
+  var proj=0,tech=0,rapH=0,rapW=0,offen=0,sysOk=true;
+  pdWxPlace=null;   // pro Laden neu aus Projekten ableiten (kein Rest von anderem Partner)
   var heute=new Date().toISOString().slice(0,10);
   var wStart=new Date(Date.now()-6*864e5).toISOString().slice(0,10);
   Promise.all([
@@ -7101,7 +7106,7 @@ function pdLoadCards(){
       tech=Object.keys(set).length;
       // Wetter-Ort: erster Projekt-Standort (DACH), sonst Fallback Zürich (s. pdGeocode).
       for(var i=0;i<ps.length;i++){ if(ps[i].standort){ pdWxPlace=ps[i].standort; break; } }
-    }).catch(function(){}),
+    }).catch(function(){ sysOk=false; }),   // projekte ist für gs_partner immer erlaubt → guter Konnektivitäts-Indikator
     gsAuthApi('tagesrapport',{action:'list'}).then(function(d){
       (d.rapporte||[]).forEach(function(r){ var dt=(r.datum||'').slice(0,10);
         if(dt===heute)rapH++; if(dt>=wStart&&dt<=heute)rapW++; });
@@ -7117,7 +7122,7 @@ function pdLoadCards(){
      +pdTile({k:'Materiallisten',v:'›',cls:'gold',sfx:'Listen ansehen',feature:'material',tab:'material'})
      +pdTile({k:'Controlling',v:'›',cls:'gold',sfx:'Auswertung öffnen',feature:'controlling',tab:'controlling'})
      +pdTile({k:'Rechnungen',v:offen,cls:offen>0?'warn':'',sfx:offen>0?'offen':'alle bezahlt',tab:'rechnungen'})
-     +pdTile({k:'Systemstatus',v:'OK',cls:'ok',sfx:'Alle Dienste online'})
+     +pdTile({k:'Systemstatus',v:sysOk?'OK':'—',cls:sysOk?'ok':'warn',sfx:sysOk?'Alle Dienste online':'Verbindung eingeschränkt',wide:true})
      +'<div class="pd-tile wide pd-wx" id="pd-weather"><div class="pt-k">🌤️ Wetter</div><div class="pt-sfx">Lädt…</div></div>';
     pdLoadWeather();
   });
