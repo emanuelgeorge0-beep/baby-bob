@@ -805,6 +805,115 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .pd-item-click{cursor:pointer;transition:border-color .15s,background .15s;-webkit-tap-highlight-color:transparent;}
 .pd-item-click:hover,.pd-item-click:focus-visible{border-color:rgba(74,158,255,0.4);background:rgba(74,158,255,0.06);outline:none;}
 .pd-item-arrow{float:right;color:rgba(74,158,255,0.7);font-weight:900;font-size:14px;}
+
+/* ══ PARTNER COCKPIT – edles Master-Design (Schwarz/Gold), NUR Optik ══
+   Alles unter #partner-dash gescopt, damit Admin-/Tech-Screens unberührt bleiben.
+   Palette 1:1 aus gs-intern.html (Master Cockpit). */
+#partner-dash{
+  background:
+    radial-gradient(900px 500px at 80% -10%, rgba(201,169,97,.06), transparent 60%),
+    radial-gradient(700px 500px at -10% 10%, rgba(90,167,255,.05), transparent 55%),
+    #0A0A0B;
+  color:#e8edf5;
+}
+#partner-dash .admin-hdr-tit{color:#e8edf5;letter-spacing:.4px;}
+#partner-dash .admin-hdr-sub{color:#8a97a8;}
+#partner-dash .admin-back{background:transparent;border:1px solid rgba(255,255,255,.07);color:#8a97a8;border-radius:9px;}
+#partner-dash .admin-add-btn{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;border-radius:12px;}
+#partner-dash .admin-empty{color:#5c6878;}
+/* Tabs → Gold-Chips, horizontal scrollbar (10 Module passen mobil nicht nebeneinander) */
+#partner-dash .pd-tabs{gap:8px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;}
+#partner-dash .pd-tabs::-webkit-scrollbar{display:none;}
+#partner-dash .pd-tab{flex:0 0 auto;background:#131519;border:1px solid rgba(255,255,255,.07);color:#8a97a8;border-radius:50px;padding:9px 15px;white-space:nowrap;}
+#partner-dash .pd-tab.act{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#C9A961;}
+/* Listen-Items */
+#partner-dash .pd-item{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:14px;}
+#partner-dash .pd-item:hover{border-color:rgba(201,169,97,.28);}
+#partner-dash .pd-item-tit{color:#e8edf5;}
+#partner-dash .pd-item-meta{color:#8a97a8;}
+#partner-dash .pd-dl{color:#C9A961;}
+/* Kleine Stat-Cards in der Projekt-Detailansicht auf Gold/Schwarz ziehen */
+#partner-dash .pd-card{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:13px;}
+#partner-dash .pd-card-n{color:#C9A961;}
+#partner-dash .pd-card-l{color:#8a97a8;}
+#partner-dash .admin-badge.active{background:rgba(62,207,142,.16);color:#3ecf8e;}
+#partner-dash .admin-badge.must_change_password{background:rgba(245,185,66,.16);color:#f5b942;}
+/* ── Übersicht: Kachel-Raster wie Master Cockpit ── */
+#partner-dash .pd-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:16px 18px 0;}
+#partner-dash .pd-tile{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:15px 16px;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent;transition:border-color .15s,transform .12s;}
+#partner-dash .pd-tile::after{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,rgba(201,169,97,.28),transparent);}
+#partner-dash .pd-tile.click{cursor:pointer;}
+#partner-dash .pd-tile.click:active{transform:translateY(1px);border-color:rgba(201,169,97,.28);}
+#partner-dash .pd-tile.wide{grid-column:1/-1;}
+#partner-dash .pd-tile.locked{opacity:.42;}
+#partner-dash .pd-tile.locked::after{display:none;}
+#partner-dash .pd-tile .pt-k{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#8a97a8;display:flex;align-items:center;gap:6px;}
+#partner-dash .pd-tile .pt-v{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;}
+#partner-dash .pd-tile .pt-v.gold{color:#C9A961;}
+#partner-dash .pd-tile .pt-v.ok{color:#3ecf8e;}
+#partner-dash .pd-tile .pt-v.warn{color:#f5b942;}
+#partner-dash .pd-tile .pt-sfx{font-size:12.5px;color:#8a97a8;font-weight:600;margin-top:3px;}
+/* ── Wetter-Kachel (open-meteo, kein Key) 1:1 aus Master ── */
+#partner-dash .pd-wx .pt-k{margin-bottom:10px;}
+#partner-dash .pd-wx .wx-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+#partner-dash .pd-wx .wx-city{display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:#0f1116;border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:9px 11px;min-width:0;}
+#partner-dash .pd-wx .wx-ic{font-size:18px;line-height:1;}
+#partner-dash .pd-wx .wx-name{font-size:11px;color:#8a97a8;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#partner-dash .pd-wx .wx-temp{font-size:19px;font-weight:800;color:#5aa7ff;font-variant-numeric:tabular-nums;}
+#partner-dash .pd-wx .wx-txt{font-size:10.5px;color:#5c6878;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#partner-dash .pd-wx-now{display:flex;align-items:center;gap:14px;}
+#partner-dash .pd-wx-ic{font-size:40px;line-height:1;flex:0 0 auto;}
+#partner-dash .pd-wx-temp{font-size:38px;font-weight:800;color:#5aa7ff;letter-spacing:-1px;font-variant-numeric:tabular-nums;}
+#partner-dash .pd-wx-txt{font-size:13px;color:#8a97a8;line-height:1.5;}
+#partner-dash .pd-wx-hilo{font-size:12px;color:#5c6878;font-variant-numeric:tabular-nums;}
+@media (max-width:360px){ #partner-dash .pd-wx .wx-row{gap:6px;} #partner-dash .pd-wx .wx-city{padding:8px;} #partner-dash .pd-wx .wx-temp{font-size:17px;} #partner-dash .pd-wx-temp{font-size:32px;} #partner-dash .pd-wx-ic{font-size:34px;} }
+
+/* ══ WOW (nur Optik): Zürich-Abend-Hero, feine Schatten/Hover, Status-Badges ══ */
+/* Hero-Header: ruhiger Abend-/Nachtverlauf + dezente Skyline-Silhouette (inline SVG,
+   kein externes Bild → nichts kann brechen). Text bleibt hell auf dunkel = lesbar. */
+#partner-dash .admin-hdr{
+  position:relative;overflow:hidden;
+  padding:calc(52px + var(--safe-top,0px)) 20px 22px;
+  border-bottom:1px solid rgba(201,169,97,.20);
+  background:
+    radial-gradient(130% 90% at 50% 8%, rgba(201,169,97,.15), transparent 55%),
+    linear-gradient(168deg, #101c33 0%, #0c1320 46%, #0A0A0B 100%);
+}
+#partner-dash .admin-hdr>*{position:relative;z-index:1;}
+#partner-dash .admin-hdr::after{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:66px;z-index:0;pointer-events:none;
+  background:url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%201200%20240'%20preserveAspectRatio%3D'xMidYMax%20slice'%3E%3Cg%20fill%3D'rgba(0%2C0%2C0%2C0.42)'%3E%3Crect%20x%3D'0'%20y%3D'170'%20width%3D'48'%20height%3D'70'%2F%3E%3Crect%20x%3D'56'%20y%3D'140'%20width%3D'40'%20height%3D'100'%2F%3E%3Crect%20x%3D'104'%20y%3D'185'%20width%3D'60'%20height%3D'55'%2F%3E%3Crect%20x%3D'172'%20y%3D'155'%20width%3D'44'%20height%3D'85'%2F%3E%3Crect%20x%3D'224'%20y%3D'178'%20width%3D'52'%20height%3D'62'%2F%3E%3Crect%20x%3D'284'%20y%3D'150'%20width%3D'38'%20height%3D'90'%2F%3E%3Crect%20x%3D'330'%20y%3D'182'%20width%3D'66'%20height%3D'58'%2F%3E%3Crect%20x%3D'404'%20y%3D'160'%20width%3D'42'%20height%3D'80'%2F%3E%3Crect%20x%3D'454'%20y%3D'186'%20width%3D'56'%20height%3D'54'%2F%3E%3Crect%20x%3D'648'%20y%3D'176'%20width%3D'54'%20height%3D'64'%2F%3E%3Crect%20x%3D'710'%20y%3D'150'%20width%3D'40'%20height%3D'90'%2F%3E%3Crect%20x%3D'758'%20y%3D'184'%20width%3D'62'%20height%3D'56'%2F%3E%3Crect%20x%3D'828'%20y%3D'158'%20width%3D'44'%20height%3D'82'%2F%3E%3Crect%20x%3D'880'%20y%3D'182'%20width%3D'58'%20height%3D'58'%2F%3E%3Crect%20x%3D'946'%20y%3D'140'%20width%3D'36'%20height%3D'100'%2F%3E%3Crect%20x%3D'990'%20y%3D'178'%20width%3D'64'%20height%3D'62'%2F%3E%3Crect%20x%3D'1062'%20y%3D'158'%20width%3D'46'%20height%3D'82'%2F%3E%3Crect%20x%3D'1116'%20y%3D'185'%20width%3D'84'%20height%3D'55'%2F%3E%3Crect%20x%3D'556'%20y%3D'96'%20width%3D'32'%20height%3D'144'%2F%3E%3Cpolygon%20points%3D'556%2C96%20572%2C58%20588%2C96'%2F%3E%3Crect%20x%3D'600'%20y%3D'96'%20width%3D'32'%20height%3D'144'%2F%3E%3Cpolygon%20points%3D'600%2C96%20616%2C58%20632%2C96'%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") repeat-x bottom center;
+  background-size:auto 66px;opacity:.5;
+  -webkit-mask:linear-gradient(180deg,transparent,#000 55%);mask:linear-gradient(180deg,transparent,#000 55%);
+}
+/* Feine Karten-Schatten + sanfte Hover-Übergänge (kein Blinken) */
+#partner-dash .pd-tile{box-shadow:0 8px 22px rgba(0,0,0,.34);}
+#partner-dash .pd-tile.click{transition:transform .16s ease,border-color .16s ease,box-shadow .2s ease;}
+#partner-dash .pd-tile.click:hover{transform:translateY(-2px);border-color:rgba(201,169,97,.28);box-shadow:0 14px 32px rgba(0,0,0,.48);}
+#partner-dash .pd-item{box-shadow:0 6px 16px rgba(0,0,0,.26);transition:transform .15s ease,border-color .18s ease,box-shadow .2s ease;}
+#partner-dash .pd-item:hover{transform:translateY(-1px);border-color:rgba(201,169,97,.28);box-shadow:0 12px 26px rgba(0,0,0,.4);}
+/* Status-Badges für Projekte (Palette wie Master .st-*) */
+#partner-dash .pd-st{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:50px;white-space:nowrap;}
+#partner-dash .pd-st.aktiv{background:rgba(62,207,142,.16);color:#3ecf8e;}
+#partner-dash .pd-st.geplant{background:rgba(90,167,255,.14);color:#5aa7ff;}
+#partner-dash .pd-st.pausiert{background:rgba(245,185,66,.16);color:#f5b942;}
+#partner-dash .pd-st.fertig{background:rgba(255,255,255,.06);color:#8a97a8;}
+/* Bob/Felix-Panel gold (bestehende Bob-Funktion, nur Optik) */
+#partner-dash .pd-bob-trigger{display:inline-flex;align-items:center;gap:9px;
+  background:linear-gradient(135deg,rgba(201,169,97,.18),rgba(201,169,97,.05));
+  border:1px solid rgba(201,169,97,.28);border-radius:14px;padding:10px 15px;color:#e8edf5;
+  font-weight:700;font-size:13.5px;cursor:pointer;transition:border-color .15s,transform .12s;}
+#partner-dash .pd-bob-trigger:hover{border-color:#C9A961;}
+#partner-dash .pd-bob-trigger:active{transform:translateY(1px);}
+#partner-dash .pd-bob-trigger .orb{width:26px;height:26px;border-radius:50%;flex:0 0 auto;
+  background:radial-gradient(circle at 35% 30%,#f0d089,#b8954d 70%);box-shadow:0 0 12px rgba(201,169,97,.5);}
+#partner-dash .bob-chat{background:#131519;border:1px solid rgba(201,169,97,.20);}
+#partner-dash .bob-msg.user{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#e8edf5;}
+#partner-dash .bob-msg.bob{background:#0f1116;border-color:rgba(255,255,255,.07);color:#e8edf5;}
+#partner-dash .bob-chat-input{background:#0f1116;border-color:rgba(255,255,255,.07);color:#e8edf5;}
+#partner-dash .bob-chat-mic{background:#0f1116;border-color:rgba(201,169,97,.28);color:#C9A961;}
+#partner-dash .bob-chat-send{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
+
 /* BLOCK 6: Lead-Detailansicht (Overlay) */
 .lead-ov{display:none;position:fixed;inset:0;z-index:2000;background:rgba(4,9,17,0.78);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);align-items:flex-end;justify-content:center;}
 @media (min-width:560px){ .lead-ov{align-items:center;} }
@@ -2418,7 +2527,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 <!-- ═══ PARTNER DASHBOARD ═══ -->
 <div id="partner-dash" class="admin-screen">
   <div class="admin-hdr">
-    <div><div class="admin-hdr-tit">🏢 Mein Portal</div><div class="admin-hdr-sub" id="pd-welcome">George Solutions</div></div>
+    <div><div class="admin-hdr-tit">Partner <span style="color:#C9A961;">Cockpit</span></div><div class="admin-hdr-sub" id="pd-welcome">George Solutions</div></div>
     <button class="admin-back" onclick="logout()">Abmelden</button>
   </div>
   <div class="pd-cards" id="pd-cards"></div>
@@ -6924,7 +7033,7 @@ function pdBobBar(tab){
   var area=pdBobArea(tab);
   if(!pdHas('bob_assist_'+area)) return '';   // nur wenn für diesen Bereich freigeschaltet
   return '<div style="margin:12px 18px 0;">'
-    +'<button class="pd-dl" style="display:inline-block;" onclick="pdBobToggle(\''+area+'\')">🎙️ Bob fragen</button>'
+    +'<button class="pd-bob-trigger" onclick="pdBobToggle(\''+area+'\')"><span class="orb"></span>🎙️ Bob fragen</button>'
     +'<div id="pd-bob-panel-'+area+'" class="bob-chat" style="display:none;margin:10px 0 0;">'
     +'<div class="bob-chat-msgs" id="pd-bob-msgs-'+area+'"></div>'
     +'<div class="bob-chat-input-row">'
@@ -6986,18 +7095,120 @@ function initPartnerDash(){
     pdTab('inbox');
   });
 }
+// Eine Übersichts-Kachel im Master-Design. feature=Entitlement-Key (leer=immer frei).
+// Gesperrt → ausgegraut + 🔒, kein Wert (Sichtbarkeit steuern die Entitlements, s. pdHas).
+function pdTile(o){
+  var locked = !!(o.feature && !pdHas(o.feature));
+  var clickable = o.tab && !locked;
+  var cls='pd-tile'+(o.wide?' wide':'')+(locked?' locked':'')+(clickable?' click':'');
+  var onclick=clickable?(' onclick="pdTab(\''+o.tab+'\')"'):'';
+  var val=locked?'—':o.v;
+  return '<div class="'+cls+'"'+onclick+'>'
+    +'<div class="pt-k">'+(locked?'🔒 ':'')+gsEsc(o.k)+'</div>'
+    +'<div class="pt-v '+(locked?'':(o.cls||''))+'">'+val+'</div>'
+    +(o.sfx&&!locked?'<div class="pt-sfx">'+gsEsc(o.sfx)+'</div>':'')
+    +'</div>';
+}
+// Projekt-Status → farbiges Badge (Palette wie Master .st-*). Robust: unbekannte
+// Status fallen auf "aktiv" zurück, damit nie ein leeres/kaputtes Badge entsteht.
+function pdStatusBadge(status){
+  var s=(status||'').toLowerCase(), cls='aktiv', lbl=status||'aktiv';
+  if(/(abgeschlossen|fertig|erledigt|abgeschl)/.test(s)){cls='fertig';}
+  else if(/(geplant|neu|offen|angelegt)/.test(s)){cls='geplant';}
+  else if(/(paus|stopp|wartet|halten|blockiert)/.test(s)){cls='pausiert';}
+  return '<span class="pd-st '+cls+'">'+gsEsc(lbl)+'</span>';
+}
 function pdLoadCards(){
   var el=document.getElementById('pd-cards');if(!el)return;
-  var proj=0,offen=0,neu=0;
+  var proj=0,tech=0,rapH=0,rapW=0,offen=0,sysOk=true;
+  pdWxPlace=null;   // pro Laden neu aus Projekten ableiten (kein Rest von anderem Partner)
+  var heute=new Date().toISOString().slice(0,10);
+  var wStart=new Date(Date.now()-6*864e5).toISOString().slice(0,10);
   Promise.all([
-    gsAuthApi('projekte',{action:'list'}).then(function(d){proj=(d.projekte||[]).filter(function(p){return p.status!=='abgeschlossen';}).length;}),
-    gsAuthApi('rechnung',{action:'list'}).then(function(d){offen=(d.rechnungen||[]).filter(function(r){return r.status!=='bezahlt';}).length;}),
-    gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){neu=d.unread||0;})
+    gsAuthApi('projekte',{action:'list'}).then(function(d){
+      var ps=(d.projekte||[]).filter(function(p){return p.status!=='abgeschlossen';});
+      proj=ps.length;
+      var set={};
+      ps.forEach(function(p){(p.gs_projekt_techniker||[]).forEach(function(t){ if(t&&t.techniker_user_id) set[t.techniker_user_id]=1; });});
+      tech=Object.keys(set).length;
+      // Wetter-Ort: erster Projekt-Standort (DACH), sonst Fallback Zürich (s. pdGeocode).
+      for(var i=0;i<ps.length;i++){ if(ps[i].standort){ pdWxPlace=ps[i].standort; break; } }
+    }).catch(function(){ sysOk=false; }),   // projekte ist für gs_partner immer erlaubt → guter Konnektivitäts-Indikator
+    gsAuthApi('tagesrapport',{action:'list'}).then(function(d){
+      (d.rapporte||[]).forEach(function(r){ var dt=(r.datum||'').slice(0,10);
+        if(dt===heute)rapH++; if(dt>=wStart&&dt<=heute)rapW++; });
+    }).catch(function(){}),
+    gsAuthApi('rechnung',{action:'list'}).then(function(d){
+      offen=(d.rechnungen||[]).filter(function(r){return r.status!=='bezahlt';}).length;
+    }).catch(function(){})
   ]).then(function(){
-    el.innerHTML='<div class="pd-card"><div class="pd-card-n">'+proj+'</div><div class="pd-card-l">Aktive Projekte</div></div>'
-      +'<div class="pd-card"><div class="pd-card-n">'+offen+'</div><div class="pd-card-l">Offene Rechnungen</div></div>'
-      +'<div class="pd-card"><div class="pd-card-n">'+neu+'</div><div class="pd-card-l">Neue Nachrichten</div></div>';
+    el.innerHTML=
+      pdTile({k:'Aktive Projekte',v:proj,cls:'gold',feature:'projektmanagement',tab:'projekte'})
+     +pdTile({k:'Zugeteilte Techniker',v:tech,sfx:'auf '+proj+' Projekt'+(proj===1?'':'en'),feature:'projektmanagement',tab:'projekte'})
+     +pdTile({k:'Rapporte',v:rapH,sfx:'heute · '+rapW+' diese Woche',feature:'reporting',tab:'rapporte'})
+     +pdTile({k:'Materiallisten',v:'›',cls:'gold',sfx:'Listen ansehen',feature:'material',tab:'material'})
+     +pdTile({k:'Controlling',v:'›',cls:'gold',sfx:'Auswertung öffnen',feature:'controlling',tab:'controlling'})
+     +pdTile({k:'Rechnungen',v:offen,cls:offen>0?'warn':'',sfx:offen>0?'offen':'alle bezahlt',tab:'rechnungen'})
+     +pdTile({k:'Systemstatus',v:sysOk?'OK':'—',cls:sysOk?'ok':'warn',sfx:sysOk?'Alle Dienste online':'Verbindung eingeschränkt',wide:true})
+     +'<div class="pd-tile wide pd-wx" id="pd-weather"><div class="pt-k">🌤️ Wetter</div><div class="pt-sfx">Lädt…</div></div>';
+    pdLoadWeather();
   });
+}
+// Wetter nach Partner-/Projekt-Ort (DACH-fähig CH/AT/DE, Fallback Zürich).
+// Quelle: open-meteo (kostenlos, KEIN Key, keine neue Backend-Logik). 15-Min-Cache,
+// Fehler unkritisch → Kachel wird ausgeblendet. WMO-Code-Map wie api/weather.js.
+var _pdWx=null,_pdWxAt=0,_pdWxKey='',pdWxPlace=null;
+function pdWxCode(c){ c=Number(c);
+  if(c===0)return{t:'klar',e:'☀️'}; if(c===1)return{t:'überwiegend klar',e:'🌤️'};
+  if(c===2)return{t:'teils bewölkt',e:'⛅'}; if(c===3)return{t:'bedeckt',e:'☁️'};
+  if(c===45||c===48)return{t:'neblig',e:'🌫️'};
+  if(c>=51&&c<=57)return{t:'Nieselregen',e:'🌦️'};
+  if(c>=61&&c<=67)return{t:'Regen',e:'🌧️'};
+  if(c>=71&&c<=77)return{t:'Schnee',e:'🌨️'};
+  if(c>=80&&c<=82)return{t:'Regenschauer',e:'🌦️'};
+  if(c===85||c===86)return{t:'Schneeschauer',e:'🌨️'};
+  if(c>=95)return{t:'Gewitter',e:'⛈️'};
+  return{t:'wechselhaft',e:'🌡️'};
+}
+function pdGeocode(place){
+  var ZH={name:'Zürich',lat:47.3769,lon:8.5417};
+  if(/z(ü|ue?)rich/i.test(place)) return Promise.resolve(ZH);
+  var u='https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(place)
+    +'&count=5&language=de&format=json';
+  return fetch(u).then(function(r){return r.json();}).then(function(j){
+    var rs=(j&&j.results)||[];
+    if(!rs.length) return ZH;
+    var dach=rs.filter(function(x){return ['CH','AT','DE'].indexOf(x.country_code)>-1;});
+    var p=dach[0]||rs[0];
+    return {name:p.name||place, lat:p.latitude, lon:p.longitude};
+  }).catch(function(){ return ZH; });
+}
+function pdPaintWeather(d){
+  var el=document.getElementById('pd-weather'); if(!el) return;
+  el.style.display='';
+  var hilo=(d.max!=null&&d.min!=null)?('H '+d.max+'°  ·  T '+d.min+'°'):'';
+  el.innerHTML='<div class="pt-k">🌤️ Wetter · '+gsEsc(d.name)+'</div>'
+    +'<div class="pd-wx-now"><span class="pd-wx-ic">'+gsEsc(d.emoji)+'</span>'
+    +'<span class="pd-wx-temp">'+gsEsc(String(d.temp))+'°</span>'
+    +'<span class="pd-wx-txt">'+gsEsc(d.text)+(hilo?('<br><span class="pd-wx-hilo">'+gsEsc(hilo)+'</span>'):'')+'</span></div>';
+}
+function pdLoadWeather(){
+  var el=document.getElementById('pd-weather'); if(!el) return;
+  var place=(pdWxPlace&&String(pdWxPlace).trim())||'Zürich';
+  if(_pdWx&&_pdWxKey===place&&Date.now()-_pdWxAt<900000){ pdPaintWeather(_pdWx); return; }
+  pdGeocode(place).then(function(loc){
+    var url='https://api.open-meteo.com/v1/forecast?latitude='+loc.lat+'&longitude='+loc.lon
+      +'&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto';
+    return fetch(url).then(function(r){return r.json();}).then(function(j){
+      var cur=j.current||{}, day=j.daily||{}, info=pdWxCode(cur.weather_code);
+      var d={ name:loc.name, text:info.t, emoji:info.e,
+        temp:(cur.temperature_2m!=null?Math.round(Number(cur.temperature_2m)):null),
+        max:(day.temperature_2m_max&&day.temperature_2m_max[0]!=null?Math.round(Number(day.temperature_2m_max[0])):null),
+        min:(day.temperature_2m_min&&day.temperature_2m_min[0]!=null?Math.round(Number(day.temperature_2m_min[0])):null) };
+      if(d.temp==null) throw new Error('no temp');
+      _pdWx=d;_pdWxAt=Date.now();_pdWxKey=place; pdPaintWeather(d);
+    });
+  }).catch(function(){ if(el)el.style.display='none'; });
 }
 function pdLoadBadge(){
   gsAuthApi('nachrichten',{action:'unread_count'}).then(function(d){
@@ -7047,9 +7258,13 @@ function pdTab(tab){
       var ps=d.projekte||[];
       pdProjekte=ps;
       c.innerHTML=ps.length?ps.map(function(p){
+        var nT=(p.gs_projekt_techniker||[]).length;
         return '<div class="pd-item" style="cursor:pointer;" onclick="pdOpenProjekt(\''+p.id+'\')">'
-          +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name)+'</div><span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div>'
-          +'<div class="pd-item-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')+' · '+gsEsc(p.status||'')+'</div></div>';
+          +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name)+'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px;">'+pdStatusBadge(p.status)
+          +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
+          +'<div class="pd-item-meta">'+gsEsc(p.projektnummer||'')+(p.standort?(' · '+gsEsc(p.standort)):'')
+          +(nT?(' · 👷 '+nT+' Techniker'):'')+'</div></div>';
       }).join(''):'<div class="admin-empty">Keine Projekte.</div>';
     });
   }else if(tab==='rapporte'){
