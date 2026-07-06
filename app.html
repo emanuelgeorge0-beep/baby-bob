@@ -839,34 +839,46 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #partner-dash .admin-badge.active{background:rgba(62,207,142,.16);color:#3ecf8e;}
 #partner-dash .admin-badge.must_change_password{background:rgba(245,185,66,.16);color:#f5b942;}
 /* ── Übersicht: Kachel-Raster wie Master Cockpit ── */
-#partner-dash .pd-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:16px 18px 0;}
-#partner-dash .pd-tile{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:15px 16px;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent;transition:border-color .15s,transform .12s;}
+/* Kachel-Raster GENAU wie Master .cc-grid/.cc-tile (kompakt, 2→3→2 Spalten) */
+#partner-dash .pd-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;padding:16px 18px 0;}
+#partner-dash .pd-tile{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:14px 14px 13px;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent;transition:border-color .15s,transform .12s;}
 #partner-dash .pd-tile::after{content:'';position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,transparent,rgba(201,169,97,.28),transparent);}
 #partner-dash .pd-tile.click{cursor:pointer;}
 #partner-dash .pd-tile.click:active{transform:translateY(1px);border-color:rgba(201,169,97,.28);}
 #partner-dash .pd-tile.wide{grid-column:1/-1;}
 #partner-dash .pd-tile.locked{opacity:.42;}
 #partner-dash .pd-tile.locked::after{display:none;}
-#partner-dash .pd-tile .pt-k{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:#8a97a8;display:flex;align-items:center;gap:6px;}
-#partner-dash .pd-tile .pt-v{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;}
+#partner-dash .pd-tile .pt-i{font-size:17px;opacity:.9;line-height:1;}
+#partner-dash .pd-tile .pt-k{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:#8a97a8;margin-top:7px;display:flex;align-items:center;gap:6px;}
+#partner-dash .pd-tile .pt-v{font-size:25px;font-weight:800;margin-top:3px;letter-spacing:-.6px;line-height:1.1;font-variant-numeric:tabular-nums;}
 #partner-dash .pd-tile .pt-v.gold{color:#C9A961;}
 #partner-dash .pd-tile .pt-v.ok{color:#3ecf8e;}
 #partner-dash .pd-tile .pt-v.warn{color:#f5b942;}
-#partner-dash .pd-tile .pt-sfx{font-size:12.5px;color:#8a97a8;font-weight:600;margin-top:3px;}
-/* ── Wetter-Kachel (open-meteo, kein Key) 1:1 aus Master ── */
-#partner-dash .pd-wx .pt-k{margin-bottom:10px;}
-#partner-dash .pd-wx .wx-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-#partner-dash .pd-wx .wx-city{display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:#0f1116;border:1px solid rgba(255,255,255,.07);border-radius:11px;padding:9px 11px;min-width:0;}
-#partner-dash .pd-wx .wx-ic{font-size:18px;line-height:1;}
-#partner-dash .pd-wx .wx-name{font-size:11px;color:#8a97a8;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#partner-dash .pd-wx .wx-temp{font-size:19px;font-weight:800;color:#5aa7ff;font-variant-numeric:tabular-nums;}
-#partner-dash .pd-wx .wx-txt{font-size:10.5px;color:#5c6878;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#partner-dash .pd-wx-now{display:flex;align-items:center;gap:14px;}
-#partner-dash .pd-wx-ic{font-size:40px;line-height:1;flex:0 0 auto;}
-#partner-dash .pd-wx-temp{font-size:38px;font-weight:800;color:#5aa7ff;letter-spacing:-1px;font-variant-numeric:tabular-nums;}
-#partner-dash .pd-wx-txt{font-size:13px;color:#8a97a8;line-height:1.5;}
-#partner-dash .pd-wx-hilo{font-size:12px;color:#5c6878;font-variant-numeric:tabular-nums;}
-@media (max-width:360px){ #partner-dash .pd-wx .wx-row{gap:6px;} #partner-dash .pd-wx .wx-city{padding:8px;} #partner-dash .pd-wx .wx-temp{font-size:17px;} #partner-dash .pd-wx-temp{font-size:32px;} #partner-dash .pd-wx-ic{font-size:34px;} }
+#partner-dash .pd-tile .pt-sfx{font-size:11px;color:#5c6878;font-weight:600;margin-top:3px;}
+@media (min-width:720px){ #partner-dash .pd-cards{grid-template-columns:repeat(3,1fr);} }
+@media (max-width:360px){ #partner-dash .pd-cards{grid-template-columns:1fr 1fr;gap:9px;} #partner-dash .pd-tile .pt-v{font-size:22px;} }
+/* Wetter-Reihe kompakt (nur eigener Ort, Fallback Zürich) */
+#partner-dash .pd-wxbar{display:flex;align-items:center;gap:13px;background:#131519;border:1px solid rgba(201,169,97,.28);border-radius:14px;margin:14px 18px 0;padding:11px 14px;box-shadow:0 8px 22px rgba(0,0,0,.34);}
+#partner-dash .pd-wxbar .wb-ic{font-size:30px;line-height:1;flex:0 0 auto;}
+#partner-dash .pd-wxbar .wb-temp{font-size:26px;font-weight:800;color:#5aa7ff;letter-spacing:-.5px;font-variant-numeric:tabular-nums;flex:0 0 auto;}
+#partner-dash .pd-wxbar .wb-txt{display:flex;flex-direction:column;min-width:0;}
+#partner-dash .pd-wxbar .wb-name{font-size:12px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#partner-dash .pd-wxbar .wb-sub{font-size:11px;color:#8a97a8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* System-Status-Liste im Master-Stil (.cc-sec/.cc-sys/.sysrow) */
+#partner-dash .pd-sec{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#C9A961;font-weight:700;margin:18px 18px 11px;display:flex;align-items:center;gap:8px;}
+#partner-dash .pd-sec::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.07);}
+#partner-dash .pd-sys{display:flex;flex-direction:column;gap:8px;margin:0 18px;}
+#partner-dash .pd-sysrow{display:flex;align-items:center;gap:11px;background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:13px;padding:11px 14px;box-shadow:0 6px 16px rgba(0,0,0,.26);}
+#partner-dash .pd-sysrow .sd{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+#partner-dash .pd-sysrow .sd.on{background:#3ecf8e;box-shadow:0 0 9px #3ecf8e;animation:pdblink 2.2s ease-in-out infinite;}
+#partner-dash .pd-sysrow .sd.warn{background:#f5b942;box-shadow:0 0 7px rgba(245,185,66,.6);}
+#partner-dash .pd-sysrow .sd.off{background:#5c6878;}
+#partner-dash .pd-sysrow .sn{font-weight:700;font-size:13.5px;flex:0 0 auto;color:#e8edf5;}
+#partner-dash .pd-sysrow .sdet{flex:1;text-align:right;font-size:11.5px;color:#8a97a8;}
+#partner-dash .pd-sysrow .sstate{font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;border-radius:50px;}
+#partner-dash .pd-sysrow .sstate.on{background:rgba(62,207,142,.16);color:#3ecf8e;}
+#partner-dash .pd-sysrow .sstate.warn{background:rgba(245,185,66,.16);color:#f5b942;}
+#partner-dash .pd-sysrow .sstate.off{background:rgba(255,255,255,.06);color:#8a97a8;}
 
 /* ══ WOW (nur Optik): Zürich-Abend-Hero, feine Schatten/Hover, Status-Badges ══ */
 /* Hero-Header: ruhiger Abend-/Nachtverlauf + dezente Skyline-Silhouette (inline SVG,
@@ -940,9 +952,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   display:flex;align-items:center;justify-content:center;font-size:26px;color:#0a0e14;}
 @keyframes pdspin{to{transform:rotate(360deg);}}
 @keyframes pdpulse{0%,100%{box-shadow:0 0 30px 3px rgba(201,169,97,.45);}50%{box-shadow:0 0 46px 12px rgba(201,169,97,.7);}}
-#partner-dash .pd-title{font-family:Georgia,'Times New Roman',serif;font-weight:800;color:#C9A961;
-  font-size:clamp(24px,7.5vw,34px);letter-spacing:clamp(1px,.8vw,3px);line-height:1.05;
+/* Titel als SVG → skaliert exakt auf die Breite, kann NIE abgeschnitten werden (wie Master .cc-title) */
+#partner-dash .pd-title{display:block;width:min(100%,340px);height:auto;margin:0 auto;
   filter:drop-shadow(0 0 18px rgba(201,169,97,.4));}
+#partner-dash .pd-title text{fill:#C9A961;}
 #partner-dash .pd-subt{font-size:11px;letter-spacing:clamp(2px,1.2vw,5px);color:#8a97a8;margin-top:5px;}
 #partner-dash .pd-meta{font-size:11.5px;color:#5c6878;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;}
 #partner-dash .pd-meta .live{display:inline-flex;align-items:center;gap:6px;color:#3ecf8e;font-weight:700;}
@@ -2602,7 +2615,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div class="pd-hero" id="pd-hero">
     <button class="pd-logout" onclick="logout()">Abmelden</button>
     <div class="pd-orb"><span class="ring"></span><span class="ring r2"></span><span class="core">⌬</span></div>
-    <div class="pd-title">PARTNER COCKPIT</div>
+    <svg class="pd-title" width="340" height="40" viewBox="0 0 680 80" preserveAspectRatio="xMidYMid meet" role="img" aria-label="PARTNER COCKPIT"><text x="340" y="61" text-anchor="middle" textLength="652" lengthAdjust="spacingAndGlyphs" font-family="Georgia,serif" font-weight="800" font-size="56">PARTNER COCKPIT</text></svg>
     <div class="pd-subt">COMMAND CENTER</div>
     <div class="pd-meta"><span class="live">Live</span><span id="pd-clock"></span><span class="pd-who" id="pd-welcome"></span></div>
     <div class="pd-cta" id="pd-cta" onclick="pdHeroBob()" style="display:none;">🎙️ Antippen &amp; sprechen</div>
@@ -2610,7 +2623,9 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div id="pd-hero-bob"></div>
   <!-- Cockpit-Startseite: nur eigene Schnellzugriffe (echte Daten, nur wenn freigeschaltet) -->
   <div id="pd-overview">
+    <div class="pd-wxbar" id="pd-weather" style="display:none;"></div>
     <div class="pd-cards" id="pd-cards"></div>
+    <div id="pd-sysbox"></div>
     <button class="admin-add-btn" onclick="setMode('gs')">+ Neues Projekt buchen</button>
   </div>
   <!-- Bob-Einstiegspunkt je Bereich (nur sichtbar, wenn bob_assist_<area> frei ist) -->
@@ -7292,10 +7307,28 @@ function pdTile(o){
   var onclick=clickable?(' onclick="pdTab(\''+o.tab+'\')"'):'';
   var val=locked?'—':o.v;
   return '<div class="'+cls+'"'+onclick+'>'
+    +(o.ic?'<div class="pt-i">'+o.ic+'</div>':'')
     +'<div class="pt-k">'+(locked?'🔒 ':'')+gsEsc(o.k)+'</div>'
     +'<div class="pt-v '+(locked?'':(o.cls||''))+'">'+val+'</div>'
     +(o.sfx&&!locked?'<div class="pt-sfx">'+gsEsc(o.sfx)+'</div>':'')
     +'</div>';
+}
+// Eine Zeile der System-Status-Liste (Master-Stil): Punkt · Name · Detail · Badge.
+function pdSysRow(name,state,det){
+  var st=state==='on'?'on':(state==='warn'?'warn':'off');
+  var lbl=st==='on'?'Aktiv':(st==='warn'?'Bereit':'Aus');
+  return '<div class="pd-sysrow"><span class="sd '+st+'"></span>'
+    +'<span class="sn">'+gsEsc(name)+'</span>'
+    +'<span class="sdet">'+gsEsc(det||'')+'</span>'
+    +'<span class="sstate '+st+'">'+lbl+'</span></div>';
+}
+// Kompakte System-Status-Liste: eigene Projekte, zugeteilte Techniker, Bob (wenn frei).
+function pdRenderSys(proj,tech,sysOk){
+  var box=document.getElementById('pd-sysbox'); if(!box) return;
+  var rows=pdSysRow('Meine Projekte', proj>0?'on':'off', proj+' aktiv')
+    +pdSysRow('Zugeteilte Techniker', tech>0?'on':'off', tech+' zugeteilt');
+  if(pdBobAnyEnabled()) rows+=pdSysRow('Bob-Assistent','on','bereit');
+  box.innerHTML='<div class="pd-sec">System-Status</div><div class="pd-sys">'+rows+'</div>';
 }
 // Projekt-Status → farbiges Badge (Palette wie Master .st-*). Robust: unbekannte
 // Status fallen auf "aktiv" zurück, damit nie ein leeres/kaputtes Badge entsteht.
@@ -7331,14 +7364,14 @@ function pdLoadCards(){
     }).catch(function(){})
   ]).then(function(){
     el.innerHTML=
-      pdTile({k:'Aktive Projekte',v:proj,cls:'gold',feature:'projektmanagement',tab:'projekte'})
-     +pdTile({k:'Zugeteilte Techniker',v:tech,sfx:'auf '+proj+' Projekt'+(proj===1?'':'en'),feature:'projektmanagement',tab:'projekte'})
-     +pdTile({k:'Rapporte',v:rapH,sfx:'heute · '+rapW+' diese Woche',feature:'reporting',tab:'rapporte'})
-     +pdTile({k:'Materiallisten',v:'›',cls:'gold',sfx:'Listen ansehen',feature:'material',tab:'material'})
-     +pdTile({k:'Controlling',v:'›',cls:'gold',sfx:'Auswertung öffnen',feature:'controlling',tab:'controlling'})
-     +pdTile({k:'Rechnungen',v:offen,cls:offen>0?'warn':'',sfx:offen>0?'offen':'alle bezahlt',tab:'rechnungen'})
-     +pdTile({k:'Systemstatus',v:sysOk?'OK':'—',cls:sysOk?'ok':'warn',sfx:sysOk?'Alle Dienste online':'Verbindung eingeschränkt',wide:true})
-     +'<div class="pd-tile wide pd-wx" id="pd-weather"><div class="pt-k">🌤️ Wetter</div><div class="pt-sfx">Lädt…</div></div>';
+      pdTile({ic:'🏗️',k:'Aktive Projekte',v:proj,cls:'gold',feature:'projektmanagement',tab:'projekte'})
+     +pdTile({ic:'🛠️',k:'Zugeteilte Techniker',v:tech,sfx:'auf '+proj+' Projekt'+(proj===1?'':'en'),feature:'projektmanagement',tab:'projekte'})
+     +pdTile({ic:'📋',k:'Rapporte',v:rapH,sfx:'heute · '+rapW+' diese Woche',feature:'reporting',tab:'rapporte'})
+     +pdTile({ic:'📦',k:'Materiallisten',v:'›',cls:'gold',sfx:'Listen ansehen',feature:'material',tab:'material'})
+     +pdTile({ic:'🧾',k:'Rechnungen',v:offen,cls:offen>0?'warn':'',sfx:offen>0?'offen':'alle bezahlt',tab:'rechnungen'})
+     +pdTile({ic:'📊',k:'Controlling',v:'›',cls:'gold',sfx:'Auswertung öffnen',feature:'controlling',tab:'controlling'})
+     +pdTile({ic:'🩺',k:'Systemstatus',v:sysOk?'OK':'—',cls:sysOk?'ok':'warn',sfx:sysOk?'Alle Dienste online':'Verbindung eingeschränkt'});
+    pdRenderSys(proj,tech,sysOk);
     pdLoadWeather();
   });
 }
@@ -7373,12 +7406,12 @@ function pdGeocode(place){
 }
 function pdPaintWeather(d){
   var el=document.getElementById('pd-weather'); if(!el) return;
-  el.style.display='';
-  var hilo=(d.max!=null&&d.min!=null)?('H '+d.max+'°  ·  T '+d.min+'°'):'';
-  el.innerHTML='<div class="pt-k">🌤️ Wetter · '+gsEsc(d.name)+'</div>'
-    +'<div class="pd-wx-now"><span class="pd-wx-ic">'+gsEsc(d.emoji)+'</span>'
-    +'<span class="pd-wx-temp">'+gsEsc(String(d.temp))+'°</span>'
-    +'<span class="pd-wx-txt">'+gsEsc(d.text)+(hilo?('<br><span class="pd-wx-hilo">'+gsEsc(hilo)+'</span>'):'')+'</span></div>';
+  el.style.display='flex';
+  var hilo=(d.max!=null&&d.min!=null)?('H '+d.max+'° · T '+d.min+'°'):'';
+  el.innerHTML='<span class="wb-ic">'+gsEsc(d.emoji)+'</span>'
+    +'<span class="wb-temp">'+gsEsc(String(d.temp))+'°</span>'
+    +'<span class="wb-txt"><span class="wb-name">'+gsEsc(d.name)+' · '+gsEsc(d.text)+'</span>'
+    +(hilo?'<span class="wb-sub">'+gsEsc(hilo)+'</span>':'')+'</span>';
 }
 function pdLoadWeather(){
   var el=document.getElementById('pd-weather'); if(!el) return;
