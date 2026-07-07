@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { getWeather } from './weather.js';
+import { buildPdf } from '../lib/pdf.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -122,6 +123,13 @@ export default async function handler(req, res) {
       case 'pm_material_add':  return res.status(200).json(await addMaterial(req.body));
       case 'pm_material_upd':  return res.status(200).json(await updMaterial(req.body));
       case 'pm_material_del':  return res.status(200).json(await delPmRow('gs_material', req.body.id));
+      case 'pm_rapport_verrechnet': return res.status(200).json(await setRapportAbrechnung(req.body));
+      case 'pm_datei_upload':  return res.status(200).json(await pmDateiUpload(req.body));
+      case 'pm_datei_list':    return res.status(200).json(await pmDateiList(req.body.projekt_id));
+      case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body));
+      case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id));
+      case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id));
+      case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -1598,17 +1606,22 @@ async function getPmProjekt(id) {
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   } catch (_) { blockaden = []; }
 
-  // Techniker-Zuweisungen (neue Tabelle) + Namen aus gs_techniker joinen.
+  // Techniker-Zuweisungen (neue Tabelle) + Karten-Daten aus gs_techniker joinen.
+  // select=* toleriert eine noch fehlende stundensatz-Spalte (kein Migrations-Fehlalarm).
   let techniker = [], migTechniker = true;
   try {
-    const rows = await sbGet(`gs_projekt_techniker?projekt_id=eq.${id}&select=id,techniker_id,taetigkeit,seit&order=seit.desc`);
+    const rows = await sbGet(`gs_projekt_techniker?projekt_id=eq.${id}&select=*&order=seit.desc`);
     const ids = rows.map((r) => r.techniker_id).filter(Boolean);
     const tById = {};
     if (ids.length) {
-      const ts = await sbGet(`gs_techniker?id=in.(${ids.join(',')})&select=id,name,telefon,email`).catch(() => []);
-      for (const t of ts) tById[t.id] = t;
+      const ts = await sbGet(`gs_techniker?id=in.(${ids.join(',')})&select=*`).catch(() => []);
+      for (const t of ts) tById[t.id] = pmTechCard(t);
     }
-    techniker = rows.map((r) => ({ id: r.id, techniker_id: r.techniker_id, taetigkeit: r.taetigkeit, seit: r.seit, ...(tById[r.techniker_id] || {}) }));
+    techniker = rows.map((r) => ({
+      id: r.id, techniker_id: r.techniker_id, taetigkeit: r.taetigkeit, seit: r.seit,
+      stundensatz: r.stundensatz != null ? Number(r.stundensatz) : null,
+      ...(tById[r.techniker_id] || {}),
+    }));
   } catch (e) { if (isNoTable(e)) migTechniker = false; else throw e; }
 
   // Tätigkeiten (neue Tabelle).
@@ -1621,15 +1634,65 @@ async function getPmProjekt(id) {
   try { material = await sbGet(`gs_material?projekt_id=eq.${id}&select=*&order=created_at.desc`); }
   catch (e) { if (isNoTable(e)) migMat = false; else throw e; }
 
+  // Arbeitsrapporte (bestehende gs_tagesrapporte) — Techniker-Namen anreichern.
+  let rapporte = [], migRapporte = true;
+  try {
+    // select=* → toleriert eine noch fehlende abrechnung_status-Spalte (Rapporte
+    // erscheinen auch vor der Migration; der Verrechnet-Status ist dann nur 'offen').
+    const rr = await sbGet(`gs_tagesrapporte?projekt_id=eq.${id}&select=*&order=datum.desc`);
+    const uids = [...new Set(rr.map((r) => r.techniker_user_id).filter(Boolean))];
+    const nameByUid = {};
+    if (uids.length) {
+      const ts = await sbGet(`gs_techniker?user_id=in.(${uids.join(',')})&select=user_id,name`).catch(() => []);
+      for (const t of ts) if (t.user_id) nameByUid[t.user_id] = t.name;
+    }
+    rapporte = rr.map((r) => ({ ...r, techniker_name: nameByUid[r.techniker_user_id] || null }));
+  } catch (e) { if (isNoTable(e)) migRapporte = false; else throw e; }
+
+  // Rechnungs-History (bestehende gs_rechnungen).
+  let rechnungen = [];
+  try { rechnungen = await sbGet(`gs_rechnungen?projekt_id=eq.${id}&select=*&order=created_at.desc`).catch(() => []); }
+  catch (_) { rechnungen = []; }
+
+  // Projektdateien / Fotos (Storage-Bucket 'projektdateien').
+  let dateien = [];
+  try { dateien = await listProjektDateien(id); } catch (_) { dateien = []; }
+
   const blOffen = (blockaden || []).filter((b) => PM_OFFEN.includes(String(b.status || '').toLowerCase())).length;
   return {
     projekt, kunde,
     blockaden: blockaden || [], blockaden_offen: blOffen,
-    techniker, taetigkeiten, material,
-    mig: { techniker: migTechniker, taetigkeiten: migTaet, material: migMat },
+    techniker, taetigkeiten, material, rapporte, rechnungen, dateien,
+    mig: { techniker: migTechniker, taetigkeiten: migTaet, material: migMat, rapporte: migRapporte },
   };
 }
 
+// Techniker-Karten-Daten aus gs_techniker ableiten (Sidecar-JSON in notizen wie api/techniker.js).
+function pmTechCard(t) {
+  if (!t) return {};
+  let side = {};
+  if (typeof t.notizen === 'string' && t.notizen.trim().startsWith('{')) {
+    try { side = JSON.parse(t.notizen.trim()); } catch (_) { side = {}; }
+  }
+  const specialization = (Array.isArray(side.specialization) && side.specialization.length) ? side.specialization
+    : (Array.isArray(t.specialization) && t.specialization.length) ? t.specialization : [];
+  const qualRaw = t.qualification || t.qualifikation;
+  const qualification = Array.isArray(qualRaw) ? qualRaw.join(' · ') : (qualRaw || side.qualification || '');
+  const herkunft = String(side.herkunft || t.herkunft || (
+    /(emanuel\s*george|dimitri\s*grill|vasil\s*ignatov)/i.test(t.name || '') ? 'CH_AT' : 'CH'
+  )).toUpperCase().replace(/[\s-]/g, '_') === 'CH_AT' ? 'CH_AT' : 'CH';
+  return {
+    name: t.name || 'Techniker', telefon: t.telefon || null, email: t.email || null,
+    qualification, specialization,
+    rating: typeof side.rating === 'number' ? side.rating : (typeof t.rating === 'number' ? t.rating : null),
+    photo_emoji: side.photo_emoji || '👷', herkunft,
+    verfuegbar: t.availability_status ?? t.verfuegbar ?? true,
+  };
+}
+
+// Erweiterte Stammdaten (brauchen scripts/projekt_detail_scharf.sql). Fehlt die
+// Migration, entfernen wir sie beim Speichern und retryen → nie ein 500.
+const PM_PROJ_EXTRA = ['projektadresse', 'projektleiter', 'ansprechperson', 'ansprech_telefon', 'ansprech_email'];
 async function savePmProjekt(b) {
   const patch = {};
   if (b.name !== undefined) patch.name = String(b.name || '').trim().slice(0, 120);
@@ -1638,14 +1701,27 @@ async function savePmProjekt(b) {
   if (b.bereich !== undefined) patch.bereich = String(b.bereich || '').trim().slice(0, 80) || null;
   if (b.status !== undefined) patch.status = String(b.status || '').trim().slice(0, 40) || 'aktiv';
   if (b.kunde_id !== undefined) patch.kunde_id = b.kunde_id ? uuid(b.kunde_id) : null;
-  if (b.id) {
-    const id = uuid(b.id);
-    const r = await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, patch);
-    return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+  if (b.stundensatz !== undefined) patch.stundensatz = (b.stundensatz === '' || b.stundensatz == null) ? null : num(b.stundensatz);
+  for (const f of PM_PROJ_EXTRA) {
+    if (b[f] !== undefined) patch[f] = String(b[f] || '').trim().slice(0, 200) || null;
   }
-  if (!patch.name) throw new Error('name nötig');
-  if (!patch.status) patch.status = 'aktiv';
-  const r = await sbWrite('POST', 'gs_projekte', patch);
+  const write = async (p) => {
+    if (b.id) { const id = uuid(b.id); return await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, p); }
+    if (!p.name) throw new Error('name nötig');
+    if (!p.status) p.status = 'aktiv';
+    return await sbWrite('POST', 'gs_projekte', p);
+  };
+  let r;
+  try { r = await write(patch); }
+  catch (e) {
+    // Spalte (noch) nicht migriert → Extra-Felder droppen, Kernfelder trotzdem speichern.
+    if (/column|does not exist|PGRST204/i.test((e && e.message) || '')) {
+      const base = { ...patch }; for (const f of PM_PROJ_EXTRA) delete base[f];
+      r = await write(base);
+      return { ok: true, projekt: Array.isArray(r) ? r[0] : r, extraNotMigrated: true };
+    }
+    throw e;
+  }
   return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
 }
 
@@ -1671,7 +1747,11 @@ async function savePmKunde(b) {
 }
 
 async function getPmTechniker() {
-  const techniker = await sbGet('gs_techniker?select=id,name,telefon,email,qualifikation,verfuegbar&order=name.asc').catch(() => []);
+  // Nur echte Techniker (typ='techniker' bzw. Legacy ohne typ) – wie die öffentliche Karte.
+  const raw = await sbGet('gs_techniker?select=*&order=name.asc').catch(() => []);
+  const techniker = (Array.isArray(raw) ? raw : [])
+    .filter((t) => !t.typ || t.typ === 'techniker')
+    .map((t) => ({ id: t.id, ...pmTechCard(t) }));
   return { techniker };
 }
 
@@ -1681,10 +1761,20 @@ async function assignTech(b) {
     techniker_id: uuid(b.techniker_id),
     taetigkeit: b.taetigkeit ? String(b.taetigkeit).slice(0, 120) : null,
   };
+  if (b.stundensatz != null && b.stundensatz !== '') row.stundensatz = num(b.stundensatz);
   try {
     const r = await sbWrite('POST', 'gs_projekt_techniker', row);
     return { ok: true, row: Array.isArray(r) ? r[0] : r };
-  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+  } catch (e) {
+    if (isNoTable(e)) return { notMigrated: true };
+    // stundensatz-Spalte fehlt noch → ohne Tarif zuweisen (kein 500).
+    if ('stundensatz' in row && /column|does not exist|PGRST204/i.test((e && e.message) || '')) {
+      const { stundensatz, ...base } = row;
+      try { const r = await sbWrite('POST', 'gs_projekt_techniker', base); return { ok: true, row: Array.isArray(r) ? r[0] : r, tarifNotMigrated: true }; }
+      catch (e2) { if (isNoTable(e2)) return { notMigrated: true }; throw e2; }
+    }
+    throw e;
+  }
 }
 
 async function unassignTech(b) {
@@ -1717,11 +1807,21 @@ async function addMaterial(b) {
     kategorie: b.kategorie ? String(b.kategorie).slice(0, 60) : null,
     status: b.status ? String(b.status).slice(0, 40) : 'offen',
   };
+  if (b.einzelpreis != null && b.einzelpreis !== '') row.einzelpreis = num(b.einzelpreis);
   if (!row.bezeichnung) throw new Error('bezeichnung nötig');
   try {
     const r = await sbWrite('POST', 'gs_material', row);
     return { ok: true, row: Array.isArray(r) ? r[0] : r };
-  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+  } catch (e) {
+    if (isNoTable(e)) return { notMigrated: true };
+    // einzelpreis-Spalte fehlt (alte gs_material) → ohne Preis speichern, kein 500.
+    if ('einzelpreis' in row && /einzelpreis|column|PGRST204/i.test((e && e.message) || '')) {
+      const { einzelpreis, ...base } = row;
+      const r = await sbWrite('POST', 'gs_material', base);
+      return { ok: true, row: Array.isArray(r) ? r[0] : r, preisNotMigrated: true };
+    }
+    throw e;
+  }
 }
 
 async function updMaterial(b) {
@@ -1741,4 +1841,213 @@ async function delPmRow(table, id) {
   id = uuid(id);
   try { await sbWrite('DELETE', `${table}?id=eq.${id}`, {}, 'return=minimal'); return { ok: true }; }
   catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+// ── Abrechnungs-Status pro Arbeitsrapport (offen | verrechnet) ─────────────
+// Nimmt ein oder mehrere Rapport-ids (z. B. eine ganze Kalenderwoche auf einmal).
+async function setRapportAbrechnung(b) {
+  const ids = (Array.isArray(b.ids) ? b.ids : [b.id]).filter(Boolean).map(uuid);
+  if (!ids.length) throw new Error('ids nötig');
+  const status = b.status === 'verrechnet' ? 'verrechnet' : 'offen';
+  try {
+    await sbWrite('PATCH', `gs_tagesrapporte?id=in.(${ids.join(',')})`, { abrechnung_status: status }, 'return=minimal');
+    return { ok: true, status, count: ids.length };
+  } catch (e) {
+    if (/column|does not exist|PGRST204/i.test((e && e.message) || '')) return { notMigrated: true };
+    throw e;
+  }
+}
+
+// ── Projektdateien / Fotos (Storage-Bucket 'projektdateien') ───────────────
+const PM_DATEI_BUCKET = 'projektdateien';
+async function pmDateiUpload(b) {
+  const projektId = uuid(b.projekt_id);
+  const buf = sbDecodeB64(b.data);
+  if (!buf) throw new Error('Datei (base64) erforderlich');
+  if (buf.length > 12 * 1024 * 1024) return { error: 'Datei zu gross (max. 12 MB)' };
+  const safe = sbSafeName(b.filename || 'datei');
+  const path = `${projektId}/${nowStamp()}-${safe}`;
+  const contentType = b.contentType || sbGuessType(safe);
+  const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': contentType, 'x-upsert': 'true' },
+    body: buf,
+  });
+  if (!up.ok) {
+    const t = await up.text().catch(() => '');
+    if (/bucket not found/i.test(t)) return { error: `Bucket '${PM_DATEI_BUCKET}' fehlt – scripts/projekt_detail_scharf.sql ausführen.`, notMigrated: true };
+    console.error('pm datei upload fail', up.status, t);
+    return { error: 'Upload fehlgeschlagen' };
+  }
+  const url = await sbSignUrl(PM_DATEI_BUCKET, path);
+  return { ok: true, datei: { name: sbDisplayName(path.split('/').pop()), path, contentType, size: buf.length, url } };
+}
+
+async function pmDateiList(projektId) {
+  const dateien = await listProjektDateien(uuid(projektId)).catch(() => []);
+  return { dateien };
+}
+
+async function listProjektDateien(projektId) {
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${PM_DATEI_BUCKET}`, {
+    method: 'POST', headers: SB,
+    body: JSON.stringify({ prefix: `${projektId}/`, limit: 200, sortBy: { column: 'created_at', order: 'desc' } }),
+  });
+  if (!r.ok) return []; // Bucket fehlt o. Ä. → leere Galerie
+  const objs = await r.json().catch(() => []);
+  const list = (Array.isArray(objs) ? objs : []).filter((o) => o && o.name && o.id !== null);
+  return Promise.all(list.map(async (o) => {
+    const path = `${projektId}/${o.name}`;
+    return {
+      name: sbDisplayName(o.name), path,
+      size: o.metadata?.size || null,
+      contentType: o.metadata?.mimetype || null,
+      created_at: o.created_at || null,
+      url: await sbSignUrl(PM_DATEI_BUCKET, path),
+    };
+  }));
+}
+
+async function pmDateiDel(b) {
+  const projektId = uuid(b.projekt_id);
+  const path = String(b.path || '');
+  if (!path.startsWith(`${projektId}/`)) throw new Error('Ungültiger Pfad');
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
+  if (!r.ok) return { error: 'Löschen fehlgeschlagen' };
+  return { ok: true };
+}
+
+// ── PDF-Export pro Abschnitt (wiederverwendet lib/pdf.buildPdf) ────────────
+// Liefert das PDF als base64 zurück; das Cockpit macht daraus einen Download.
+function pdfResult(buf, filename) {
+  return { ok: true, filename, pdf_base64: Buffer.from(buf).toString('base64') };
+}
+function chf(n) { return 'CHF ' + Number(n || 0).toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function projektHead(projektId) {
+  const pr = await sbGet(`gs_projekte?id=eq.${projektId}&select=name,projektnummer,standort&limit=1`).catch(() => []);
+  return (pr && pr[0]) || {};
+}
+
+async function exportMaterial(projektId) {
+  projektId = uuid(projektId);
+  const p = await projektHead(projektId);
+  const mat = await sbGet(`gs_material?projekt_id=eq.${projektId}&select=*&order=created_at.desc`).catch(() => []);
+  const blocks = [
+    { t: 'h1', text: 'Materialliste' },
+    { t: 'kv', label: 'Projekt', value: p.name || '–' },
+    { t: 'kv', label: 'Projektnummer', value: p.projektnummer || '–' },
+    { t: 'kv', label: 'Datum', value: new Date().toISOString().slice(0, 10) },
+    { t: 'sp', size: 8 },
+    { t: 'h2', text: `Positionen (${mat.length})` },
+  ];
+  let sum = 0;
+  if (!mat.length) blocks.push({ t: 'text', text: 'Kein Material erfasst.' });
+  for (const m of mat) {
+    const menge = m.menge != null ? Number(m.menge) : null;
+    const preis = m.einzelpreis != null ? Number(m.einzelpreis) : null;
+    const zeile = (preis != null && menge != null) ? menge * preis : null;
+    if (zeile != null) sum += zeile;
+    const mengeTxt = [menge != null ? menge : '', m.einheit || ''].filter((x) => x !== '').join(' ') || '—';
+    const val = [mengeTxt, preis != null ? `à ${chf(preis)}` : '', zeile != null ? `= ${chf(zeile)}` : '', m.status ? `(${m.status})` : '']
+      .filter(Boolean).join('  ');
+    blocks.push({ t: 'kv', label: String(m.bezeichnung || '–').slice(0, 46), value: val });
+  }
+  blocks.push({ t: 'sp', size: 6 });
+  blocks.push({ t: 'kv', label: 'Summe Material', value: chf(sum) });
+  blocks.push({ t: 'sp', size: 8 });
+  blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
+  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Materialliste_${(p.projektnummer || 'projekt')}.pdf`);
+}
+
+async function exportRapporte(projektId) {
+  projektId = uuid(projektId);
+  const p = await projektHead(projektId);
+  let raps = [];
+  try { raps = await sbGet(`gs_tagesrapporte?projekt_id=eq.${projektId}&select=*&order=datum.asc`); } catch (_) { raps = []; }
+  // Techniker-Namen anreichern.
+  const uids = [...new Set(raps.map((r) => r.techniker_user_id).filter(Boolean))];
+  const nameByUid = {};
+  if (uids.length) {
+    const ts = await sbGet(`gs_techniker?user_id=in.(${uids.join(',')})&select=user_id,name`).catch(() => []);
+    for (const t of ts) if (t.user_id) nameByUid[t.user_id] = t.name;
+  }
+  // Nach KW gruppieren.
+  const groups = new Map();
+  for (const r of raps) { const k = `${r.jahr}-${String(r.woche).padStart(2, '0')}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+  const blocks = [
+    { t: 'h1', text: 'Arbeitsrapporte' },
+    { t: 'kv', label: 'Projekt', value: p.name || '–' },
+    { t: 'kv', label: 'Projektnummer', value: p.projektnummer || '–' },
+    { t: 'kv', label: 'Rapporte', value: String(raps.length) },
+    { t: 'sp', size: 8 },
+  ];
+  let total = 0;
+  const keys = [...groups.keys()].sort();
+  for (const k of keys) {
+    const rows = groups.get(k);
+    let sumH = 0; let anyOffen = false;
+    rows.forEach((r) => { sumH += Number(r.gesamtstunden || 0); if ((r.abrechnung_status || 'offen') !== 'verrechnet') anyOffen = true; });
+    total += sumH;
+    const [jahr, woche] = k.split('-');
+    blocks.push({ t: 'h2', text: `KW ${Number(woche)}/${jahr} · ${sumH.toFixed(1)} h · ${anyOffen ? 'offen' : 'verrechnet'}` });
+    for (const r of rows) {
+      const arb = (Array.isArray(r.arbeiten) ? r.arbeiten.join(' · ') : (r.arbeiten || '')).slice(0, 70);
+      blocks.push({ t: 'kv', label: `${r.datum} · ${nameByUid[r.techniker_user_id] || 'Techniker'}`, value: `${Number(r.gesamtstunden || 0)} h  ${arb}` });
+    }
+    blocks.push({ t: 'sp', size: 4 });
+  }
+  if (!raps.length) blocks.push({ t: 'text', text: 'Keine Rapporte auf diesem Projekt.' });
+  blocks.push({ t: 'sp', size: 4 });
+  blocks.push({ t: 'kv', label: 'Total Stunden', value: `${total.toFixed(1)} h` });
+  blocks.push({ t: 'sp', size: 8 });
+  blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
+  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Arbeitsrapporte_${(p.projektnummer || 'projekt')}.pdf`);
+}
+
+async function exportRechnungen(projektId) {
+  projektId = uuid(projektId);
+  const p = await projektHead(projektId);
+  const rechs = await sbGet(`gs_rechnungen?projekt_id=eq.${projektId}&select=*&order=created_at.desc`).catch(() => []);
+  const blocks = [
+    { t: 'h1', text: 'Rechnungs-History' },
+    { t: 'kv', label: 'Projekt', value: p.name || '–' },
+    { t: 'kv', label: 'Projektnummer', value: p.projektnummer || '–' },
+    { t: 'kv', label: 'Rechnungen', value: String(rechs.length) },
+    { t: 'sp', size: 8 },
+    { t: 'h2', text: 'Rechnungen' },
+  ];
+  let sum = 0;
+  if (!rechs.length) blocks.push({ t: 'text', text: 'Keine Rechnungen zu diesem Projekt.' });
+  for (const r of rechs) {
+    sum += Number(r.betrag || 0);
+    const datum = r.created_at ? String(r.created_at).slice(0, 10) : '';
+    const val = [chf(r.betrag), r.stunden != null ? `${r.stunden} h × ${chf(r.stundensatz)}` : '', r.status || '', datum].filter(Boolean).join('  ·  ');
+    blocks.push({ t: 'kv', label: String(r.rechnungsnummer || 'Rechnung').slice(0, 40), value: val });
+  }
+  blocks.push({ t: 'sp', size: 6 });
+  blocks.push({ t: 'kv', label: 'Gesamtsumme', value: chf(sum) });
+  blocks.push({ t: 'sp', size: 8 });
+  blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
+  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Rechnungen_${(p.projektnummer || 'projekt')}.pdf`);
+}
+
+// Storage-Helfer (Muster aus api/projectflow.js).
+async function sbSignUrl(bucket, path, expiresIn = 3600) {
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${bucket}/${path}`, { method: 'POST', headers: SB, body: JSON.stringify({ expiresIn }) });
+  if (!r.ok) return null;
+  const d = await r.json().catch(() => ({}));
+  return d.signedURL ? SUPABASE_URL + '/storage/v1' + d.signedURL : null;
+}
+function sbDecodeB64(s) {
+  if (!s || typeof s !== 'string') return null;
+  const raw = s.includes(',') ? s.split(',')[1] : s;
+  try { const b = Buffer.from(raw, 'base64'); return b.length ? b : null; } catch { return null; }
+}
+function sbSafeName(n) { return String(n || 'datei').replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, '_').slice(0, 120) || 'datei'; }
+function sbDisplayName(n) { return String(n).replace(/^\d{10,}-/, ''); }
+function nowStamp() { return String(Date.now()); }
+function sbGuessType(n) {
+  const e = String(n).toLowerCase().split('.').pop();
+  return { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', dwg: 'application/acad', dxf: 'image/vnd.dxf' }[e] || 'application/octet-stream';
 }

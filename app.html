@@ -2063,8 +2063,11 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div class="login-card">
     <div class="login-logo">
       <img class="login-logo-img" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
-      <div class="login-logo-sub">Partner & Techniker Login</div>
+      <div class="login-logo-sub">Partner &amp; Techniker</div>
     </div>
+    <!-- Einstieg: Techniker (freier Zugang) ODER Partner (Login). Nur der Auswahl-Einstieg. -->
+    <button class="login-btn-pw" onclick="enterTechnikerFrei()" style="border-color:rgba(201,169,97,0.5);color:#FFD700;font-weight:800;">🔧 Techniker – ohne Login starten</button>
+    <div class="login-sep">oder als Partner anmelden</div>
     <input class="login-inp" id="login-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" data-i18n-ph="gsf_ph_email" inputmode="email"/>
     <button class="login-btn-magic" id="login-magic-btn" onclick="loginMagicLink()">✨ Magic Link senden</button>
     <div class="login-sep">oder</div>
@@ -5146,6 +5149,16 @@ function demoEnter(role){
   else if(role==='gs_partner'){ showScreen('partner-dash'); initPartnerDash(); }
   else { var aw=document.getElementById('admin-welcome');if(aw)aw.textContent='Demo Admin';showScreen('admin-home'); }
 }
+// Techniker: FREIER Zugang ohne Login → direkt in die bestehenden Techniker-Ansichten.
+// Wiederverwendung: initTechRapport() (Rapport/Stunden/Material/Blockade/Profil).
+// token-frei über demoMode (gsAuthApi→demoApi), damit die Screens ohne 401 laden.
+// Zurück/Beenden über den bestehenden „Abmelden"-Button (logout) im Techniker-Header.
+function enterTechnikerFrei(){
+  demoMode=true; authToken=null; authRole='techniker';
+  authUser={ email:'techniker@george-solutions.ch' }; authTechName='Techniker';
+  var mw=document.querySelector('.mode-toggle-wrap'); if(mw) mw.style.display='none';
+  initTechRapport();
+}
 function demoExit(){
   demoMode=false;authRole=null;authToken=null;authUser=null;authTechName=null;
   var b=document.getElementById('demo-banner');if(b)b.style.display='none';
@@ -5163,6 +5176,8 @@ function setLoginMsg(msg,type){
 function logout(){
   localStorage.removeItem('bob_auth_token');
   authToken=null;authRole=null;authUser=null;authTechName=null;
+  demoMode=false;   // freien Techniker-Zugang (demoMode) sauber beenden
+  try{ document.body.classList.remove('demo-on'); }catch(e){}
   adminDisarmReturn();
   // Reset mode toggle — keep it visible so the GS Login button shows.
   var modeWrap=document.querySelector('.mode-toggle-wrap');
@@ -7096,16 +7111,35 @@ var PD_MODULES=[
   {tab:'settings',    label:'⚙️',             core:true}
 ];
 // null = fail-open (Demo ODER Tabelle noch nicht eingespielt) → alles frei.
-var pdEntitlements=null, pdTableMissing=false;
+var pdEntitlements=null, pdTableMissing=false, pdMyId=null, pdMyEmail=null, pdActiveTab=null;
 function pdHas(key){ if(pdEntitlements===null) return true; return pdEntitlements.indexOf(key)>-1; }
 function pdCompany(){ return { id:(authUser&&authUser.id)||null, name:(authUser&&authUser.email)||'' }; }
+// Entitlements IMMER frisch vom Server (kein Cache). Wird bei jedem Laden/Login,
+// bei bfcache-Restore (pageshow) und beim Fokuswechsel aufgerufen.
 function pdLoadEntitlements(cb){
   if(demoMode){ pdEntitlements=null; if(cb)cb(); return; }   // Demo: alles frei
   gsAuthApi('entitlements',{action:'mine'}).then(function(d){
     pdEntitlements=(d&&!d.error&&Array.isArray(d.features)&&!d.tableMissing)?d.features.slice():null;
     pdTableMissing=!!(d&&d.tableMissing);
+    pdMyId=(d&&d.user_id)||(authUser&&authUser.id)||null;
+    pdMyEmail=(d&&d.email)||(authUser&&authUser.email)||null;
     if(cb)cb();
   }).catch(function(){ pdEntitlements=null; if(cb)cb(); });
+}
+// Frisch nachladen OHNE Vollreload: eine Master-Freischaltung wird sofort sichtbar.
+// Baut Tabs/Nav neu und rendert die aktuelle Ansicht neu.
+function pdRefreshEntitlements(showToast){
+  var before=(pdEntitlements||[]).slice().sort().join(',');
+  pdLoadEntitlements(function(){
+    pdBuildTabs(); pdBuildBottomNav(); pdSetupHeroCta();
+    var c=document.getElementById('pd-content');
+    var contentVisible=c&&c.style.display!=='none';
+    if(contentVisible&&pdActiveTab){ pdTab(pdActiveTab); } else if(typeof pdLoadCards==='function'){ pdLoadCards(); }
+    if(showToast){
+      var after=(pdEntitlements||[]).slice().sort().join(',');
+      toast(before===after?'Freischaltungen aktuell':'Freischaltungen aktualisiert');
+    }
+  });
 }
 function pdModule(tab){ for(var i=0;i<PD_MODULES.length;i++){ if(PD_MODULES[i].tab===tab) return PD_MODULES[i]; } return null; }
 function pdBuildTabs(){
@@ -7203,8 +7237,24 @@ function pdBobMic(area){
   pdBobRec.onerror=function(){ pdBobRecOn=false; if(btn)btn.classList.remove('rec'); };
   try{pdBobRec.start();}catch(e){pdBobRecOn=false;if(btn)btn.classList.remove('rec');}
 }
+// bfcache-Restore & Rückkehr in den Tab → Entitlements frisch nachladen (einmal gebunden).
+// Deckt den Fall ab: Master schaltet frei, Partner kehrt (ohne Hard-Reload) ins Cockpit zurück.
+var _pdRefreshBound=false;
+function pdBindRefreshHooks(){
+  if(_pdRefreshBound) return; _pdRefreshBound=true;
+  function maybeRefresh(){
+    if(demoMode) return;
+    if(authRole!=='gs_partner') return;
+    var scr=document.getElementById('partner-dash');
+    if(!scr||scr.style.display==='none') return;   // nur wenn Partner-Cockpit aktiv
+    pdRefreshEntitlements(false);
+  }
+  window.addEventListener('pageshow',function(e){ if(e.persisted) maybeRefresh(); });
+  document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible') maybeRefresh(); });
+}
 function initPartnerDash(){
   var w=document.getElementById('pd-welcome'); if(w) w.textContent=(authUser&&authUser.email)||'';
+  pdBindRefreshHooks();
   pdLoadEntitlements(function(){
     pdBuildBottomNav();       // feste Bottom-Nav wie Master (Cockpit · Inbox · Projekte · Mehr)
     pdSetupHeroCta();         // „Antippen & sprechen" nur, wenn Bob freigeschaltet
@@ -7275,6 +7325,7 @@ function pdGoCockpit(){
   var h=document.getElementById('pd-hero'), o=document.getElementById('pd-overview'),
       c=document.getElementById('pd-content'), s=document.getElementById('pd-bob-slot');
   if(h) h.style.display=''; if(o) o.style.display=''; if(c) c.style.display='none'; if(s) s.innerHTML='';
+  pdActiveTab=null;
   pdNavActive('cockpit');
   try{ document.getElementById('partner-dash').scrollTop=0; }catch(e){}
 }
@@ -7442,6 +7493,7 @@ function pdLoadBadge(){
   });
 }
 function pdTab(tab){
+  pdActiveTab=tab;
   PD_MODULES.forEach(function(m){ var el=document.getElementById('pdt-'+m.tab); if(el) el.classList.toggle('act',m.tab===tab); });
   pdShowModule();        // Hero/Übersicht ausblenden, Inhaltsbereich zeigen
   pdNavActive(tab);      // passenden Bottom-Nav-Punkt markieren (Rest → „Mehr")
@@ -7580,10 +7632,27 @@ function pdRenderSettings(c){
       +'<div class="ob-lbl">Rechnungsadresse</div><textarea class="login-inp" id="set-radr" rows="3">'+gsEsc(p.rechnungsadresse||'')+'</textarea>'
       +'<button class="login-btn-magic" style="margin-top:12px;" onclick="pdSaveSettings()">Speichern</button>'
       +'<div class="login-msg" id="set-msg"></div></div>'
+      +'<div class="pd-item" id="pd-ent-box"><div class="pd-item-top"><div class="pd-item-tit">🔑 Freischaltungen</div>'
+        +'<button class="admin-act" onclick="pdRefreshEntitlements(true)">🔄 Aktualisieren</button></div>'
+        +pdEntitlementsInfoHtml()+'</div>'
       +'<div class="pd-item"><div class="pd-item-tit">📑 Tarif-Übersicht (was Sie zahlen)</div>'
       +'<div class="pd-item-meta" style="margin-top:6px;line-height:1.7;">Pilot CHF 60–65/h (Team/Einzel) · Monat CHF 65–70/h (Team/Einzel)</div></div>'
       +'<div class="pd-legal"><a onclick="openLegal(\'agb\')">AGB</a><a onclick="openLegal(\'datenschutz\')">Datenschutzerklärung</a></div>';
   });
+}
+// Zeigt freigeschaltete Module + Account-ID. Die Account-ID muss im Master unter
+// „Kunden & Lizenzen" bei DIESEM Partner stehen – so lässt sich ein ID-Mismatch
+// (Freischaltung auf falschem Account) sofort erkennen.
+function pdEntitlementsInfoHtml(){
+  var id=pdMyId||(authUser&&authUser.id)||'—';
+  if(demoMode) return '<div class="pd-item-meta" style="margin-top:6px;">Demo-Modus: alle Module frei.</div>';
+  if(pdTableMissing) return '<div class="pd-item-meta" style="margin-top:6px;">Noch keine Lizenz-Tabelle – vorübergehend alle Module frei.</div>';
+  var freed=(pdEntitlements===null)?null:PD_MODULES.filter(function(m){ return m.feature&&pdHas(m.feature); });
+  var body;
+  if(pdEntitlements===null){ body='<div class="pd-item-meta" style="margin-top:6px;">Alle Module frei.</div>'; }
+  else if(!freed.length){ body='<div class="pd-item-meta" style="margin-top:6px;">Noch kein Modul freigeschaltet. Wenden Sie sich an George Solutions.</div>'; }
+  else { body='<div class="pd-item-meta" style="margin-top:6px;line-height:1.9;">'+freed.map(function(m){ return '✅ '+gsEsc(m.label); }).join('<br>')+'</div>'; }
+  return body+'<div class="pd-item-meta" style="margin-top:10px;font-size:11px;opacity:.65;">Account-ID: '+gsEsc(id)+'</div>';
 }
 function pdSaveSettings(){
   gsAuthApi('account',{action:'update_settings',
