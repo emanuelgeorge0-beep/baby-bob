@@ -2059,8 +2059,11 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div class="login-card">
     <div class="login-logo">
       <img class="login-logo-img" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
-      <div class="login-logo-sub">Partner & Techniker Login</div>
+      <div class="login-logo-sub">Partner &amp; Techniker</div>
     </div>
+    <!-- Einstieg: Techniker (freier Zugang) ODER Partner (Login). Nur der Auswahl-Einstieg. -->
+    <button class="login-btn-pw" onclick="enterTechnikerFrei()" style="border-color:rgba(201,169,97,0.5);color:#FFD700;font-weight:800;">🔧 Techniker – ohne Login starten</button>
+    <div class="login-sep">oder als Partner anmelden</div>
     <input class="login-inp" id="login-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" data-i18n-ph="gsf_ph_email" inputmode="email"/>
     <button class="login-btn-magic" id="login-magic-btn" onclick="loginMagicLink()">✨ Magic Link senden</button>
     <div class="login-sep">oder</div>
@@ -5142,6 +5145,16 @@ function demoEnter(role){
   else if(role==='gs_partner'){ showScreen('partner-dash'); initPartnerDash(); }
   else { var aw=document.getElementById('admin-welcome');if(aw)aw.textContent='Demo Admin';showScreen('admin-home'); }
 }
+// Techniker: FREIER Zugang ohne Login → direkt in die bestehenden Techniker-Ansichten.
+// Wiederverwendung: initTechRapport() (Rapport/Stunden/Material/Blockade/Profil).
+// token-frei über demoMode (gsAuthApi→demoApi), damit die Screens ohne 401 laden.
+// Zurück/Beenden über den bestehenden „Abmelden"-Button (logout) im Techniker-Header.
+function enterTechnikerFrei(){
+  demoMode=true; authToken=null; authRole='techniker';
+  authUser={ email:'techniker@george-solutions.ch' }; authTechName='Techniker';
+  var mw=document.querySelector('.mode-toggle-wrap'); if(mw) mw.style.display='none';
+  initTechRapport();
+}
 function demoExit(){
   demoMode=false;authRole=null;authToken=null;authUser=null;authTechName=null;
   var b=document.getElementById('demo-banner');if(b)b.style.display='none';
@@ -5159,6 +5172,8 @@ function setLoginMsg(msg,type){
 function logout(){
   localStorage.removeItem('bob_auth_token');
   authToken=null;authRole=null;authUser=null;authTechName=null;
+  demoMode=false;   // freien Techniker-Zugang (demoMode) sauber beenden
+  try{ document.body.classList.remove('demo-on'); }catch(e){}
   adminDisarmReturn();
   // Reset mode toggle — keep it visible so the GS Login button shows.
   var modeWrap=document.querySelector('.mode-toggle-wrap');
