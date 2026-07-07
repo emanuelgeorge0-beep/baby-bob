@@ -7101,6 +7101,7 @@ function blWeekReportInto(containerId){
 var PD_MODULES=[
   {tab:'inbox',       label:'📨 Inbox',       core:true, badge:true},
   {tab:'projekte',    label:'Projekte',       feature:'projektmanagement'},
+  {tab:'pm',          label:'🏗️ Projektmanagement', feature:'projektmanagement'},
   {tab:'disposition', label:'🧭 Disposition', feature:'disposition', mount:true},
   {tab:'rapporte',    label:'Rapporte',       feature:'reporting'},
   {tab:'material',    label:'📦 Material',    feature:'material', mount:true},
@@ -7506,6 +7507,12 @@ function pdTab(tab){
   // Feature-Gate: gesperrtes Modul → Upgrade-Hinweis statt Inhalt (nicht nur optisch;
   // die Datenendpunkte lehnen ohne Freischaltung ohnehin mit 403 ab).
   if(locked){ pdRenderLocked(c,mod); return; }
+  // Projektmanagement (Herzstück, Master-Ansicht): "Projektmanagement" (Mehr) UND
+  // der prominente "Projekte"-Tab öffnen dieselbe volle PM-Ansicht (Liste + Neues
+  // Projekt + Detail mit Techniker/Rapporte/Material/Blockaden/Dateien). Server-seitig
+  // auf die eigenen Projekte des Partners gescoped (api/cockpit.js). Demo behält die
+  // leichte Demo-Liste.
+  if(tab==='pm' || (tab==='projekte' && !demoMode)){ pmRender(); return; }
   c.innerHTML='<div class="admin-empty">Lädt…</div>';
   if(mod&&mod.mount){ pdRenderMount(c,mod); return; }
   if(tab==='settings'){ pdRenderSettings(c); return; }
@@ -7623,6 +7630,398 @@ function pdRenderProjektDetail(p,rapporte,materiallisten){
   c.innerHTML='<div class="pd-dl" onclick="pdTab(\'projekte\')" style="margin:0 0 12px;display:inline-block;">← Zurück zur Projektliste</div>'
     +head+sums+rapHtml+matHtml;
 }
+// ══════════════════════════════════════════════════════════════════════════
+// PARTNER-PROJEKTMANAGEMENT (Herzstück) — nutzt die BESTEHENDE Master-PM-API
+// (api/cockpit.js, pm_*-Actions), server-seitig auf die EIGENEN Projekte des
+// Partners gescoped. Reuse statt Neubau: dieselben Endpunkte, dieselbe Daten-
+// struktur, dieselbe Storage-/Katalog-Quelle wie im Master-Cockpit.
+// ══════════════════════════════════════════════════════════════════════════
+var pmState={proj:null,data:null,kunden:[],techAll:null};
+
+// Wrapper auf /api/cockpit: Token im BODY (wie das Master-Cockpit), nicht im
+// Header. Ein Refresh-Retry bei 403 (abgelaufener Token). Demo → freundlicher Hinweis.
+function pmApi(action,params){
+  if(demoMode) return Promise.resolve({error:'Im Demo-Modus nicht verfügbar – bitte mit Partner-Login testen.'});
+  function call(){
+    return fetch('/api/cockpit',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({token:authToken,action:action},params||{}))})
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(d){ return {s:r.status,d:d}; }); });
+  }
+  return call().then(function(x){
+    if(x.s===403 && authRefresh){
+      return refreshToken().then(function(ok){ return ok?call().then(function(y){return y.d;}):{error:'Kein Zugriff'}; });
+    }
+    if(x.s===403) return {error:'Kein Zugriff'};
+    return x.d;
+  }).catch(function(){ return {error:'Verbindungsfehler'}; });
+}
+function pmChf(n){ return 'CHF '+Number(n||0).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function pmDl(url,name){ if(!url) return '#'; return url+(url.indexOf('?')>-1?'&':'?')+'download='+encodeURIComponent(name||'datei'); }
+function pmFileIc(ct,name){ ct=ct||''; if(/^image\//.test(ct))return'🖼️'; if(/pdf/.test(ct))return'📄'; if(/(dwg|dxf)/i.test(name||''))return'📐'; return'📎'; }
+
+// ── Modal (leichtgewichtig, self-contained) für Formulare ──
+function pmModal(title,bodyHtml){
+  var ov=document.getElementById('pm-modal');
+  if(!ov){ ov=document.createElement('div'); ov.id='pm-modal';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.62);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+    ov.onclick=function(e){ if(e.target===ov) pmModalClose(); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML='<div style="background:#12151c;border:1px solid rgba(255,255,255,0.12);border-radius:18px 18px 0 0;width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:16px 16px 26px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
+    +'<div class="pd-sec-tit" style="margin:0;">'+gsEsc(title)+'</div>'
+    +'<button class="admin-act" style="flex:0 0 auto;" onclick="pmModalClose()">✕</button></div>'
+    +bodyHtml+'</div>';
+  ov.style.display='flex';
+}
+function pmModalClose(){ var ov=document.getElementById('pm-modal'); if(ov){ ov.style.display='none'; ov.innerHTML=''; } }
+
+// ── Liste ──
+function pmRender(){
+  pmState.proj=null;
+  var t=pdActiveTab||'projekte'; pdShowModule(); pdNavActive(t);
+  var slot=document.getElementById('pd-bob-slot'); if(slot) slot.innerHTML=pdBobBar('projekte');
+  var c=document.getElementById('pd-content'); if(!c) return;
+  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  pmApi('pm_projekte').then(function(d){
+    if(!d||d.error){ c.innerHTML='<div class="admin-empty">'+gsEsc((d&&d.error)||'Fehler')+'</div>'; return; }
+    pmState.kunden=(d&&d.kunden)||[];
+    var list=(d&&d.projekte)||[];
+    var head='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">'
+      +'<div class="pd-sec-tit" style="margin:0;">🏗️ Projektmanagement</div>'
+      +'<button class="admin-act ok" style="flex:0 0 auto;" onclick="pmNew()">＋ Neues Projekt</button></div>';
+    var rows=list.length?list.map(function(p){
+      var meta=[p.projektnummer,p.standort,p.bereich].filter(Boolean).map(gsEsc).join(' · ');
+      var bl=p.blockaden_offen?(' · <span style="color:#ff9b9b;">🚧 '+p.blockaden_offen+' offen</span>'):'';
+      var kn=(p.kunde&&(p.kunde.firma||p.kunde.kontaktperson))?(' · 🏢 '+gsEsc(p.kunde.firma||p.kunde.kontaktperson)):'';
+      return '<div class="pd-item" style="cursor:pointer;" onclick="pmOpen(\''+p.id+'\')">'
+        +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
+        +'<div style="display:flex;align-items:center;gap:8px;">'+pdStatusBadge(p.status)
+        +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
+        +'<div class="pd-item-meta">'+(meta||'—')+kn+bl+'</div></div>';
+    }).join(''):'<div class="admin-empty">Noch keine Projekte. Legen Sie mit „＋ Neues Projekt" das erste an.</div>';
+    c.innerHTML=head+rows;
+  });
+}
+
+// ── Detail ──
+function pmOpen(id){
+  var c=document.getElementById('pd-content'); if(!c) return;
+  pdShowModule(); pdNavActive(pdActiveTab||'projekte');
+  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  pmApi('pm_projekt',{id:id}).then(function(d){
+    if(!d||d.error){ c.innerHTML='<div class="admin-empty">'+gsEsc((d&&d.error)||'Projekt nicht gefunden')+'</div>'
+      +'<div class="pd-dl" onclick="pmRender()" style="margin-top:10px;display:inline-block;">← Projektliste</div>'; return; }
+    pmState.proj=id; pmState.data=d;
+    pmPaintDetail(d);
+  });
+}
+function pmReload(){ if(pmState.proj) pmOpen(pmState.proj); }
+
+function pmPaintDetail(d){
+  var c=document.getElementById('pd-content'); if(!c) return;
+  var p=d.projekt||{}, k=d.kunde||null;
+  var back='<div class="pd-dl" onclick="pmRender()" style="margin:0 0 12px;display:inline-block;">← Projektliste</div>';
+  var meta=[p.projektnummer?('🔖 '+gsEsc(p.projektnummer)):'',p.standort?('📍 '+gsEsc(p.standort)):'',p.bereich?gsEsc(p.bereich):''].filter(Boolean).join(' · ');
+  var head='<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;">'+pdStatusBadge(p.status)
+    +'<button class="admin-act" style="flex:0 0 auto;padding:5px 9px;" onclick="pmEdit()">✎</button></div></div>'
+    +(meta?'<div class="pd-item-meta">'+meta+'</div>':'')
+    +(k?('<div class="pd-item-meta">🏢 '+gsEsc(k.firma||k.kontaktperson||'')+([k.telefon,k.ort].filter(Boolean).length?(' · '+[k.telefon,k.ort].filter(Boolean).map(gsEsc).join(' · ')):'')+'</div>'):'')
+    +'</div>';
+
+  // Techniker
+  var techs=d.techniker||[];
+  var techHtml='<div style="display:flex;justify-content:space-between;align-items:center;">'
+    +'<div class="pd-sec-tit">👷 Techniker ('+techs.length+')</div>'
+    +'<button class="admin-act ok" style="flex:0 0 auto;" onclick="pmTechAssign()">＋ zuweisen</button></div>';
+  techHtml+=techs.length?techs.map(function(t){
+    var sub=[t.qualification,t.taetigkeit,t.stundensatz!=null?('CHF '+t.stundensatz+'/h'):''].filter(Boolean).map(gsEsc).join(' · ');
+    return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(t.photo_emoji||'👷')+' '+gsEsc(t.name||'Techniker')+'</div>'
+      +'<button class="admin-act danger" style="flex:0 0 auto;padding:5px 9px;" onclick="pmTechUnassign(\''+t.id+'\')">✕</button></div>'
+      +(sub?'<div class="pd-item-meta">'+sub+'</div>':'')
+      +(t.telefon?'<div class="pd-item-meta">📞 '+gsEsc(t.telefon)+'</div>':'')+'</div>';
+  }).join(''):'<div class="admin-empty">Keine Techniker zugewiesen.</div>';
+
+  // Dateien (3 Kategorien)
+  var dateien=d.dateien||[];
+  function katFiles(kat){ return dateien.filter(function(f){return (f.kategorie||'dateien')===kat;}); }
+  function katBlock(kat,label,icon){
+    var fs=katFiles(kat);
+    var items=fs.length?('<div class="pm-gal">'+fs.map(function(f){
+      var isImg=/^image\//.test(f.contentType||'');
+      var inner=isImg?('<img src="'+f.url+'" style="width:100%;height:78px;object-fit:cover;border-radius:9px;display:block;">')
+        :('<div style="height:78px;display:flex;align-items:center;justify-content:center;font-size:26px;background:rgba(255,255,255,0.04);border-radius:9px;">'+pmFileIc(f.contentType,f.name)+'</div>');
+      return '<div style="width:calc(33.33% - 6px);">'+inner
+        +'<div style="font-size:9.5px;color:rgba(232,237,245,0.55);margin-top:3px;word-break:break-all;line-height:1.2;">'+gsEsc(f.name)+'</div>'
+        +'<div style="display:flex;gap:4px;margin-top:3px;">'
+        +'<a href="'+pmDl(f.url,f.name)+'" download="'+gsEsc(f.name)+'" class="admin-act" style="flex:1;text-align:center;text-decoration:none;padding:4px;font-size:10px;">⬇</a>'
+        +'<button class="admin-act danger" style="flex:0 0 auto;padding:4px 7px;font-size:10px;" onclick="pmFileDel(\''+encodeURIComponent(f.path)+'\')">✕</button>'
+        +'</div></div>';
+    }).join('')+'</div>'):'<div class="pd-item-meta" style="margin:2px 2px 6px;">–</div>';
+    return '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;align-items:center;margin:6px 2px 4px;">'
+      +'<div style="font-size:12px;font-weight:700;color:rgba(232,237,245,0.75);">'+icon+' '+label+' ('+fs.length+')</div>'
+      +'<button class="admin-act" style="flex:0 0 auto;" onclick="pmFileUpload(\''+kat+'\')">＋ hochladen</button></div>'+items+'</div>';
+  }
+  var dateiHtml='<div class="pd-sec-tit">📎 Dateien</div>'+katBlock('bilder','Bilder','🖼️')+katBlock('plaene','Pläne','📐')+katBlock('dateien','Dateien','📄');
+
+  // Material
+  var mat=d.material||[];
+  var matSum=0; mat.forEach(function(m){ if(m.menge!=null&&m.einzelpreis!=null) matSum+=Number(m.menge)*Number(m.einzelpreis); });
+  var matHtml='<div style="display:flex;justify-content:space-between;align-items:center;">'
+    +'<div class="pd-sec-tit">📦 Material ('+mat.length+')</div>'
+    +'<div style="display:flex;gap:6px;"><button class="admin-act" style="flex:0 0 auto;" onclick="pmExport(\'material\')">📄 PDF</button>'
+    +'<button class="admin-act ok" style="flex:0 0 auto;" onclick="pmMatAdd()">＋ Material</button></div></div>';
+  matHtml+=mat.length?mat.map(function(m){
+    var mengeTxt=[m.menge!=null?m.menge:'',m.einheit||''].filter(function(x){return x!=='';}).join(' ');
+    var preis=m.einzelpreis!=null?(' · à '+pmChf(m.einzelpreis)):'';
+    return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(m.bezeichnung||'–')+'</div>'
+      +'<button class="admin-act danger" style="flex:0 0 auto;padding:5px 9px;" onclick="pmMatDel(\''+m.id+'\')">✕</button></div>'
+      +'<div class="pd-item-meta">'+(mengeTxt||'—')+preis+(m.kategorie?(' · '+gsEsc(m.kategorie)):'')+(m.status?(' · '+gsEsc(m.status)):'')+'</div></div>';
+  }).join(''):'<div class="admin-empty">Kein Material erfasst.</div>';
+  if(matSum>0) matHtml+='<div class="pd-item-meta" style="text-align:right;margin:4px 4px 0;font-weight:700;">Summe: '+pmChf(matSum)+'</div>';
+
+  // Rapporte (read-only, gruppiert nach KW) + Verrechnet-Toggle
+  var raps=d.rapporte||[];
+  var rapHtml='<div style="display:flex;justify-content:space-between;align-items:center;">'
+    +'<div class="pd-sec-tit">📋 Arbeitsrapporte ('+raps.length+')</div>'
+    +'<button class="admin-act" style="flex:0 0 auto;" onclick="pmExport(\'rapporte\')">📄 PDF</button></div>';
+  rapHtml+=raps.length?raps.map(function(r){
+    var verr=(r.abrechnung_status==='verrechnet');
+    return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(r.datum||'')+' · '+(r.gesamtstunden||0)+'h</div>'
+      +'<button class="admin-act '+(verr?'ok':'')+'" style="flex:0 0 auto;padding:5px 9px;" onclick="pmVerr(\''+r.id+'\',\''+(verr?'offen':'verrechnet')+'\')">'+(verr?'✓ verrechnet':'offen')+'</button></div>'
+      +'<div class="pd-item-meta">👷 '+gsEsc(r.techniker_name||'–')+'</div>'
+      +'<div class="pd-item-meta">'+gsEsc(Array.isArray(r.arbeiten)?r.arbeiten.join(', '):(r.arbeiten||'–'))+'</div></div>';
+  }).join(''):'<div class="admin-empty">Keine Rapporte auf diesem Projekt.</div>';
+
+  // Blockaden (read-only)
+  var bl=d.blockaden||[];
+  var blHtml='<div class="pd-sec-tit">🚧 Blockaden ('+bl.length+')</div>';
+  blHtml+=bl.length?bl.map(function(b){
+    var loc=[b.haus,b.einheit,b.zone].filter(Boolean).map(gsEsc).join(' · ');
+    return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(b.beschreibung||'Blockade')+'</div>'
+      +'<span class="admin-badge '+(String(b.status).toLowerCase()==='offen'?'must_change_password':'active')+'">'+gsEsc(b.status||'')+'</span></div>'
+      +(loc?'<div class="pd-item-meta">'+loc+'</div>':'')+'</div>';
+  }).join(''):'<div class="admin-empty">Keine offenen Blockaden.</div>';
+
+  // Rechnungen (read-only History)
+  var rech=d.rechnungen||[];
+  var rechHtml='';
+  if(rech.length){
+    rechHtml='<div style="display:flex;justify-content:space-between;align-items:center;">'
+      +'<div class="pd-sec-tit">🧾 Rechnungen ('+rech.length+')</div>'
+      +'<button class="admin-act" style="flex:0 0 auto;" onclick="pmExport(\'rechnungen\')">📄 PDF</button></div>'
+      +rech.map(function(r){
+      return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(r.rechnungsnummer||'Rechnung')+'</div>'
+        +'<div class="pd-item-tit" style="color:#FFD700;">'+pmChf(r.betrag)+'</div></div>'
+        +'<div class="pd-item-meta">'+gsEsc(r.status||'')+((r.created_at)?(' · '+gsEsc(String(r.created_at).slice(0,10))):'')+'</div></div>';
+    }).join('');
+  }
+
+  c.innerHTML=back+head+techHtml+dateiHtml+matHtml+rapHtml+rechHtml+blHtml;
+}
+
+// ── Neues / Bearbeiten Projekt ──
+var PM_BEREICHE=['Sanitär','Heizung','Lüftung','Klima','HKLS','Sanierung'];
+var PM_STATUS=['aktiv','laufend','pausiert','abgeschlossen'];
+function pmKundeOpts(sel){
+  return '<option value="">– kein Kunde –</option>'+(pmState.kunden||[]).map(function(k){
+    var lbl=k.firma||k.kontaktperson||k.ort||k.id;
+    return '<option value="'+gsEsc(k.id)+'"'+(sel===k.id?' selected':'')+'>'+gsEsc(lbl)+'</option>';
+  }).join('');
+}
+function pmAutoNr(){ var y=new Date().getFullYear(); var r=String(Math.floor(1000+ (Date.now()%9000))); return 'P-'+y+'-'+r; }
+function pmProjektForm(p){
+  p=p||{};
+  var chips=PM_BEREICHE.map(function(b){ var on=(p.bereich===b); return '<span class="gs-chip'+(on?' sel':'')+'" data-b="'+b+'" onclick="pmBereichPick(this)" style="cursor:pointer;">'+gsEsc(b)+'</span>'; }).join('');
+  var statusOpts=PM_STATUS.map(function(s){return '<option'+((p.status||'aktiv')===s?' selected':'')+'>'+s+'</option>';}).join('');
+  return '<div class="ob-lbl">Projektname *</div><input class="login-inp" id="pm-f-name" value="'+gsEsc(p.name||'')+'"/>'
+    +'<div class="ob-lbl">Projektnummer</div><input class="login-inp" id="pm-f-nr" value="'+gsEsc(p.projektnummer||'')+'"/>'
+    +'<div class="ob-lbl">Bereich</div><div id="pm-f-bereich-chips" style="display:flex;flex-wrap:wrap;gap:6px;">'+chips+'</div>'
+    +'<input type="hidden" id="pm-f-bereich" value="'+gsEsc(p.bereich||'')+'"/>'
+    +'<div class="ob-lbl">Standort</div><input class="login-inp" id="pm-f-standort" value="'+gsEsc(p.standort||'')+'"/>'
+    +'<div class="ob-lbl">Status</div><select class="login-inp" id="pm-f-status">'+statusOpts+'</select>'
+    +'<div class="ob-lbl">Kunde</div><div style="display:flex;gap:6px;"><select class="login-inp" id="pm-f-kunde" style="flex:1;">'+pmKundeOpts(p.kunde_id)+'</select>'
+    +'<button class="admin-act" style="flex:0 0 auto;" onclick="pmKundeNew()">＋ Neu</button></div>'
+    +'<button class="login-btn-magic" style="margin-top:14px;" onclick="pmSaveProjekt(\''+(p.id||'')+'\')">Speichern</button>'
+    +'<div class="login-msg" id="pm-f-msg"></div>';
+}
+function pmBereichPick(el){
+  var box=document.getElementById('pm-f-bereich-chips'); if(box) Array.prototype.forEach.call(box.querySelectorAll('.gs-chip'),function(c){c.classList.remove('sel');});
+  el.classList.add('sel'); var h=document.getElementById('pm-f-bereich'); if(h) h.value=el.getAttribute('data-b');
+}
+function pmNew(){
+  // Kunden für den Picker sicherstellen (Liste-Load füllt sie bereits).
+  var nr=pmAutoNr();
+  pmModal('Neues Projekt', pmProjektForm({projektnummer:nr,status:'aktiv'}));
+}
+function pmEdit(){ if(!pmState.data) return; pmModal('Projekt bearbeiten', pmProjektForm(pmState.data.projekt||{})); }
+function pmSaveProjekt(id){
+  var name=(document.getElementById('pm-f-name').value||'').trim();
+  if(!name){ pmMsg('pm-f-msg','Projektname erforderlich','err'); return; }
+  var body={ name:name,
+    projektnummer:(document.getElementById('pm-f-nr').value||'').trim(),
+    bereich:(document.getElementById('pm-f-bereich').value||'').trim(),
+    standort:(document.getElementById('pm-f-standort').value||'').trim(),
+    status:document.getElementById('pm-f-status').value,
+    kunde_id:document.getElementById('pm-f-kunde').value||null };
+  if(id) body.id=id;
+  pmMsg('pm-f-msg','Speichert…','');
+  pmApi('pm_projekt_save',body).then(function(d){
+    if(!d||d.error){ pmMsg('pm-f-msg',(d&&d.error)||'Fehler','err'); return; }
+    pmModalClose();
+    var newId=id||(d.projekt&&d.projekt.id);
+    if(newId) pmOpen(newId); else pmRender();
+  });
+}
+function pmMsg(elId,txt,cls){ var e=document.getElementById(elId); if(!e)return; e.textContent=txt; e.style.color=cls==='err'?'#ff9b9b':'rgba(232,237,245,0.55)'; }
+
+// ── Neuer Kunde inline ──
+function pmKundeNew(){
+  pmModal('Neuer Kunde',
+    '<div class="ob-lbl">Firma</div><input class="login-inp" id="pm-k-firma"/>'
+    +'<div class="ob-lbl">Kontaktperson</div><input class="login-inp" id="pm-k-kontakt"/>'
+    +'<div class="ob-lbl">Telefon</div><input class="login-inp" id="pm-k-tel"/>'
+    +'<div class="ob-lbl">Ort</div><input class="login-inp" id="pm-k-ort"/>'
+    +'<button class="login-btn-magic" style="margin-top:14px;" onclick="pmSaveKunde()">Kunde anlegen</button>'
+    +'<div class="login-msg" id="pm-k-msg"></div>');
+}
+function pmSaveKunde(){
+  var firma=(document.getElementById('pm-k-firma').value||'').trim();
+  var kontakt=(document.getElementById('pm-k-kontakt').value||'').trim();
+  if(!firma&&!kontakt){ pmMsg('pm-k-msg','Firma oder Kontakt erforderlich','err'); return; }
+  pmMsg('pm-k-msg','Speichert…','');
+  pmApi('pm_kunde_save',{firma:firma,kontaktperson:kontakt,telefon:(document.getElementById('pm-k-tel').value||'').trim(),ort:(document.getElementById('pm-k-ort').value||'').trim()})
+  .then(function(d){
+    if(!d||d.error){ pmMsg('pm-k-msg',(d&&d.error)||'Fehler','err'); return; }
+    // Kunde in die lokale Liste aufnehmen und Projektformular wieder öffnen.
+    if(d.kunde){ pmState.kunden=(pmState.kunden||[]).concat([d.kunde]); }
+    pmModalClose();
+    // Zurück zum Projektformular (Neuanlage) mit vorausgewähltem Kunden.
+    var f={status:'aktiv',projektnummer:pmAutoNr(),kunde_id:d.kunde&&d.kunde.id};
+    pmModal('Neues Projekt', pmProjektForm(f));
+  });
+}
+
+// ── Techniker zuweisen ──
+function pmTechAssign(){
+  pmModal('Techniker zuweisen','<div class="admin-empty" id="pm-ta-load">Lädt…</div>');
+  var render=function(){
+    var body='<div class="ob-lbl">Techniker</div><select class="login-inp" id="pm-ta-sel">'
+      +(pmState.techAll||[]).map(function(t){return '<option value="'+gsEsc(t.id)+'">'+gsEsc((t.photo_emoji||'👷')+' '+(t.name||'Techniker'))+(t.qualification?(' · '+t.qualification):'')+'</option>';}).join('')
+      +'</select>'
+      +'<div class="ob-lbl">Tätigkeit</div><input class="login-inp" id="pm-ta-taet" placeholder="z. B. Montage Sanitär"/>'
+      +'<div class="ob-lbl">Stundensatz (CHF, optional)</div><input class="login-inp" id="pm-ta-satz" inputmode="decimal"/>'
+      +'<button class="login-btn-magic" style="margin-top:14px;" onclick="pmDoAssign()">Zuweisen</button>'
+      +'<div class="login-msg" id="pm-ta-msg"></div>';
+    pmModal('Techniker zuweisen',body);
+  };
+  if(pmState.techAll){ render(); return; }
+  pmApi('pm_techniker').then(function(d){
+    pmState.techAll=(d&&d.techniker)||[];
+    if(!pmState.techAll.length){ pmModal('Techniker zuweisen','<div class="admin-empty">Keine Techniker verfügbar.</div>'); return; }
+    render();
+  });
+}
+function pmDoAssign(){
+  var tid=document.getElementById('pm-ta-sel').value;
+  if(!tid){ pmMsg('pm-ta-msg','Techniker wählen','err'); return; }
+  var satz=(document.getElementById('pm-ta-satz').value||'').trim();
+  pmMsg('pm-ta-msg','Speichert…','');
+  pmApi('pm_tech_assign',{projekt_id:pmState.proj,techniker_id:tid,taetigkeit:(document.getElementById('pm-ta-taet').value||'').trim(),stundensatz:satz})
+  .then(function(d){ if(!d||d.error){ pmMsg('pm-ta-msg',(d&&d.error)||'Fehler','err'); return; } pmModalClose(); pmReload(); });
+}
+function pmTechUnassign(id){ pmApi('pm_tech_unassign',{id:id}).then(function(d){ if(d&&d.error){toast(d.error);return;} pmReload(); }); }
+
+// ── Material (Katalog wiederverwendet: HKLS_MATERIAL_CHIPS) ──
+var pmMatTab='abwasser';
+function pmMatAdd(){
+  var tabs=HKLS_MATERIAL_CHIPS.map(function(g){return '<button type="button" class="admin-act'+(g.id===pmMatTab?' ok':'')+'" style="flex:0 0 auto;" onclick="pmMatTabSel(\''+g.id+'\')">'+gsEsc(g.label)+'</button>';}).join('');
+  pmModal('Material hinzufügen',
+    '<div class="ob-lbl">Katalog</div><div id="pm-mat-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">'+tabs+'</div>'
+    +'<div id="pm-mat-grid" style="display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow:auto;margin-bottom:10px;"></div>'
+    +'<div class="ob-lbl">Bezeichnung *</div><input class="login-inp" id="pm-mat-bez"/>'
+    +'<div style="display:flex;gap:6px;"><div style="flex:1;"><div class="ob-lbl">Menge</div><input class="login-inp" id="pm-mat-menge" inputmode="decimal"/></div>'
+    +'<div style="flex:1;"><div class="ob-lbl">Einheit</div><input class="login-inp" id="pm-mat-einheit" placeholder="Stk"/></div>'
+    +'<div style="flex:1;"><div class="ob-lbl">à CHF</div><input class="login-inp" id="pm-mat-preis" inputmode="decimal"/></div></div>'
+    +'<button class="login-btn-magic" style="margin-top:14px;" onclick="pmDoMatAdd()">Hinzufügen</button>'
+    +'<div class="login-msg" id="pm-mat-msg"></div>');
+  pmMatGrid();
+}
+function pmMatTabSel(id){ pmMatTab=id; var tabs=document.getElementById('pm-mat-tabs'); if(tabs){ Array.prototype.forEach.call(tabs.querySelectorAll('.admin-act'),function(b){b.classList.remove('ok');}); }
+  // Tab-Buttons neu markieren
+  var btns=tabs?tabs.querySelectorAll('.admin-act'):[]; HKLS_MATERIAL_CHIPS.forEach(function(g,i){ if(g.id===id&&btns[i]) btns[i].classList.add('ok'); });
+  pmMatGrid();
+}
+function pmMatGrid(){
+  var grid=document.getElementById('pm-mat-grid'); if(!grid) return;
+  var grp=HKLS_MATERIAL_CHIPS.filter(function(g){return g.id===pmMatTab;})[0]||HKLS_MATERIAL_CHIPS[0];
+  grid.innerHTML=(grp.items||[]).map(function(it){return '<button type="button" class="gs-chip" data-l="'+gsEsc(it)+'" onclick="pmMatPick(this.dataset.l)" style="cursor:pointer;">+ '+gsEsc(it)+'</button>';}).join('');
+}
+function pmMatPick(label){ var b=document.getElementById('pm-mat-bez'); if(b){ b.value=label; b.focus(); } var m=document.getElementById('pm-mat-menge'); if(m&&!m.value) m.value='1'; }
+function pmDoMatAdd(){
+  var bez=(document.getElementById('pm-mat-bez').value||'').trim();
+  if(!bez){ pmMsg('pm-mat-msg','Bezeichnung erforderlich','err'); return; }
+  pmMsg('pm-mat-msg','Speichert…','');
+  pmApi('pm_material_add',{projekt_id:pmState.proj,bezeichnung:bez,
+    menge:(document.getElementById('pm-mat-menge').value||'').trim(),
+    einheit:(document.getElementById('pm-mat-einheit').value||'').trim(),
+    einzelpreis:(document.getElementById('pm-mat-preis').value||'').trim(),
+    kategorie:(HKLS_MATERIAL_CHIPS.filter(function(g){return g.id===pmMatTab;})[0]||{}).label||''})
+  .then(function(d){ if(!d||d.error){ pmMsg('pm-mat-msg',(d&&d.error)||'Fehler','err'); return; } pmModalClose(); pmReload(); });
+}
+function pmMatDel(id){ pmApi('pm_material_del',{id:id}).then(function(d){ if(d&&d.error){toast(d.error);return;} pmReload(); }); }
+
+// ── Rapport verrechnet-Toggle ──
+function pmVerr(id,status){ pmApi('pm_rapport_verrechnet',{id:id,status:status}).then(function(d){ if(d&&d.error){toast(d.error);return;} pmReload(); }); }
+
+// ── Datei-Upload (3 Kategorien) — Bucket 'projektdateien' via api/cockpit ──
+function pmFileUpload(kategorie){
+  var inp=document.createElement('input'); inp.type='file';
+  inp.accept=(kategorie==='bilder')?'image/*':(kategorie==='plaene'?'application/pdf,.dwg,.dxf,image/*':'*/*');
+  inp.multiple=true;
+  inp.onchange=function(){ pmDoUpload(Array.prototype.slice.call(inp.files||[]),kategorie); };
+  inp.click();
+}
+function pmDoUpload(files,kategorie){
+  if(!files.length) return;
+  toast('Lädt '+files.length+' Datei'+(files.length>1?'en':'')+'…');
+  var i=0;
+  (function next(){
+    if(i>=files.length){ pmReload(); return; }
+    var f=files[i++];
+    if(f.size>12*1024*1024){ toast('„'+f.name+'" zu gross (max. 12 MB)'); next(); return; }
+    var rd=new FileReader();
+    rd.onload=function(){
+      pmApi('pm_datei_upload',{projekt_id:pmState.proj,kategorie:kategorie,filename:f.name,contentType:f.type||'',data:String(rd.result)})
+      .then(function(d){ if(d&&d.error) toast(d.error); next(); });
+    };
+    rd.onerror=function(){ toast('Lesefehler bei „'+f.name+'"'); next(); };
+    rd.readAsDataURL(f);
+  })();
+}
+function pmFileDel(pathEnc){
+  var path=decodeURIComponent(pathEnc);
+  pmApi('pm_datei_del',{projekt_id:pmState.proj,path:path}).then(function(d){ if(d&&d.error){toast(d.error);return;} pmReload(); });
+}
+
+// ── PDF-Export (Material/Rapporte/Rechnungen) ──
+function pmExport(kind){
+  var act={material:'pm_export_material',rapporte:'pm_export_rapporte',rechnungen:'pm_export_rechnungen'}[kind];
+  if(!act) return;
+  toast('PDF wird erstellt…');
+  pmApi(act,{projekt_id:pmState.proj}).then(function(d){
+    if(!d||d.error||!d.pdf_base64){ toast((d&&d.error)||'Export fehlgeschlagen'); return; }
+    try{
+      var bin=atob(d.pdf_base64), len=bin.length, buf=new Uint8Array(len);
+      for(var i=0;i<len;i++) buf[i]=bin.charCodeAt(i);
+      var url=URL.createObjectURL(new Blob([buf],{type:'application/pdf'}));
+      var a=document.createElement('a'); a.href=url; a.download=d.filename||'export.pdf'; document.body.appendChild(a); a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },1500);
+    }catch(e){ toast('Download fehlgeschlagen'); }
+  });
+}
+
 function pdRenderSettings(c){
   gsAuthApi('account',{action:'me'}).then(function(d){
     var p=d.profile||{};
