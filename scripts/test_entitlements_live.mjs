@@ -16,14 +16,17 @@
 
 import { readFileSync } from 'node:fs';
 
-// .env.local best-effort laden (nur fehlende Keys ergänzen; kein Override).
-try {
-  const env = readFileSync(new URL('../.env.local', import.meta.url), 'utf8');
-  for (const line of env.split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
-  }
-} catch { /* keine .env.local → Env muss gesetzt sein */ }
+// Keys aus der bestehenden Projekt-Konfiguration lesen (wie api/cockpit.js: process.env).
+// Zusätzlich .env.local / .env best-effort einlesen – KEINE Secrets im Code.
+for (const f of ['../.env.local', '../.env']) {
+  try {
+    const env = readFileSync(new URL(f, import.meta.url), 'utf8');
+    for (const line of env.split('\n')) {
+      const m = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    }
+  } catch { /* Datei nicht vorhanden → nächste Quelle */ }
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -32,8 +35,13 @@ const KEYS = ['disposition', 'material', 'controlling'];   // mehrere Keys
 const ROUNDS = 5;                                           // mehrfach
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('✗ SUPABASE_URL / SUPABASE_KEY fehlen (Env oder .env.local).');
-  process.exit(2);
+  // Kein harter Fehler: ohne DB-Credentials im Worktree gibt es nichts zu verbinden.
+  // Der Beweis läuft ohne Netzwerk über den Integrationstest.
+  console.log('⏭  SKIP Live-Test: keine DB-Credentials gefunden (SUPABASE_URL/SUPABASE_KEY).');
+  console.log('   → Diesen Test mit Env/.env.local ausführen, z. B.:');
+  console.log('     SUPABASE_URL=… SUPABASE_KEY=<service-key> node scripts/test_entitlements_live.mjs');
+  console.log('   → Ohne DB: node scripts/test_entitlements_integration.mjs (voller Round-Trip-Beweis).');
+  process.exit(0);
 }
 const SB = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
 
