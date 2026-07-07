@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { getWeather } from './weather.js';
+import { buildPdf } from '../lib/pdf.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -126,6 +127,9 @@ export default async function handler(req, res) {
       case 'pm_datei_upload':  return res.status(200).json(await pmDateiUpload(req.body));
       case 'pm_datei_list':    return res.status(200).json(await pmDateiList(req.body.projekt_id));
       case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body));
+      case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id));
+      case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id));
+      case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -1803,11 +1807,21 @@ async function addMaterial(b) {
     kategorie: b.kategorie ? String(b.kategorie).slice(0, 60) : null,
     status: b.status ? String(b.status).slice(0, 40) : 'offen',
   };
+  if (b.einzelpreis != null && b.einzelpreis !== '') row.einzelpreis = num(b.einzelpreis);
   if (!row.bezeichnung) throw new Error('bezeichnung nötig');
   try {
     const r = await sbWrite('POST', 'gs_material', row);
     return { ok: true, row: Array.isArray(r) ? r[0] : r };
-  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+  } catch (e) {
+    if (isNoTable(e)) return { notMigrated: true };
+    // einzelpreis-Spalte fehlt (alte gs_material) → ohne Preis speichern, kein 500.
+    if ('einzelpreis' in row && /einzelpreis|column|PGRST204/i.test((e && e.message) || '')) {
+      const { einzelpreis, ...base } = row;
+      const r = await sbWrite('POST', 'gs_material', base);
+      return { ok: true, row: Array.isArray(r) ? r[0] : r, preisNotMigrated: true };
+    }
+    throw e;
+  }
 }
 
 async function updMaterial(b) {
@@ -1901,6 +1915,121 @@ async function pmDateiDel(b) {
   const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
   if (!r.ok) return { error: 'Löschen fehlgeschlagen' };
   return { ok: true };
+}
+
+// ── PDF-Export pro Abschnitt (wiederverwendet lib/pdf.buildPdf) ────────────
+// Liefert das PDF als base64 zurück; das Cockpit macht daraus einen Download.
+function pdfResult(buf, filename) {
+  return { ok: true, filename, pdf_base64: Buffer.from(buf).toString('base64') };
+}
+function chf(n) { return 'CHF ' + Number(n || 0).toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+async function projektHead(projektId) {
+  const pr = await sbGet(`gs_projekte?id=eq.${projektId}&select=name,projektnummer,standort&limit=1`).catch(() => []);
+  return (pr && pr[0]) || {};
+}
+
+async function exportMaterial(projektId) {
+  projektId = uuid(projektId);
+  const p = await projektHead(projektId);
+  const mat = await sbGet(`gs_material?projekt_id=eq.${projektId}&select=*&order=created_at.desc`).catch(() => []);
+  const blocks = [
+    { t: 'h1', text: 'Materialliste' },
+    { t: 'kv', label: 'Projekt', value: p.name || '–' },
+    { t: 'kv', label: 'Projektnummer', value: p.projektnummer || '–' },
+    { t: 'kv', label: 'Datum', value: new Date().toISOString().slice(0, 10) },
+    { t: 'sp', size: 8 },
+    { t: 'h2', text: `Positionen (${mat.length})` },
+  ];
+  let sum = 0;
+  if (!mat.length) blocks.push({ t: 'text', text: 'Kein Material erfasst.' });
+  for (const m of mat) {
+    const menge = m.menge != null ? Number(m.menge) : null;
+    const preis = m.einzelpreis != null ? Number(m.einzelpreis) : null;
+    const zeile = (preis != null && menge != null) ? menge * preis : null;
+    if (zeile != null) sum += zeile;
+    const mengeTxt = [menge != null ? menge : '', m.einheit || ''].filter((x) => x !== '').join(' ') || '—';
+    const val = [mengeTxt, preis != null ? `à ${chf(preis)}` : '', zeile != null ? `= ${chf(zeile)}` : '', m.status ? `(${m.status})` : '']
+      .filter(Boolean).join('  ');
+    blocks.push({ t: 'kv', label: String(m.bezeichnung || '–').slice(0, 46), value: val });
+  }
+  blocks.push({ t: 'sp', size: 6 });
+  blocks.push({ t: 'kv', label: 'Summe Material', value: chf(sum) });
+  blocks.push({ t: 'sp', size: 8 });
+  blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
+  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Materialliste_${(p.projektnummer || 'projekt')}.pdf`);
+}
+
+async function exportRapporte(projektId) {
+  projektId = uuid(projektId);
+  const p = await projektHead(projektId);
+  let raps = [];
+  try { raps = await sbGet(`gs_tagesrapporte?projekt_id=eq.${projektId}&select=*&order=datum.asc`); } catch (_) { raps = []; }
+  // Techniker-Namen anreichern.
+  const uids = [...new Set(raps.map((r) => r.techniker_user_id).filter(Boolean))];
+  const nameByUid = {};
+  if (uids.length) {
+    const ts = await sbGet(`gs_techniker?user_id=in.(${uids.join(',')})&select=user_id,name`).catch(() => []);
+    for (const t of ts) if (t.user_id) nameByUid[t.user_id] = t.name;
+  }
+  // Nach KW gruppieren.
+  const groups = new Map();
+  for (const r of raps) { const k = `${r.jahr}-${String(r.woche).padStart(2, '0')}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+  const blocks = [
+    { t: 'h1', text: 'Arbeitsrapporte' },
+    { t: 'kv', label: 'Projekt', value: p.name || '–' },
+    { t: 'kv', label: 'Projektnummer', value: p.projektnummer || '–' },
+    { t: 'kv', label: 'Rapporte', value: String(raps.length) },
+    { t: 'sp', size: 8 },
+  ];
+  let total = 0;
+  const keys = [...groups.keys()].sort();
+  for (const k of keys) {
+    const rows = groups.get(k);
+    let sumH = 0; let anyOffen = false;
+    rows.forEach((r) => { sumH += Number(r.gesamtstunden || 0); if ((r.abrechnung_status || 'offen') !== 'verrechnet') anyOffen = true; });
+    total += sumH;
+    const [jahr, woche] = k.split('-');
+    blocks.push({ t: 'h2', text: `KW ${Number(woche)}/${jahr} · ${sumH.toFixed(1)} h · ${anyOffen ? 'offen' : 'verrechnet'}` });
+    for (const r of rows) {
+      const arb = (Array.isArray(r.arbeiten) ? r.arbeiten.join(' · ') : (r.arbeiten || '')).slice(0, 70);
+      blocks.push({ t: 'kv', label: `${r.datum} · ${nameByUid[r.techniker_user_id] || 'Techniker'}`, value: `${Number(r.gesamtstunden || 0)} h  ${arb}` });
+    }
+    blocks.push({ t: 'sp', size: 4 });
+  }
+  if (!raps.length) blocks.push({ t: 'text', text: 'Keine Rapporte auf diesem Projekt.' });
+  blocks.push({ t: 'sp', size: 4 });
+  blocks.push({ t: 'kv', label: 'Total Stunden', value: `${total.toFixed(1)} h` });
+  blocks.push({ t: 'sp', size: 8 });
+  blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
+  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Arbeitsrapporte_${(p.projektnummer || 'projekt')}.pdf`);
+}
+
+async function exportRechnungen(projektId) {
+  projektId = uuid(projektId);
+  const p = await projektHead(projektId);
+  const rechs = await sbGet(`gs_rechnungen?projekt_id=eq.${projektId}&select=*&order=created_at.desc`).catch(() => []);
+  const blocks = [
+    { t: 'h1', text: 'Rechnungs-History' },
+    { t: 'kv', label: 'Projekt', value: p.name || '–' },
+    { t: 'kv', label: 'Projektnummer', value: p.projektnummer || '–' },
+    { t: 'kv', label: 'Rechnungen', value: String(rechs.length) },
+    { t: 'sp', size: 8 },
+    { t: 'h2', text: 'Rechnungen' },
+  ];
+  let sum = 0;
+  if (!rechs.length) blocks.push({ t: 'text', text: 'Keine Rechnungen zu diesem Projekt.' });
+  for (const r of rechs) {
+    sum += Number(r.betrag || 0);
+    const datum = r.created_at ? String(r.created_at).slice(0, 10) : '';
+    const val = [chf(r.betrag), r.stunden != null ? `${r.stunden} h × ${chf(r.stundensatz)}` : '', r.status || '', datum].filter(Boolean).join('  ·  ');
+    blocks.push({ t: 'kv', label: String(r.rechnungsnummer || 'Rechnung').slice(0, 40), value: val });
+  }
+  blocks.push({ t: 'sp', size: 6 });
+  blocks.push({ t: 'kv', label: 'Gesamtsumme', value: chf(sum) });
+  blocks.push({ t: 'sp', size: 8 });
+  blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
+  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Rechnungen_${(p.projektnummer || 'projekt')}.pdf`);
 }
 
 // Storage-Helfer (Muster aus api/projectflow.js).

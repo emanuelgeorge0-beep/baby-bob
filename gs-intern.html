@@ -450,6 +450,7 @@
   .gal .it .doc{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);font-size:10.5px;padding:6px;text-align:center;}
   .gal .it .doc .ic{font-size:26px;}
   .gal .it .del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.62);border:none;color:#fff;width:22px;height:22px;border-radius:50%;font-size:13px;cursor:pointer;line-height:1;}
+  .gal .it .dl-file{position:absolute;top:4px;left:4px;background:rgba(0,0,0,.62);color:var(--gold);width:22px;height:22px;border-radius:50%;font-size:12px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;}
   .gal .it .cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff;font-size:9.5px;padding:10px 5px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .kw-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 2px 7px;}
   .kw-row .kw-t{font-size:12px;font-weight:700;color:var(--txt);}
@@ -1389,10 +1390,12 @@ function paintProjektDetail(d){
   else {
     dateiInner='<div class="gal">'+dateien.map(function(f){
       var ic=pmFileIcon(f.contentType,f.name);
+      var dl=f.url?(f.url+(f.url.indexOf('?')>-1?'&':'?')+'download='+encodeURIComponent(f.name)):'#';
       var body = ic==='img'&&f.url
         ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener"><img src="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"/></a>'
         : '<a href="'+esc(f.url||'#')+'" target="_blank" rel="noopener" class="doc"><span class="ic">'+(ic==='img'?'🖼️':ic)+'</span><span>'+esc(f.name)+'</span></a>';
       return '<div class="it">'+body+'<span class="cap">'+esc(f.name)+'</span>'+
+        '<a class="dl-file" href="'+esc(dl)+'" download="'+esc(f.name)+'" title="Herunterladen">⬇</a>'+
         '<button class="del" data-delfile="'+esc(f.path)+'" title="Löschen">×</button></div>';
     }).join('')+'</div>';
   }
@@ -1428,7 +1431,7 @@ function paintProjektDetail(d){
           '<div class="list">'+items+'</div>';
       }).join('');
       var sumLine='<div class="sum-line"><span>Total erfasste Stunden</span><b>'+totalH.toFixed(1)+' h</b></div>';
-      rapSec=pmSec('Arbeitsrapporte ('+raps.length+')',sumLine+rapHtml);
+      rapSec=pmSec('Arbeitsrapporte ('+raps.length+')',sumLine+rapHtml,'<button class="chip" id="pm-rap-pdf" style="font-size:11px">⬇ PDF</button>');
     }
   }
 
@@ -1447,7 +1450,7 @@ function paintProjektDetail(d){
     }).join('')+'</div>'+
     '<div class="sum-line"><span>Total ('+rechs.length+' Rechnung'+(rechs.length>1?'en':'')+')</span><b>CHF '+rSum.toLocaleString('de-CH',{minimumFractionDigits:2})+'</b></div>';
   }
-  var rechSec=pmSec('Rechnungs-History',rechInner);
+  var rechSec=pmSec('Rechnungs-History',rechInner, rechs.length?'<button class="chip" id="pm-rech-pdf" style="font-size:11px">⬇ PDF</button>':'');
 
   // Tätigkeiten
   var taetInner;
@@ -1471,14 +1474,22 @@ function paintProjektDetail(d){
   if(!d.mig.material){ matInner=migRow('Materialliste noch nicht migriert.'); }
   else if(!d.material.length){ matInner='<div class="empty" style="padding:12px">Noch kein Material erfasst.</div>'; }
   else {
+    var matSum=0;
     matInner='<div class="list">'+d.material.map(function(m){
+      var menge=(m.menge!=null)?Number(m.menge):null, preis=(m.einzelpreis!=null)?Number(m.einzelpreis):null;
+      var zeile=(menge!=null&&preis!=null)?menge*preis:null; if(zeile!=null) matSum+=zeile;
       return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(m.bezeichnung)+'</div>'+pmPill(m.status||'offen',pmStatusColor(m.status))+'</div>'+
         '<div class="meta">'+((m.menge!=null)?'<span>'+esc(m.menge)+(m.einheit?' '+esc(m.einheit):'')+'</span>':'')+
+          (preis!=null?'<span class="dot">à CHF '+preis.toLocaleString('de-CH',{minimumFractionDigits:2})+'</span>':'')+
+          (zeile!=null?'<span class="dot" style="color:var(--gold)">CHF '+zeile.toLocaleString('de-CH',{minimumFractionDigits:2})+'</span>':'')+
           (m.kategorie?'<span class="dot">'+esc(m.kategorie)+'</span>':'')+
           '<span class="dot"><a data-delmat="'+esc(m.id)+'" style="color:var(--muted2);cursor:pointer">entfernen</a></span></div></div>';
-    }).join('')+'</div>';
+    }).join('')+'</div>'+
+    (matSum>0?'<div class="sum-line"><span>Summe Material</span><b>CHF '+matSum.toLocaleString('de-CH',{minimumFractionDigits:2})+'</b></div>':'');
   }
-  var matSec=pmSec('Materialliste',matInner, d.mig.material?'<button class="chip" id="pm-mat-add" style="font-size:11px">＋ hinzufügen</button>':'');
+  var matAct=(d.mig.material?'<button class="chip" id="pm-mat-add" style="font-size:11px">＋ hinzufügen</button>':'')+
+    ((d.mig.material&&d.material.length)?'<button class="chip" id="pm-mat-pdf" style="font-size:11px;margin-left:6px">⬇ PDF</button>':'');
+  var matSec=pmSec('Materialliste',matInner,matAct);
 
   // Blockaden (bestehendes Modul)
   var blInner;
@@ -1503,6 +1514,9 @@ function paintProjektDetail(d){
   var xa=$('pm-taet-add'); if(xa) xa.onclick=openTaetigkeitAdd;
   var ma=$('pm-mat-add'); if(ma) ma.onclick=openMaterialAdd;
   var fa=$('pm-file-add'); if(fa) fa.onclick=openDateiUpload;
+  var mpdf=$('pm-mat-pdf'); if(mpdf) mpdf.onclick=function(){ pmExportPdf('pm_export_material'); };
+  var rpdf=$('pm-rap-pdf'); if(rpdf) rpdf.onclick=function(){ pmExportPdf('pm_export_rapporte'); };
+  var repdf=$('pm-rech-pdf'); if(repdf) repdf.onclick=function(){ pmExportPdf('pm_export_rechnungen'); };
   var blall=$('pm-bl-all'); if(blall) blall.onclick=function(){ _bobViewParams={gefunden:true,projekt:{name:p.name},blockaden:d.blockaden.filter(function(b){return ['offen','in_bearbeitung','eskaliert'].indexOf(b.status)>-1;}),alle:d.blockaden}; go('blockaden'); };
   Array.prototype.forEach.call($('view').querySelectorAll('[data-untech]'),function(b){ b.onclick=function(){ pmUnassignTech(b.getAttribute('data-untech')); }; });
   Array.prototype.forEach.call($('view').querySelectorAll('[data-deltaet]'),function(b){ b.onclick=function(){ pmDel('pm_taetigkeit_del',b.getAttribute('data-deltaet')); }; });
@@ -1547,6 +1561,23 @@ function pmUploadFiles(files){
 function pmDeleteDatei(path){
   api('pm_datei_del',{projekt_id:_pmProjektId,path:path}).then(function(r){
     if(r&&r.error){ toast(r.error); return; } loadProjekt(); toast('Gelöscht');
+  }).catch(function(){ toast('Fehler'); });
+}
+// PDF-Export eines Abschnitts (Material/Rapporte/Rechnungen) → base64 → Download.
+// Nutzt die bestehende PDF-Engine lib/pdf.js serverseitig (kein neuer Renderer).
+function pmExportPdf(action){
+  toast('Erstelle PDF…');
+  api(action,{projekt_id:_pmProjektId}).then(function(d){
+    if(!d||!d.pdf_base64){ toast(d&&d.error?d.error:'Export fehlgeschlagen'); return; }
+    try{
+      var bin=atob(d.pdf_base64), len=bin.length, arr=new Uint8Array(len);
+      for(var i=0;i<len;i++) arr[i]=bin.charCodeAt(i);
+      var blob=new Blob([arr],{type:'application/pdf'}), url=URL.createObjectURL(blob);
+      var a=document.createElement('a'); a.href=url; a.download=d.filename||'export.pdf';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); },4000);
+      toast('PDF geladen');
+    }catch(e){ toast('Download fehlgeschlagen'); }
   }).catch(function(){ toast('Fehler'); });
 }
 function pmDel(action,id){ api(action,{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
@@ -1729,6 +1760,7 @@ function openMaterialAdd(){
     '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
       '<input class="field" id="mm-menge" placeholder="Menge" type="number" step="0.5" style="max-width:120px"/>'+
       '<input class="field" id="mm-einheit" placeholder="Einheit (Stk, m, kg)"/></div>'+
+    '<input class="field" id="mm-preis" placeholder="Einzelpreis CHF (optional)" type="number" step="0.05" style="margin-top:8px"/>'+
     '<input class="field" id="mm-kat" placeholder="Kategorie (Sanitär, Heizung, Lüftung)" style="margin-top:8px"/>'+
     '<div class="sec-t">Status</div>'+pmSelect('mm-status',statusOpts,'offen')+
     '<div class="login-msg" id="mm-msg" style="margin-top:8px"></div>'+
@@ -1737,9 +1769,9 @@ function openMaterialAdd(){
   $('mm-cancel').onclick=closeSheet;
   $('mm-save').onclick=function(){
     var bez=($('mm-bez')||{}).value; if(!((bez||'').trim())){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Bezeichnung erforderlich'; return; }
-    api('pm_material_add',{projekt_id:_pmProjektId,bezeichnung:bez,menge:($('mm-menge')||{}).value,einheit:($('mm-einheit')||{}).value,kategorie:($('mm-kat')||{}).value,status:($('mm-status')||{}).value}).then(function(r){
+    api('pm_material_add',{projekt_id:_pmProjektId,bezeichnung:bez,menge:($('mm-menge')||{}).value,einheit:($('mm-einheit')||{}).value,einzelpreis:($('mm-preis')||{}).value,kategorie:($('mm-kat')||{}).value,status:($('mm-status')||{}).value}).then(function(r){
       if(r&&r.notMigrated){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Tabelle noch nicht migriert.'; return; }
-      closeSheet(); loadProjekt(); toast('Hinzugefügt');
+      closeSheet(); loadProjekt(); toast(r&&r.preisNotMigrated?'Hinzugefügt (Preis: einzelpreis-Spalte fehlt)':'Hinzugefügt');
     }).catch(function(){ $('mm-msg').className='login-msg err'; $('mm-msg').textContent='Fehler'; });
   };
 }

@@ -31,6 +31,10 @@ ALTER TABLE gs_projekt_techniker ADD COLUMN IF NOT EXISTS stundensatz DECIMAL(8,
 -- 'offen' = noch nicht verrechnet, 'verrechnet' = in Rechnung übernommen.
 ALTER TABLE gs_tagesrapporte ADD COLUMN IF NOT EXISTS abrechnung_status TEXT DEFAULT 'offen';
 
+-- ── (Material-Preise) Einzelpreis pro Position, falls gs_material älter ist ──
+-- (session6-Migration legt die Spalte i. d. R. schon an; hier idempotent absichern.)
+ALTER TABLE gs_material ADD COLUMN IF NOT EXISTS einzelpreis DECIMAL(10,2) DEFAULT 0;
+
 -- ── 4. Storage-Bucket 'projektdateien' (privat; nur serverseitig, signierte URLs) ──
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('projektdateien', 'projektdateien', false)
