@@ -426,6 +426,36 @@
     .wx-city:hover{border-color:var(--gold-line);transform:translateY(-1px);}
     .btn:hover{box-shadow:0 12px 26px -12px rgba(201,169,97,.95);}
   }
+  /* ── Projekt-Detail scharf: Techniker-Karten (Master-Optik, aus app.html gs-tech-card) ── */
+  .tcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px;display:flex;gap:12px;align-items:flex-start;}
+  .tcard.pick{cursor:pointer;transition:border-color .15s ease,background .15s ease,transform .12s ease;}
+  .tcard.pick:active{transform:scale(.99);}
+  .tcard.sel{border-color:var(--gold);background:var(--gold-soft);}
+  .tcard .av{width:44px;height:44px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--gold-soft);border:1px solid var(--gold-line);}
+  .tcard .mn{flex:1;min-width:0;}
+  .tcard .tp{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .tcard .nm{font-weight:700;font-size:14.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tcard .rt{font-size:12px;font-weight:800;color:var(--gold);white-space:nowrap;}
+  .tcard .ql{font-size:12px;color:var(--muted);margin-top:2px;}
+  .tcard .hk{font-size:11px;letter-spacing:-1px;vertical-align:middle;opacity:.92;}
+  .tcard .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;}
+  .tcard .tag{font-size:10.5px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);}
+  .tcard .tag.on{border-color:var(--gold-line);color:var(--gold);background:var(--gold-soft);}
+  .tcard .free{font-size:11px;color:#3dd68c;display:inline-flex;align-items:center;gap:4px;margin-top:6px;}
+  .tarif-chip{font-size:12px;font-weight:700;color:var(--gold);border:1px solid var(--gold-line);border-radius:20px;padding:2px 10px;background:var(--gold-soft);}
+  /* Datei-Galerie */
+  .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:9px;}
+  .gal .it{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);aspect-ratio:1;display:flex;align-items:center;justify-content:center;}
+  .gal .it img{width:100%;height:100%;object-fit:cover;display:block;}
+  .gal .it .doc{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);font-size:10.5px;padding:6px;text-align:center;}
+  .gal .it .doc .ic{font-size:26px;}
+  .gal .it .del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.62);border:none;color:#fff;width:22px;height:22px;border-radius:50%;font-size:13px;cursor:pointer;line-height:1;}
+  .gal .it .cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff;font-size:9.5px;padding:10px 5px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .kw-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 2px 7px;}
+  .kw-row .kw-t{font-size:12px;font-weight:700;color:var(--txt);}
+  .kw-row .kw-s{font-size:11px;color:var(--muted);}
+  .sum-line{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border:1px dashed var(--gold-line);border-radius:12px;background:var(--gold-soft);margin-top:4px;}
+  .sum-line b{color:var(--gold);font-size:15px;}
 </style>
 </head>
 <body>
@@ -1274,6 +1304,39 @@ function loadProjekt(){
 function migRow(txt){ return '<div class="empty" style="padding:12px;font-size:12.5px">'+esc(txt)+'<br><span style="color:var(--muted2)">scripts/master_cockpit_session6_pm.sql in Supabase ausführen.</span></div>'; }
 function pmSec(title,inner,action){ return '<div class="cc-sec" style="display:flex;justify-content:space-between;align-items:center">'+esc(title)+(action||'')+'</div>'+inner; }
 
+// ── Techniker-Karte (Master-Optik, Google-★-Rating, Herkunft-Flags) ──
+function pmHerkunftFlags(h){ return h==='CH_AT' ? '🇨🇭🇦🇹' : '🇨🇭'; }
+function pmTarifOptions(sel){ return [65,70,72].map(function(v){ return {v:v,t:v+' CHF/h'}; }); }
+// t = normalisierter Techniker (aus pm_techniker) bzw. Zuweisung (aus pm_projekt).
+function pmTechCardHtml(t,opts){
+  opts=opts||{};
+  var tags=(t.specialization||[]).slice(0,4).map(function(s){ return '<span class="tag">'+esc(s)+'</span>'; }).join('');
+  var rating=(t.rating!=null)?('★ '+Number(t.rating).toFixed(1)):'';
+  var free=(t.verfuegbar!==false)?'<div class="free">● Verfügbar</div>':'';
+  var right='';
+  if(opts.tarif!=null) right='<span class="tarif-chip">'+esc(t.stundensatz!=null?t.stundensatz+' CHF/h':opts.tarif)+'</span>';
+  else if(rating) right='<span class="rt">'+rating+'</span>';
+  var actionRow=opts.actionHtml||'';
+  return '<div class="tcard'+(opts.pick?' pick':'')+(opts.sel?' sel':'')+'"'+(opts.dataTid?(' data-tid="'+esc(opts.dataTid)+'"'):'')+'>'+
+    '<div class="av">'+esc(t.photo_emoji||'👷')+'</div>'+
+    '<div class="mn">'+
+      '<div class="tp"><span class="nm">'+esc(t.name||'Techniker')+' <span class="hk">'+pmHerkunftFlags(t.herkunft)+'</span></span>'+right+'</div>'+
+      (t.qualification?'<div class="ql">'+esc(t.qualification)+'</div>':'')+
+      (t.taetigkeit?'<div class="ql">🔧 '+esc(t.taetigkeit)+'</div>':'')+
+      (tags?'<div class="tags">'+tags+'</div>':'')+
+      free+actionRow+
+    '</div>'+
+  '</div>';
+}
+function pmFileIcon(ct,name){
+  ct=String(ct||''); name=String(name||'').toLowerCase();
+  if(/^image\//.test(ct)||/\.(png|jpe?g|webp|gif|heic)$/.test(name)) return 'img';
+  if(/pdf/.test(ct)||/\.pdf$/.test(name)) return '📄';
+  if(/\.(dwg|dxf)$/.test(name)) return '📐';
+  return '📎';
+}
+function pmKW(y,w){ return 'KW '+w+'/'+String(y).slice(2); }
+
 function paintProjektDetail(d){
   var p=d.projekt||{}, k=d.kunde;
   var head='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Projekte</span></div>'+
@@ -1281,8 +1344,20 @@ function paintProjektDetail(d){
     '<div class="meta" style="margin-bottom:10px">'+pmPill(p.status||'—',pmStatusColor(p.status))+
       (p.projektnummer?'<span class="dot">'+esc(p.projektnummer)+'</span>':'')+
       (p.standort?'<span class="dot">'+esc(p.standort)+'</span>':'')+
-      (p.bereich?'<span class="dot">'+esc(p.bereich)+'</span>':'')+'</div>'+
+      (p.bereich?'<span class="dot">'+esc(p.bereich)+'</span>':'')+
+      (p.stundensatz!=null?'<span class="dot">'+esc(p.stundensatz)+' CHF/h</span>':'')+'</div>'+
+    ((p.projektadresse||p.projektleiter)?'<div class="meta" style="margin-bottom:10px">'+
+      (p.projektadresse?'<span>📍 '+esc(p.projektadresse)+'</span>':'')+
+      (p.projektleiter?'<span class="dot">👷 PL: '+esc(p.projektleiter)+'</span>':'')+'</div>':'')+
     '<button class="chip" id="pm-edit" style="margin-bottom:6px">✏️ Projekt bearbeiten</button>';
+
+  // Ansprechperson (Projekt-Kontakt vor Ort)
+  var apInner;
+  if(p.ansprechperson||p.ansprech_telefon||p.ansprech_email){
+    apInner='<div class="lcard"><div class="top"><div class="nm">'+esc(p.ansprechperson||'Ansprechperson')+'</div></div>'+
+      '<div class="meta" style="margin-top:10px;gap:8px">'+(contactBtns(p.ansprech_telefon,p.ansprech_email)||'<span style="color:var(--muted2)">Keine Kontaktdaten</span>')+'</div></div>';
+  } else { apInner='<div class="empty" style="padding:12px">Keine Ansprechperson erfasst. Über „Projekt bearbeiten" ergänzen.</div>'; }
+  var apSec=pmSec('Ansprechperson',apInner);
 
   // Kunde
   var kundeInner;
@@ -1294,32 +1369,100 @@ function paintProjektDetail(d){
   } else { kundeInner='<div class="empty" style="padding:12px">Kein Kunde zugeordnet.</div>'; }
   var kundeSec=pmSec('Kunde',kundeInner,'<button class="chip" id="pm-kunde-set" style="font-size:11px">'+(k?'ändern':'zuordnen')+'</button>');
 
-  // Techniker
+  // Techniker (Master-Karten mit Google-★, Herkunft-Flag, Tarif)
   var techInner;
   if(!d.mig.techniker){ techInner=migRow('Techniker-Zuweisung noch nicht migriert.'); }
   else if(!d.techniker.length){ techInner='<div class="empty" style="padding:12px">Noch kein Techniker zugewiesen.</div>'; }
   else {
     techInner='<div class="list">'+d.techniker.map(function(t){
-      return '<div class="lcard"><div class="top"><div class="nm">🔧 '+esc(t.name||'Techniker')+'</div>'+
-        '<span class="chip" data-untech="'+esc(t.id)+'" style="font-size:11px">entfernen</span></div>'+
-        (t.taetigkeit?'<div class="meta"><span>'+esc(t.taetigkeit)+'</span></div>':'')+
-        '<div class="meta" style="margin-top:8px;gap:8px">'+contactBtns(t.telefon,t.email)+'</div></div>';
+      var action='<div class="meta" style="margin-top:9px;gap:8px">'+contactBtns(t.telefon,t.email)+
+        '<span class="chip" data-untech="'+esc(t.id)+'" style="font-size:11px">entfernen</span></div>';
+      return pmTechCardHtml(t,{tarif:(p.stundensatz!=null?p.stundensatz+' CHF/h':'Tarif offen'),actionHtml:action});
     }).join('')+'</div>';
   }
   var techSec=pmSec('Techniker',techInner, d.mig.techniker?'<button class="chip" id="pm-tech-add" style="font-size:11px">＋ zuweisen</button>':'');
+
+  // ── Projektdateien / Fotos & Pläne (Storage) ──
+  var dateien=d.dateien||[];
+  var dateiInner;
+  if(!dateien.length){ dateiInner='<div class="empty" style="padding:12px">Noch keine Dateien. Fotos oder Pläne (PDF/Bild) hochladen.</div>'; }
+  else {
+    dateiInner='<div class="gal">'+dateien.map(function(f){
+      var ic=pmFileIcon(f.contentType,f.name);
+      var body = ic==='img'&&f.url
+        ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener"><img src="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"/></a>'
+        : '<a href="'+esc(f.url||'#')+'" target="_blank" rel="noopener" class="doc"><span class="ic">'+(ic==='img'?'🖼️':ic)+'</span><span>'+esc(f.name)+'</span></a>';
+      return '<div class="it">'+body+'<span class="cap">'+esc(f.name)+'</span>'+
+        '<button class="del" data-delfile="'+esc(f.path)+'" title="Löschen">×</button></div>';
+    }).join('')+'</div>';
+  }
+  var dateiSec=pmSec('Dateien & Fotos ('+dateien.length+')',dateiInner,'<button class="chip" id="pm-file-add" style="font-size:11px">＋ hochladen</button>');
+
+  // ── Arbeitsrapporte (bestehende gs_tagesrapporte), pro KW gruppiert + Abrechnungsstatus ──
+  var rapSec;
+  if(d.mig.rapporte===false){ rapSec=pmSec('Arbeitsrapporte',migRow('Abrechnungs-Status noch nicht migriert.')); }
+  else {
+    var raps=d.rapporte||[];
+    if(!raps.length){ rapSec=pmSec('Arbeitsrapporte','<div class="empty" style="padding:12px">Noch keine Rapporte auf diesem Projekt.</div>'); }
+    else {
+      // nach KW gruppieren (Reihenfolge: neueste zuerst).
+      var groups={}, order=[];
+      raps.forEach(function(r){ var key=(r.jahr||0)+'-'+(r.woche||0); if(!groups[key]){ groups[key]=[]; order.push(key); } groups[key].push(r); });
+      var totalH=0; raps.forEach(function(r){ totalH+=Number(r.gesamtstunden||0); });
+      var rapHtml=order.map(function(key){
+        var rows=groups[key], wk=rows[0];
+        var sumH=0, offenIds=[], verrIds=[], anyOffen=false;
+        rows.forEach(function(r){ sumH+=Number(r.gesamtstunden||0); if((r.abrechnung_status||'offen')==='verrechnet') verrIds.push(r.id); else { offenIds.push(r.id); anyOffen=true; } });
+        var allIds=rows.map(function(r){return r.id;});
+        var badge=anyOffen?pmPill('offen','var(--gold)'):pmPill('verrechnet','#3dd68c');
+        var toggle=anyOffen
+          ? '<span class="chip" data-verr="'+esc(allIds.join(','))+'" data-vs="verrechnet" style="font-size:11px">✓ verrechnet</span>'
+          : '<span class="chip" data-verr="'+esc(allIds.join(','))+'" data-vs="offen" style="font-size:11px">↺ offen</span>';
+        var items=rows.map(function(r){
+          var arb=(Array.isArray(r.arbeiten)?r.arbeiten.join(' · '):(r.arbeiten||''));
+          return '<div class="lcard"><div class="top"><div class="nm" style="font-size:13.5px">'+deDate(r.datum)+
+            (r.techniker_name?' · '+esc(r.techniker_name):'')+'</div><span class="dot">'+esc(Number(r.gesamtstunden||0))+' h</span></div>'+
+            (arb?'<div class="meta"><span>'+esc(arb.slice(0,140))+'</span></div>':'')+'</div>';
+        }).join('');
+        return '<div class="kw-row"><span class="kw-t">'+pmKW(wk.jahr,wk.woche)+' · '+sumH.toFixed(1)+' h '+badge+'</span>'+toggle+'</div>'+
+          '<div class="list">'+items+'</div>';
+      }).join('');
+      var sumLine='<div class="sum-line"><span>Total erfasste Stunden</span><b>'+totalH.toFixed(1)+' h</b></div>';
+      rapSec=pmSec('Arbeitsrapporte ('+raps.length+')',sumLine+rapHtml);
+    }
+  }
+
+  // ── Rechnungs-History (bestehende gs_rechnungen) ──
+  var rechs=d.rechnungen||[];
+  var rechInner;
+  if(!rechs.length){ rechInner='<div class="empty" style="padding:12px">Noch keine Rechnungen zu diesem Projekt.</div>'; }
+  else {
+    var rSum=0; rechs.forEach(function(r){ rSum+=Number(r.betrag||0); });
+    var rStatusPill=function(s){ s=String(s||'').toLowerCase(); var c=s==='bezahlt'?'#3dd68c':(s==='versendet'?'var(--gold)':'var(--muted)'); return pmPill(s||'erstellt',c); };
+    rechInner='<div class="list">'+rechs.map(function(r){
+      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(r.rechnungsnummer||'Rechnung')+'</div>'+rStatusPill(r.status)+'</div>'+
+        '<div class="meta">'+(r.betrag!=null?'<span>CHF '+Number(r.betrag).toLocaleString('de-CH',{minimumFractionDigits:2})+'</span>':'')+
+          (r.stunden!=null?'<span class="dot">'+esc(r.stunden)+' h × '+esc(r.stundensatz||'')+'</span>':'')+
+          (r.created_at?'<span class="dot">'+deDate(r.created_at)+'</span>':'')+'</div></div>';
+    }).join('')+'</div>'+
+    '<div class="sum-line"><span>Total ('+rechs.length+' Rechnung'+(rechs.length>1?'en':'')+')</span><b>CHF '+rSum.toLocaleString('de-CH',{minimumFractionDigits:2})+'</b></div>';
+  }
+  var rechSec=pmSec('Rechnungs-History',rechInner);
 
   // Tätigkeiten
   var taetInner;
   if(!d.mig.taetigkeiten){ taetInner=migRow('Tätigkeiten noch nicht migriert.'); }
   else if(!d.taetigkeiten.length){ taetInner='<div class="empty" style="padding:12px">Noch keine Arbeiten erfasst.</div>'; }
   else {
+    var taetH=0; d.taetigkeiten.forEach(function(a){ taetH+=Number(a.stunden||0); });
     taetInner='<div class="list">'+d.taetigkeiten.map(function(a){
       return '<div class="lcard"><div class="top"><div class="nm" style="font-size:14px">'+esc(a.beschreibung)+'</div>'+
         '<span class="chip" data-deltaet="'+esc(a.id)+'" style="font-size:11px">×</span></div>'+
         '<div class="meta">'+(a.techniker_name?'<span>'+esc(a.techniker_name)+'</span>':'')+
           (a.datum?'<span class="dot">'+deDate(a.datum)+'</span>':'')+
           (a.stunden!=null?'<span class="dot">'+esc(a.stunden)+' h</span>':'')+'</div></div>';
-    }).join('')+'</div>';
+    }).join('')+'</div>'+
+    (taetH>0?'<div class="sum-line"><span>Summe erfasste Arbeiten</span><b>'+taetH.toFixed(1)+' h</b></div>':'');
   }
   var taetSec=pmSec('Erfasste Arbeiten',taetInner, d.mig.taetigkeiten?'<button class="chip" id="pm-taet-add" style="font-size:11px">＋ erfassen</button>':'');
 
@@ -1351,7 +1494,7 @@ function paintProjektDetail(d){
   }
   var blSec=pmSec('Blockaden ('+d.blockaden_offen+' offen)',blInner,'<button class="chip" id="pm-bl-all" style="font-size:11px">alle</button>');
 
-  $('view').innerHTML=head+kundeSec+techSec+taetSec+matSec+blSec;
+  $('view').innerHTML=head+kundeSec+apSec+techSec+dateiSec+rapSec+matSec+rechSec+taetSec+blSec;
 
   var back=$('pm-back'); if(back) back.onclick=renderProjektListe;
   $('pm-edit').onclick=function(){ openProjektEdit(p); };
@@ -1359,10 +1502,52 @@ function paintProjektDetail(d){
   var ta=$('pm-tech-add'); if(ta) ta.onclick=openTechAssign;
   var xa=$('pm-taet-add'); if(xa) xa.onclick=openTaetigkeitAdd;
   var ma=$('pm-mat-add'); if(ma) ma.onclick=openMaterialAdd;
+  var fa=$('pm-file-add'); if(fa) fa.onclick=openDateiUpload;
   var blall=$('pm-bl-all'); if(blall) blall.onclick=function(){ _bobViewParams={gefunden:true,projekt:{name:p.name},blockaden:d.blockaden.filter(function(b){return ['offen','in_bearbeitung','eskaliert'].indexOf(b.status)>-1;}),alle:d.blockaden}; go('blockaden'); };
   Array.prototype.forEach.call($('view').querySelectorAll('[data-untech]'),function(b){ b.onclick=function(){ pmUnassignTech(b.getAttribute('data-untech')); }; });
   Array.prototype.forEach.call($('view').querySelectorAll('[data-deltaet]'),function(b){ b.onclick=function(){ pmDel('pm_taetigkeit_del',b.getAttribute('data-deltaet')); }; });
   Array.prototype.forEach.call($('view').querySelectorAll('[data-delmat]'),function(b){ b.onclick=function(){ pmDel('pm_material_del',b.getAttribute('data-delmat')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-delfile]'),function(b){ b.onclick=function(){ pmDeleteDatei(b.getAttribute('data-delfile')); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-verr]'),function(b){ b.onclick=function(){ pmSetVerrechnet(b.getAttribute('data-verr').split(','),b.getAttribute('data-vs')); }; });
+}
+// ── Rapport-Abrechnung (KW) offen/verrechnet umschalten ──
+function pmSetVerrechnet(ids,status){
+  api('pm_rapport_verrechnet',{ids:ids,status:status}).then(function(r){
+    if(r&&r.notMigrated){ toast('Abrechnungs-Status nicht migriert'); return; }
+    loadProjekt(); toast(status==='verrechnet'?'Als verrechnet markiert':'Auf offen gesetzt');
+  }).catch(function(){ toast('Fehler'); });
+}
+// ── Datei-Upload (Fotos/Pläne) → Storage-Bucket 'projektdateien' ──
+function openDateiUpload(){
+  var inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*,application/pdf,.dwg,.dxf'; inp.multiple=true;
+  inp.onchange=function(){ var files=Array.prototype.slice.call(inp.files||[]); if(files.length) pmUploadFiles(files); };
+  inp.click();
+}
+function pmUploadFiles(files){
+  toast('Lade '+files.length+' Datei'+(files.length>1?'en':'')+' hoch…');
+  var chain=Promise.resolve(), okCount=0, errMsg='';
+  files.forEach(function(f){
+    chain=chain.then(function(){
+      if(f.size>12*1024*1024){ errMsg=f.name+' > 12 MB'; return; }
+      return new Promise(function(resolve){
+        var rd=new FileReader();
+        rd.onload=function(){
+          api('pm_datei_upload',{projekt_id:_pmProjektId,filename:f.name,contentType:f.type||'',data:String(rd.result)})
+            .then(function(r){ if(r&&r.ok) okCount++; else if(r&&r.error) errMsg=r.error; resolve(); })
+            .catch(function(){ errMsg='Upload fehlgeschlagen'; resolve(); });
+        };
+        rd.onerror=function(){ errMsg='Datei nicht lesbar'; resolve(); };
+        rd.readAsDataURL(f);
+      });
+    });
+  });
+  chain.then(function(){ loadProjekt(); toast(okCount?(okCount+' hochgeladen'+(errMsg?' · '+errMsg:'')):(errMsg||'Kein Upload')); });
+}
+function pmDeleteDatei(path){
+  api('pm_datei_del',{projekt_id:_pmProjektId,path:path}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; } loadProjekt(); toast('Gelöscht');
+  }).catch(function(){ toast('Fehler'); });
 }
 function pmDel(action,id){ api(action,{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
 function pmUnassignTech(id){ api('pm_tech_unassign',{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
@@ -1376,11 +1561,20 @@ function openProjektEdit(p){
   p=p||{};
   var statusOpts=PM_PROJ_STATUS.map(function(s){ return {v:s,t:cap(s)}; });
   var kundeOpts=_pmKunden.map(function(k){ return {v:k.id,t:(k.firma||k.kontaktperson||'Kunde')}; });
+  var tarifOpts=[{v:'',t:'— kein Tarif —'},{v:65,t:'65 CHF/h'},{v:70,t:'70 CHF/h'},{v:72,t:'72 CHF/h'},{v:95,t:'95 CHF/h'}];
   openSheet('<h3>'+(p.id?'Projekt bearbeiten':'Neues Projekt')+'</h3>'+
     '<input class="field" id="pe-name" placeholder="Projektname *" value="'+esc(p.name||'')+'"/>'+
     '<input class="field" id="pe-nr" placeholder="Projektnummer" value="'+esc(p.projektnummer||'')+'" style="margin-top:8px"/>'+
     '<input class="field" id="pe-ort" placeholder="Standort" value="'+esc(p.standort||'')+'" style="margin-top:8px"/>'+
+    '<input class="field" id="pe-adr" placeholder="Projektadresse (Baustelle)" value="'+esc(p.projektadresse||'')+'" style="margin-top:8px"/>'+
     '<input class="field" id="pe-bereich" placeholder="Bereich (z. B. Sanierung, HKLS)" value="'+esc(p.bereich||'')+'" style="margin-top:8px"/>'+
+    '<input class="field" id="pe-pl" placeholder="Projektleiter" value="'+esc(p.projektleiter||'')+'" style="margin-top:8px"/>'+
+    '<div class="sec-t">Ansprechperson vor Ort</div>'+
+    '<input class="field" id="pe-ap" placeholder="Name Ansprechperson" value="'+esc(p.ansprechperson||'')+'"/>'+
+    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+      '<input class="field" id="pe-ap-tel" placeholder="Telefon" value="'+esc(p.ansprech_telefon||'')+'"/>'+
+      '<input class="field" id="pe-ap-mail" placeholder="E-Mail" value="'+esc(p.ansprech_email||'')+'" type="email"/></div>'+
+    '<div class="sec-t">Stundentarif (Projekt)</div>'+pmSelect('pe-tarif',tarifOpts,p.stundensatz!=null?p.stundensatz:'')+
     '<div class="sec-t">Status</div>'+pmSelect('pe-status',statusOpts,p.status||'aktiv')+
     '<div class="sec-t">Kunde</div>'+pmSelect('pe-kunde',kundeOpts,p.kunde_id||'','— kein Kunde —')+
     '<div class="login-msg" id="pe-msg" style="margin-top:8px"></div>'+
@@ -1391,12 +1585,14 @@ function openProjektEdit(p){
     var name=($('pe-name')||{}).value; name=(name||'').trim();
     if(!name){ $('pe-msg').className='login-msg err'; $('pe-msg').textContent='Projektname erforderlich'; return; }
     var body={id:p.id||undefined,name:name,projektnummer:($('pe-nr')||{}).value,standort:($('pe-ort')||{}).value,
-      bereich:($('pe-bereich')||{}).value,status:($('pe-status')||{}).value,kunde_id:($('pe-kunde')||{}).value};
+      bereich:($('pe-bereich')||{}).value,status:($('pe-status')||{}).value,kunde_id:($('pe-kunde')||{}).value,
+      projektadresse:($('pe-adr')||{}).value,projektleiter:($('pe-pl')||{}).value,ansprechperson:($('pe-ap')||{}).value,
+      ansprech_telefon:($('pe-ap-tel')||{}).value,ansprech_email:($('pe-ap-mail')||{}).value,stundensatz:($('pe-tarif')||{}).value};
     var btn=$('pe-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
     api('pm_projekt_save',body).then(function(d){
       closeSheet();
       if(p.id){ loadProjekt(); } else if(d&&d.projekt&&d.projekt.id){ openProjekt(d.projekt.id); } else { renderProjektListe(); }
-      toast('Gespeichert');
+      toast(d&&d.extraNotMigrated?'Gespeichert (Zusatzfelder: SQL ausstehend)':'Gespeichert');
     }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('pe-msg').className='login-msg err'; $('pe-msg').textContent='Fehler beim Speichern'; });
   };
 }
@@ -1466,23 +1662,37 @@ function openKundeEdit(k,onDone){
 }
 
 // ── Techniker zuweisen ──
+// Techniker zuweisen – bestehende Karten-Optik (Avatar, ★-Rating, Herkunft-Flag),
+// schlank (kein Onboarding). Karte antippen = auswählen, dann Tarif + Tätigkeit.
+var _taPick=null;
 function openTechAssign(){
   api('pm_techniker').then(function(d){
     var techs=d.techniker||[];
     if(!techs.length){ toast('Keine Techniker im Pool'); return; }
-    var opts=techs.map(function(t){ return {v:t.id,t:(t.name||'Techniker')+(t.verfuegbar?' · frei':'')}; });
+    _taPick=null;
+    var cards=techs.map(function(t){ return pmTechCardHtml(t,{pick:true,dataTid:t.id}); }).join('');
+    var tarifOpts=[{v:65,t:'65 CHF/h'},{v:70,t:'70 CHF/h'},{v:72,t:'72 CHF/h'}];
     openSheet('<h3>Techniker zuweisen</h3>'+
-      '<div class="sec-t">Techniker</div>'+pmSelect('ta-tech',opts,'','— wählen —')+
+      '<div class="sec-t">Techniker wählen</div>'+
+      '<div class="list" id="ta-cards">'+cards+'</div>'+
+      '<div class="sec-t">Stundentarif</div>'+pmSelect('ta-tarif',tarifOpts,72)+
       '<input class="field" id="ta-taet" placeholder="Tätigkeit (z. B. Servicearbeiten)" style="margin-top:10px"/>'+
       '<div class="login-msg" id="ta-msg" style="margin-top:8px"></div>'+
       '<button class="btn btn-gold" id="ta-save" style="margin-top:12px">Zuweisen</button>'+
       '<button class="btn ghost" id="ta-cancel">Abbrechen</button>');
     $('ta-cancel').onclick=closeSheet;
+    Array.prototype.forEach.call($('ta-cards').querySelectorAll('.tcard'),function(c){
+      c.onclick=function(){
+        _taPick=c.getAttribute('data-tid');
+        Array.prototype.forEach.call($('ta-cards').querySelectorAll('.tcard'),function(x){ x.classList.remove('sel'); });
+        c.classList.add('sel');
+      };
+    });
     $('ta-save').onclick=function(){
-      var tid=($('ta-tech')||{}).value; if(!tid){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Bitte Techniker wählen'; return; }
-      api('pm_tech_assign',{projekt_id:_pmProjektId,techniker_id:tid,taetigkeit:($('ta-taet')||{}).value}).then(function(r){
+      if(!_taPick){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Bitte Techniker antippen'; return; }
+      api('pm_tech_assign',{projekt_id:_pmProjektId,techniker_id:_taPick,taetigkeit:($('ta-taet')||{}).value,stundensatz:($('ta-tarif')||{}).value}).then(function(r){
         if(r&&r.notMigrated){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Tabelle noch nicht migriert.'; return; }
-        closeSheet(); loadProjekt(); toast('Zugewiesen');
+        closeSheet(); loadProjekt(); toast(r&&r.tarifNotMigrated?'Zugewiesen (Tarif: SQL ausstehend)':'Zugewiesen');
       }).catch(function(){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Fehler'; });
     };
   }).catch(function(){ toast('Ladefehler'); });
