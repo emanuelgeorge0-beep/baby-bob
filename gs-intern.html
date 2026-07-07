@@ -1781,6 +1781,7 @@ function paintLizenz(){
     '<div class="sec-t" style="margin-top:0">Kunde (Partner-Account)</div>'+pmSelect('liz-partner',opts,_lizPartnerId)+
     '<div class="meta" style="margin:12px 0"><span style="color:var(--muted)">'+esc(p.email||'')+'</span>'+
       '<span class="dot">Freigeschaltet:</span> '+pmPill(frei+' von '+_lizFeatures.length,'var(--gold)')+'</div>'+
+    '<div class="meta" style="margin:-4px 0 12px"><span style="color:var(--muted2);font-size:11px">Account-ID: '+esc(p.user_id||'—')+' · muss im Partner unter ⚙️→Freischaltungen identisch sein</span></div>'+
     '<div class="list">'+_lizFeatures.map(function(f){
       var on=!!ent[f.key];
       return '<div class="lcard" style="opacity:'+(on?'1':'.6')+'"><div class="top">'+
@@ -1800,7 +1801,19 @@ function lizToggle(key){
   ent[key]=next; paintLizenz();      // optimistisch, rollt bei Fehler zurück
   entApi({action:'set',partner_user_id:p.user_id,feature_key:key,enabled:next}).then(function(d){
     if(d.error){ ent[key]=!next; paintLizenz(); toast(d.error); return; }
-    toast(next?'Freigeschaltet':'Gesperrt');
+    // DB-Wahrheit gegenlesen: frisch die Matrix neu laden und den Zustand aus der
+    // Tabelle übernehmen. So fliegt ein stiller Write-Fehler sofort auf (Toggle
+    // springt zurück), statt fälschlich „frei" zu zeigen.
+    var pid=p.user_id;
+    entApi({action:'list'}).then(function(dd){
+      if(dd&&!dd.error&&Array.isArray(dd.partners)){
+        _lizFeatures=dd.features||_lizFeatures; _lizPartners=dd.partners; _lizTableMissing=!!dd.tableMissing;
+        var cur=null; for(var i=0;i<_lizPartners.length;i++){ if(_lizPartners[i].user_id===pid) cur=_lizPartners[i]; }
+        var real=cur&&cur.entitlements&&!!cur.entitlements[key];
+        paintLizenz();
+        toast(real===next ? (next?'Freigeschaltet ✓':'Gesperrt ✓') : 'Nicht gespeichert – bitte erneut');
+      } else { toast(next?'Freigeschaltet':'Gesperrt'); }
+    }).catch(function(){ toast(next?'Freigeschaltet':'Gesperrt'); });
   }).catch(function(){ ent[key]=!next; paintLizenz(); toast('Verbindungsfehler'); });
 }
 

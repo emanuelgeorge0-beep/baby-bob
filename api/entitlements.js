@@ -31,7 +31,7 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Nur für Administratoren' });
     }
     switch (action) {
-      case 'mine': return await mine(res, me.id);
+      case 'mine': return await mine(res, me);
       case 'list': return await list(res);
       case 'set':  return await setEntitlement(res, req.body);
       default:     return res.status(400).json({ error: 'Unknown action' });
@@ -43,12 +43,17 @@ export default async function handler(req, res) {
 }
 
 // ── Selbstauskunft: eigene freigeschaltete Features ──
-async function mine(res, userId) {
-  const { features, tableMissing } = await getEnabledFeatures(userId);
+// IMMER frisch aus der DB (kein Cache); no-store-Header ist oben gesetzt. Gibt die
+// eigene user_id/email zurück → Master & Partner können abgleichen, ob die
+// Freischaltung auf DIESELBE partner_user_id geschrieben wurde (Fehlerquelle Nr. 1).
+async function mine(res, me) {
+  const { features, tableMissing } = await getEnabledFeatures(me.id);
   return res.status(200).json({
     features: [...features],           // freigeschaltete Keys
     all: await featureCatalog(),       // Katalog (key + label) für Upgrade-Hinweise
     tableMissing,
+    user_id: me.id,
+    email: me.email || null,
   });
 }
 
