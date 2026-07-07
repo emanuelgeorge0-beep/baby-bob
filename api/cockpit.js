@@ -10,6 +10,10 @@
 
 import { getWeather } from './weather.js';
 import { buildPdf } from '../lib/pdf.js';
+import { isEntitled } from '../lib/entitlements.js';
+
+// Signalisiert „darf der Aufrufer nicht" → Handler übersetzt zu HTTP 403.
+class Forbidden extends Error {}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -56,6 +60,65 @@ async function verifyMaster(token) {
 
 const STUFEN = ['neu', 'kontaktiert', 'angebot', 'gewonnen', 'verloren'];
 
+// ── Projektmanagement-Actions, die AUCH freigeschaltete Partner nutzen dürfen ──
+// Alle übrigen Cockpit-Actions (Leads, Umsatz, CRM, Margen …) bleiben Master-only.
+const PM_ACTIONS = new Set([
+  'pm_projekte', 'pm_projekt', 'pm_projekt_save', 'pm_kunden', 'pm_kunde_save',
+  'pm_techniker', 'pm_tech_assign', 'pm_tech_unassign', 'pm_taetigkeit_add', 'pm_taetigkeit_del',
+  'pm_material_add', 'pm_material_upd', 'pm_material_del', 'pm_rapport_verrechnet',
+  'pm_datei_upload', 'pm_datei_list', 'pm_datei_del',
+  'pm_export_material', 'pm_export_rapporte', 'pm_export_rechnungen',
+]);
+
+// Zugriffskontext bestimmen:
+//   • Master/Admin  → { isMaster:true,  partnerId:null }  (sieht ALLE Projekte)
+//   • Partner + PM  → { isMaster:false, partnerId:uid  }  (nur EIGENE Projekte,
+//                       nur wenn Feature 'projektmanagement' freigeschaltet ist)
+//   • sonst         → null  (→ 403)
+async function resolveAccess(token, action) {
+  if (!token) return null;
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) return null;
+  const user = await r.json().catch(() => null);
+  if (!user || !user.id) return null;
+  let role = null;
+  try {
+    const rows = await sbGet(`user_roles?user_id=eq.${user.id}&select=role&limit=1`);
+    role = rows?.[0]?.role || null;
+  } catch (_) { return null; }
+  // Master: exakt die Master-UUID mit Master/Admin-Rolle (unverändert streng).
+  if (user.id === MASTER_UID && (role === 'master' || role === 'gs_admin')) {
+    return { isMaster: true, partnerId: null, userId: user.id };
+  }
+  // Partner: NUR PM-Actions und NUR mit Entitlement 'projektmanagement'.
+  if (role === 'gs_partner' && PM_ACTIONS.has(action)) {
+    if (await isEntitled(user.id, 'projektmanagement')) {
+      return { isMaster: false, partnerId: user.id, userId: user.id };
+    }
+  }
+  return null;
+}
+
+// Server-seitige Datentrennung: Partner darf nur auf EIGENE Projekte zugreifen.
+// Master (scope.partnerId == null) → keine Prüfung. Sonst muss der Besitzer exakt
+// der Partner sein; jeder Fremd-/Master-/Nicht-vorhanden-Fall → 403 (Forbidden).
+async function requireOwnedProjekt(projektId, scope) {
+  if (!scope || !scope.partnerId) return;               // Master: Vollzugriff
+  const rows = await sbGet(`gs_projekte?id=eq.${uuid(projektId)}&select=partner_user_id&limit=1`).catch(() => []);
+  const owner = rows && rows[0] ? (rows[0].partner_user_id ?? null) : undefined;
+  if (owner !== scope.partnerId) throw new Forbidden();
+}
+// Zeilen-Besitz (Material/Tätigkeit/…): über die zugehörige projekt_id prüfen.
+async function requireOwnedRow(table, id, scope) {
+  if (!scope || !scope.partnerId) return;
+  const rows = await sbGet(`${table}?id=eq.${uuid(id)}&select=projekt_id&limit=1`).catch(() => []);
+  const pid = rows && rows[0] ? rows[0].projekt_id : null;
+  if (!pid) throw new Forbidden();
+  await requireOwnedProjekt(pid, scope);
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -66,8 +129,9 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
 
   const { token, action } = req.body || {};
-  const master = await verifyMaster(token);
-  if (!master) return res.status(403).json({ error: 'Kein Zugriff' }); // generisch, kein Leak
+  const access = await resolveAccess(token, action);
+  if (!access) return res.status(403).json({ error: 'Kein Zugriff' }); // generisch, kein Leak
+  const scope = { partnerId: access.partnerId }; // Master: null → sieht alles
 
   try {
     switch (action) {
@@ -109,30 +173,31 @@ export default async function handler(req, res) {
       case 'voice':           return res.status(200).json(await handleVoice(req.body));
       case 'blockaden_liste': return res.status(200).json(await voiceBlockaden(req.body));
       case 'projekt_add':     return res.status(200).json(await addProjekt(req.body));
-      // ── Session 6: Projektmanagement (Herzstück) ──
-      case 'pm_projekte':      return res.status(200).json(await getPmProjekte());
-      case 'pm_projekt':       return res.status(200).json(await getPmProjekt(req.body.id));
-      case 'pm_projekt_save':  return res.status(200).json(await savePmProjekt(req.body));
-      case 'pm_kunden':        return res.status(200).json(await getPmKunden());
-      case 'pm_kunde_save':    return res.status(200).json(await savePmKunde(req.body));
+      // ── Session 6: Projektmanagement (Herzstück) — Master ODER gescopeter Partner ──
+      case 'pm_projekte':      return res.status(200).json(await getPmProjekte(scope));
+      case 'pm_projekt':       return res.status(200).json(await getPmProjekt(req.body.id, scope));
+      case 'pm_projekt_save':  return res.status(200).json(await savePmProjekt(req.body, scope));
+      case 'pm_kunden':        return res.status(200).json(await getPmKunden(scope));
+      case 'pm_kunde_save':    return res.status(200).json(await savePmKunde(req.body, scope));
       case 'pm_techniker':     return res.status(200).json(await getPmTechniker());
-      case 'pm_tech_assign':   return res.status(200).json(await assignTech(req.body));
-      case 'pm_tech_unassign': return res.status(200).json(await unassignTech(req.body));
-      case 'pm_taetigkeit_add':return res.status(200).json(await addTaetigkeit(req.body));
-      case 'pm_taetigkeit_del':return res.status(200).json(await delPmRow('gs_taetigkeiten', req.body.id));
-      case 'pm_material_add':  return res.status(200).json(await addMaterial(req.body));
-      case 'pm_material_upd':  return res.status(200).json(await updMaterial(req.body));
-      case 'pm_material_del':  return res.status(200).json(await delPmRow('gs_material', req.body.id));
-      case 'pm_rapport_verrechnet': return res.status(200).json(await setRapportAbrechnung(req.body));
-      case 'pm_datei_upload':  return res.status(200).json(await pmDateiUpload(req.body));
-      case 'pm_datei_list':    return res.status(200).json(await pmDateiList(req.body.projekt_id));
-      case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body));
-      case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id));
-      case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id));
-      case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id));
+      case 'pm_tech_assign':   return res.status(200).json(await assignTech(req.body, scope));
+      case 'pm_tech_unassign': return res.status(200).json(await unassignTech(req.body, scope));
+      case 'pm_taetigkeit_add':return res.status(200).json(await addTaetigkeit(req.body, scope));
+      case 'pm_taetigkeit_del':return res.status(200).json(await delPmRow('gs_taetigkeiten', req.body.id, scope));
+      case 'pm_material_add':  return res.status(200).json(await addMaterial(req.body, scope));
+      case 'pm_material_upd':  return res.status(200).json(await updMaterial(req.body, scope));
+      case 'pm_material_del':  return res.status(200).json(await delPmRow('gs_material', req.body.id, scope));
+      case 'pm_rapport_verrechnet': return res.status(200).json(await setRapportAbrechnung(req.body, scope));
+      case 'pm_datei_upload':  return res.status(200).json(await pmDateiUpload(req.body, scope));
+      case 'pm_datei_list':    return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
+      case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body, scope));
+      case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id, scope));
+      case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
+      case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
+    if (err instanceof Forbidden) return res.status(403).json({ error: 'Kein Zugriff' });
     console.error('Cockpit Error:', err.message);
     return res.status(500).json({ error: 'Serverfehler' });
   }
@@ -1558,10 +1623,13 @@ async function handleVoice(body) {
 // ═══════════════════════════════════════════════════════════════════════════
 const PM_OFFEN = ['offen', 'in_bearbeitung', 'eskaliert'];
 
-async function getPmProjekte() {
+async function getPmProjekte(scope) {
+  // Partner: nur eigene Projekte (partner_user_id=eq.uid). Master: kein Filter → alle.
+  const projFilter = scope && scope.partnerId ? `&partner_user_id=eq.${scope.partnerId}` : '';
+  const kundeFilter = scope && scope.partnerId ? `&partner_user_id=eq.${scope.partnerId}` : '';
   const [projekte, kunden] = await Promise.all([
-    sbGet('gs_projekte?select=*&order=created_at.desc').catch(() => []),
-    sbGet('gs_kunden?select=id,firma,kontaktperson,telefon,email,ort').catch(() => []),
+    sbGet(`gs_projekte?select=*&order=created_at.desc${projFilter}`).catch(() => []),
+    sbGet(`gs_kunden?select=id,firma,kontaktperson,telefon,email,ort${kundeFilter}`).catch(() => []),
   ]);
   const kById = {};
   for (const k of kunden) kById[k.id] = k;
@@ -1580,11 +1648,13 @@ async function getPmProjekte() {
   };
 }
 
-async function getPmProjekt(id) {
+async function getPmProjekt(id, scope) {
   id = uuid(id);
   const pr = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
   const projekt = pr && pr[0];
   if (!projekt) return { error: 'Projekt nicht gefunden' };
+  // Datentrennung: Partner darf nur EIGENE Projekte öffnen.
+  if (scope && scope.partnerId && projekt.partner_user_id !== scope.partnerId) throw new Forbidden();
   const kunde = projekt.kunde_id
     ? (await sbGet(`gs_kunden?id=eq.${projekt.kunde_id}&select=*&limit=1`).catch(() => []))[0] || null
     : null;
@@ -1693,8 +1763,12 @@ function pmTechCard(t) {
 // Erweiterte Stammdaten (brauchen scripts/projekt_detail_scharf.sql). Fehlt die
 // Migration, entfernen wir sie beim Speichern und retryen → nie ein 500.
 const PM_PROJ_EXTRA = ['projektadresse', 'projektleiter', 'ansprechperson', 'ansprech_telefon', 'ansprech_email'];
-async function savePmProjekt(b) {
+async function savePmProjekt(b, scope) {
+  // Bearbeiten: Partner darf nur EIGENE Projekte ändern.
+  if (b.id) await requireOwnedProjekt(b.id, scope);
   const patch = {};
+  // Neuanlage durch Partner → Besitz wird server-seitig erzwungen (nie clientseitig).
+  if (!b.id && scope && scope.partnerId) patch.partner_user_id = scope.partnerId;
   if (b.name !== undefined) patch.name = String(b.name || '').trim().slice(0, 120);
   if (b.projektnummer !== undefined) patch.projektnummer = String(b.projektnummer || '').trim().slice(0, 60) || null;
   if (b.standort !== undefined) patch.standort = String(b.standort || '').trim().slice(0, 160) || null;
@@ -1725,24 +1799,46 @@ async function savePmProjekt(b) {
   return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
 }
 
-async function getPmKunden() {
-  const kunden = await sbGet('gs_kunden?select=*&order=erstellt_am.desc').catch(() => []);
+async function getPmKunden(scope) {
+  // Partner: nur eigene Kunden (CRM-Trennung, scripts/partner_kunden_scope.sql).
+  // Fehlt die Spalte noch → .catch → leere Liste (fail-safe, wie dokumentiert).
+  const filter = scope && scope.partnerId ? `&partner_user_id=eq.${scope.partnerId}` : '';
+  const kunden = await sbGet(`gs_kunden?select=*&order=erstellt_am.desc${filter}`).catch(() => []);
   return { kunden };
 }
 
-async function savePmKunde(b) {
+async function savePmKunde(b, scope) {
   const patch = {};
   ['firma', 'kontaktperson', 'email', 'telefon', 'adresse', 'ort', 'vertragstyp'].forEach((f) => {
     if (b[f] !== undefined) patch[f] = String(b[f] || '').trim().slice(0, 160) || null;
   });
   if (b.plz !== undefined) patch.plz = String(b.plz || '').trim().slice(0, 12) || null;
   if (b.id) {
+    // Bestehenden Kunden nur ändern, wenn er dem Partner gehört (Besitz via eigener
+    // partner_user_id, nicht über ein Projekt).
+    if (scope && scope.partnerId) {
+      const rows = await sbGet(`gs_kunden?id=eq.${uuid(b.id)}&select=partner_user_id&limit=1`).catch(() => []);
+      const owner = rows && rows[0] ? (rows[0].partner_user_id ?? null) : undefined;
+      if (owner !== scope.partnerId) throw new Forbidden();
+    }
     const id = uuid(b.id);
     const r = await sbWrite('PATCH', `gs_kunden?id=eq.${id}`, patch);
     return { ok: true, kunde: Array.isArray(r) ? r[0] : r };
   }
   if (!patch.firma && !patch.kontaktperson) throw new Error('Firma oder Kontakt nötig');
-  const r = await sbWrite('POST', 'gs_kunden', patch);
+  // Neuanlage durch Partner → Besitz erzwingen. Fehlt die Spalte (vor Migration),
+  // droppen wir sie und legen den Kunden trotzdem an (kein 500).
+  if (scope && scope.partnerId) patch.partner_user_id = scope.partnerId;
+  let r;
+  try { r = await sbWrite('POST', 'gs_kunden', patch); }
+  catch (e) {
+    if ('partner_user_id' in patch && /column|does not exist|PGRST204/i.test((e && e.message) || '')) {
+      const { partner_user_id, ...base } = patch;
+      r = await sbWrite('POST', 'gs_kunden', base);
+      return { ok: true, kunde: Array.isArray(r) ? r[0] : r, scopeNotMigrated: true };
+    }
+    throw e;
+  }
   return { ok: true, kunde: Array.isArray(r) ? r[0] : r };
 }
 
@@ -1755,7 +1851,8 @@ async function getPmTechniker() {
   return { techniker };
 }
 
-async function assignTech(b) {
+async function assignTech(b, scope) {
+  await requireOwnedProjekt(b.projekt_id, scope);
   const row = {
     projekt_id: uuid(b.projekt_id),
     techniker_id: uuid(b.techniker_id),
@@ -1777,13 +1874,15 @@ async function assignTech(b) {
   }
 }
 
-async function unassignTech(b) {
+async function unassignTech(b, scope) {
+  await requireOwnedRow('gs_projekt_techniker', b.id, scope);
   const id = uuid(b.id);
   try { await sbWrite('DELETE', `gs_projekt_techniker?id=eq.${id}`, {}, 'return=minimal'); return { ok: true }; }
   catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
-async function addTaetigkeit(b) {
+async function addTaetigkeit(b, scope) {
+  await requireOwnedProjekt(b.projekt_id, scope);
   const row = {
     projekt_id: uuid(b.projekt_id),
     beschreibung: String(b.beschreibung || '').slice(0, 500),
@@ -1798,7 +1897,8 @@ async function addTaetigkeit(b) {
   } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
-async function addMaterial(b) {
+async function addMaterial(b, scope) {
+  await requireOwnedProjekt(b.projekt_id, scope);
   const row = {
     projekt_id: uuid(b.projekt_id),
     bezeichnung: String(b.bezeichnung || '').slice(0, 200),
@@ -1824,7 +1924,8 @@ async function addMaterial(b) {
   }
 }
 
-async function updMaterial(b) {
+async function updMaterial(b, scope) {
+  await requireOwnedRow('gs_material', b.id, scope);
   const id = uuid(b.id);
   const patch = {};
   if (b.status !== undefined) patch.status = String(b.status).slice(0, 40);
@@ -1837,7 +1938,8 @@ async function updMaterial(b) {
 }
 
 // Generisches Löschen für PM-Zeilen (Tätigkeit/Material) mit Migrations-Fallback.
-async function delPmRow(table, id) {
+async function delPmRow(table, id, scope) {
+  await requireOwnedRow(table, id, scope);
   id = uuid(id);
   try { await sbWrite('DELETE', `${table}?id=eq.${id}`, {}, 'return=minimal'); return { ok: true }; }
   catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
@@ -1845,9 +1947,15 @@ async function delPmRow(table, id) {
 
 // ── Abrechnungs-Status pro Arbeitsrapport (offen | verrechnet) ─────────────
 // Nimmt ein oder mehrere Rapport-ids (z. B. eine ganze Kalenderwoche auf einmal).
-async function setRapportAbrechnung(b) {
+async function setRapportAbrechnung(b, scope) {
   const ids = (Array.isArray(b.ids) ? b.ids : [b.id]).filter(Boolean).map(uuid);
   if (!ids.length) throw new Error('ids nötig');
+  // Partner: jeder betroffene Rapport muss zu einem EIGENEN Projekt gehören.
+  if (scope && scope.partnerId) {
+    const rows = await sbGet(`gs_tagesrapporte?id=in.(${ids.join(',')})&select=projekt_id`).catch(() => []);
+    if (rows.length !== ids.length) throw new Forbidden();
+    for (const r of rows) await requireOwnedProjekt(r.projekt_id, scope);
+  }
   const status = b.status === 'verrechnet' ? 'verrechnet' : 'offen';
   try {
     await sbWrite('PATCH', `gs_tagesrapporte?id=in.(${ids.join(',')})`, { abrechnung_status: status }, 'return=minimal');
@@ -1860,13 +1968,18 @@ async function setRapportAbrechnung(b) {
 
 // ── Projektdateien / Fotos (Storage-Bucket 'projektdateien') ───────────────
 const PM_DATEI_BUCKET = 'projektdateien';
-async function pmDateiUpload(b) {
+// Drei Kategorien (Unterordner je Projekt). Unbekannt/leer → 'dateien'.
+const PM_KATEGORIEN = ['bilder', 'plaene', 'dateien'];
+function pmKategorie(v) { const k = String(v || '').toLowerCase(); return PM_KATEGORIEN.includes(k) ? k : 'dateien'; }
+async function pmDateiUpload(b, scope) {
   const projektId = uuid(b.projekt_id);
+  await requireOwnedProjekt(projektId, scope); // VOR dem Storage-Write (kein Leak)
   const buf = sbDecodeB64(b.data);
   if (!buf) throw new Error('Datei (base64) erforderlich');
   if (buf.length > 12 * 1024 * 1024) return { error: 'Datei zu gross (max. 12 MB)' };
   const safe = sbSafeName(b.filename || 'datei');
-  const path = `${projektId}/${nowStamp()}-${safe}`;
+  const kat = pmKategorie(b.kategorie);
+  const path = `${projektId}/${kat}/${nowStamp()}-${safe}`;
   const contentType = b.contentType || sbGuessType(safe);
   const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, {
     method: 'POST',
@@ -1880,26 +1993,29 @@ async function pmDateiUpload(b) {
     return { error: 'Upload fehlgeschlagen' };
   }
   const url = await sbSignUrl(PM_DATEI_BUCKET, path);
-  return { ok: true, datei: { name: sbDisplayName(path.split('/').pop()), path, contentType, size: buf.length, url } };
+  return { ok: true, datei: { name: sbDisplayName(path.split('/').pop()), path, kategorie: kat, contentType, size: buf.length, url } };
 }
 
-async function pmDateiList(projektId) {
+async function pmDateiList(projektId, scope) {
+  await requireOwnedProjekt(projektId, scope);
   const dateien = await listProjektDateien(uuid(projektId)).catch(() => []);
   return { dateien };
 }
 
-async function listProjektDateien(projektId) {
+// Listet Dateien je Kategorie-Unterordner + Alt-Bestand direkt unter dem Projekt.
+async function listOneFolder(prefix, kategorie) {
   const r = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${PM_DATEI_BUCKET}`, {
     method: 'POST', headers: SB,
-    body: JSON.stringify({ prefix: `${projektId}/`, limit: 200, sortBy: { column: 'created_at', order: 'desc' } }),
+    body: JSON.stringify({ prefix, limit: 200, sortBy: { column: 'created_at', order: 'desc' } }),
   });
-  if (!r.ok) return []; // Bucket fehlt o. Ä. → leere Galerie
+  if (!r.ok) return [];
   const objs = await r.json().catch(() => []);
+  // id === null ⇒ Pseudo-Ordner (z. B. 'bilder/') → überspringen, nur echte Dateien.
   const list = (Array.isArray(objs) ? objs : []).filter((o) => o && o.name && o.id !== null);
   return Promise.all(list.map(async (o) => {
-    const path = `${projektId}/${o.name}`;
+    const path = `${prefix}${o.name}`;
     return {
-      name: sbDisplayName(o.name), path,
+      name: sbDisplayName(o.name), path, kategorie,
       size: o.metadata?.size || null,
       contentType: o.metadata?.mimetype || null,
       created_at: o.created_at || null,
@@ -1908,8 +2024,20 @@ async function listProjektDateien(projektId) {
   }));
 }
 
-async function pmDateiDel(b) {
+async function listProjektDateien(projektId) {
+  // Alt-Bestand (direkt unter projektId/) → Kategorie aus dem MIME-Typ ableiten.
+  const legacy = (await listOneFolder(`${projektId}/`, null)).map((d) => ({
+    ...d, kategorie: /^image\//.test(d.contentType || '') ? 'bilder' : 'dateien',
+  }));
+  const perKat = await Promise.all(PM_KATEGORIEN.map((k) => listOneFolder(`${projektId}/${k}/`, k)));
+  const all = [...legacy, ...perKat.flat()];
+  all.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  return all;
+}
+
+async function pmDateiDel(b, scope) {
   const projektId = uuid(b.projekt_id);
+  await requireOwnedProjekt(projektId, scope);
   const path = String(b.path || '');
   if (!path.startsWith(`${projektId}/`)) throw new Error('Ungültiger Pfad');
   const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
@@ -1929,8 +2057,9 @@ async function projektHead(projektId) {
   return (pr && pr[0]) || {};
 }
 
-async function exportMaterial(projektId) {
+async function exportMaterial(projektId, scope) {
   projektId = uuid(projektId);
+  await requireOwnedProjekt(projektId, scope);
   const p = await projektHead(projektId);
   const mat = await sbGet(`gs_material?projekt_id=eq.${projektId}&select=*&order=created_at.desc`).catch(() => []);
   const blocks = [
@@ -1960,8 +2089,9 @@ async function exportMaterial(projektId) {
   return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Materialliste_${(p.projektnummer || 'projekt')}.pdf`);
 }
 
-async function exportRapporte(projektId) {
+async function exportRapporte(projektId, scope) {
   projektId = uuid(projektId);
+  await requireOwnedProjekt(projektId, scope);
   const p = await projektHead(projektId);
   let raps = [];
   try { raps = await sbGet(`gs_tagesrapporte?projekt_id=eq.${projektId}&select=*&order=datum.asc`); } catch (_) { raps = []; }
@@ -2005,8 +2135,9 @@ async function exportRapporte(projektId) {
   return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Arbeitsrapporte_${(p.projektnummer || 'projekt')}.pdf`);
 }
 
-async function exportRechnungen(projektId) {
+async function exportRechnungen(projektId, scope) {
   projektId = uuid(projektId);
+  await requireOwnedProjekt(projektId, scope);
   const p = await projektHead(projektId);
   const rechs = await sbGet(`gs_rechnungen?projekt_id=eq.${projektId}&select=*&order=created_at.desc`).catch(() => []);
   const blocks = [
