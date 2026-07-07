@@ -68,6 +68,7 @@ const PM_ACTIONS = new Set([
   'pm_material_add', 'pm_material_upd', 'pm_material_del', 'pm_rapport_verrechnet',
   'pm_datei_upload', 'pm_datei_list', 'pm_datei_del',
   'pm_export_material', 'pm_export_rapporte', 'pm_export_rechnungen',
+  'pm_datenblatt_save',
 ]);
 
 // Zugriffskontext bestimmen:
@@ -194,6 +195,7 @@ export default async function handler(req, res) {
       case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id, scope));
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
+      case 'pm_datenblatt_save':   return res.status(200).json(await savePmDatenblatt(req.body, scope));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -1797,6 +1799,62 @@ async function savePmProjekt(b, scope) {
     throw e;
   }
   return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+}
+
+// ── Projektdatenblatt (JSONB-Spalte gs_projekte.datenblatt) ──────────────────
+// Ein ausfüllbares SHK/HKLS-Datenblatt je Projekt. Master füllt aus/vorbereitet,
+// freigeschalteter Partner ergänzt NUR eigene Projekte (requireOwnedProjekt).
+// Die Struktur wird server-seitig whitelisted & längenbegrenzt (kein Wildwuchs,
+// kein Riesen-Blob). Fehlt die Spalte noch (vor Migration) → notMigrated statt 500.
+function sanitizeDatenblatt(input) {
+  const o = (input && typeof input === 'object' && !Array.isArray(input)) ? input : {};
+  const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const arrStr = (a, max, n) => Array.isArray(a) ? a.slice(0, max).map((x) => clip(x, n)).filter(Boolean) : [];
+  const k = (o.kunde && typeof o.kunde === 'object') ? o.kunde : {};
+  const db = {
+    kunde: {
+      firma: clip(k.firma, 160), ansprechperson: clip(k.ansprechperson, 160),
+      telefon: clip(k.telefon, 60), email: clip(k.email, 160), objekt: clip(k.objekt, 200),
+    },
+    anlagenart: arrStr(o.anlagenart, 12, 40),
+    details: {},
+    umfang: arrStr(o.umfang, 24, 60),
+    materialstellung: clip(o.materialstellung, 40),
+    start: clip(o.start, 80),
+    notiz: clip(o.notiz, 2000),
+    updated_at: new Date().toISOString(),
+  };
+  if (o.details && typeof o.details === 'object' && !Array.isArray(o.details)) {
+    for (const key of Object.keys(o.details).slice(0, 12)) {
+      const v = o.details[key];
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const fld = {};
+        for (const fk of Object.keys(v).slice(0, 40)) {
+          const val = v[fk];
+          fld[clip(fk, 40)] = Array.isArray(val) ? arrStr(val, 20, 80) : clip(val, 300);
+        }
+        db.details[clip(key, 40)] = fld;
+      }
+    }
+  }
+  return db;
+}
+async function savePmDatenblatt(b, scope) {
+  const pid = uuid(b.projekt_id);
+  // Datentrennung: Partner darf nur EIGENE Projekte ausfüllen (Master: Vollzugriff).
+  await requireOwnedProjekt(pid, scope);
+  const db = sanitizeDatenblatt(b.datenblatt);
+  db.updated_by = (scope && scope.partnerId) ? 'partner' : 'master';
+  try {
+    const r = await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { datenblatt: db });
+    return { ok: true, datenblatt: db, projekt: Array.isArray(r) ? r[0] : r };
+  } catch (e) {
+    // Spalte noch nicht migriert → sauberer Hinweis statt 500 (wie übrige PM-Actions).
+    if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) {
+      return { ok: false, notMigrated: true, error: 'Datenblatt-Spalte fehlt – scripts/projekt_datenblatt.sql in Supabase ausführen.' };
+    }
+    throw e;
+  }
 }
 
 async function getPmKunden(scope) {
