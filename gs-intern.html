@@ -1383,23 +1383,27 @@ function paintProjektDetail(d){
   }
   var techSec=pmSec('Techniker',techInner, d.mig.techniker?'<button class="chip" id="pm-tech-add" style="font-size:11px">＋ zuweisen</button>':'');
 
-  // ── Projektdateien / Fotos & Pläne (Storage) ──
+  // ── Projektdateien: drei Kategorien (Bilder/Pläne/Dateien), Bucket 'projektdateien' ──
   var dateien=d.dateien||[];
-  var dateiInner;
-  if(!dateien.length){ dateiInner='<div class="empty" style="padding:12px">Noch keine Dateien. Fotos oder Pläne (PDF/Bild) hochladen.</div>'; }
-  else {
-    dateiInner='<div class="gal">'+dateien.map(function(f){
-      var ic=pmFileIcon(f.contentType,f.name);
-      var dl=f.url?(f.url+(f.url.indexOf('?')>-1?'&':'?')+'download='+encodeURIComponent(f.name)):'#';
-      var body = ic==='img'&&f.url
-        ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener"><img src="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"/></a>'
-        : '<a href="'+esc(f.url||'#')+'" target="_blank" rel="noopener" class="doc"><span class="ic">'+(ic==='img'?'🖼️':ic)+'</span><span>'+esc(f.name)+'</span></a>';
-      return '<div class="it">'+body+'<span class="cap">'+esc(f.name)+'</span>'+
-        '<a class="dl-file" href="'+esc(dl)+'" download="'+esc(f.name)+'" title="Herunterladen">⬇</a>'+
-        '<button class="del" data-delfile="'+esc(f.path)+'" title="Löschen">×</button></div>';
-    }).join('')+'</div>';
+  function pmDateiItem(f){
+    var ic=pmFileIcon(f.contentType,f.name);
+    var dl=f.url?(f.url+(f.url.indexOf('?')>-1?'&':'?')+'download='+encodeURIComponent(f.name)):'#';
+    var body = ic==='img'&&f.url
+      ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener"><img src="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"/></a>'
+      : '<a href="'+esc(f.url||'#')+'" target="_blank" rel="noopener" class="doc"><span class="ic">'+(ic==='img'?'🖼️':ic)+'</span><span>'+esc(f.name)+'</span></a>';
+    return '<div class="it">'+body+'<span class="cap">'+esc(f.name)+'</span>'+
+      '<a class="dl-file" href="'+esc(dl)+'" download="'+esc(f.name)+'" title="Herunterladen">⬇</a>'+
+      '<button class="del" data-delfile="'+esc(f.path)+'" title="Löschen">×</button></div>';
   }
-  var dateiSec=pmSec('Dateien & Fotos ('+dateien.length+')',dateiInner,'<button class="chip" id="pm-file-add" style="font-size:11px">＋ hochladen</button>');
+  function pmKatBlock(kat,label,icon){
+    var fs=dateien.filter(function(f){ return (f.kategorie||'dateien')===kat; });
+    var inner=fs.length?('<div class="gal">'+fs.map(pmDateiItem).join('')+'</div>'):'<div class="empty" style="padding:8px 12px">–</div>';
+    return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin:2px 2px 6px">'+
+      '<strong style="font-size:12px">'+icon+' '+label+' ('+fs.length+')</strong>'+
+      '<button class="chip" style="font-size:11px" onclick="openDateiUpload(\''+kat+'\')">＋ hochladen</button></div>'+inner+'</div>';
+  }
+  var dateiInner=pmKatBlock('bilder','Bilder','🖼️')+pmKatBlock('plaene','Pläne','📐')+pmKatBlock('dateien','Dateien','📄');
+  var dateiSec=pmSec('Dateien & Fotos ('+dateien.length+')',dateiInner,'');
 
   // ── Arbeitsrapporte (bestehende gs_tagesrapporte), pro KW gruppiert + Abrechnungsstatus ──
   var rapSec;
@@ -1532,13 +1536,16 @@ function pmSetVerrechnet(ids,status){
   }).catch(function(){ toast('Fehler'); });
 }
 // ── Datei-Upload (Fotos/Pläne) → Storage-Bucket 'projektdateien' ──
-function openDateiUpload(){
+function openDateiUpload(kategorie){
+  kategorie=(['bilder','plaene','dateien'].indexOf(kategorie)>-1)?kategorie:'dateien';
   var inp=document.createElement('input');
-  inp.type='file'; inp.accept='image/*,application/pdf,.dwg,.dxf'; inp.multiple=true;
-  inp.onchange=function(){ var files=Array.prototype.slice.call(inp.files||[]); if(files.length) pmUploadFiles(files); };
+  inp.type='file';
+  inp.accept=(kategorie==='bilder')?'image/*':(kategorie==='plaene'?'application/pdf,.dwg,.dxf,image/*':'*/*');
+  inp.multiple=true;
+  inp.onchange=function(){ var files=Array.prototype.slice.call(inp.files||[]); if(files.length) pmUploadFiles(files,kategorie); };
   inp.click();
 }
-function pmUploadFiles(files){
+function pmUploadFiles(files,kategorie){
   toast('Lade '+files.length+' Datei'+(files.length>1?'en':'')+' hoch…');
   var chain=Promise.resolve(), okCount=0, errMsg='';
   files.forEach(function(f){
@@ -1547,7 +1554,7 @@ function pmUploadFiles(files){
       return new Promise(function(resolve){
         var rd=new FileReader();
         rd.onload=function(){
-          api('pm_datei_upload',{projekt_id:_pmProjektId,filename:f.name,contentType:f.type||'',data:String(rd.result)})
+          api('pm_datei_upload',{projekt_id:_pmProjektId,kategorie:kategorie,filename:f.name,contentType:f.type||'',data:String(rd.result)})
             .then(function(r){ if(r&&r.ok) okCount++; else if(r&&r.error) errMsg=r.error; resolve(); })
             .catch(function(){ errMsg='Upload fehlgeschlagen'; resolve(); });
         };
