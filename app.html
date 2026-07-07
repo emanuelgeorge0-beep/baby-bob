@@ -7698,7 +7698,7 @@ function pmRender(){
         +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
         +'<div style="display:flex;align-items:center;gap:8px;">'+pdStatusBadge(p.status)
         +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
-        +'<div class="pd-item-meta">'+(meta||'—')+kn+bl+'</div></div>';
+        +'<div class="pd-item-meta">'+(meta||'—')+kn+bl+dbListDot(p)+'</div></div>';
     }).join(''):'<div class="admin-empty">Noch keine Projekte. Legen Sie mit „＋ Neues Projekt" das erste an.</div>';
     c.innerHTML=head+rows;
   });
@@ -7818,7 +7818,8 @@ function pmPaintDetail(d){
     }).join('');
   }
 
-  c.innerHTML=back+head+techHtml+dateiHtml+matHtml+rapHtml+rechHtml+blHtml;
+  var dbCard=pmDatenblattCard(p);
+  c.innerHTML=back+head+dbCard+techHtml+dateiHtml+matHtml+rapHtml+rechHtml+blHtml;
 }
 
 // ── Neues / Bearbeiten Projekt ──
@@ -8019,6 +8020,207 @@ function pmExport(kind){
       var a=document.createElement('a'); a.href=url; a.download=d.filename||'export.pdf'; document.body.appendChild(a); a.click();
       setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },1500);
     }catch(e){ toast('Download fehlgeschlagen'); }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PROJEKTDATENBLATT (Partner) — ausfüllbares SHK/HKLS-Datenblatt je Projekt.
+// Speichert als JSONB auf dem Projekt (action pm_datenblatt_save, server-seitig
+// auf eigene Projekte gescoped). Klick-Auswahl (Chips) wo möglich, Text nur wo
+// nötig. Dieselbe Config-Struktur wie im Master-Cockpit (gs-intern.html).
+// ══════════════════════════════════════════════════════════════════════════
+var DB_ANLAGEN=[
+  {k:'sanitaer',l:'🚿 Sanitär'},{k:'heizung',l:'🔥 Heizung'},
+  {k:'fernwaerme',l:'♨️ Fernwärmezentrale'},{k:'heizzentrale',l:'🏭 Heizungszentrale'},
+  {k:'kaelte',l:'❄️ Kältezentrale'},{k:'lueftung',l:'💨 Lüftung'},
+  {k:'wohnblock',l:'🏢 Wohnblock / Sanierung'}
+];
+var DB_UMFANG=['Zentrale','Verteilung','Warmwasser','Anschluss Bestand','Dämmung','Demontage/Rückbau','Inbetriebnahme','Spülung/Entlüftung'];
+var DB_MATSTELL=[{k:'wir',l:'Wir (GS)'},{k:'auftraggeber',l:'Auftraggeber'},{k:'teils',l:'Teils / teils'}];
+var DB_DETAILS={
+  sanitaer:[
+    {k:'art',l:'Art',t:'single',opts:['Neubau','Sanierung','Reparatur','Erweiterung']},
+    {k:'bereiche',l:'Bereiche',t:'multi',opts:['Apparate','Leitungen','Abwasser','Enthärtung','Regenwasser']},
+    {k:'plan',l:'Plan vorhanden?',t:'yesno'}
+  ],
+  heizung:[
+    {k:'art',l:'Art',t:'single',opts:['Neubau','Umbau','Umhängung','Ersatz']},
+    {k:'waermeerzeuger',l:'Wärmeerzeuger',t:'multi',opts:['Wärmepumpe','Gas','Öl','Pellet','Fernwärme','Solar']},
+    {k:'abgabe',l:'Wärmeabgabe',t:'multi',opts:['Radiatoren','Bodenheizung','Konvektoren']},
+    {k:'bewohnt',l:'Bewohnt (Umschlussphase)?',t:'yesno'},
+    {k:'plan',l:'Plan vorhanden?',t:'yesno'}
+  ],
+  fernwaerme:[
+    {k:'art',l:'Art der Arbeit',t:'single',opts:['Neubau','Umbau','Umhängung']},
+    {k:'anschluss',l:'Anschluss',t:'single',opts:['indirekt','direkt']},
+    {k:'uebergabe',l:'Übergabestation schon gesetzt?',t:'yesno'},
+    {k:'speicher',l:'Speicher',t:'multi',opts:['Pufferspeicher','Warmwasserspeicher','Kombispeicher','keiner']},
+    {k:'abgabe',l:'Wärmeabgabe',t:'multi',opts:['Radiatoren','Bodenheizung','Konvektoren']},
+    {k:'bewohnt',l:'Bewohnt (Umschlussphase)?',t:'yesno'},
+    {k:'plan',l:'Plan vorhanden?',t:'yesno'}
+  ],
+  heizzentrale:[
+    {k:'art',l:'Art',t:'single',opts:['Neubau','Ersatz','Umbau']},
+    {k:'waermeerzeuger',l:'Wärmeerzeuger',t:'multi',opts:['Wärmepumpe','Gas','Öl','Pellet','Fernwärme','BHKW']},
+    {k:'leistung',l:'Leistung',t:'text',ph:'z. B. 120 kW'},
+    {k:'speicher',l:'Speicher',t:'multi',opts:['Pufferspeicher','Warmwasserspeicher','Kombispeicher']},
+    {k:'bewohnt',l:'Bewohnt?',t:'yesno'},
+    {k:'plan',l:'Plan vorhanden?',t:'yesno'}
+  ],
+  kaelte:[
+    {k:'art',l:'Art',t:'single',opts:['Klimakälte','Prozesskälte','Serverraum']},
+    {k:'system',l:'System',t:'multi',opts:['Kaltwassersatz','Splitanlage','VRV/VRF','Freie Kühlung']},
+    {k:'rueckkuehlung',l:'Rückkühlung',t:'single',opts:['Luft','Wasser','Hybrid']},
+    {k:'plan',l:'Plan vorhanden?',t:'yesno'}
+  ],
+  lueftung:[
+    {k:'art',l:'Art',t:'single',opts:['Neubau','Sanierung','Erweiterung']},
+    {k:'system',l:'System',t:'multi',opts:['Zu-/Abluft','Nur Abluft','WRG','Einzelraum','Entrauchung']},
+    {k:'bewohnt',l:'Bewohnt?',t:'yesno'},
+    {k:'plan',l:'Plan vorhanden?',t:'yesno'}
+  ],
+  wohnblock:[
+    {k:'einheiten',l:'Anzahl Einheiten',t:'text',ph:'z. B. 24 Wohnungen'},
+    {k:'gewerke',l:'Gewerke',t:'multi',opts:['Sanitär','Heizung','Lüftung','Steigzonen','Wohnungen']},
+    {k:'art',l:'Art',t:'single',opts:['Sanierung','Neubau','Etappen']},
+    {k:'bewohnt',l:'Bewohnt (Umschlussphase)?',t:'yesno'},
+    {k:'plan',l:'Plan vorhanden?',t:'yesno'}
+  ]
+};
+function dbAnlageLabel(k){ for(var i=0;i<DB_ANLAGEN.length;i++) if(DB_ANLAGEN[i].k===k) return DB_ANLAGEN[i].l; return k; }
+function dbMatLabel(k){ for(var i=0;i<DB_MATSTELL.length;i++) if(DB_MATSTELL[i].k===k) return DB_MATSTELL[i].l; return k; }
+function dbIsComplete(db){ if(!db) return false; var k=db.kunde||{}; if(!k.firma) return false; if(!((db.anlagenart||[]).length)) return false; if(!db.materialstellung) return false; return true; }
+function dbTouched(db){ if(!db) return false; var k=db.kunde||{}; return !!(k.firma||k.ansprechperson||(db.anlagenart||[]).length||(db.umfang||[]).length||db.materialstellung||db.notiz||db.start); }
+function dbJsq(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function dbClone(src){
+  src=src||{}; var k=src.kunde||{};
+  var d={kunde:{firma:k.firma||'',ansprechperson:k.ansprechperson||'',telefon:k.telefon||'',email:k.email||'',objekt:k.objekt||''},
+    anlagenart:(src.anlagenart||[]).slice(),details:{},umfang:(src.umfang||[]).slice(),
+    materialstellung:src.materialstellung||'',start:src.start||'',notiz:src.notiz||''};
+  if(src.details){ for(var a in src.details){ if(Object.prototype.hasOwnProperty.call(src.details,a)){ var f=src.details[a]||{},o={}; for(var fk in f){ if(Object.prototype.hasOwnProperty.call(f,fk)){ o[fk]=Array.isArray(f[fk])?f[fk].slice():f[fk]; } } d.details[a]=o; } } }
+  return d;
+}
+// ── Read-Summary im Projekt-Detail ──
+function pmDatenblattCard(p){
+  var db=(p&&p.datenblatt)||{}; var comp=dbIsComplete(db);
+  var badge='<span style="font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:50px;white-space:nowrap;'
+    +(comp?'color:#0a0a0a;background:#FFD700;':'color:#ffca6b;background:rgba(255,180,0,0.14);border:1px solid rgba(255,180,0,0.35);')+'">'+(comp?'✓ vollständig':'○ unvollständig')+'</span>';
+  var arts=(db.anlagenart||[]).map(dbAnlageLabel);
+  var lines='';
+  if(db.kunde&&db.kunde.firma) lines+='<div class="pd-item-meta">👤 '+gsEsc(db.kunde.firma)+(db.kunde.ansprechperson?(' · '+gsEsc(db.kunde.ansprechperson)):'')+'</div>';
+  lines+= arts.length?('<div class="pd-item-meta">🏗️ '+arts.map(gsEsc).join(' · ')+'</div>'):'<div class="pd-item-meta" style="color:rgba(232,237,245,0.4);">Noch nicht ausgefüllt – jetzt ausfüllen.</div>';
+  if((db.umfang||[]).length) lines+='<div class="pd-item-meta">🧩 '+db.umfang.map(gsEsc).join(', ')+'</div>';
+  if(db.materialstellung) lines+='<div class="pd-item-meta">📦 Material: '+gsEsc(dbMatLabel(db.materialstellung))+'</div>';
+  if(db.start) lines+='<div class="pd-item-meta">📅 Start: '+gsEsc(db.start)+'</div>';
+  if(db.notiz) lines+='<div class="pd-item-meta">📝 '+gsEsc(db.notiz)+'</div>';
+  var upd= db.updated_by?('<div class="pd-item-meta" style="color:rgba(232,237,245,0.35);font-size:10.5px;">zuletzt: '+(db.updated_by==='partner'?'Partner':'Master')+'</div>'):'';
+  return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">📋 Projektdatenblatt</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;">'+badge
+    +'<button class="admin-act ok" style="flex:0 0 auto;padding:5px 10px;" onclick="dbOpen()">'+(dbTouched(db)?'✎ bearbeiten':'ausfüllen')+'</button></div></div>'
+    +lines+upd+'</div>';
+}
+function dbListDot(p){ var db=(p&&p.datenblatt)||{}; if(!dbTouched(db)) return ''; return dbIsComplete(db)?' · <span style="color:#FFD700;">📋✓</span>':' · <span style="color:#ffb84d;">📋○</span>'; }
+
+// ── Formular (Bottom-Sheet via pmModal) ──
+var _dbEdit=null;
+function dbOpen(){
+  var p=(pmState.data&&pmState.data.projekt)||{}, k=(pmState.data&&pmState.data.kunde)||null;
+  _dbEdit=dbClone(p.datenblatt);
+  // Kundendaten aus verknüpftem Kunden vorbefüllen, wenn Datenblatt-Kunde leer.
+  if(k && !(_dbEdit.kunde.firma||_dbEdit.kunde.ansprechperson)){
+    _dbEdit.kunde.firma=k.firma||''; _dbEdit.kunde.ansprechperson=k.kontaktperson||'';
+    _dbEdit.kunde.telefon=k.telefon||''; _dbEdit.kunde.email=k.email||'';
+    _dbEdit.kunde.objekt=[k.adresse,k.plz,k.ort].filter(Boolean).join(' ');
+  }
+  pmModal('📋 Projektdatenblatt', dbFormHtml());
+}
+function dbChipRow(items,selArr,fn){
+  return '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+items.map(function(it){
+    var val=it.k||it, lbl=it.l||it, on=(selArr||[]).indexOf(val)>-1;
+    return '<span class="gs-chip'+(on?' sel':'')+'" onclick="'+fn+"('"+dbJsq(val)+"')\" style=\"cursor:pointer;\">"+gsEsc(lbl)+'</span>';
+  }).join('')+'</div>';
+}
+function dbFieldHtml(art,f){
+  var cur=(_dbEdit.details[art]||{})[f.k];
+  if(f.t==='text'){
+    return '<div class="ob-lbl">'+gsEsc(f.l)+'</div><input class="login-inp" data-dbtext="1" data-art="'+gsEsc(art)+'" data-field="'+gsEsc(f.k)+'" value="'+gsEsc(cur||'')+'" placeholder="'+gsEsc(f.ph||'')+'"/>';
+  }
+  var opts=(f.t==='yesno')?['ja','nein']:(f.opts||[]);
+  var sel=(f.t==='multi')?(Array.isArray(cur)?cur:[]):(cur?[cur]:[]);
+  var multi=(f.t==='multi');
+  var chips=opts.map(function(o){
+    var on=sel.indexOf(o)>-1;
+    var oc="dbDetailPick('"+dbJsq(art)+"','"+dbJsq(f.k)+"','"+dbJsq(o)+"',"+multi+")";
+    return '<span class="gs-chip'+(on?' sel':'')+'" onclick="'+oc+'" style="cursor:pointer;">'+gsEsc(o)+'</span>';
+  }).join('');
+  return '<div class="ob-lbl">'+gsEsc(f.l)+'</div><div style="display:flex;flex-wrap:wrap;gap:6px;">'+chips+'</div>';
+}
+function dbDynHtml(){
+  var e=_dbEdit;
+  var anl='<div class="pd-sec-tit">🏗️ Anlagen-Art <span style="font-weight:400;color:rgba(232,237,245,0.4);font-size:11px;">(mehrere möglich)</span></div>'
+    +dbChipRow(DB_ANLAGEN,e.anlagenart,'dbAnlageToggle');
+  var blocks=(e.anlagenart||[]).map(function(a){
+    var cfg=DB_DETAILS[a]; if(!cfg) return '';
+    var inner=cfg.map(function(f){ return dbFieldHtml(a,f); }).join('');
+    return '<div style="border:1px solid rgba(255,215,0,0.18);border-radius:12px;padding:8px 12px 10px;margin-top:8px;background:rgba(255,215,0,0.03);">'
+      +'<div style="font-weight:800;color:#FFD700;font-size:13px;margin-bottom:2px;">'+gsEsc(dbAnlageLabel(a))+'</div>'+inner+'</div>';
+  }).join('');
+  return anl+blocks;
+}
+function dbFormHtml(){
+  var e=_dbEdit;
+  var kunde='<div class="pd-sec-tit" style="margin-top:0;">👤 Auftraggeber</div>'
+    +'<div class="ob-lbl">Firma</div><input class="login-inp" id="db-k-firma" value="'+gsEsc(e.kunde.firma)+'"/>'
+    +'<div class="ob-lbl">Ansprechperson</div><input class="login-inp" id="db-k-ap" value="'+gsEsc(e.kunde.ansprechperson)+'"/>'
+    +'<div style="display:flex;gap:6px;"><div style="flex:1;"><div class="ob-lbl">Telefon</div><input class="login-inp" id="db-k-tel" value="'+gsEsc(e.kunde.telefon)+'"/></div>'
+    +'<div style="flex:1;"><div class="ob-lbl">E-Mail</div><input class="login-inp" id="db-k-mail" value="'+gsEsc(e.kunde.email)+'"/></div></div>'
+    +'<div class="ob-lbl">Objekt / Adresse</div><input class="login-inp" id="db-k-obj" value="'+gsEsc(e.kunde.objekt)+'"/>';
+  var dyn='<div id="db-dyn">'+dbDynHtml()+'</div>';
+  var umfang='<div class="pd-sec-tit">🧩 Umfang</div><div id="db-umfang">'+dbChipRow(DB_UMFANG,e.umfang,'dbUmfangToggle')+'</div>';
+  var mat='<div class="pd-sec-tit">📦 Materialstellung</div><div id="db-mat">'+dbChipRow(DB_MATSTELL,[e.materialstellung],'dbMatSet')+'</div>';
+  var rest='<div class="ob-lbl">Gewünschter Start</div><input class="login-inp" id="db-start" value="'+gsEsc(e.start)+'" placeholder="z. B. KW 32 / Aug 2026"/>'
+    +'<div class="ob-lbl">Notiz</div><textarea class="login-inp" id="db-notiz" rows="3">'+gsEsc(e.notiz)+'</textarea>';
+  return kunde+dyn+umfang+mat+rest
+    +'<button class="login-btn-magic" style="margin-top:14px;" onclick="dbSave()">Datenblatt speichern</button>'
+    +'<div class="login-msg" id="db-msg"></div>';
+}
+function dbSyncText(){
+  var g=function(id){ var el=document.getElementById(id); return el?el.value:undefined; }, v;
+  if((v=g('db-k-firma'))!==undefined)_dbEdit.kunde.firma=v;
+  if((v=g('db-k-ap'))!==undefined)_dbEdit.kunde.ansprechperson=v;
+  if((v=g('db-k-tel'))!==undefined)_dbEdit.kunde.telefon=v;
+  if((v=g('db-k-mail'))!==undefined)_dbEdit.kunde.email=v;
+  if((v=g('db-k-obj'))!==undefined)_dbEdit.kunde.objekt=v;
+  if((v=g('db-start'))!==undefined)_dbEdit.start=v;
+  if((v=g('db-notiz'))!==undefined)_dbEdit.notiz=v;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-dbtext]'),function(el){
+    var art=el.getAttribute('data-art'), fk=el.getAttribute('data-field');
+    if(!_dbEdit.details[art])_dbEdit.details[art]={};
+    _dbEdit.details[art][fk]=el.value;
+  });
+}
+function dbRerenderDyn(){ var el=document.getElementById('db-dyn'); if(el) el.innerHTML=dbDynHtml(); }
+function dbAnlageToggle(k){
+  dbSyncText();
+  var a=_dbEdit.anlagenart, i=a.indexOf(k);
+  if(i>-1){ a.splice(i,1); delete _dbEdit.details[k]; } else { a.push(k); if(!_dbEdit.details[k])_dbEdit.details[k]={}; }
+  dbRerenderDyn();
+}
+function dbDetailPick(art,field,val,multi){
+  dbSyncText();
+  if(!_dbEdit.details[art])_dbEdit.details[art]={};
+  if(multi){ var arr=_dbEdit.details[art][field]; if(!Array.isArray(arr))arr=[]; var i=arr.indexOf(val); if(i>-1)arr.splice(i,1); else arr.push(val); _dbEdit.details[art][field]=arr; }
+  else { _dbEdit.details[art][field]=(_dbEdit.details[art][field]===val)?'':val; }
+  dbRerenderDyn();
+}
+function dbUmfangToggle(v){ var a=_dbEdit.umfang, i=a.indexOf(v); if(i>-1)a.splice(i,1); else a.push(v); var el=document.getElementById('db-umfang'); if(el) el.innerHTML=dbChipRow(DB_UMFANG,_dbEdit.umfang,'dbUmfangToggle'); }
+function dbMatSet(v){ _dbEdit.materialstellung=(_dbEdit.materialstellung===v)?'':v; var el=document.getElementById('db-mat'); if(el) el.innerHTML=dbChipRow(DB_MATSTELL,[_dbEdit.materialstellung],'dbMatSet'); }
+function dbMsg(t,c){ var e=document.getElementById('db-msg'); if(e){ e.textContent=t; e.style.color=c==='err'?'#ff9b9b':'rgba(232,237,245,0.55)'; } }
+function dbSave(){
+  dbSyncText(); dbMsg('Speichert…','');
+  pmApi('pm_datenblatt_save',{projekt_id:pmState.proj,datenblatt:_dbEdit}).then(function(d){
+    if(!d||d.error){ dbMsg((d&&d.error)||'Fehler','err'); return; }
+    pmModalClose(); toast('Datenblatt gespeichert'); pmReload();
   });
 }
 
