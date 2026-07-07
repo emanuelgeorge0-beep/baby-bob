@@ -213,6 +213,33 @@ async function suite(run) {
   r = await call('tokMaster', 'pm_kunden');
   const kQm = r.calls.find((c) => c.url.includes('/rest/v1/gs_kunden') && c.method === 'GET');
   ok('master kunden ohne partner-filter', kQm && !kQm.url.includes('partner_user_id=eq'), kQm && kQm.url);
+
+  // 18. Techniker einem FREMDEN Projekt zuweisen → 403
+  r = await call('tokA', 'pm_tech_assign', { projekt_id: P2, techniker_id: MASTER_UID });
+  ok('partner A Techniker-Zuweisung fremdes Projekt → 403', r.status === 403, 'status=' + r.status);
+
+  // 19. PDF-Export EIGENES Projekt → 200 (echtes PDF), FREMDES → 403
+  r = await call('tokA', 'pm_export_material', { projekt_id: P1 });
+  ok('partner A Material-Export eigenes Projekt → 200', r.status === 200, 'status=' + r.status);
+  ok('Material-Export liefert pdf_base64', !!(r.body && r.body.pdf_base64), 'keys=' + (r.body && Object.keys(r.body).join(',')));
+  r = await call('tokA', 'pm_export_material', { projekt_id: P2 });
+  ok('partner A Material-Export fremdes Projekt → 403', r.status === 403, 'status=' + r.status);
+  r = await call('tokMaster', 'pm_export_material', { projekt_id: P2 });
+  ok('master Material-Export beliebiges Projekt → 200', r.status === 200, 'status=' + r.status);
+
+  // 20. Datei löschen auf FREMDEM Projekt → 403 und KEIN Storage-DELETE
+  r = await call('tokA', 'pm_datei_del', { projekt_id: P2, path: P2 + '/bilder/x.jpg' });
+  const delB = r.calls.find((c) => c.url.includes('/storage/v1/object/projektdateien/') && c.method === 'DELETE');
+  ok('partner A Datei-Del fremdes Projekt → 403', r.status === 403, 'status=' + r.status);
+  ok('kein Storage-DELETE bei fremdem Projekt', !delB, delB && delB.url);
+
+  // 21. Rapport-Abrechnung auf fremdem/unzugänglichem Projekt → 403
+  r = await call('tokA', 'pm_rapport_verrechnet', { id: '44440000-0000-0000-0000-0000000000f4', status: 'verrechnet' });
+  ok('partner A Rapport-Abrechnung ohne Zugriff → 403', r.status === 403, 'status=' + r.status);
+
+  // 22. Datei-Liste eines FREMDEN Projekts → 403
+  r = await call('tokA', 'pm_datei_list', { projekt_id: P2 });
+  ok('partner A Datei-Liste fremdes Projekt → 403', r.status === 403, 'status=' + r.status);
 }
 
 console.log('Partner-PM Datentrennung — Offline-Integrationstest\n');
