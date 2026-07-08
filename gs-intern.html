@@ -463,7 +463,23 @@
   .zs-ab-head strong{font-size:14.5px;}
   .zs-ab-meta{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;}
   .zs-bar{height:10px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden;border:1px solid var(--line);}
-  .zs-fill{height:100%;background:linear-gradient(90deg,var(--gold),#e5c987);transition:width .3s;}
+  .zs-fill{height:100%;background:linear-gradient(90deg,#2fa96a,#3dd68c);transition:width .3s;}
+  /* Gesamtübersicht (projektweit) */
+  .zs-ov{border:1px solid var(--gold-line);border-radius:14px;background:var(--gold-soft);padding:14px;margin-bottom:14px;}
+  .zs-ov-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;}
+  .zs-ov-vol{font-size:22px;font-weight:800;color:var(--gold);line-height:1;}
+  .zs-ov-sub{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .zs-ov-badge{font-size:20px;font-weight:800;color:#3dd68c;flex:0 0 auto;}
+  .zs-ov-line{display:flex;justify-content:space-between;font-size:12px;margin-top:6px;}
+  .zs-ov-ok{color:#3dd68c;font-weight:600;}
+  .zs-ov-mut{color:var(--muted);}
+  .zs-ov-stats{font-size:11.5px;color:var(--muted2);margin-top:4px;}
+  .zs-ov-rows{margin-top:11px;border-top:1px solid var(--line);padding-top:9px;display:flex;flex-direction:column;gap:6px;}
+  .zs-ov-row{display:flex;align-items:center;gap:8px;font-size:12.5px;}
+  .zs-ov-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+  .zs-ov-nm{flex:1;min-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .zs-ov-pct{font-weight:700;width:42px;text-align:right;flex:0 0 auto;}
+  .zs-ov-betr{color:var(--gold);font-size:11.5px;flex:0 0 auto;}
   .zs-agg{margin-bottom:12px;}
   .zs-agg-line{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:5px;}
   .zs-next{font-size:12px;color:var(--gold);margin-top:4px;}
@@ -1931,7 +1947,46 @@ function zsRender(d){
   var box=$('zs-box'); if(!box) return;
   var abs=(d&&d.abschnitte)||[];
   if(!abs.length){ box.innerHTML='<div class="empty" style="padding:12px">Noch kein Bauabschnitt. Über „＋ Bauabschnitt" anlegen – die Zahlungs-/Blockaden-Kette wird automatisch generiert.</div>'; return; }
-  box.innerHTML=abs.map(zsAbschnittHtml).join('');
+  // Gesamtübersicht GANZ OBEN, darunter die Abschnitts-Karten. Gleiche Datenquelle,
+  // daher automatisch aktuell bei jeder Freigabe/Neuanlage (zsLoad → zsRender).
+  box.innerHTML=zsUebersichtHtml(abs)+abs.map(zsAbschnittHtml).join('');
+}
+// ── Projektweite Gesamtübersicht (rein aus d.abschnitte summiert) ──
+function zsUebersichtHtml(abs){
+  var vol=0, freig=0, nZahl=0, nBlock=0, next=null;
+  abs.forEach(function(a){
+    vol+=Number(a.gesamtbetrag||0);
+    freig+=Number((a.aggregat&&a.aggregat.freigegeben)||0);
+    (a.steps||[]).forEach(function(s){
+      if(s.typ==='zahlung'){ nZahl++; if(!next && s.status!=='freigegeben') next={bez:s.bezeichnung,ab:a.name}; }
+      else if(s.typ==='blockade'){ nBlock++; }
+    });
+  });
+  var offen=Math.max(0,vol-freig);
+  var pct=vol>0?Math.round(freig/vol*100):0;
+  var nextHtml=next
+    ? '▸ Nächster offener Schritt: '+esc(next.bez)+' <span style="color:var(--muted2)">('+esc(next.ab)+')</span>'
+    : '✓ Alle Zahlungen freigegeben';
+  var rows=abs.map(function(a){
+    var ap=(a.aggregat&&a.aggregat.prozent)||0, col=zsAbStatusColor(a.status);
+    return '<div class="zs-ov-row">'+
+      '<span class="zs-ov-dot" style="background:'+col+'"></span>'+
+      '<span class="zs-ov-nm">'+esc(a.name)+'</span>'+
+      '<span class="zs-ov-pct" style="color:'+col+'">'+ap+'%</span>'+
+      '<span class="zs-ov-betr">'+zsChf(a.gesamtbetrag)+'</span>'+
+      pmPill(a.status||'—',col)+'</div>';
+  }).join('');
+  return '<div class="zs-ov">'+
+    '<div class="zs-ov-head"><div>'+
+      '<div class="zs-ov-vol">'+zsChf(vol)+'</div>'+
+      '<div class="zs-ov-sub">Auftragsvolumen · '+abs.length+' Bauabschnitt'+(abs.length!==1?'e':'')+'</div></div>'+
+      '<div class="zs-ov-badge">'+pct+'%</div></div>'+
+    '<div class="zs-bar"><div class="zs-fill" style="width:'+pct+'%"></div></div>'+
+    '<div class="zs-ov-line"><span class="zs-ov-ok">'+zsChf(freig)+' freigegeben</span><span class="zs-ov-mut">'+zsChf(offen)+' offen</span></div>'+
+    '<div class="zs-ov-stats">'+nZahl+' Zahlungs-Step'+(nZahl!==1?'s':'')+' · '+nBlock+' Blockade'+(nBlock!==1?'n':'')+'</div>'+
+    '<div class="zs-next" style="margin-top:6px">'+nextHtml+'</div>'+
+    '<div class="zs-ov-rows">'+rows+'</div>'+
+  '</div>';
 }
 function zsAbschnittHtml(a){
   var agg=a.aggregat||{}, pct=agg.prozent||0;
