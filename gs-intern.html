@@ -457,6 +457,26 @@
   .kw-row .kw-s{font-size:11px;color:var(--muted);}
   .sum-line{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border:1px dashed var(--gold-line);border-radius:12px;background:var(--gold-soft);margin-top:4px;}
   .sum-line b{color:var(--gold);font-size:15px;}
+  /* ── Zahlungssystem (Escrow) ── */
+  .zs-ab{border:1px solid var(--line);border-radius:14px;background:var(--card2);padding:12px;margin-bottom:12px;}
+  .zs-ab-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .zs-ab-head strong{font-size:14.5px;}
+  .zs-ab-meta{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;}
+  .zs-bar{height:10px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden;border:1px solid var(--line);}
+  .zs-fill{height:100%;background:linear-gradient(90deg,var(--gold),#e5c987);transition:width .3s;}
+  .zs-agg{margin-bottom:12px;}
+  .zs-agg-line{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:5px;}
+  .zs-next{font-size:12px;color:var(--gold);margin-top:4px;}
+  .zs-steps{display:flex;flex-direction:column;gap:7px;}
+  .zs-step{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:9px 11px;}
+  .zs-step-h{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  .zs-no{width:20px;height:20px;border-radius:50%;background:var(--gold-soft);color:var(--gold);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .zs-ic{font-size:14px;}
+  .zs-bez{font-size:13px;font-weight:600;flex:1;min-width:120px;}
+  .zs-betr{font-size:12.5px;color:var(--gold);font-weight:700;}
+  .zs-esc{font-size:11px;color:var(--muted2);margin:5px 0 0 27px;}
+  .zs-btns{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0 27px;}
+  .zs-btns .zs-op{font-size:11px;}
 </style>
 </head>
 <body>
@@ -1509,6 +1529,9 @@ function paintProjektDetail(d){
   }
   var blSec=pmSec('Blockaden ('+d.blockaden_offen+' offen)',blInner,'<button class="chip" id="pm-bl-all" style="font-size:11px">alle</button>');
 
+  // ── Zahlungssystem (Escrow-Engine) — lazy via zs_projekt nachgeladen ──
+  var zsSec=pmSec('💰 Zahlungssystem','<div id="zs-box"><div class="empty" style="padding:12px">Lädt…</div></div>','<button class="chip" id="zs-add" style="font-size:11px">＋ Bauabschnitt</button>');
+
   // ── Projektdatenblatt (JSONB gs_projekte.datenblatt) — Read-Summary + Status ──
   var db=p.datenblatt||{};
   var dbComplete=dbIsComplete(db);
@@ -1533,9 +1556,11 @@ function paintProjektDetail(d){
     ' <button class="chip" id="pm-db-edit" style="font-size:11px;margin-left:6px">'+(dbTouched(db)?'✏️ bearbeiten':'＋ ausfüllen')+'</button>';
   var dbSec=pmSec('📋 Projektdatenblatt',dbInner,dbAction);
 
-  $('view').innerHTML=head+kundeSec+apSec+dbSec+techSec+dateiSec+rapSec+matSec+rechSec+taetSec+blSec;
+  $('view').innerHTML=head+kundeSec+apSec+dbSec+techSec+dateiSec+rapSec+matSec+rechSec+taetSec+blSec+zsSec;
 
   var back=$('pm-back'); if(back) back.onclick=renderProjektListe;
+  var za=$('zs-add'); if(za) za.onclick=function(){ zsAbschnittForm(null); };
+  zsLoad(_pmProjektId);
   $('pm-edit').onclick=function(){ openProjektEdit(p); };
   var dbe=$('pm-db-edit'); if(dbe) dbe.onclick=openDatenblatt;
   $('pm-kunde-set').onclick=openKundeZuordnen;
@@ -1860,6 +1885,146 @@ function openKundeZuordnen(){
 function saveKundeZuordnung(kundeId){
   api('pm_projekt_save',{id:_pmProjektId,kunde_id:kundeId}).then(function(){ closeSheet(); loadProjekt(); toast('Kunde zugeordnet'); })
     .catch(function(){ toast('Fehler'); });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZAHLUNGSSYSTEM (Escrow) — interne Ansicht + Aggregat je Bauabschnitt.
+//   Daten via zs_projekt; Aktionen via zs_step_action (liefert frisches Payload).
+// ═══════════════════════════════════════════════════════════════════════════
+var _zsData=null;
+var ZS_PROFILE=[
+  {v:'stueck_15_70_15',t:'Stück/Zone 15/70/15'},
+  {v:'komplex_15_25_50_10',t:'Komplex-Block 15/25/50/10'},
+  {v:'endmontage_30_70',t:'Endmontage 30/70 (letzte=Abnahme)'},
+  {v:'klein_pauschal',t:'Klein-Pauschal mit Blockaden'}
+];
+var ZS_EINHEIT=[
+  {v:'zone',t:'Zone'},{v:'giessrahmen',t:'Gießrahmen'},{v:'verteiler',t:'Verteiler'},
+  {v:'bad_wc',t:'Bad/WC'},{v:'meilenstein',t:'Meilenstein'},{v:'pauschal',t:'Pauschal'}
+];
+function zsProfilLabel(v){ for(var i=0;i<ZS_PROFILE.length;i++) if(ZS_PROFILE[i].v===v) return ZS_PROFILE[i].t; return v||'—'; }
+function zsEinheitLabel(v){ for(var i=0;i<ZS_EINHEIT.length;i++) if(ZS_EINHEIT[i].v===v) return ZS_EINHEIT[i].t; return v||'—'; }
+function zsChf(v){ return 'CHF '+Number(v||0).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function zsAbStatusColor(s){ return ({geplant:'var(--muted)',angezahlt:'var(--gold)',aktiv:'var(--gold)',zwischenfreigabe:'#4aa8ff',abgeschlossen:'#3dd68c',nachtrag:'#e0a341'})[s]||'var(--muted)'; }
+function zsStepStatusLabel(s){ return ({wartend:'wartend',aktiv:'aktiv',hinterlegt:'im Escrow',gs_fertig:'in Bestätigung',freigegeben:'freigegeben',offen:'offen',geklaert:'geklärt'})[s]||s; }
+function zsStepStatusColor(s){ return ({wartend:'var(--muted2)',aktiv:'var(--gold)',hinterlegt:'#4aa8ff',gs_fertig:'#e0a341',freigegeben:'#3dd68c',offen:'var(--gold)',geklaert:'#3dd68c'})[s]||'var(--muted)'; }
+
+function zsLoad(pid){
+  api('zs_projekt',{projekt_id:pid}).then(function(d){
+    var box=$('zs-box'); if(!box) return;
+    if(d && d.notMigrated){ box.innerHTML=migRow('Zahlungssystem-Tabellen noch nicht migriert.'); return; }
+    if(!d || d.error){ box.innerHTML='<div class="empty" style="padding:12px">'+esc((d&&d.error)||'Ladefehler')+'</div>'; return; }
+    _zsData=d; zsRender(d);
+  }).catch(function(){ var box=$('zs-box'); if(box) box.innerHTML='<div class="empty" style="padding:12px">Ladefehler Zahlungssystem</div>'; });
+}
+function zsRender(d){
+  var box=$('zs-box'); if(!box) return;
+  var abs=(d&&d.abschnitte)||[];
+  if(!abs.length){ box.innerHTML='<div class="empty" style="padding:12px">Noch kein Bauabschnitt. Über „＋ Bauabschnitt" anlegen – die Zahlungs-/Blockaden-Kette wird automatisch generiert.</div>'; return; }
+  box.innerHTML=abs.map(zsAbschnittHtml).join('');
+}
+function zsAbschnittHtml(a){
+  var agg=a.aggregat||{}, pct=agg.prozent||0;
+  var head='<div class="zs-ab-head"><div><strong>'+esc(a.name)+'</strong> '+pmPill(a.status||'—',zsAbStatusColor(a.status))+
+    '<div class="zs-ab-meta">'+esc(zsEinheitLabel(a.einheit_typ))+' ×'+esc(a.einheit_anzahl)+' · '+zsChf(a.gesamtbetrag)+' · '+esc(zsProfilLabel(a.split_profil))+'</div></div>'+
+    '<div style="display:flex;gap:4px">'+
+      '<button class="chip" style="font-size:11px" onclick="zsAbschnittForm(\''+a.id+'\')">✏️</button>'+
+      '<button class="chip" style="font-size:11px" onclick="zsRegen(\''+a.id+'\')">↻ neu</button>'+
+      '<button class="chip" style="font-size:11px" onclick="zsDel(\''+a.id+'\')">×</button></div></div>';
+  var next=agg.naechster?('▸ Nächster Schritt: '+esc(agg.naechster.bezeichnung)):'✓ Alle Schritte abgeschlossen';
+  var aggBlock='<div class="zs-agg"><div class="zs-bar"><div class="zs-fill" style="width:'+pct+'%"></div></div>'+
+    '<div class="zs-agg-line"><span>'+pct+'% freigegeben</span><span>'+zsChf(agg.freigegeben)+' / '+zsChf(agg.total)+'</span></div>'+
+    '<div class="zs-next">'+next+'</div></div>';
+  var steps='<div class="zs-steps">'+(a.steps||[]).map(zsStepHtml).join('')+'</div>';
+  return '<div class="zs-ab">'+head+aggBlock+steps+'</div>';
+}
+function zsStepHtml(s){
+  var icon=s.typ==='blockade'?'⛔':'💰';
+  var betr=s.typ==='zahlung'?('<span class="zs-betr">'+zsChf(s.betrag)+'</span>'):'';
+  var pill=pmPill(zsStepStatusLabel(s.status),zsStepStatusColor(s.status));
+  var escLine='';
+  if(s.typ==='zahlung'){
+    var parts=[];
+    if(s.escrow_status) parts.push('Escrow: '+esc(s.escrow_status));
+    if(s.gs_bestaetigt) parts.push('GS ✓');
+    if(s.kunde_bestaetigt) parts.push('Kunde ✓');
+    if(s.rueckbehalt_prozent>0) parts.push('Rückbehalt '+esc(s.rueckbehalt_prozent)+'%');
+    if(s.stripe_transfer_id) parts.push(esc(s.stripe_transfer_id));
+    else if(s.stripe_payment_intent_id) parts.push(esc(s.stripe_payment_intent_id));
+    if(parts.length) escLine='<div class="zs-esc">'+parts.join(' · ')+'</div>';
+  }
+  return '<div class="zs-step"><div class="zs-step-h"><span class="zs-no">'+esc(s.reihenfolge)+'</span><span class="zs-ic">'+icon+'</span>'+
+    '<span class="zs-bez">'+esc(s.bezeichnung)+'</span>'+betr+pill+'</div>'+escLine+zsStepBtns(s)+'</div>';
+}
+function zsStepBtns(s){
+  var b=[];
+  function btn(op,label){ return '<button class="chip zs-op" onclick="zsAct(\''+s.id+'\',\''+op+'\')">'+esc(label)+'</button>'; }
+  if(s.typ==='blockade' && s.status==='offen') b.push(btn('blockade_freigeben','✓ freigeben'));
+  if(s.typ==='zahlung'){
+    if(s.status==='aktiv') b.push(btn('hinterlegen','💳 hinterlegen'));
+    else if(s.status==='hinterlegt'||s.status==='gs_fertig'){
+      if(!s.gs_bestaetigt) b.push(btn('gs_fertig','GS fertig'));
+      if(!s.kunde_bestaetigt) b.push(btn('kunde_fertig','Kunde fertig'));
+      if(s.gs_bestaetigt && s.kunde_bestaetigt) b.push(btn('freigeben','💰 freigeben'));
+    }
+  }
+  return b.length?'<div class="zs-btns">'+b.join('')+'</div>':'';
+}
+function zsAct(stepId,op){
+  api('zs_step_action',{step_id:stepId,op:op}).then(function(d){
+    if(d && d.error){ toast(d.error); return; }
+    if(d && d.notMigrated){ toast('Nicht migriert'); return; }
+    _zsData=d; zsRender(d); toast('Aktualisiert');
+  }).catch(function(){ toast('Aktion fehlgeschlagen'); });
+}
+function zsRegen(id){
+  if(!confirm('Kette neu berechnen? Überschreibt den bisherigen Zahlungs-Fortschritt dieses Abschnitts.')) return;
+  api('zs_abschnitt_save',{id:id,regenerate:true}).then(function(d){
+    if(d && d.error){ toast(d.error); return; }
+    zsLoad(_pmProjektId); toast('Kette neu generiert');
+  }).catch(function(){ toast('Fehler'); });
+}
+function zsDel(id){
+  if(!confirm('Bauabschnitt inkl. Kette und Escrow löschen?')) return;
+  api('zs_abschnitt_del',{id:id}).then(function(d){
+    if(d && d.error){ toast(d.error); return; }
+    zsLoad(_pmProjektId); toast('Gelöscht');
+  }).catch(function(){ toast('Fehler'); });
+}
+function zsAbschnittForm(id){
+  var a=null;
+  if(id && _zsData){ (_zsData.abschnitte||[]).forEach(function(x){ if(x.id===id) a=x; }); }
+  a=a||{};
+  var regenHint=id?'<div class="sec-t">Kette</div><label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)"><input type="checkbox" id="zs-regen"/> Kette jetzt neu berechnen (überschreibt Fortschritt)</label>':'';
+  openSheet('<h3>'+(id?'Bauabschnitt bearbeiten':'Neuer Bauabschnitt')+'</h3>'+
+    '<input class="field" id="zs-name" placeholder="Name (z. B. Rohbau Haus A) *" value="'+esc(a.name||'')+'"/>'+
+    '<div class="sec-t">Split-Profil</div>'+pmSelect('zs-profil',ZS_PROFILE,a.split_profil||'stueck_15_70_15')+
+    '<div class="sec-t">Einheit</div>'+pmSelect('zs-einheit',ZS_EINHEIT,a.einheit_typ||'pauschal')+
+    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+      '<input class="field" id="zs-anzahl" type="number" min="0" placeholder="Anzahl Einheiten" value="'+esc(a.einheit_anzahl!=null?a.einheit_anzahl:'')+'"/>'+
+      '<input class="field" id="zs-tage" type="number" min="0" step="0.5" placeholder="Team-Tage" value="'+esc(a.team_tage!=null?a.team_tage:'')+'"/></div>'+
+    '<input class="field" id="zs-betrag" type="number" min="0" step="0.01" placeholder="Gesamtbetrag CHF *" value="'+esc(a.gesamtbetrag!=null?a.gesamtbetrag:'')+'" style="margin-top:8px"/>'+
+    regenHint+
+    '<div class="login-msg" id="zs-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="zs-save" style="margin-top:12px">Speichern</button>'+
+    '<button class="btn ghost" id="zs-cancel">Abbrechen</button>');
+  $('zs-cancel').onclick=closeSheet;
+  $('zs-save').onclick=function(){
+    var name=(($('zs-name')||{}).value||'').trim();
+    var betrag=($('zs-betrag')||{}).value;
+    if(!name){ $('zs-msg').className='login-msg err'; $('zs-msg').textContent='Name erforderlich'; return; }
+    if(betrag===''||isNaN(Number(betrag))){ $('zs-msg').className='login-msg err'; $('zs-msg').textContent='Gesamtbetrag erforderlich'; return; }
+    var body={id:id||undefined,projekt_id:_pmProjektId,name:name,split_profil:($('zs-profil')||{}).value,
+      einheit_typ:($('zs-einheit')||{}).value,einheit_anzahl:($('zs-anzahl')||{}).value||0,
+      team_tage:($('zs-tage')||{}).value||0,gesamtbetrag:betrag};
+    var rg=$('zs-regen'); if(rg&&rg.checked) body.regenerate=true;
+    var btn=$('zs-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
+    api('zs_abschnitt_save',body).then(function(d){
+      if(d && d.error){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('zs-msg').className='login-msg err'; $('zs-msg').textContent=d.error; return; }
+      if(d && d.notMigrated){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('zs-msg').className='login-msg err'; $('zs-msg').textContent='Tabellen noch nicht migriert'; return; }
+      closeSheet(); zsLoad(_pmProjektId); toast(id?'Gespeichert':'Bauabschnitt + Kette angelegt');
+    }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('zs-msg').className='login-msg err'; $('zs-msg').textContent='Fehler beim Speichern'; });
+  };
 }
 
 // ── Kundenverwaltung ──

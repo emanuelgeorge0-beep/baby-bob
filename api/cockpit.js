@@ -2443,8 +2443,13 @@ async function zsAbschnittSave(b, access) {
     let abschnitt, doGenerate;
     if (b.id) {
       const id = uuid(b.id);
-      const r = await sbWrite('PATCH', `gs_bauabschnitte?id=eq.${id}`, patch);
-      abschnitt = Array.isArray(r) ? r[0] : r;
+      if (Object.keys(patch).length) {
+        const r = await sbWrite('PATCH', `gs_bauabschnitte?id=eq.${id}`, patch);
+        abschnitt = Array.isArray(r) ? r[0] : r;
+      } else {
+        const r = await sbGet(`gs_bauabschnitte?id=eq.${id}&select=*&limit=1`); // reines "neu berechnen"
+        abschnitt = r && r[0];
+      }
       doGenerate = b.regenerate === true;
     } else {
       const pid = uuid(b.projekt_id);
