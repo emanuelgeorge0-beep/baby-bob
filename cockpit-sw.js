@@ -2,7 +2,7 @@
 // Zweck: macht die App auf Android installierbar (fetch-Handler ist Pflicht für
 // den Install-Prompt) und cacht die Shell für schnellen, app-artigen Start.
 // WICHTIG: /api/* wird NIE gecacht → Jarvis/Cockpit zeigen immer Live-Daten.
-const CACHE = 'gs-cockpit-v1';
+const CACHE = 'gs-cockpit-v2';
 const SHELL = [
   '/gs-intern-7k2x',
   '/cockpit-manifest.json',
@@ -37,8 +37,13 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin) return;       // fremde Hosts (ElevenLabs/Claude) nie anfassen
   if (url.pathname.startsWith('/api/')) return;      // API immer live, nie aus Cache
 
-  // Navigation → network-first, Fallback Shell (App startet auch offline).
-  if (req.mode === 'navigate') {
+  // Cockpit-HTML (Route ODER Datei) IMMER frisch vom Server: network-first, Cache
+  // nur als Offline-Fallback. Verhindert, dass der Browser an einer alten
+  // gs-intern.html haengt (Ursache des verschwundenen Übersicht-Features).
+  const isCockpitHtml = url.pathname === '/gs-intern-7k2x' || url.pathname === '/gs-intern.html';
+
+  // Navigation ODER Cockpit-HTML → network-first, Fallback Shell (App startet auch offline).
+  if (req.mode === 'navigate' || isCockpitHtml) {
     e.respondWith(
       fetch(req)
         .then((r) => { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(req, cp)); return r; })
