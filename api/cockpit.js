@@ -11,6 +11,7 @@
 import { getWeather } from './weather.js';
 import { buildPdf } from '../lib/pdf.js';
 import { isEntitled } from '../lib/entitlements.js';
+import { escrowHinterlegen, escrowFreigeben } from './escrow_stripe.js';
 
 // Signalisiert „darf der Aufrufer nicht" → Handler übersetzt zu HTTP 403.
 class Forbidden extends Error {}
@@ -196,6 +197,12 @@ export default async function handler(req, res) {
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
       case 'pm_datenblatt_save':   return res.status(200).json(await savePmDatenblatt(req.body, scope));
+      // ── Zahlungssystem (Escrow-Engine) — Master-only (nicht in PM_ACTIONS) ──
+      case 'zs_profile':       return res.status(200).json(await zsProfile());
+      case 'zs_projekt':       return res.status(200).json(await zsProjekt(req.body.projekt_id));
+      case 'zs_abschnitt_save':return res.status(200).json(await zsAbschnittSave(req.body, access));
+      case 'zs_abschnitt_del': return res.status(200).json(await zsAbschnittDel(req.body.id));
+      case 'zs_step_action':   return res.status(200).json(await zsStepAction(req.body, access));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -2239,4 +2246,315 @@ function nowStamp() { return String(Date.now()); }
 function sbGuessType(n) {
   const e = String(n).toLowerCase().split('.').pop();
   return { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', dwg: 'application/acad', dxf: 'image/vnd.dxf' }[e] || 'application/octet-stream';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZAHLUNGSSYSTEM (Escrow-Engine) — Master-only.
+//   Tabellen (bereits migriert): gs_bauabschnitte, gs_steps, gs_escrow,
+//   gs_split_profile, gs_bob_wissen. Der Server nutzt service_role (SB/sbGet/
+//   sbWrite). Stripe ist ein Stub (api/escrow_stripe.js) — es fliesst kein Geld.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// DB-Accessor fuer den Stripe-Stub (Dependency-Injection statt 2. SB-Client).
+const zsSb = { get: sbGet, write: sbWrite };
+
+// gs_bauabschnitte fehlt (noch nicht migriert)? → sauberer Hinweis statt 500.
+function zsNotMigrated(e) { return { error: 'Zahlungssystem nicht migriert', notMigrated: true, detail: (e && e.message) || '' }; }
+
+// Split-Profile (Datensaetze) laden — fuer das Anlage-Formular.
+async function zsProfile() {
+  try {
+    const rows = await sbGet('gs_split_profile?select=name,bezeichnung,verteilung&order=name.asc');
+    return { profile: rows || [] };
+  } catch (e) { if (isNoTable(e)) return zsNotMigrated(e); throw e; }
+}
+
+// Verteilung eines Profils lesen (jsonb → Objekt). Fallback wenn Datensatz fehlt.
+async function zsVerteilung(profil) {
+  const rows = await sbGet(`gs_split_profile?name=eq.${encodeURIComponent(profil)}&select=verteilung&limit=1`).catch(() => []);
+  const v = rows && rows[0] && rows[0].verteilung;
+  if (v && typeof v === 'object') return v;
+  return { anzahlung: 15, einheiten: 70, abnahme: 15, rueckbehalt: 10 };
+}
+
+// Step-Spezifikation je Profil (Reihenfolge = Array-Reihenfolge; Betraege folgen
+// in zsAllocate). fortschritt:true → teilt sich den einheiten-Prozentblock.
+function zsBuildSpecs(profil, einheitAnzahl, vert) {
+  const units = Math.max(1, einheitAnzahl | 0);
+  const rb = num(vert.rueckbehalt) || 0;
+  const specs = [];
+  if (profil === 'komplex_15_25_50_10') {
+    const ms = Array.isArray(vert.meilensteine) ? vert.meilensteine : [25, 50];
+    const msNames = ['Speicher gestellt', 'Installation komplett'];
+    specs.push({ typ: 'zahlung', art: 'anzahlung', bezeichnung: 'Anzahlung', pct: num(vert.anzahlung) });
+    ms.forEach((p, i) => specs.push({ typ: 'zahlung', art: 'meilenstein', bezeichnung: msNames[i] || `Meilenstein ${i + 1}`, pct: num(p) }));
+    specs.push({ typ: 'zahlung', art: 'abnahme', bezeichnung: 'Abnahme', pct: num(vert.abnahme), rueckbehalt: rb });
+  } else if (profil === 'endmontage_30_70') {
+    specs.push({ typ: 'zahlung', art: 'anzahlung', bezeichnung: 'Anzahlung', pct: num(vert.anzahlung) });
+    for (let i = 1; i <= units; i++) {
+      const last = i === units; // letzte Einheit = Abnahme (kein separater Abnahme-Step)
+      specs.push({ typ: 'zahlung', art: last ? 'abnahme' : 'fortschritt', fortschritt: true, rueckbehalt: last ? rb : 0,
+        bezeichnung: last ? `Endmontage/Abnahme (${i}/${units})` : `Fortschritt Einheit ${i}/${units}` });
+    }
+  } else if (profil === 'klein_pauschal') {
+    specs.push({ typ: 'zahlung', art: 'anzahlung', bezeichnung: 'Anzahlung', pct: num(vert.anzahlung) });
+    specs.push({ typ: 'blockade', bezeichnung: 'Material-Gate' });
+    for (let i = 1; i <= units; i++) specs.push({ typ: 'zahlung', art: 'fortschritt', fortschritt: true, bezeichnung: `Fortschritt Einheit ${i}/${units}` });
+    specs.push({ typ: 'blockade', bezeichnung: 'Druckprotokoll' });
+    specs.push({ typ: 'blockade', bezeichnung: 'Fliesenleger' });
+    specs.push({ typ: 'blockade', bezeichnung: 'Endabnahme' });
+    specs.push({ typ: 'zahlung', art: 'abnahme', bezeichnung: 'Abnahme', pct: num(vert.abnahme), rueckbehalt: rb });
+  } else { // stueck_15_70_15 (Default)
+    specs.push({ typ: 'zahlung', art: 'anzahlung', bezeichnung: 'Anzahlung', pct: num(vert.anzahlung) });
+    for (let i = 1; i <= units; i++) specs.push({ typ: 'zahlung', art: 'fortschritt', fortschritt: true, bezeichnung: `Fortschritt Einheit ${i}/${units}` });
+    specs.push({ typ: 'zahlung', art: 'abnahme', bezeichnung: 'Abnahme', pct: num(vert.abnahme), rueckbehalt: rb });
+  }
+  return specs;
+}
+
+// Betraege in Rappen rechnen → Summe EXAKT = gesamtbetrag. Rundungsrest landet
+// auf dem letzten Fortschritt-Step (bzw. letzten Zahlungs-Step ohne Fortschritt).
+function zsAllocate(specs, gesamtbetrag, vert) {
+  const total = Math.round(num(gesamtbetrag) * 100); // Rappen
+  const einheitenPct = num(vert.einheiten) || 0;
+  const fIdx = specs.map((s, i) => (s.fortschritt ? i : -1)).filter((i) => i >= 0);
+  const cents = specs.map(() => 0);
+  specs.forEach((s, i) => { if (s.typ === 'zahlung' && !s.fortschritt) cents[i] = Math.round(total * num(s.pct) / 100); });
+  if (fIdx.length) {
+    const block = Math.round(total * einheitenPct / 100);
+    const base = Math.floor(block / fIdx.length);
+    fIdx.forEach((i) => { cents[i] = base; });
+    cents[fIdx[fIdx.length - 1]] += block - base * fIdx.length; // Rest im Block auf letzten Fortschritt
+  }
+  const diff = total - cents.reduce((a, b) => a + b, 0);
+  if (diff !== 0) {
+    let t = fIdx.length ? fIdx[fIdx.length - 1] : -1;
+    if (t < 0) for (let i = specs.length - 1; i >= 0; i--) if (specs[i].typ === 'zahlung') { t = i; break; }
+    if (t >= 0) cents[t] += diff; // Gesamt-Rundungsrest → exakt = gesamtbetrag
+  }
+  return cents.map((c) => Math.round(c) / 100);
+}
+
+// Step-Kette (+ Escrow) fuer einen Bauabschnitt (neu) erzeugen. Ersetzt eine
+// evtl. bestehende Kette (Escrow via FK-Cascade). Danach Status-Automat + Bob-Wissen.
+async function zsGenerateChain(abschnitt) {
+  const profil = abschnitt.split_profil || 'stueck_15_70_15';
+  const vert = await zsVerteilung(profil);
+  const specs = zsBuildSpecs(profil, abschnitt.einheit_anzahl, vert);
+  const betraege = zsAllocate(specs, abschnitt.gesamtbetrag, vert);
+  await sbWrite('DELETE', `gs_steps?bauabschnitt_id=eq.${abschnitt.id}`, undefined, 'return=minimal');
+  const stepRows = specs.map((s, i) => ({
+    bauabschnitt_id: abschnitt.id, reihenfolge: i + 1, typ: s.typ,
+    zahlung_art: s.typ === 'zahlung' ? (s.art || null) : null,
+    bezeichnung: s.bezeichnung, betrag: s.typ === 'zahlung' ? betraege[i] : 0, status: 'wartend',
+  }));
+  const inserted = await sbWrite('POST', 'gs_steps', stepRows); // return=representation
+  const idByR = {}; (inserted || []).forEach((r) => { idByR[r.reihenfolge] = r.id; });
+  const escRows = [];
+  specs.forEach((s, i) => {
+    if (s.typ !== 'zahlung') return;
+    escRows.push({ step_id: idByR[i + 1], escrow_status: 'offen', betrag: betraege[i], rueckbehalt_prozent: s.rueckbehalt || 0 });
+  });
+  if (escRows.length) await sbWrite('POST', 'gs_escrow', escRows, 'return=minimal');
+  const rec = await zsRecompute(abschnitt.id);
+  await zsWriteBobWissen(abschnitt, rec.steps);
+  return rec.steps;
+}
+
+// ── Status-Automat: streng nach reihenfolge, Escrow = Quelle der Wahrheit ──
+function zsStepDone(step) { return step.typ === 'blockade' ? step.status === 'geklaert' : step.status === 'freigegeben'; }
+function zsDeriveStepStatus(step, esc, predDone) {
+  if (step.typ === 'blockade') {
+    if (step.status === 'geklaert') return 'geklaert';
+    return predDone ? 'offen' : 'wartend';   // offen = aktiv/zu klaeren
+  }
+  const es = (esc && esc.escrow_status) || 'offen';
+  if (es === 'freigegeben') return 'freigegeben';
+  if (!predDone) return 'wartend';
+  if (es === 'hinterlegt') {
+    const gs = !!(esc && esc.gs_bestaetigt_at), ku = !!(esc && esc.kunde_bestaetigt_at);
+    return (gs || ku) ? 'gs_fertig' : 'hinterlegt';  // gs_fertig = in Doppelbestaetigung
+  }
+  return 'aktiv'; // Escrow offen + Vorgaenger fertig → hinterlegbar
+}
+function zsDeriveAbschnittStatus(steps) {
+  const zahl = steps.filter((s) => s.typ === 'zahlung');
+  if (!zahl.length) return 'geplant';
+  const released = zahl.filter((s) => s.status === 'freigegeben');
+  if (released.length === zahl.length) return 'abgeschlossen';
+  if (zahl[0].status === 'freigegeben') return released.length >= 2 ? 'zwischenfreigabe' : 'angezahlt';
+  const active = steps.some((s) => ['aktiv', 'hinterlegt', 'gs_fertig'].includes(s.status) || (s.typ === 'blockade' && s.status === 'offen'));
+  return active ? 'aktiv' : 'geplant';
+}
+async function zsRecompute(abschnittId) {
+  const steps = await sbGet(`gs_steps?bauabschnitt_id=eq.${abschnittId}&select=*&order=reihenfolge.asc`);
+  const zIds = steps.filter((s) => s.typ === 'zahlung').map((s) => s.id);
+  const escByStep = {};
+  if (zIds.length) {
+    const escs = await sbGet(`gs_escrow?step_id=in.(${zIds.join(',')})&select=*`).catch(() => []);
+    (escs || []).forEach((e) => { escByStep[e.step_id] = e; });
+  }
+  let predDone = true;
+  for (const s of steps) {
+    const want = zsDeriveStepStatus(s, escByStep[s.id], predDone);
+    if (want !== s.status) { await sbWrite('PATCH', `gs_steps?id=eq.${s.id}`, { status: want }, 'return=minimal'); s.status = want; }
+    predDone = zsStepDone(s);
+  }
+  const status = zsDeriveAbschnittStatus(steps);
+  await sbWrite('PATCH', `gs_bauabschnitte?id=eq.${abschnittId}`, { status }, 'return=minimal').catch(() => {});
+  return { steps, status, escByStep };
+}
+
+// Bob-Wissen: bei jeder (Neu-)Kalkulation eines Abschnitts einen Lern-Datensatz.
+async function zsWriteBobWissen(abschnitt, steps) {
+  const std = num(abschnitt.team_tage) * 8; // Team-Tage → Stunden (8h/Tag)
+  const ansatz = std > 0 ? Math.round(num(abschnitt.gesamtbetrag) / std * 100) / 100 : null;
+  const row = {
+    quelle: 'bauabschnitt', bauabschnitt_id: abschnitt.id,
+    einheit_typ: abschnitt.einheit_typ, team_tage: num(abschnitt.team_tage),
+    einheit_anzahl: abschnitt.einheit_anzahl | 0, split_profil: abschnitt.split_profil,
+    ansatz_chf_h: ansatz, eff_chf_h: ansatz,
+    datensatz: {
+      abschnitt: { name: abschnitt.name, einheit_typ: abschnitt.einheit_typ, einheit_anzahl: abschnitt.einheit_anzahl, gesamtbetrag: abschnitt.gesamtbetrag, split_profil: abschnitt.split_profil },
+      steps: (steps || []).map((s) => ({ reihenfolge: s.reihenfolge, typ: s.typ, zahlung_art: s.zahlung_art, bezeichnung: s.bezeichnung, betrag: s.betrag })),
+    },
+  };
+  await sbWrite('POST', 'gs_bob_wissen', row, 'return=minimal').catch(() => {});
+}
+
+// Bauabschnitt anlegen/aendern. Neu → Kette generieren. Aendern → nur mit
+// regenerate:true neu berechnen (schuetzt bereits laufenden Escrow-Fortschritt).
+function zsClampEinheitTyp(v) {
+  const ok = ['zone', 'giessrahmen', 'verteiler', 'bad_wc', 'meilenstein', 'pauschal'];
+  return ok.includes(v) ? v : 'pauschal';
+}
+async function zsAbschnittSave(b, access) {
+  try {
+    const patch = {};
+    if (b.name !== undefined) patch.name = String(b.name || '').trim().slice(0, 120);
+    if (b.einheit_typ !== undefined) patch.einheit_typ = zsClampEinheitTyp(String(b.einheit_typ || '').trim());
+    if (b.einheit_anzahl !== undefined) patch.einheit_anzahl = Math.max(0, Math.min(9999, num(b.einheit_anzahl) | 0));
+    if (b.team_tage !== undefined) patch.team_tage = Math.max(0, num(b.team_tage));
+    if (b.gesamtbetrag !== undefined) patch.gesamtbetrag = Math.max(0, num(b.gesamtbetrag));
+    if (b.split_profil !== undefined) patch.split_profil = String(b.split_profil || 'stueck_15_70_15').trim().slice(0, 60);
+
+    let abschnitt, doGenerate;
+    if (b.id) {
+      const id = uuid(b.id);
+      const r = await sbWrite('PATCH', `gs_bauabschnitte?id=eq.${id}`, patch);
+      abschnitt = Array.isArray(r) ? r[0] : r;
+      doGenerate = b.regenerate === true;
+    } else {
+      const pid = uuid(b.projekt_id);
+      if (!patch.name) patch.name = 'Bauabschnitt';
+      patch.projekt_id = pid;
+      // reihenfolge = aktueller Max + 1
+      const ex = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=reihenfolge&order=reihenfolge.desc&limit=1`).catch(() => []);
+      patch.reihenfolge = ((ex && ex[0] && ex[0].reihenfolge) || 0) + 1;
+      const r = await sbWrite('POST', 'gs_bauabschnitte', patch);
+      abschnitt = Array.isArray(r) ? r[0] : r;
+      doGenerate = true;
+    }
+    if (!abschnitt) return { error: 'Bauabschnitt nicht gespeichert' };
+    if (doGenerate) await zsGenerateChain(abschnitt);
+    return { ok: true, abschnitt, regenerated: !!doGenerate };
+  } catch (e) { if (isNoTable(e)) return zsNotMigrated(e); throw e; }
+}
+
+async function zsAbschnittDel(id) {
+  try {
+    id = uuid(id);
+    await sbWrite('DELETE', `gs_bauabschnitte?id=eq.${id}`, undefined, 'return=minimal'); // Steps+Escrow via Cascade
+    return { ok: true };
+  } catch (e) { if (isNoTable(e)) return zsNotMigrated(e); throw e; }
+}
+
+// Eine Aktion auf einen Step (treibt den Status-Automaten). op:
+//   blockade_freigeben | hinterlegen | gs_fertig | kunde_fertig | freigeben
+async function zsStepAction(b, access) {
+  try {
+    const stepId = uuid(b.step_id);
+    const op = String(b.op || '');
+    const srows = await sbGet(`gs_steps?id=eq.${stepId}&select=*&limit=1`);
+    const step = srows && srows[0];
+    if (!step) return { error: 'Step nicht gefunden' };
+    const arows = await sbGet(`gs_bauabschnitte?id=eq.${step.bauabschnitt_id}&select=id,projekt_id&limit=1`);
+    const abschnitt = arows && arows[0];
+    if (!abschnitt) return { error: 'Bauabschnitt nicht gefunden' };
+    const uid = (access && access.userId) || null;
+
+    if (op === 'blockade_freigeben') {
+      if (step.typ !== 'blockade') return { error: 'Kein Blockade-Step' };
+      if (step.status !== 'offen') return { error: 'Blockade nicht offen (Vorgaenger noch nicht fertig?)' };
+      await sbWrite('PATCH', `gs_steps?id=eq.${stepId}`, { status: 'geklaert' }, 'return=minimal');
+    } else if (op === 'hinterlegen') {
+      if (step.typ !== 'zahlung') return { error: 'Kein Zahlungs-Step' };
+      if (step.status !== 'aktiv') return { error: 'Step nicht aktiv (Vorgaenger noch nicht freigegeben?)' };
+      await escrowHinterlegen(stepId, zsSb);
+    } else if (op === 'gs_fertig' || op === 'kunde_fertig') {
+      const erows = await sbGet(`gs_escrow?step_id=eq.${stepId}&select=*&limit=1`);
+      const esc = erows && erows[0];
+      if (!esc || esc.escrow_status !== 'hinterlegt') return { error: 'Escrow nicht hinterlegt' };
+      const p = op === 'gs_fertig'
+        ? { gs_bestaetigt_at: new Date().toISOString(), gs_bestaetigt_by: uid }
+        : { kunde_bestaetigt_at: new Date().toISOString(), kunde_bestaetigt_by: uid };
+      await sbWrite('PATCH', `gs_escrow?id=eq.${esc.id}`, p, 'return=minimal');
+    } else if (op === 'freigeben') {
+      if (step.typ !== 'zahlung') return { error: 'Kein Zahlungs-Step' };
+      await escrowFreigeben(stepId, zsSb); // prueft Doppelbestaetigung selbst
+    } else {
+      return { error: 'Unbekannte Aktion' };
+    }
+    await zsRecompute(abschnitt.id);
+    return await zsProjekt(abschnitt.projekt_id);
+  } catch (e) {
+    if (isNoTable(e)) return zsNotMigrated(e);
+    return { error: (e && e.message) || 'Aktion fehlgeschlagen' };
+  }
+}
+
+// Projekt-Ansicht: alle Bauabschnitte → Step-Kette (+ Escrow) + Aggregat.
+async function zsProjekt(projektId) {
+  try {
+    const pid = uuid(projektId);
+    const prow = await sbGet(`gs_projekte?id=eq.${pid}&select=id,name&limit=1`).catch(() => []);
+    const projekt = (prow && prow[0]) || { id: pid, name: 'Projekt' };
+    const abs = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=*&order=reihenfolge.asc`);
+    const abschnitte = [];
+    for (const a of abs || []) {
+      const steps = await sbGet(`gs_steps?bauabschnitt_id=eq.${a.id}&select=*&order=reihenfolge.asc`);
+      const zIds = (steps || []).filter((s) => s.typ === 'zahlung').map((s) => s.id);
+      const escByStep = {};
+      if (zIds.length) {
+        const escs = await sbGet(`gs_escrow?step_id=in.(${zIds.join(',')})&select=*`).catch(() => []);
+        (escs || []).forEach((e) => { escByStep[e.step_id] = e; });
+      }
+      let totalC = 0, relC = 0, next = null;
+      const outSteps = (steps || []).map((s) => {
+        const e = escByStep[s.id] || null;
+        if (s.typ === 'zahlung') {
+          const c = Math.round(num(s.betrag) * 100); totalC += c;
+          if (e && e.escrow_status === 'freigegeben') relC += c;
+        }
+        if (!next && !zsStepDone(s)) next = { bezeichnung: s.bezeichnung, typ: s.typ, status: s.status };
+        return {
+          id: s.id, reihenfolge: s.reihenfolge, typ: s.typ, zahlung_art: s.zahlung_art,
+          bezeichnung: s.bezeichnung, betrag: num(s.betrag), status: s.status,
+          escrow_status: e ? e.escrow_status : null,
+          rueckbehalt_prozent: e ? num(e.rueckbehalt_prozent) : 0,
+          gs_bestaetigt: !!(e && e.gs_bestaetigt_at), kunde_bestaetigt: !!(e && e.kunde_bestaetigt_at),
+          stripe_payment_intent_id: e ? e.stripe_payment_intent_id : null,
+          stripe_transfer_id: e ? e.stripe_transfer_id : null,
+        };
+      });
+      abschnitte.push({
+        id: a.id, name: a.name, reihenfolge: a.reihenfolge, einheit_typ: a.einheit_typ,
+        einheit_anzahl: a.einheit_anzahl, team_tage: num(a.team_tage), gesamtbetrag: num(a.gesamtbetrag),
+        split_profil: a.split_profil, status: a.status,
+        steps: outSteps,
+        aggregat: { prozent: totalC ? Math.round(relC / totalC * 100) : 0, freigegeben: relC / 100, total: totalC / 100, naechster: next },
+      });
+    }
+    return { projekt, abschnitte, mig: true };
+  } catch (e) { if (isNoTable(e)) return zsNotMigrated(e); throw e; }
 }
