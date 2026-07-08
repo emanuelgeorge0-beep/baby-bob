@@ -475,6 +475,8 @@
   .zs-bez{font-size:13px;font-weight:600;flex:1;min-width:120px;}
   .zs-betr{font-size:12.5px;color:var(--gold);font-weight:700;}
   .zs-esc{font-size:11px;color:var(--muted2);margin:5px 0 0 27px;}
+  .zs-time{font-size:11px;color:var(--muted);margin:3px 0 0 27px;}
+  .zs-time-ok{color:#3dd68c;font-weight:600;}
   .zs-btns{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0 27px;}
   .zs-btns .zs-op{font-size:11px;}
 </style>
@@ -1905,6 +1907,14 @@ var ZS_EINHEIT=[
 function zsProfilLabel(v){ for(var i=0;i<ZS_PROFILE.length;i++) if(ZS_PROFILE[i].v===v) return ZS_PROFILE[i].t; return v||'—'; }
 function zsEinheitLabel(v){ for(var i=0;i<ZS_EINHEIT.length;i++) if(ZS_EINHEIT[i].v===v) return ZS_EINHEIT[i].t; return v||'—'; }
 function zsChf(v){ return 'CHF '+Number(v||0).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Audit-Zeitstempel: mitJahr=true → "TT.MM.JJJJ, HH:MM", sonst kompakt "TT.MM. HH:MM".
+function zsFmt(iso,mitJahr){
+  if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return '';
+  var p=function(n){ return (n<10?'0':'')+n; };
+  var tag=p(d.getDate())+'.'+p(d.getMonth()+1)+'.';
+  var datum=mitJahr?(tag+d.getFullYear()):tag;
+  return datum+(mitJahr?', ':' ')+p(d.getHours())+':'+p(d.getMinutes());
+}
 function zsAbStatusColor(s){ return ({geplant:'var(--muted)',angezahlt:'var(--gold)',aktiv:'var(--gold)',zwischenfreigabe:'#4aa8ff',abgeschlossen:'#3dd68c',nachtrag:'#e0a341'})[s]||'var(--muted)'; }
 function zsStepStatusLabel(s){ return ({wartend:'wartend',aktiv:'aktiv',hinterlegt:'im Escrow',gs_fertig:'in Bestätigung',freigegeben:'freigegeben',offen:'offen',geklaert:'geklärt'})[s]||s; }
 function zsStepStatusColor(s){ return ({wartend:'var(--muted2)',aktiv:'var(--gold)',hinterlegt:'#4aa8ff',gs_fertig:'#e0a341',freigegeben:'#3dd68c',offen:'var(--gold)',geklaert:'#3dd68c'})[s]||'var(--muted)'; }
@@ -1953,8 +1963,19 @@ function zsStepHtml(s){
     else if(s.stripe_payment_intent_id) parts.push(esc(s.stripe_payment_intent_id));
     if(parts.length) escLine='<div class="zs-esc">'+parts.join(' · ')+'</div>';
   }
+  // Audit-Trail: Zeitstempel der Freigabe + Doppelbestätigung (nur Anzeige).
+  var timeLine='';
+  if(s.typ==='zahlung'){
+    var tl=[];
+    if(s.freigegeben_at) tl.push('<div class="zs-time zs-time-ok">✓ Freigegeben: '+esc(zsFmt(s.freigegeben_at,true))+'</div>');
+    var conf=[];
+    if(s.gs_bestaetigt_at) conf.push('GS best. '+esc(zsFmt(s.gs_bestaetigt_at,false)));
+    if(s.kunde_bestaetigt_at) conf.push('Kunde best. '+esc(zsFmt(s.kunde_bestaetigt_at,false)));
+    if(conf.length) tl.push('<div class="zs-time">'+conf.join(' · ')+'</div>');
+    timeLine=tl.join('');
+  }
   return '<div class="zs-step"><div class="zs-step-h"><span class="zs-no">'+esc(s.reihenfolge)+'</span><span class="zs-ic">'+icon+'</span>'+
-    '<span class="zs-bez">'+esc(s.bezeichnung)+'</span>'+betr+pill+'</div>'+escLine+zsStepBtns(s)+'</div>';
+    '<span class="zs-bez">'+esc(s.bezeichnung)+'</span>'+betr+pill+'</div>'+escLine+timeLine+zsStepBtns(s)+'</div>';
 }
 function zsStepBtns(s){
   var b=[];

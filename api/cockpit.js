@@ -2581,6 +2581,10 @@ async function zsProjekt(projektId) {
           escrow_status: e ? e.escrow_status : null,
           rueckbehalt_prozent: e ? num(e.rueckbehalt_prozent) : 0,
           gs_bestaetigt: !!(e && e.gs_bestaetigt_at), kunde_bestaetigt: !!(e && e.kunde_bestaetigt_at),
+          // Roh-Zeitstempel fuer den Audit-Trail (reine Anzeige, keine Logik).
+          freigegeben_at: e ? (e.freigegeben_at || null) : null,
+          gs_bestaetigt_at: e ? (e.gs_bestaetigt_at || null) : null,
+          kunde_bestaetigt_at: e ? (e.kunde_bestaetigt_at || null) : null,
           stripe_payment_intent_id: e ? e.stripe_payment_intent_id : null,
           stripe_transfer_id: e ? e.stripe_transfer_id : null,
         };
