@@ -135,6 +135,15 @@ export default async function handler(req, res) {
   if (!access) return res.status(403).json({ error: 'Kein Zugriff' }); // generisch, kein Leak
   const scope = { partnerId: access.partnerId }; // Master: null → sieht alles
 
+  // Zahlungssystem-Modul zusaetzlich per Entitlement gaten. Master hat den Key
+  // 'zahlungssystem' immer; Partner brauchen die Freischaltung in der Matrix.
+  // (Aktuell ohnehin Master-only, weil zs_* NICHT in PM_ACTIONS steht — resolveAccess
+  //  laesst Partner gar nicht durch. Der Check ist der saubere Vorbau fuer den Submodus.)
+  if (typeof action === 'string' && action.startsWith('zs_')) {
+    try { await requireZahlungssystem(access); }
+    catch (e) { if (e instanceof Forbidden) return res.status(403).json({ error: 'Kein Zugriff' }); throw e; }
+  }
+
   try {
     switch (action) {
       case 'dashboard':       return res.status(200).json(await getDashboard());
@@ -2257,6 +2266,28 @@ function sbGuessType(n) {
 
 // DB-Accessor fuer den Stripe-Stub (Dependency-Injection statt 2. SB-Client).
 const zsSb = { get: sbGet, write: sbWrite };
+
+// ── Entitlement-Gate fuer das Zahlungssystem-Modul ──────────────────────────
+// Master hat den Feature-Key 'zahlungssystem' IMMER. Partner nur, wenn er in der
+// Master-Cockpit-Matrix freigeschaltet ist (gs_partner_entitlements).
+//
+// ┌───────────────────────────────────────────────────────────────────────────┐
+// │ TODO Partner-Variante / Submodus haengt hier ein:                          │
+// │ Damit ein freigeschalteter Partner (oder Subunternehmer) das Modul nutzen  │
+// │ kann, muss                                                                 │
+// │   1) resolveAccess() die zs_*-Actions fuer Partner zulassen (analog zu     │
+// │      PM_ACTIONS: eigenes Set + isEntitled-Pruefung),                       │
+// │   2) jede zs_*-Funktion server-seitig auf EIGENE Projekte gescoped werden  │
+// │      (requireOwnedProjekt / requireOwnedRow wie im PM-Modul),              │
+// │   3) evtl. ein Subunternehmer-Submodus mit eingeschraenkter Sicht (nur     │
+// │      zugewiesene Bauabschnitte) ergaenzt werden.                           │
+// │ Diese requireZahlungssystem-Pruefung greift dann automatisch fuer Partner. │
+// └───────────────────────────────────────────────────────────────────────────┘
+async function requireZahlungssystem(access) {
+  if (!access) throw new Forbidden();
+  if (access.isMaster) return;                                  // Master: immer berechtigt
+  if (!await isEntitled(access.userId, 'zahlungssystem')) throw new Forbidden();
+}
 
 // gs_bauabschnitte fehlt (noch nicht migriert)? → sauberer Hinweis statt 500.
 function zsNotMigrated(e) { return { error: 'Zahlungssystem nicht migriert', notMigrated: true, detail: (e && e.message) || '' }; }
