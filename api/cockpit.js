@@ -2383,8 +2383,10 @@ function zsDeriveAbschnittStatus(steps) {
   const released = zahl.filter((s) => s.status === 'freigegeben');
   if (released.length === zahl.length) return 'abgeschlossen';
   if (zahl[0].status === 'freigegeben') return released.length >= 2 ? 'zwischenfreigabe' : 'angezahlt';
-  const active = steps.some((s) => ['aktiv', 'hinterlegt', 'gs_fertig'].includes(s.status) || (s.typ === 'blockade' && s.status === 'offen'));
-  return active ? 'aktiv' : 'geplant';
+  // 'aktiv' erst wenn tatsaechlich Geld im Escrow liegt (hinterlegt/in Doppelbestaetigung).
+  // Ein bloss 'aktiver' (= hinterlegbarer) erster Step ist noch 'geplant'.
+  const money = steps.some((s) => s.status === 'hinterlegt' || s.status === 'gs_fertig');
+  return money ? 'aktiv' : 'geplant';
 }
 async function zsRecompute(abschnittId) {
   const steps = await sbGet(`gs_steps?bauabschnitt_id=eq.${abschnittId}&select=*&order=reihenfolge.asc`);
