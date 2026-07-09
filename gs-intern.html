@@ -688,7 +688,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -708,6 +708,7 @@ function go(v){
   else if(v==='users') renderUsers();
   else if(v==='projekte') renderProjekte();
   else if(v==='lizenz') renderLizenz();
+  else if(v==='subanfragen') renderSubAnfragen();
 }
 function router(){ go(curView); }
 
@@ -1119,6 +1120,7 @@ function renderMehr(){
     {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
     {v:'lizenz',ic:'🔑',t:'Kunden & Lizenzen',d:'Pro Partner-Account Features freischalten – serverseitig durchgesetzt'},
+    {v:'subanfragen',ic:'📐',t:'Sub-Anfragen',d:'Sub-/Akkord-Anfragen der Partner: kalkulieren & Angebot erstellen'},
     {v:'marketing',ic:'📣',t:'Marketing',d:'Kanäle, Kosten/Lead, Conversion, Content-Plan'},
     {v:'todos',ic:'✅',t:'To-Dos',d:'Interne Aufgaben (Team, Fälligkeit, Priorität)'},
     {v:'margen',ic:'💰',t:'Verkauf & Margen',d:'Einkauf vs. Verkauf → Marge pro Projekt'},
@@ -2100,6 +2102,154 @@ function zsAbschnittForm(id){
       if(d && d.notMigrated){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('zs-msg').className='login-msg err'; $('zs-msg').textContent='Tabellen noch nicht migriert'; return; }
       closeSheet(); zsLoad(_pmProjektId); toast(id?'Gespeichert':'Bauabschnitt + Kette angelegt');
     }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('zs-msg').className='login-msg err'; $('zs-msg').textContent='Fehler beim Speichern'; });
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MASTER: SUB-/AKKORD-ANFRAGEN (Runde 2)
+//   Liste (gruppiert nach sub_status) + Detail mit Partner-Branding, Dateien,
+//   WIEDERVERWENDETER Zahlungssystem-Kalkulation (#zs-box / zsLoad / zsAbschnittForm)
+//   und Angebot (gs_angebote). Optik 1:1 zum Zahlungssystem (zs-ov / lcard / pills).
+// ═══════════════════════════════════════════════════════════════════════════
+var _msubList=null, _msubDetail=null;
+var MSUB_STATUS_ORDER=['angefragt','in_pruefung','angebot_offen','angenommen','abgelehnt','aktiv','entwurf'];
+function msubStatusLabel(s){ return ({entwurf:'Entwurf',angefragt:'Angefragt',in_pruefung:'In Prüfung',angebot_offen:'Angebot offen',angenommen:'Angenommen',abgelehnt:'Abgelehnt',aktiv:'Aktiv'})[s]||'Entwurf'; }
+// Farbcode wie Zahlungssystem: gold=aktiv/in Arbeit, grün=erledigt, blau=wartet extern, grau=neutral.
+function msubStatusColor(s){ return ({entwurf:'var(--muted)',angefragt:'var(--gold)',in_pruefung:'var(--gold)',angebot_offen:'#4aa8ff',angenommen:'#3dd68c',abgelehnt:'var(--muted)',aktiv:'var(--gold)'})[s]||'var(--muted)'; }
+function msubLogoHtml(url,firma,size){
+  size=size||34;
+  if(url) return '<img src="'+esc(url)+'" alt="'+esc(firma||'Logo')+'" style="width:'+size+'px;height:'+size+'px;object-fit:contain;border-radius:8px;background:rgba(255,255,255,.04);flex:0 0 auto"/>';
+  var ini=((firma||'?').trim().charAt(0)||'?').toUpperCase();
+  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:8px;background:var(--gold-soft);color:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:800;flex:0 0 auto">'+esc(ini)+'</div>';
+}
+function subHead(){ return '<h2><span class="acc">📐</span> Sub-Anfragen</h2>'+backRow(); }
+function renderSubAnfragen(){
+  $('view').innerHTML=subHead()+'<div class="empty" style="padding:12px">Lädt…</div>'; wireBack();
+  api('msub_liste').then(function(d){
+    if(d&&d.notMigrated){ $('view').innerHTML=subHead()+migRow('Sub-Modus-Tabellen noch nicht migriert.'); wireBack(); return; }
+    if(!d||d.error){ $('view').innerHTML=subHead()+'<div class="empty" style="padding:12px">'+esc((d&&d.error)||'Ladefehler')+'</div>'; wireBack(); return; }
+    _msubList=(d&&d.anfragen)||[];
+    $('view').innerHTML=subHead()+msubListeHtml(_msubList); wireBack();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-msub]'),function(el){ el.onclick=function(){ openSubAnfrage(el.getAttribute('data-msub')); }; });
+  }).catch(function(){ $('view').innerHTML=subHead()+'<div class="empty" style="padding:12px">Ladefehler</div>'; wireBack(); });
+}
+function msubListeHtml(list){
+  if(!list.length) return '<div class="empty" style="padding:12px">Noch keine Sub-/Akkord-Anfragen. Partner legen sie im Partner-Cockpit an und schicken sie ab.</div>';
+  var neu=list.filter(function(a){return a.sub_status==='angefragt';}).length;
+  var offen=list.filter(function(a){return a.sub_status==='angefragt'||a.sub_status==='in_pruefung';}).length;
+  var angOffen=list.filter(function(a){return a.sub_status==='angebot_offen';}).length;
+  var ov='<div class="zs-ov">'+
+    '<div class="zs-ov-head"><div>'+
+      '<div class="zs-ov-vol">'+list.length+'</div>'+
+      '<div class="zs-ov-sub">Sub-/Akkord-Anfrage'+(list.length!==1?'n':'')+' gesamt</div></div>'+
+      '<div class="zs-ov-badge" style="color:var(--gold)">'+neu+' neu</div></div>'+
+    '<div class="zs-ov-line"><span class="zs-ov-mut">'+offen+' in Bearbeitung</span><span class="zs-ov-ok" style="color:#4aa8ff">'+angOffen+' Angebot offen</span></div>'+
+  '</div>';
+  var groups='';
+  MSUB_STATUS_ORDER.forEach(function(st){
+    var rows=list.filter(function(a){return (a.sub_status||'entwurf')===st;});
+    if(!rows.length) return;
+    groups+='<div class="sec-t" style="margin-top:14px">'+esc(msubStatusLabel(st))+' ('+rows.length+')</div>'+
+      '<div class="list">'+rows.map(msubCardHtml).join('')+'</div>';
+  });
+  return ov+groups;
+}
+function msubCardHtml(a){
+  var meta=[a.standort,a.bereich].filter(Boolean).map(esc).join(' · ');
+  var when=a.angefragt_am?('angefragt '+esc(zsFmt(a.angefragt_am,true))):'Entwurf';
+  return '<div class="lcard" data-msub="'+a.id+'" style="cursor:pointer">'+
+    '<div class="top" style="display:flex;align-items:center;gap:10px">'+
+      msubLogoHtml(a.partner_logo,a.partner_firma,34)+
+      '<div style="flex:1;min-width:0">'+
+        '<div class="nm">'+esc(a.name||'Projekt')+'</div>'+
+        '<div class="meta"><span>'+esc(a.partner_firma||'—')+'</span>'+(meta?'<span class="dot">'+meta+'</span>':'')+'</div></div>'+
+      pmPill(msubStatusLabel(a.sub_status),msubStatusColor(a.sub_status))+'</div>'+
+    (a.beschreibung?'<div class="meta" style="margin-top:6px"><span>📝 '+esc(String(a.beschreibung).slice(0,140))+'</span></div>':'')+
+    '<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">'+when+'</span></div>'+
+  '</div>';
+}
+function openSubAnfrage(id){
+  _pmProjektId=id;   // fuer die wiederverwendete zs-Kalkulation (zsLoad/zsAbschnittForm)
+  $('view').innerHTML='<div class="empty" style="padding:12px">Lädt…</div>';
+  api('msub_detail',{id:id}).then(function(d){
+    if(d&&d.notMigrated){ $('view').innerHTML=migRow('Nicht migriert'); return; }
+    if(!d||d.error){ $('view').innerHTML='<div class="empty" style="padding:12px">'+esc((d&&d.error)||'Fehler')+'</div><div style="margin-top:10px"><span class="chip" id="msub-back">‹ Sub-Anfragen</span></div>'; var b=$('msub-back'); if(b) b.onclick=renderSubAnfragen; return; }
+    _msubDetail=d; paintSubAnfrage(d);
+  }).catch(function(){ $('view').innerHTML='<div class="empty" style="padding:12px">Ladefehler</div>'; });
+}
+function paintSubAnfrage(d){
+  var p=d.projekt||{}, sub=d.sub||{}, partner=d.partner||{}, ang=d.angebot||null;
+  var back='<div style="margin-bottom:12px"><span class="chip" id="msub-back">‹ Sub-Anfragen</span></div>';
+  var head='<div class="lcard"><div class="top" style="display:flex;align-items:center;gap:10px">'+
+    msubLogoHtml(partner.logo_url_signed,partner.firma,44)+
+    '<div style="flex:1;min-width:0"><div class="nm" style="font-size:16px">'+esc(p.name||'Projekt')+'</div>'+
+      '<div class="meta"><span>'+esc(partner.firma||'—')+'</span></div></div>'+
+    pmPill(msubStatusLabel(p.sub_status),msubStatusColor(p.sub_status))+'</div>'+
+    '<div class="meta" style="margin-top:8px">'+
+      [p.standort?'📍 '+esc(p.standort):'',p.bereich?'🔧 '+esc(p.bereich):'',sub.ansprechperson?'👤 '+esc(sub.ansprechperson):'',partner.telefon?'📞 '+esc(partner.telefon):'',partner.email?'✉ '+esc(partner.email):''].filter(Boolean).map(function(x){return '<span class="dot">'+x+'</span>';}).join('')+
+    '</div>'+
+    (sub.beschreibung?'<div class="meta" style="margin-top:6px"><span>📝 '+esc(sub.beschreibung)+'</span></div>':'')+
+    (p.angefragt_am?'<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">Angefragt: '+esc(zsFmt(p.angefragt_am,true))+'</span></div>':'')+
+  '</div>';
+  var files=d.dateien||[];
+  var fileInner=files.length?('<div class="list">'+files.map(function(f){
+    var ic=(/^image\//.test(f.contentType||''))?'🖼️':(/pdf/.test(f.contentType||'')?'📄':'📎');
+    return '<div class="lcard"><div class="top"><div class="nm">'+ic+' '+esc(f.name)+'</div>'+
+      '<a href="'+esc(f.url)+'" target="_blank" rel="noopener" class="src-tag" style="border-color:var(--gold-line);color:var(--gold);text-decoration:none">öffnen ›</a></div>'+
+      '<div class="meta"><span class="dot">'+esc(f.kategorie||'datei')+'</span></div></div>';
+  }).join('')+'</div>'):'<div class="empty" style="padding:12px">Keine Dateien.</div>';
+  var fileSec=pmSec('📎 Dateien / Pläne',fileInner);
+  var calcSec=pmSec('🧮 Kalkulation','<div id="zs-box"><div class="empty" style="padding:12px">Lädt…</div></div>','<button class="chip" id="msub-zs-add" style="font-size:11px">＋ Bauabschnitt</button>');
+  var angSec=pmSec('📄 Angebot',msubAngebotHtml(ang,p));
+  var statusAction=(p.sub_status==='angefragt')?'<button class="chip" id="msub-pruefen" style="font-size:11px;margin-bottom:12px">In Prüfung nehmen</button>':'';
+  $('view').innerHTML=back+head+statusAction+fileSec+calcSec+angSec;
+  var b=$('msub-back'); if(b) b.onclick=renderSubAnfragen;
+  var za=$('msub-zs-add'); if(za) za.onclick=function(){ zsAbschnittForm(null); };
+  var pr=$('msub-pruefen'); if(pr) pr.onclick=function(){ api('msub_in_pruefung',{id:p.id}).then(function(r){ if(r&&r.error){toast(r.error);return;} openSubAnfrage(p.id); }); };
+  wireMsubAngebot(p);
+  zsLoad(_pmProjektId);   // rendert die Kalkulation in #zs-box (identische Optik)
+}
+function msubAngebotHtml(ang,p){
+  var abgeschickt=ang&&ang.status==='abgeschickt';
+  var info;
+  if(ang){
+    info='<div class="lcard"><div class="top"><div class="nm">'+zsChf(ang.gesamtbetrag)+'</div>'+pmPill(abgeschickt?'abgeschickt':'Entwurf',abgeschickt?'#3dd68c':'var(--gold)')+'</div>'+
+      '<div class="meta">'+[ang.ansatz_chf_h!=null?('Ansatz '+zsChf(ang.ansatz_chf_h)+'/h'):'','Version '+esc(ang.version||1)].filter(Boolean).map(function(x){return '<span class="dot">'+esc(x)+'</span>';}).join('')+'</div>'+
+      (ang.bemerkung?'<div class="meta" style="margin-top:4px"><span>📝 '+esc(ang.bemerkung)+'</span></div>':'')+
+      (ang.abgeschickt_am?'<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">Abgeschickt: '+esc(zsFmt(ang.abgeschickt_am,true))+'</span></div>':'')+
+    '</div>';
+  } else {
+    info='<div class="empty" style="padding:12px">Noch kein Angebot. Kalkuliere oben die Bauabschnitte und erzeuge dann das Angebot – der Betrag kommt aus der Kalkulation.</div>';
+  }
+  if(abgeschickt){
+    return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Angebot ist beim Partner. (Annahme/Ablehnung folgt in Runde 3.)</span></div>';
+  }
+  var ansatz=(ang&&ang.ansatz_chf_h!=null)?ang.ansatz_chf_h:'';
+  var bem=(ang&&ang.bemerkung)?ang.bemerkung:'';
+  return info+'<div style="margin-top:10px">'+
+    '<input class="field" id="msub-ansatz" type="number" min="0" step="0.01" placeholder="Ansatz CHF/h (optional)" value="'+esc(ansatz)+'"/>'+
+    '<textarea class="field" id="msub-bem" placeholder="Bemerkung (optional)" style="margin-top:8px;min-height:64px">'+esc(bem)+'</textarea>'+
+    '<div class="login-msg" id="msub-ang-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="msub-ang-save" style="margin-top:10px">'+(ang?'Angebot aktualisieren':'Angebot erzeugen')+'</button>'+
+    (ang?'<button class="btn" id="msub-ang-send" style="margin-top:8px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Angebot abschicken</button>':'')+
+  '</div>';
+}
+function wireMsubAngebot(p){
+  var sv=$('msub-ang-save'); if(sv) sv.onclick=function(){
+    var body={projekt_id:p.id,ansatz_chf_h:($('msub-ansatz')||{}).value,bemerkung:($('msub-bem')||{}).value};
+    sv.disabled=true; sv.textContent='…';
+    api('msub_angebot_save',body).then(function(d){
+      if(d&&d.error){ sv.disabled=false; var m=$('msub-ang-msg'); if(m){m.className='login-msg err';m.textContent=d.error;} return; }
+      toast('Angebot gespeichert'); openSubAnfrage(p.id);
+    }).catch(function(){ sv.disabled=false; toast('Fehler'); });
+  };
+  var sd=$('msub-ang-send'); if(sd) sd.onclick=function(){
+    if(!confirm('Angebot jetzt an den Partner abschicken? Danach steht der Status auf „Angebot offen".')) return;
+    sd.disabled=true;
+    api('msub_angebot_send',{projekt_id:p.id}).then(function(d){
+      if(d&&d.error){ sd.disabled=false; toast(d.error); return; }
+      toast('Angebot abgeschickt'); openSubAnfrage(p.id);
+    }).catch(function(){ sd.disabled=false; toast('Fehler'); });
   };
 }
 
