@@ -942,10 +942,17 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
    Animation) → wurde bei vollem Startseiten-Inhalt flex-geschrumpft, sodass Orb/Titel
    oben abgeschnitten waren. Direkte Kinder nie schrumpfen; Screen scrollt via overflow-y. */
 #partner-dash>*{flex-shrink:0;}
-#partner-dash .pd-logout{position:absolute;top:12px;right:12px;z-index:2;background:transparent;
+#partner-dash .pd-logout{position:absolute;top:12px;left:12px;z-index:2;background:transparent;
   border:1px solid rgba(255,255,255,.10);color:#8a97a8;border-radius:9px;padding:6px 11px;font-size:11.5px;
   font-weight:700;cursor:pointer;transition:border-color .15s,color .15s;-webkit-tap-highlight-color:transparent;}
 #partner-dash .pd-logout:hover{border-color:rgba(201,169,97,.4);color:#C9A961;}
+/* Firmenlogo + Name oben rechts. Kompakt gehalten, damit der zentrierte Orb nie verdeckt wird. */
+#partner-dash .pd-brand{position:absolute;top:8px;right:10px;z-index:2;display:flex;flex-direction:column;
+  align-items:flex-end;gap:3px;max-width:118px;pointer-events:none;}
+#partner-dash .pd-brand img{max-height:46px;max-width:118px;object-fit:contain;border-radius:8px;display:block;
+  background:rgba(255,255,255,.04);padding:2px;}
+#partner-dash .pd-brand .pd-brand-name{font-size:11px;font-weight:800;color:#C9A961;text-align:right;
+  line-height:1.2;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #partner-dash .pd-orb{position:relative;width:96px;height:96px;margin:0 auto 16px;filter:drop-shadow(0 0 18px rgba(201,169,97,.28));}
 #partner-dash .pd-orb .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(201,169,97,.28);animation:pdspin 9s linear infinite;}
 #partner-dash .pd-orb .ring::after{content:'';position:absolute;top:-3px;left:calc(50% - 4px);width:8px;height:8px;border-radius:50%;background:#C9A961;box-shadow:0 0 12px 2px #C9A961;}
@@ -2621,6 +2628,8 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
        Orb/Glow + Titel + Live-Zeit + „Antippen & sprechen" (Bob, nur wenn freigeschaltet). -->
   <div class="pd-hero" id="pd-hero">
     <button class="pd-logout" onclick="logout()">Abmelden</button>
+    <!-- Firmenlogo + Name oben rechts (Feature partner_branding). Orb bleibt zentriert & unberührt. -->
+    <div class="pd-brand" id="pd-brand"></div>
     <div class="pd-orb"><span class="ring"></span><span class="ring r2"></span><span class="core">⌬</span></div>
     <svg class="pd-title" width="340" height="40" viewBox="0 0 680 80" preserveAspectRatio="xMidYMid meet" role="img" aria-label="PARTNER COCKPIT"><text x="340" y="61" text-anchor="middle" textLength="652" lengthAdjust="spacingAndGlyphs" font-family="Georgia,serif" font-weight="800" font-size="56">PARTNER COCKPIT</text></svg>
     <div class="pd-subt">COMMAND CENTER</div>
@@ -7115,6 +7124,24 @@ var PD_MODULES=[
 var pdEntitlements=null, pdTableMissing=false, pdMyId=null, pdMyEmail=null, pdActiveTab=null;
 function pdHas(key){ if(pdEntitlements===null) return true; return pdEntitlements.indexOf(key)>-1; }
 function pdCompany(){ return { id:(authUser&&authUser.id)||null, name:(authUser&&authUser.email)||'' }; }
+// ── Firmenprofil + Logo (Feature partner_branding) ──
+var pdProfil=null, pdLogoUrl=null;
+function pdLoadProfil(cb){
+  if(demoMode || !pdHas('partner_branding')){ pdProfil=null; pdLogoUrl=null; if(cb)cb(); return; }
+  pmApi('pm_profil_get').then(function(d){
+    pdProfil=(d&&d.profil)||null; pdLogoUrl=(d&&d.logo_url_signed)||null; if(cb)cb();
+  }).catch(function(){ if(cb)cb(); });
+}
+// Logo + Firmenname oben rechts rendern (leer, wenn nicht freigeschaltet/Demo).
+function pdRenderBrand(){
+  var el=document.getElementById('pd-brand'); if(!el) return;
+  if(demoMode || !pdHas('partner_branding')){ el.innerHTML=''; return; }
+  var name=(pdProfil&&pdProfil.firma)||'';
+  var html='';
+  if(pdLogoUrl) html+='<img src="'+pdLogoUrl+'" alt="'+gsEsc(name||'Firmenlogo')+'"/>';
+  if(name) html+='<div class="pd-brand-name">'+gsEsc(name)+'</div>';
+  el.innerHTML=html;
+}
 // Entitlements IMMER frisch vom Server (kein Cache). Wird bei jedem Laden/Login,
 // bei bfcache-Restore (pageshow) und beim Fokuswechsel aufgerufen.
 function pdLoadEntitlements(cb){
@@ -7133,6 +7160,7 @@ function pdRefreshEntitlements(showToast){
   var before=(pdEntitlements||[]).slice().sort().join(',');
   pdLoadEntitlements(function(){
     pdBuildTabs(); pdBuildBottomNav(); pdSetupHeroCta();
+    pdLoadProfil(pdRenderBrand);   // Branding kann mit einer Freischaltung dazukommen/wegfallen
     var c=document.getElementById('pd-content');
     var contentVisible=c&&c.style.display!=='none';
     if(contentVisible&&pdActiveTab){ pdTab(pdActiveTab); } else if(typeof pdLoadCards==='function'){ pdLoadCards(); }
@@ -7262,6 +7290,7 @@ function initPartnerDash(){
     pdStartClock();           // Live-Zeit im Command-Center-Hero
     pdLoadBadge();
     pdLoadCards();
+    pdLoadProfil(pdRenderBrand);   // Firmenlogo/Name oben rechts (nur wenn freigeschaltet)
     pdGoCockpit();            // Startseite = eigene Schnellzugriffe (Cockpit)
   });
 }
@@ -8225,6 +8254,8 @@ function dbSave(){
 }
 
 function pdRenderSettings(c){
+  // Firmenprofil frisch laden (Branding-Block spiegelt den Server-Stand).
+  pdLoadProfil(function(){
   gsAuthApi('account',{action:'me'}).then(function(d){
     var p=d.profile||{};
     c.innerHTML='<div class="pd-item"><div class="pd-item-tit">⚙️ Einstellungen</div>'
@@ -8233,6 +8264,7 @@ function pdRenderSettings(c){
       +'<div class="ob-lbl">Rechnungsadresse</div><textarea class="login-inp" id="set-radr" rows="3">'+gsEsc(p.rechnungsadresse||'')+'</textarea>'
       +'<button class="login-btn-magic" style="margin-top:12px;" onclick="pdSaveSettings()">Speichern</button>'
       +'<div class="login-msg" id="set-msg"></div></div>'
+      +pdBrandingBlockHtml()
       +'<div class="pd-item" id="pd-ent-box"><div class="pd-item-top"><div class="pd-item-tit">🔑 Freischaltungen</div>'
         +'<button class="admin-act" onclick="pdRefreshEntitlements(true)">🔄 Aktualisieren</button></div>'
         +pdEntitlementsInfoHtml()+'</div>'
@@ -8240,6 +8272,59 @@ function pdRenderSettings(c){
       +'<div class="pd-item-meta" style="margin-top:6px;line-height:1.7;">Pilot CHF 60–65/h (Team/Einzel) · Monat CHF 65–70/h (Team/Einzel)</div></div>'
       +'<div class="pd-legal"><a onclick="openLegal(\'agb\')">AGB</a><a onclick="openLegal(\'datenschutz\')">Datenschutzerklärung</a></div>';
   });
+  });
+}
+// Firmendaten + Logo (nur wenn Feature partner_branding frei). Speichert in gs_partner_profil.
+function pdBrandingBlockHtml(){
+  if(demoMode || !pdHas('partner_branding')) return '';
+  var p=pdProfil||{};
+  var logo=pdLogoUrl
+    ? '<img src="'+pdLogoUrl+'" style="max-height:64px;max-width:180px;object-fit:contain;border-radius:8px;display:block;margin:6px 0;background:rgba(255,255,255,.04);padding:3px;"/>'
+    : '<div class="pd-item-meta" style="margin:6px 0;">Noch kein Logo hochgeladen.</div>';
+  return '<div class="pd-item"><div class="pd-item-tit">🏢 Firmendaten & Branding</div>'
+    +'<div class="ob-lbl">Firmenname</div><input class="login-inp" id="br-firma" value="'+gsEsc(p.firma||'')+'"/>'
+    +'<div class="ob-lbl">Adresse</div><input class="login-inp" id="br-adresse" value="'+gsEsc(p.adresse||'')+'"/>'
+    +'<div style="display:flex;gap:8px;"><div style="flex:0 0 34%;"><div class="ob-lbl">PLZ</div><input class="login-inp" id="br-plz" value="'+gsEsc(p.plz||'')+'"/></div>'
+    +'<div style="flex:1;"><div class="ob-lbl">Ort</div><input class="login-inp" id="br-ort" value="'+gsEsc(p.ort||'')+'"/></div></div>'
+    +'<div class="ob-lbl">Telefon</div><input class="login-inp" id="br-telefon" value="'+gsEsc(p.telefon||'')+'"/>'
+    +'<div class="ob-lbl">E-Mail</div><input class="login-inp" id="br-email" value="'+gsEsc(p.email||'')+'"/>'
+    +'<div class="ob-lbl">Firmenlogo</div>'+logo
+    +'<button class="admin-act" style="margin-top:2px;" onclick="pdLogoPick()">🖼️ Logo hochladen</button>'
+    +'<button class="login-btn-magic" style="margin-top:12px;" onclick="pdSaveBranding()">Firmendaten speichern</button>'
+    +'<div class="login-msg" id="br-msg"></div></div>';
+}
+function pdSaveBranding(){
+  var params={};
+  ['firma','adresse','plz','ort','telefon','email'].forEach(function(k){
+    var el=document.getElementById('br-'+k); params[k]=el?el.value.trim():'';
+  });
+  pmApi('pm_profil_save',params).then(function(d){
+    var m=document.getElementById('br-msg');
+    if(d&&d.error){ if(m){m.textContent=d.error;m.style.color='#ff9b9b';} return; }
+    pdProfil=(d&&d.profil)||pdProfil; pdLogoUrl=(d&&d.logo_url_signed)||pdLogoUrl;
+    if(m){m.textContent='✓ Gespeichert';m.style.color='rgba(232,237,245,0.55)';}
+    pdRenderBrand();
+  });
+}
+function pdLogoPick(){
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange=function(){ var f=(inp.files||[])[0]; if(f) pdDoLogoUpload(f); };
+  inp.click();
+}
+function pdDoLogoUpload(f){
+  if(f.size>4*1024*1024){ toast('Logo zu gross (max. 4 MB)'); return; }
+  toast('Logo wird hochgeladen…');
+  var rd=new FileReader();
+  rd.onload=function(){
+    pmApi('pm_logo_upload',{filename:f.name,contentType:f.type||'',data:String(rd.result)}).then(function(d){
+      if(d&&d.error){ toast(d.error); return; }
+      pdProfil=(d&&d.profil)||pdProfil; pdLogoUrl=(d&&d.logo_url_signed)||pdLogoUrl;
+      pdRenderBrand(); toast('Logo aktualisiert');
+      if(pdActiveTab==='settings') pdTab('settings');   // Vorschau im Formular auffrischen
+    });
+  };
+  rd.onerror=function(){ toast('Lesefehler beim Logo'); };
+  rd.readAsDataURL(f);
 }
 // Zeigt freigeschaltete Module + Account-ID. Die Account-ID muss im Master unter
 // „Kunden & Lizenzen" bei DIESEM Partner stehen – so lässt sich ein ID-Mismatch
