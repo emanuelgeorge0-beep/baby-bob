@@ -246,6 +246,9 @@ export default async function handler(req, res) {
       case 'msub_in_pruefung':  return res.status(200).json(await msubInPruefung(req.body, access));
       case 'msub_angebot_save': return res.status(200).json(await msubAngebotSave(req.body, access));
       case 'msub_angebot_send': return res.status(200).json(await msubAngebotSend(req.body, access));
+      case 'msub_kalk_settings_get':  return res.status(200).json(await kalkSettingsGet(access));
+      case 'msub_kalk_settings_save': return res.status(200).json(await kalkSettingsSave(req.body, access));
+      case 'msub_kalk_apply':         return res.status(200).json(await msubKalkApply(req.body, access));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -2904,6 +2907,7 @@ async function msubDetail(id, access) {
       angefragt_am: projekt.angefragt_am || null,
       sub: (projekt.datenblatt && typeof projekt.datenblatt === 'object' && projekt.datenblatt.sub) || {},
       partner, angebot, auftrag,
+      kalk: await msubKalkData(id),   // INTERN — nur ueber diesen Master-Endpunkt
     };
     return pm;
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
@@ -2937,15 +2941,40 @@ async function msubAngebotSave(b, access) {
     }));
     const ansatz = (b.ansatz_chf_h === '' || b.ansatz_chf_h == null) ? null : num(b.ansatz_chf_h);
     const bemerkung = b.bemerkung != null ? String(b.bemerkung).slice(0, 2000) : null;
-    const existing = await msubLatestAngebot(pid);
-    let r;
-    if (existing && existing.status === 'entwurf') {
-      r = await sbWrite('PATCH', `gs_angebote?id=eq.${existing.id}`, { gesamtbetrag, ansatz_chf_h: ansatz, bemerkung, bauabschnitt_vorschlag: vorschlag });
-    } else {
-      const version = existing ? (num(existing.version) + 1) : 1;
-      r = await sbWrite('POST', 'gs_angebote', { projekt_id: pid, version, gesamtbetrag, ansatz_chf_h: ansatz, bemerkung, bauabschnitt_vorschlag: vorschlag, status: 'entwurf' });
+    // Positionen: gegeben ODER aus den Bauabschnitten vorbefuellen (Menge 1, Pauschal).
+    let positionen = angPosSanitize(b.positionen);
+    if (!positionen || !positionen.length) {
+      positionen = abschnitte.map((a) => ({ bezeichnung: a.name || 'Bauabschnitt', menge: 1, einheit: 'Pauschal', einzelpreis: num(a.gesamtbetrag) }));
     }
-    return { ok: true, angebot: Array.isArray(r) ? r[0] : r };
+    const rabatt = Math.max(0, num(b.rabatt_prozent));
+    const zuschlag = Math.max(0, num(b.zuschlag_prozent));
+    const mwst = (b.mwst_prozent == null || b.mwst_prozent === '') ? 8.1 : Math.max(0, num(b.mwst_prozent));
+    const rech = angRechnung(positionen, rabatt, zuschlag, mwst);
+    // Brutto (inkl. MWST) = verbindlicher Gesamtbetrag des Angebots.
+    const angGesamt = rech.brutto;
+    const base = { gesamtbetrag: angGesamt, ansatz_chf_h: ansatz, bemerkung, bauabschnitt_vorschlag: vorschlag };
+    const extra = {
+      positionen, rabatt_prozent: rabatt, zuschlag_prozent: zuschlag, mwst_prozent: mwst,
+      zahlungsziel_tage: (b.zahlungsziel_tage == null || b.zahlungsziel_tage === '') ? null : (num(b.zahlungsziel_tage) | 0),
+      gueltig_bis: dateOrNull(b.gueltig_bis), ausfuehrung_von: dateOrNull(b.ausfuehrung_von), ausfuehrung_bis: dateOrNull(b.ausfuehrung_bis),
+    };
+    const existing = await msubLatestAngebot(pid);
+    const writeWith = async (payload) => {
+      if (existing && existing.status === 'entwurf') return await sbWrite('PATCH', `gs_angebote?id=eq.${existing.id}`, payload);
+      const version = existing ? (num(existing.version) + 1) : 1;
+      return await sbWrite('POST', 'gs_angebote', { projekt_id: pid, version, status: 'entwurf', ...payload });
+    };
+    let r;
+    try { r = await writeWith({ ...base, ...extra }); }
+    catch (e) {
+      // Neue Angebots-Spalten (positionen/…) noch nicht migriert → Kernfelder trotzdem speichern.
+      if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) {
+        r = await writeWith(base);
+        return { ok: true, angebot: Array.isArray(r) ? r[0] : r, rechnung: rech, extraNotMigrated: true };
+      }
+      throw e;
+    }
+    return { ok: true, angebot: Array.isArray(r) ? r[0] : r, rechnung: rech };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
 async function msubAngebotSend(b, access) {
@@ -2959,5 +2988,129 @@ async function msubAngebotSend(b, access) {
     const r = await sbWrite('PATCH', `gs_angebote?id=eq.${angebot.id}`, { status: 'abgeschickt', abgeschickt_am: new Date().toISOString() });
     await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { sub_status: 'angebot_offen' });
     return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: 'angebot_offen' };
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KALKULATIONSGENERATOR + ANGEBOTS-RECHNUNG (Runde 4)
+//   Kosten/Rohgewinn/Ampel sind INTERN: leben nur in gs_kalk_* und werden NUR
+//   ueber Master-only-Endpunkte (msub_*) ausgeliefert — nie in gs_angebote, nie
+//   ueber einen Partner-Endpunkt. Die Engine (gs_bauabschnitte/steps) bleibt
+//   unveraendert; msubKalkApply schreibt nur den berechneten Umsatz via zsAbschnittSave.
+// ═══════════════════════════════════════════════════════════════════════════
+function round2(n) { return Math.round(num(n) * 100) / 100; }
+function dateOrNull(v) { if (!v) return null; const s = String(v).slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null; }
+// ── Angebots-Positionen: Netto → Rabatt/Zuschlag → MWST → Brutto ──
+function angPosSanitize(arr) {
+  if (!Array.isArray(arr)) return null;
+  return arr.slice(0, 60).map((p) => ({
+    bezeichnung: String((p && p.bezeichnung) || '').slice(0, 200),
+    menge: Math.max(0, num(p && p.menge)),
+    einheit: String((p && p.einheit) || 'Pauschal').slice(0, 30),
+    einzelpreis: Math.max(0, num(p && p.einzelpreis)),
+  })).filter((p) => p.bezeichnung || p.einzelpreis);
+}
+function angRechnung(positionen, rabatt, zuschlag, mwst) {
+  const netto = (positionen || []).reduce((s, p) => s + num(p.menge) * num(p.einzelpreis), 0);
+  const nachRabatt = netto * (1 - num(rabatt) / 100);
+  const zwischensumme = nachRabatt * (1 + num(zuschlag) / 100);
+  const mwstBetrag = zwischensumme * num(mwst) / 100;
+  return { netto: round2(netto), zwischensumme: round2(zwischensumme), mwst_betrag: round2(mwstBetrag), brutto: round2(zwischensumme + mwstBetrag) };
+}
+// ── Kalkulations-Kostensaetze (Singleton) ──
+const KALK_DEFAULTS = { vollkosten_chf_h: 46, spesen_pro_person_tag: 40, kfz_pauschale_tag: 20, equipment_pro_woche: 280, stunden_pro_team_tag: 8, ansatz_detailliert: 90, ansatz_schnell: 85, ampel_gruen_ab: 70, ampel_rot_unter: 56 };
+const KALK_SET_FELDER = Object.keys(KALK_DEFAULTS);
+async function kalkSettingsRead() {
+  try {
+    const rows = await sbGet('gs_kalk_settings?select=*&limit=1');
+    if (rows && rows[0]) return { ...KALK_DEFAULTS, ...rows[0] };
+    return { ...KALK_DEFAULTS };
+  } catch (e) { if (isNoTable(e)) return { ...KALK_DEFAULTS, notMigrated: true }; throw e; }
+}
+async function kalkSettingsGet(access) { msubAssertMaster(access); const s = await kalkSettingsRead(); return { settings: s, notMigrated: !!s.notMigrated }; }
+async function kalkSettingsSave(b, access) {
+  msubAssertMaster(access);
+  const patch = {};
+  for (const f of KALK_SET_FELDER) if (b[f] !== undefined && b[f] !== '') patch[f] = Math.max(0, num(b[f]));
+  patch.updated_at = new Date().toISOString();
+  try {
+    const rows = await sbGet('gs_kalk_settings?select=id&limit=1').catch(() => []);
+    const r = (rows && rows[0])
+      ? await sbWrite('PATCH', `gs_kalk_settings?id=eq.${rows[0].id}`, patch)
+      : await sbWrite('POST', 'gs_kalk_settings', patch);
+    return { ok: true, settings: { ...KALK_DEFAULTS, ...(Array.isArray(r) ? r[0] : r) } };
+  } catch (e) { if (isNoTable(e)) return { error: 'Kalk-Tabelle fehlt – scripts/kalk_settings.sql ausführen.', notMigrated: true }; throw e; }
+}
+// Kernrechnung — INTERN (Kosten/Rohgewinn/Ampel). Nie ueber Partner-Endpunkt.
+function kalkCompute(inp, s) {
+  s = s || KALK_DEFAULTS;
+  const stundenProTag = num(s.stunden_pro_team_tag) || 8;
+  const personen = Math.max(1, (num(inp.personen) | 0) || 2);
+  const teamTage = Math.max(0, num(inp.team_tage));
+  const modus = inp.ansatz_modus === 'schnell' ? 'schnell' : 'detailliert';
+  const ansatz = modus === 'schnell' ? num(s.ansatz_schnell) : num(s.ansatz_detailliert);
+  const vstunden = teamTage * personen * stundenProTag;
+  const umsatz = vstunden * ansatz;
+  const kosten = (vstunden * num(s.vollkosten_chf_h))
+    + (teamTage * personen * num(s.spesen_pro_person_tag))
+    + (teamTage * num(s.kfz_pauschale_tag))
+    + ((teamTage / 5) * num(s.equipment_pro_woche));
+  const rohgewinn = umsatz - kosten;
+  const dbProStunde = vstunden > 0 ? rohgewinn / vstunden : 0;
+  const effChfH = vstunden > 0 ? (rohgewinn / vstunden) + num(s.vollkosten_chf_h) : 0;
+  let ampel = 'rot';
+  if (effChfH >= num(s.ampel_gruen_ab)) ampel = 'gruen';
+  else if (effChfH >= num(s.ampel_rot_unter)) ampel = 'gelb';
+  return {
+    personen, team_tage: round2(teamTage), ansatz_modus: modus, ansatz: round2(ansatz),
+    verrechnungsstunden: round2(vstunden), umsatz: round2(umsatz), kosten: round2(kosten),
+    rohgewinn: round2(rohgewinn), db_pro_stunde: round2(dbProStunde), eff_chf_h: round2(effChfH), ampel,
+  };
+}
+async function kalkPositionenRead(bauabschnittIds) {
+  if (!bauabschnittIds.length) return {};
+  const rows = await sbGet(`gs_kalk_positionen?bauabschnitt_id=in.(${bauabschnittIds.join(',')})&select=*`).catch(() => []);
+  const by = {}; (rows || []).forEach((r) => { by[r.bauabschnitt_id] = r; });
+  return by;
+}
+// Interne Kalk-Daten je Bauabschnitt (nur ueber msub_detail = Master-only).
+async function msubKalkData(projektId) {
+  const settings = await kalkSettingsRead();
+  let abs = [];
+  try { abs = await sbGet(`gs_bauabschnitte?projekt_id=eq.${projektId}&select=id,name,team_tage,gesamtbetrag,reihenfolge&order=reihenfolge.asc`); }
+  catch (e) { if (isNoTable(e)) return { settings, positionen: [], notMigrated: true }; throw e; }
+  const kById = await kalkPositionenRead((abs || []).map((a) => a.id));
+  const positionen = (abs || []).map((a) => {
+    const kp = kById[a.id];
+    const inp = kp ? { personen: kp.personen, team_tage: kp.team_tage, ansatz_modus: kp.ansatz_modus }
+                   : { personen: 2, team_tage: num(a.team_tage), ansatz_modus: 'detailliert' };
+    return { bauabschnitt_id: a.id, name: a.name, gesamtbetrag: num(a.gesamtbetrag), gespeichert: !!kp, ...kalkCompute(inp, settings) };
+  });
+  return { settings, positionen };
+}
+// Kalkulieren & uebernehmen: berechnet Umsatz und setzt ihn als gesamtbetrag ueber
+// die BESTEHENDE Engine (zsAbschnittSave → Kette). Legt bei Bedarf den Abschnitt an.
+async function msubKalkApply(b, access) {
+  msubAssertMaster(access);
+  try {
+    const settings = await kalkSettingsRead();
+    const calc = kalkCompute({ personen: b.personen, team_tage: b.team_tage, ansatz_modus: b.ansatz_modus }, settings);
+    let bauId = b.bauabschnitt_id ? uuid(b.bauabschnitt_id) : null;
+    const save = {
+      id: bauId || undefined,
+      projekt_id: bauId ? undefined : (b.projekt_id ? uuid(b.projekt_id) : undefined),
+      name: b.name, split_profil: b.split_profil, einheit_typ: b.einheit_typ, einheit_anzahl: b.einheit_anzahl,
+      team_tage: calc.team_tage, gesamtbetrag: calc.umsatz, regenerate: true,
+    };
+    const zr = await zsAbschnittSave(save, access);
+    if (zr && zr.error) return zr;
+    bauId = (zr && zr.abschnitt && zr.abschnitt.id) || bauId;
+    if (!bauId) return { error: 'Bauabschnitt nicht gespeichert' };
+    try {
+      await sbWrite('POST', 'gs_kalk_positionen?on_conflict=bauabschnitt_id',
+        { bauabschnitt_id: bauId, personen: calc.personen, team_tage: calc.team_tage, ansatz_modus: calc.ansatz_modus, updated_at: new Date().toISOString() },
+        'resolution=merge-duplicates,return=minimal');
+    } catch (e) { if (!isNoTable(e)) throw e; /* Kalk-Tabelle fehlt → Umsatz ist dennoch gesetzt */ }
+    return { ok: true, bauabschnitt_id: bauId, kalk: calc };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }

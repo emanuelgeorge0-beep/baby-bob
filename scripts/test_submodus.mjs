@@ -22,7 +22,7 @@ function mkid() {
 }
 
 // ── In-Memory-Zustand (pro Testlauf frisch via resetState) ──
-let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE, BAUAB, STEPS, ESCROW, ANGEBOTE, AUFTRAG;
+let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE, BAUAB, STEPS, ESCROW, ANGEBOTE, AUFTRAG, KSET, KPOS;
 function resetState() {
   ROLES = new Map();      // userId → role
   ENTS = new Map();       // `${pid} ${key}` → enabled
@@ -34,6 +34,8 @@ function resetState() {
   ESCROW = [];            // gs_escrow
   ANGEBOTE = [];          // gs_angebote
   AUFTRAG = [];           // gs_auftragsbestaetigung
+  KSET = null;            // gs_kalk_settings (Singleton)
+  KPOS = [];              // gs_kalk_positionen
   _uc = 0;
 }
 function setPartner(id, feats) {
@@ -134,12 +136,27 @@ globalThis.fetch = async (url, opts = {}) => {
     }
     if (table.startsWith('gs_bauabschnitte')) {
       if (method === 'GET') return ok(BAUAB.filter((r) => match(r, filt)));
+      if (method === 'POST') { const row = { id: mkid(), status: 'geplant', ...body }; BAUAB.push(row); return ok([row]); }
+      if (method === 'PATCH') { const hits = BAUAB.filter((r) => match(r, filt)); hits.forEach((r) => Object.assign(r, body)); return ok(hits); }
     }
     if (table.startsWith('gs_steps')) {
       if (method === 'GET') return ok(STEPS.filter((r) => match(r, filt)));
+      if (method === 'POST') { const rows = (Array.isArray(body) ? body : [body]).map((x) => ({ id: mkid(), ...x })); STEPS.push(...rows); return ok(rows); }
+      if (method === 'PATCH') { const hits = STEPS.filter((r) => match(r, filt)); hits.forEach((r) => Object.assign(r, body)); return ok(hits); }
+      if (method === 'DELETE') { const rest = STEPS.filter((r) => !match(r, filt)); STEPS.length = 0; STEPS.push(...rest); return ok([]); }
     }
     if (table.startsWith('gs_escrow')) {
       if (method === 'GET') return ok([]); // in.()-Filter → im Test irrelevant (kein Escrow-Geld)
+      if (method === 'POST') { return ok([]); }
+    }
+    if (table.startsWith('gs_kalk_settings')) {
+      if (method === 'GET') return ok(KSET ? [KSET] : []);
+      if (method === 'POST') { KSET = { id: mkid(), ...body }; return ok([KSET]); }
+      if (method === 'PATCH') { if (!KSET) KSET = { id: mkid() }; Object.assign(KSET, body); return ok([KSET]); }
+    }
+    if (table.startsWith('gs_kalk_positionen')) {
+      if (method === 'GET') { const ids = (qs.match(/bauabschnitt_id=in\.\(([^)]*)\)/) || [])[1]; const set = ids ? ids.split(',') : null; return ok(KPOS.filter((r) => !set || set.includes(r.bauabschnitt_id))); }
+      if (method === 'POST') { const ex = KPOS.find((r) => r.bauabschnitt_id === body.bauabschnitt_id); if (ex) Object.assign(ex, body); else KPOS.push({ ...body }); return ok([]); }
     }
     if (table.startsWith('gs_angebote')) {
       if (method === 'GET') {
@@ -284,7 +301,7 @@ async function suite(iter) {
 
   // Angebot erzeugen: gesamtbetrag = Summe der Bauabschnitte, vorschlag als Snapshot.
   r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp.id, ansatz_chf_h: 62, bemerkung: 'Pilot' });
-  assert(r.d && r.d.ok && r.d.angebot.gesamtbetrag === 30000 && r.d.angebot.status === 'entwurf', 'msub_angebot_save: betrag+entwurf');
+  assert(r.d && r.d.ok && r.d.rechnung.netto === 30000 && r.d.angebot.gesamtbetrag === 32430 && r.d.angebot.status === 'entwurf', 'msub_angebot_save: brutto+entwurf');
   assert(r.d && Array.isArray(r.d.angebot.bauabschnitt_vorschlag) && r.d.angebot.bauabschnitt_vorschlag.length === 1, 'angebot: vorschlag-snapshot');
   assert(r.d && r.d.angebot.ansatz_chf_h === 62 && r.d.angebot.bemerkung === 'Pilot', 'angebot: ansatz+bemerkung');
 
@@ -326,7 +343,7 @@ async function suite(iter) {
   r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'annehmen' });
   assert(r.d && r.d.ok && r.d.angebot.status === 'angenommen' && r.d.angebot.entschieden_am && r.d.angebot.entschieden_by, 'annehmen: status+audit');
   assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'angenommen', 'projekt sub_status → angenommen');
-  assert(r.d && r.d.auftrag && /^AB-\d{4}-\d{6}$/.test(r.d.auftrag.nummer) && r.d.auftrag.gesamtbetrag === 30000, 'auftragsbestätigung erzeugt (nr+betrag)');
+  assert(r.d && r.d.auftrag && /^AB-\d{4}-\d{6}$/.test(r.d.auftrag.nummer) && r.d.auftrag.gesamtbetrag === 32430, 'auftragsbestätigung erzeugt (nr+brutto-betrag)');
 
   // Doppelte Entscheidung → Fehler.
   r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'ablehnen' });
@@ -341,6 +358,56 @@ async function suite(iter) {
   assert(r.d && r.d.projekt && Array.isArray(r.d.techniker) && Array.isArray(r.d.dateien), 'msub_detail: volle PM-Ansicht');
   assert(r.d && r.d.sub_bundle && r.d.sub_bundle.sub_status === 'angenommen' && r.d.sub_bundle.partner.firma === 'Sub GmbH', 'sub_bundle: status+partner');
   assert(r.d && r.d.sub_bundle.auftrag && r.d.sub_bundle.auftrag.nummer && r.d.sub_bundle.angebot.status === 'angenommen', 'sub_bundle: AB + angenommenes angebot');
+
+  // ── 8) Kalkulationsgenerator + Angebot mit Positionen (Runde 4) ──
+  // Gating: Partner darf Kalk-Actions NICHT.
+  assert((await call(tok(P_ALL), { action: 'msub_kalk_settings_get' })).status === 403, 'Partner kalk_settings_get→403');
+  assert((await call(tok(P_ALL), { action: 'msub_kalk_apply', projekt_id: sp.id })).status === 403, 'Partner kalk_apply→403');
+  // Settings-Defaults.
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_settings_get' });
+  assert(r.d && Number(r.d.settings.vollkosten_chf_h) === 46 && Number(r.d.settings.ansatz_detailliert) === 90, 'kalk_settings defaults');
+
+  // Frisches Sub-Projekt kalkulieren.
+  const sp3 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'Kalk-Test' })).d.projekt;
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: sp3.id, name: 'Rohbau', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 3, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  assert(r.d && r.d.ok && r.d.kalk.verrechnungsstunden === 80 && r.d.kalk.umsatz === 7200, 'kalk: vstunden+umsatz');
+  assert(r.d && r.d.kalk.kosten === 4460 && r.d.kalk.rohgewinn === 2740, 'kalk: kosten+rohgewinn');
+  assert(r.d && r.d.kalk.db_pro_stunde === 34.25 && r.d.kalk.eff_chf_h === 80.25 && r.d.kalk.ampel === 'gruen', 'kalk: db/h + eff + ampel grün');
+  const baId3 = r.d.bauabschnitt_id;
+  assert(BAUAB.find((a) => a.id === baId3).gesamtbetrag === 7200, 'kalk: umsatz → gesamtbetrag');
+  assert(KPOS.find((k) => k.bauabschnitt_id === baId3).personen === 2, 'kalk: eingaben gespeichert');
+
+  // Interne Kalk-Daten im Master-Detail (nur hier).
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp3.id });
+  const kp = r.d && r.d.sub_bundle.kalk.positionen[0];
+  assert(kp && kp.umsatz === 7200 && kp.kosten === 4460 && kp.ampel === 'gruen' && kp.gespeichert === true, 'sub_bundle.kalk breakdown');
+
+  // Ansatz „schnell" → geringerer Umsatz, Engine-gesamtbetrag folgt.
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_apply', bauabschnitt_id: baId3, personen: 2, team_tage: 5, ansatz_modus: 'schnell' });
+  assert(r.d && r.d.kalk.umsatz === 6800 && r.d.kalk.ansatz === 85, 'kalk schnell: umsatz 6800');
+  assert(BAUAB.find((a) => a.id === baId3).gesamtbetrag === 6800, 'kalk schnell → gesamtbetrag 6800');
+
+  // Angebot: Positionen aus Bauabschnitten vorbefüllt, Brutto = netto × 1.081.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp3.id });
+  assert(r.d && r.d.ok && r.d.angebot.positionen.length === 1 && r.d.angebot.positionen[0].einzelpreis === 6800, 'angebot: positionen vorbefüllt');
+  assert(r.d && r.d.angebot.gesamtbetrag === 7350.8 && r.d.rechnung.netto === 6800 && r.d.angebot.mwst_prozent === 8.1, 'angebot: brutto+mwst');
+
+  // Freie Position + Rabatt + Konditionen.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp3.id, positionen: [{ bezeichnung: 'Material', menge: 2, einheit: 'Stk', einzelpreis: 100 }], rabatt_prozent: 10, mwst_prozent: 8.1, zahlungsziel_tage: 30, gueltig_bis: '2026-08-31' });
+  assert(r.d && r.d.rechnung.netto === 200 && r.d.rechnung.brutto === 194.58, 'angebot: rabatt+mwst rechnung');
+  assert(r.d && r.d.angebot.rabatt_prozent === 10 && r.d.angebot.zahlungsziel_tage === 30 && r.d.angebot.gueltig_bis === '2026-08-31', 'angebot: konditionen gespeichert');
+
+  // KRITISCH — INTERN/EXTERN: Partner sieht Angebot, aber NIE Kosten/Rohgewinn/Ampel/Kalk.
+  await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: sp3.id });
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp3.id });
+  const pa = r.d && r.d.angebot;
+  assert(pa && Array.isArray(pa.positionen), 'partner: sieht positionen');
+  assert(pa && !('kosten' in pa) && !('rohgewinn' in pa) && !('ampel' in pa) && !('personen' in pa), 'partner: KEINE kosten/rohgewinn/ampel im angebot');
+  assert(r.d && r.d.sub_bundle === undefined && r.d.kalk === undefined, 'partner: KEIN sub_bundle/kalk');
+
+  // Settings speichern (ganz am Ende, damit obige Kalk-Werte stabil bleiben).
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_settings_save', vollkosten_chf_h: 48, ansatz_detailliert: 95 });
+  assert(r.d && r.d.ok && Number(r.d.settings.vollkosten_chf_h) === 48 && Number(r.d.settings.ansatz_detailliert) === 95, 'kalk_settings speichern');
 }
 
 const RUNS = 5;
