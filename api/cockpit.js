@@ -72,6 +72,15 @@ const PM_ACTIONS = new Set([
   'pm_datenblatt_save',
 ]);
 
+// ── Weitere Partner-Actions, je eigenem Entitlement (nicht 'projektmanagement') ──
+// Sub-/Akkordmodus (sub_akkord) und Firmenlogo/Branding (partner_branding) sind
+// eigenständige Freischaltungen. Master (isMaster-Zweig) kommt hier nie vorbei.
+const PARTNER_FEATURE_ACTIONS = {
+  pm_profil_get: 'partner_branding', pm_profil_save: 'partner_branding', pm_logo_upload: 'partner_branding',
+  sub_projekte: 'sub_akkord', sub_projekt: 'sub_akkord', sub_projekt_save: 'sub_akkord', sub_anfrage: 'sub_akkord',
+  sub_datei_upload: 'sub_akkord', sub_datei_list: 'sub_akkord', sub_datei_del: 'sub_akkord',
+};
+
 // Zugriffskontext bestimmen:
 //   • Master/Admin  → { isMaster:true,  partnerId:null }  (sieht ALLE Projekte)
 //   • Partner + PM  → { isMaster:false, partnerId:uid  }  (nur EIGENE Projekte,
@@ -94,9 +103,14 @@ async function resolveAccess(token, action) {
   if (user.id === MASTER_UID && (role === 'master' || role === 'gs_admin')) {
     return { isMaster: true, partnerId: null, userId: user.id };
   }
-  // Partner: NUR PM-Actions und NUR mit Entitlement 'projektmanagement'.
-  if (role === 'gs_partner' && PM_ACTIONS.has(action)) {
-    if (await isEntitled(user.id, 'projektmanagement')) {
+  // Partner: PM-Actions mit Entitlement 'projektmanagement', ODER eine der weiteren
+  // Feature-Actions (Sub-Modus/Branding) mit dem jeweils eigenen Entitlement.
+  if (role === 'gs_partner') {
+    if (PM_ACTIONS.has(action) && await isEntitled(user.id, 'projektmanagement')) {
+      return { isMaster: false, partnerId: user.id, userId: user.id };
+    }
+    const feat = PARTNER_FEATURE_ACTIONS[action];
+    if (feat && await isEntitled(user.id, feat)) {
       return { isMaster: false, partnerId: user.id, userId: user.id };
     }
   }
@@ -206,6 +220,18 @@ export default async function handler(req, res) {
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
       case 'pm_datenblatt_save':   return res.status(200).json(await savePmDatenblatt(req.body, scope));
+      // ── Partner-Branding (Firmenprofil + Logo) — Feature 'partner_branding' ──
+      case 'pm_profil_get':    return res.status(200).json(await partnerProfilGet(scope));
+      case 'pm_profil_save':   return res.status(200).json(await partnerProfilSave(req.body, scope));
+      case 'pm_logo_upload':   return res.status(200).json(await partnerLogoUpload(req.body, scope));
+      // ── Sub-/Akkordprojekte — Feature 'sub_akkord' ──
+      case 'sub_projekte':     return res.status(200).json(await subProjekte(scope));
+      case 'sub_projekt':      return res.status(200).json(await subProjekt(req.body.id, scope));
+      case 'sub_projekt_save': return res.status(200).json(await subProjektSave(req.body, scope));
+      case 'sub_anfrage':      return res.status(200).json(await subAnfrage(req.body, scope));
+      case 'sub_datei_upload': return res.status(200).json(await pmDateiUpload(req.body, scope));
+      case 'sub_datei_list':   return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
+      case 'sub_datei_del':    return res.status(200).json(await pmDateiDel(req.body, scope));
       // ── Zahlungssystem (Escrow-Engine) — Master-only (nicht in PM_ACTIONS) ──
       case 'zs_profile':       return res.status(200).json(await zsProfile());
       case 'zs_projekt':       return res.status(200).json(await zsProjekt(req.body.projekt_id));
@@ -2117,6 +2143,161 @@ async function pmDateiDel(b, scope) {
   const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
   if (!r.ok) return { error: 'Löschen fehlgeschlagen' };
   return { ok: true };
+}
+
+// ═══ Partner-Branding: Firmenprofil + Logo (gs_partner_profil) ══════════════
+// Feature 'partner_branding'. Profil je Partner (partner_user_id = PK). Logo liegt
+// im bestehenden Bucket 'projektdateien' unter _branding/<partnerId>/…; im Profil
+// steht nur der PFAD (logo_url), signiert wird beim Lesen (frische URL, kein Ablauf).
+const PARTNER_PROFIL_FELDER = ['firma', 'adresse', 'plz', 'ort', 'telefon', 'email'];
+async function partnerProfilRead(pid) {
+  const rows = await sbGet(`gs_partner_profil?partner_user_id=eq.${pid}&select=*&limit=1`).catch(() => []);
+  const profil = (rows && rows[0]) || null;
+  let logo_url_signed = null;
+  if (profil && profil.logo_url) logo_url_signed = await sbSignUrl(PM_DATEI_BUCKET, profil.logo_url, 86400).catch(() => null);
+  return { profil, logo_url_signed };
+}
+async function partnerProfilGet(scope) {
+  const pid = scope && scope.partnerId;
+  if (!pid) return { profil: null };   // Master hat kein Partner-Profil
+  try { return await partnerProfilRead(pid); }
+  catch (e) { if (isNoTable(e)) return { profil: null, notMigrated: true }; throw e; }
+}
+async function partnerProfilUpsert(pid, patch) {
+  // Upsert auf den PK partner_user_id; merge-duplicates lässt nicht gesetzte Spalten unberührt.
+  const r = await sbWrite('POST', 'gs_partner_profil?on_conflict=partner_user_id',
+    { partner_user_id: pid, ...patch }, 'resolution=merge-duplicates,return=representation');
+  return Array.isArray(r) ? r[0] : r;
+}
+async function partnerProfilSave(b, scope) {
+  const pid = scope && scope.partnerId;
+  if (!pid) throw new Forbidden();
+  const patch = {};
+  for (const f of PARTNER_PROFIL_FELDER) {
+    if (b[f] === undefined) continue;
+    const v = String(b[f] || '').trim().slice(0, 200);
+    patch[f] = (f === 'firma') ? v : (v || null);
+  }
+  try {
+    const profil = await partnerProfilUpsert(pid, patch);
+    let logo_url_signed = null;
+    if (profil && profil.logo_url) logo_url_signed = await sbSignUrl(PM_DATEI_BUCKET, profil.logo_url, 86400).catch(() => null);
+    return { ok: true, profil, logo_url_signed };
+  } catch (e) {
+    if (isNoTable(e)) return { error: 'Profil-Tabelle fehlt – scripts/submodus_migration.sql ausführen.', notMigrated: true };
+    throw e;
+  }
+}
+async function partnerLogoUpload(b, scope) {
+  const pid = scope && scope.partnerId;
+  if (!pid) throw new Forbidden();
+  const buf = sbDecodeB64(b.data);
+  if (!buf) throw new Error('Logo (base64) erforderlich');
+  if (buf.length > 4 * 1024 * 1024) return { error: 'Logo zu gross (max. 4 MB)' };
+  const safe = sbSafeName(b.filename || 'logo.png');
+  const path = `_branding/${pid}/${nowStamp()}-${safe}`;
+  const contentType = b.contentType || sbGuessType(safe);
+  const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': contentType, 'x-upsert': 'true' },
+    body: buf,
+  });
+  if (!up.ok) {
+    const t = await up.text().catch(() => '');
+    if (/bucket not found/i.test(t)) return { error: `Bucket '${PM_DATEI_BUCKET}' fehlt – scripts/projekt_detail_scharf.sql ausführen.`, notMigrated: true };
+    console.error('logo upload fail', up.status, t);
+    return { error: 'Upload fehlgeschlagen' };
+  }
+  try {
+    const profil = await partnerProfilUpsert(pid, { logo_url: path });
+    const logo_url_signed = await sbSignUrl(PM_DATEI_BUCKET, path, 86400).catch(() => null);
+    return { ok: true, profil, logo_url_signed };
+  } catch (e) {
+    if (isNoTable(e)) return { error: 'Profil-Tabelle fehlt – scripts/submodus_migration.sql ausführen.', notMigrated: true };
+    throw e;
+  }
+}
+
+// ═══ Sub-/Akkordprojekte (Feature 'sub_akkord') ═════════════════════════════
+// Eigene Projekte mit projekt_art='sub_akkord'; Lifecycle in sub_status. Sub-Detail-
+// felder liegen in datenblatt.sub (jsonb, bereits vorhanden), Anzeige über standort/
+// bereich (Spalten). Nur solange 'entwurf' (oder leer) editierbar; nach der Anfrage
+// schreibgeschützt.
+const SUB_EDITABLE = new Set([null, 'entwurf']);
+function sanitizeSubDetail(o) {
+  o = (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+  const clip = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  return {
+    strasse: clip(o.strasse, 160), plz: clip(o.plz, 12), ort: clip(o.ort, 120),
+    beschreibung: clip(o.beschreibung, 2000), ansprechperson: clip(o.ansprechperson, 160),
+  };
+}
+async function subProjekte(scope) {
+  const pid = scope && scope.partnerId;
+  if (!pid) return { projekte: [] };
+  try {
+    const projekte = await sbGet(`gs_projekte?partner_user_id=eq.${pid}&projekt_art=eq.sub_akkord&select=*&order=created_at.desc`);
+    return { projekte };
+  } catch (e) { if (isNoTable(e)) return { projekte: [], notMigrated: true }; throw e; }
+}
+async function subProjekt(id, scope) {
+  id = uuid(id);
+  const pr = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
+  const projekt = pr && pr[0];
+  if (!projekt) return { error: 'Projekt nicht gefunden' };
+  if (scope && scope.partnerId && projekt.partner_user_id !== scope.partnerId) throw new Forbidden();
+  let dateien = [];
+  try { dateien = await listProjektDateien(id); } catch (_) { dateien = []; }
+  return { projekt, dateien };
+}
+async function subProjektSave(b, scope) {
+  const pid = scope && scope.partnerId;
+  if (!pid) throw new Forbidden();
+  let existing = null;
+  if (b.id) {
+    await requireOwnedProjekt(b.id, scope);
+    const rows = await sbGet(`gs_projekte?id=eq.${uuid(b.id)}&select=sub_status,datenblatt&limit=1`).catch(() => []);
+    existing = (rows && rows[0]) || null;
+    if (existing && !SUB_EDITABLE.has(existing.sub_status || null)) return { error: 'Projekt ist bereits angefragt und schreibgeschützt.', locked: true };
+  }
+  const det = sanitizeSubDetail(b);
+  const standort = [det.strasse, [det.plz, det.ort].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const patch = { projekt_art: 'sub_akkord' };
+  if (b.name !== undefined) patch.name = String(b.name || '').trim().slice(0, 120);
+  patch.standort = standort || null;
+  if (b.bereich !== undefined) patch.bereich = String(b.bereich || '').trim().slice(0, 120) || null;
+  const db = (existing && existing.datenblatt && typeof existing.datenblatt === 'object' && !Array.isArray(existing.datenblatt)) ? existing.datenblatt : {};
+  db.sub = { ...det, updated_at: new Date().toISOString() };
+  patch.datenblatt = db;
+  if (!b.id) {
+    patch.partner_user_id = pid; patch.sub_status = 'entwurf'; patch.status = 'aktiv';
+    if (!patch.name) return { error: 'Name erforderlich' };
+  }
+  try {
+    const r = b.id
+      ? await sbWrite('PATCH', `gs_projekte?id=eq.${uuid(b.id)}`, patch)
+      : await sbWrite('POST', 'gs_projekte', patch);
+    return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+  } catch (e) {
+    if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) return { error: 'Sub-Modus-Spalten fehlen – scripts/submodus_migration.sql ausführen.', notMigrated: true };
+    throw e;
+  }
+}
+async function subAnfrage(b, scope) {
+  const id = uuid(b.id);
+  await requireOwnedProjekt(id, scope);
+  const rows = await sbGet(`gs_projekte?id=eq.${id}&select=sub_status,projekt_art&limit=1`).catch(() => []);
+  const cur = rows && rows[0];
+  if (!cur) return { error: 'Projekt nicht gefunden' };
+  if (cur.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
+  if (!SUB_EDITABLE.has(cur.sub_status || null)) return { error: 'Anfrage bereits abgeschickt.', locked: true };
+  try {
+    const r = await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, { sub_status: 'angefragt', angefragt_am: new Date().toISOString() });
+    return { ok: true, projekt: Array.isArray(r) ? r[0] : r };
+  } catch (e) {
+    if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) return { error: 'Sub-Modus-Spalten fehlen – scripts/submodus_migration.sql ausführen.', notMigrated: true };
+    throw e;
+  }
 }
 
 // ── PDF-Export pro Abschnitt (wiederverwendet lib/pdf.buildPdf) ────────────
