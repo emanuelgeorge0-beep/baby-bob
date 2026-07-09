@@ -45,18 +45,20 @@ function setPartner(id, feats) {
 
 // ── PostgREST-Query zerlegen: eq-Filter + select ──
 function parseQ(qs) {
-  const filt = {}; let select = '*';
+  const filt = {}; const neq = {}; let select = '*';
   for (const part of (qs || '').split('&')) {
     if (!part) continue;
     const [k, v] = part.split('=');
     if (k === 'select') { select = decodeURIComponent(v); continue; }
     if (k === 'order' || k === 'limit') continue;
     if (v && v.startsWith('eq.')) filt[k] = decodeURIComponent(v.slice(3));
+    else if (v && v.startsWith('neq.')) neq[k] = decodeURIComponent(v.slice(4));
   }
-  return { filt, select };
+  return { filt, neq, select };
 }
-function match(row, filt) {
+function match(row, filt, neq) {
   for (const k of Object.keys(filt)) if (String(row[k] ?? '') !== String(filt[k])) return false;
+  for (const k of Object.keys(neq || {})) if (String(row[k] ?? '') === String(neq[k])) return false;
   return true;
 }
 const ok = (json) => ({ ok: true, status: 200, json: async () => json, text: async () => JSON.stringify(json) });
@@ -108,7 +110,7 @@ globalThis.fetch = async (url, opts = {}) => {
   if (p.startsWith('/rest/v1/')) {
     const table = p.slice('/rest/v1/'.length);
     const qs = u.search.slice(1);
-    const { filt } = parseQ(qs);
+    const { filt, neq } = parseQ(qs);
     const body = opts.body ? JSON.parse(opts.body) : null;
 
     if (table === 'user_roles') {
@@ -160,7 +162,7 @@ globalThis.fetch = async (url, opts = {}) => {
     }
     if (table.startsWith('gs_angebote')) {
       if (method === 'GET') {
-        let rows = ANGEBOTE.filter((r) => match(r, filt));
+        let rows = ANGEBOTE.filter((r) => match(r, filt, neq));
         rows = rows.sort((a, b) => (b.version || 0) - (a.version || 0));
         if (/limit=1/.test(qs)) rows = rows.slice(0, 1);
         return ok(rows);
@@ -231,6 +233,9 @@ async function suite(iter) {
   assert(r.d && r.d.profil.firma === 'Muster AG' && r.d.logo_url_signed, 'logo-upsert löscht firma NICHT + signed url');
 
   // ── 3) Sub-Lifecycle (P_ALL) ──
+  // Runde 5: vollständiges Firmenprofil (Firma/Adresse/PLZ/Ort) ist Pflicht vor
+  // dem ersten Projekt. P_ALL bekommt es hier.
+  await call(tok(P_ALL), { action: 'pm_profil_save', firma: 'Sub GmbH', adresse: 'Werkstr 5', plz: '8005', ort: 'Zürich' });
   r = await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'Neubau Seefeld', strasse: 'Bahnhofstr 1', plz: '8001', ort: 'Zürich', ansprechperson: 'Fr. Meier', beschreibung: 'Rohbau Sanitär', bereich: 'Sanitär, Heizung' });
   assert(r.d && r.d.ok, 'sub_save create ok');
   const sp = r.d.projekt;
@@ -408,6 +413,73 @@ async function suite(iter) {
   // Settings speichern (ganz am Ende, damit obige Kalk-Werte stabil bleiben).
   r = await call(tok(MASTER_UID), { action: 'msub_kalk_settings_save', vollkosten_chf_h: 48, ansatz_detailliert: 95 });
   assert(r.d && r.d.ok && Number(r.d.settings.vollkosten_chf_h) === 48 && Number(r.d.settings.ansatz_detailliert) === 95, 'kalk_settings speichern');
+
+  // ══ 9) RUNDE 5 – Blocker-Fixes ══════════════════════════════════════════
+  // (4) Ansatz „Schmerzgrenze" (75) — eff-Basis unabhängig von Vollkosten.
+  //     Gegenprobe: 80 h × 75 = 6000, eff 65.25 → gelb.
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_apply', bauabschnitt_id: baId3, personen: 2, team_tage: 5, ansatz_modus: 'schmerzgrenze' });
+  assert(r.d && r.d.kalk.ansatz === 75 && r.d.kalk.umsatz === 6000, '(4) schmerzgrenze: ansatz 75 / umsatz 6000');
+  assert(r.d && r.d.kalk.eff_chf_h === 65.25 && r.d.kalk.ampel === 'gelb', '(4) schmerzgrenze: eff 65.25 → gelb');
+  assert(BAUAB.find((a) => a.id === baId3).gesamtbetrag === 6000, '(4) schmerzgrenze → gesamtbetrag 6000');
+
+  // (1) Stale-Erkennung: Bauabschnitt (6000) ≠ Angebots-Netto (200 aus §8) → veraltet.
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp3.id });
+  assert(r.d && r.d.sub_bundle.angebot_stale === true && r.d.sub_bundle.bauabschnitt_summe === 6000, '(1) stale: angebot veraltet erkannt');
+
+  // (Abschluss) Angebotsbetrag == Summe der Bauabschnitte (vor Rabatt/Zuschlag).
+  //  Positionen automatisch aus Bauabschnitten → netto == 6000. Neue Version (vorher abgeschickt).
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp3.id });
+  assert(r.d && r.d.ok && r.d.rechnung.netto === 6000, '(abschluss) angebotsbetrag == summe bauabschnitte');
+  assert(ANGEBOTE.filter((a) => a.projekt_id === sp3.id).length === 2, '(1) abgeschicktes angebot → NEUE version (nie still geändert)');
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp3.id });
+  assert(r.d && r.d.sub_bundle.angebot_stale === false, '(1) nach neu-übernehmen: nicht mehr veraltet');
+
+  // (2) Live-Step-Vorschau via Engine (nicht hartcodiert): 3 Einheiten (stück) → 5 Zahlungsschritte, 3 Fortschritt.
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 6, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 3 });
+  assert(r.d && r.d.steps && r.d.steps.zahlung === 5 && r.d.steps.fortschritt === 3, '(2) kalk_preview: 5 zahlungsschritte, 3 fortschritt');
+  assert(r.d && r.d.kalk && r.d.kalk.verrechnungsstunden === 96, '(2) kalk_preview: 6 T × 2 P × 8 h = 96 h');
+  // Pauschal → Anzahl 1 erzwungen (Anzahlung + Abnahme = 2 Zahlungsschritte).
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 6, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 9 });
+  assert(r.d && r.d.steps.einheit_anzahl === 1 && r.d.steps.zahlung === 3, '(2) pauschal: anzahl→1');
+  assert((await call(tok(P_ALL), { action: 'msub_kalk_preview', personen: 2, team_tage: 1 })).status === 403, '(2) partner kalk_preview → 403');
+
+  // (1) Quick-Send: Angebot aus Bauabschnitten + direkt abschicken (ohne Editor).
+  const spQ = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'Quick' })).d.projekt;
+  await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spQ.id, name: 'A', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spQ.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt' && r.d.sub_status === 'angebot_offen', '(1) quick_send: abgeschickt + angebot_offen');
+  assert(PROJEKTE.find((p) => p.id === spQ.id).sub_status === 'angebot_offen', '(1) quick_send: projekt-status persistiert');
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: spQ.id });
+  assert(r.d && r.d.angebot && Array.isArray(r.d.angebot.positionen) && r.d.angebot.positionen.length === 1, '(1) quick_send: positionen auto aus bauabschnitten');
+
+  // (Abschluss/EISERN) Partner-Angebot-Payload enthält KEINE INTERN-Felder.
+  const pq = r.d.angebot;
+  assert(pq && !('ansatz_chf_h' in pq) && !('vollkosten_chf_h' in pq) && !('kosten' in pq) && !('rohgewinn' in pq) && !('ampel' in pq), '(eisern) partner-angebot ohne kosten/rohgewinn/ampel/ansatz_chf_h/vollkosten_chf_h');
+
+  // (5) Profil-Pflicht: Partner OHNE vollständiges Profil kann kein Projekt anlegen.
+  r = await call(tok(P_SUB), { action: 'sub_projekt_save', name: 'Ohne Profil' });
+  assert(r.d && r.d.profileIncomplete && !r.d.ok, '(5) profil unvollständig → kein neues projekt');
+  // Vollständiges Profil → geht.
+  await call(tok(P_SUB), { action: 'pm_profil_save', firma: 'S AG', adresse: 'Weg 1', plz: '8000', ort: 'Bern' });
+  // pm_profil_save braucht partner_branding — P_SUB hat es nicht → 403. Direkt in Map setzen.
+  PROFIL.set(P_SUB, { partner_user_id: P_SUB, firma: 'S AG', adresse: 'Weg 1', plz: '8000', ort: 'Bern' });
+  r = await call(tok(P_SUB), { action: 'sub_projekt_save', name: 'Mit Profil' });
+  assert(r.d && r.d.ok && r.d.projekt, '(5) mit vollständigem profil → projekt angelegt');
+
+  // (6) Leistungsarten als Array in datenblatt.sub.
+  r = await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'Leistung', leistungsarten: ['Badsanierung', 'Wärmepumpe', 'Badsanierung', 'Sonderwunsch XY'] });
+  const la = r.d && r.d.projekt.datenblatt.sub.leistungsarten;
+  assert(Array.isArray(la) && la.length === 3 && la[0] === 'Badsanierung' && la.indexOf('Sonderwunsch XY') > -1, '(6) leistungsarten array (dedupe)');
+
+  // (7) Sichtbare Projekt-ID S-YYYY-NNN (Master-Liste, Partner-Liste, Detail).
+  r = await call(tok(MASTER_UID), { action: 'msub_liste' });
+  assert(r.d && (r.d.anfragen || []).every((a) => /^S-\d{4}-\d{3}$/.test(a.anzeige_id)), '(7) master-liste: anzeige_id S-YYYY-NNN');
+  r = await call(tok(P_ALL), { action: 'sub_projekte' });
+  assert(r.d && (r.d.projekte || []).every((p) => /^S-\d{4}-\d{3}$/.test(p.anzeige_id)), '(7) partner-liste: anzeige_id S-YYYY-NNN');
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp.id });
+  assert(r.d && /^S-\d{4}-\d{3}$/.test(r.d.projekt.anzeige_id), '(7) partner-detail: anzeige_id');
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp.id });
+  assert(r.d && /^S-\d{4}-\d{3}$/.test(r.d.sub_bundle.anzeige_id), '(7) master-detail: anzeige_id');
 }
 
 const RUNS = 5;
