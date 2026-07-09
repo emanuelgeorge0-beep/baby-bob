@@ -2,7 +2,7 @@
 // Zweck: macht die App auf Android installierbar (fetch-Handler ist Pflicht für
 // den Install-Prompt) und cacht die Shell für schnellen, app-artigen Start.
 // WICHTIG: /api/* wird NIE gecacht → Jarvis/Cockpit zeigen immer Live-Daten.
-const CACHE = 'gs-cockpit-v5';
+const CACHE = 'gs-cockpit-v6';
 const SHELL = [
   '/gs-intern-7k2x',
   '/cockpit-manifest.json',
