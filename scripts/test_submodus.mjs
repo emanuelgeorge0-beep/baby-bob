@@ -616,6 +616,13 @@ async function suite(iter) {
   const pzp = r.d && r.d.zahlungsplan;
   assert(pzp && pzp.startbedingung.offen === true && /Anzahlung hinterlegen/.test(pzp.startbedingung.partner_hinweis) && /verbindlich/.test(pzp.startbedingung.partner_hinweis), '(B7) Partner-Hinweis: „Bitte Anzahlung hinterlegen, damit der Termin verbindlich wird."');
   assert(pzp && pzp.anzahlung_hinterlegt === false, '(B7) Anzahlung noch nicht hinterlegt');
+
+  // ── ABSCHLUSS: Pflicht-Assertions am voll angereicherten Partner-Payload ──
+  // (a) keine internen Kalk-/Kostenfelder; (c) kein internes Engine-Vokabular.
+  ['kosten', 'rohgewinn', 'ampel', 'ansatz_chf_h', 'vollkosten_chf_h'].forEach((k) =>
+    assert(!deepHasKey(r.d, k), '(a) partner-payload (mit Zahlungsplan) OHNE ' + k));
+  ['split_profil', 'einheit_typ', 'nummer', 'ab_nummer'].forEach((k) =>
+    assert(!deepHasKey(r.d, k), '(c) partner-payload (mit Zahlungsplan) OHNE ' + k));
 }
 
 const RUNS = 5;
