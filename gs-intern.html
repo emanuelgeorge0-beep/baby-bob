@@ -2282,13 +2282,54 @@ function msubAngebotHtml(ang){
 function wireMsubAngebot(p,ang){
   var rp=$('msub-ang-reprefill'); if(rp) rp.onclick=function(){ msubReprefill(p.id); };
   var ed=$('msub-ang-edit'); if(ed) ed.onclick=function(){ openAngebotEditor(p.id,ang||null); };
-  var sd=$('msub-ang-send'); if(sd) sd.onclick=function(){
-    if(!confirm('Angebot jetzt an den Partner abschicken? Danach steht der Status auf „Angebot offen".')) return;
-    sd.disabled=true;
+  // Block 4 (Runde 6): Abschicken erst nach der Prüf-Ansicht (Positionen |
+  // Zahlungsplan | Konditionen, je Häkchen).
+  var sd=$('msub-ang-send'); if(sd) sd.onclick=function(){ openAngebotPruefung(p,ang); };
+}
+// ── Prüf-Ansicht vor dem Abschicken (3 Häkchen: Positionen, Zahlungsplan, Konditionen) ──
+function angPruefPositionenHtml(ang){
+  var pos=(ang&&ang.positionen)||[];
+  return pos.length?pos.map(function(p){ return '<div class="meta"><span>'+esc(p.bezeichnung||'')+' ('+esc(p.menge)+' '+esc(p.einheit||'')+' × '+zsChf(p.einzelpreis)+')</span><span class="dot">'+zsChf(Number(p.menge||0)*Number(p.einzelpreis||0))+'</span></div>'; }).join(''):'<div class="empty" style="padding:10px">Keine Positionen.</div>';
+}
+function angPruefZahlungsplanHtml(ang){
+  var v=(ang&&ang.bauabschnitt_vorschlag)||[];
+  if(!v.length) return '<div class="empty" style="padding:10px">Kein Zahlungsplan – zuerst Bauabschnitte kalkulieren.</div>';
+  return v.map(function(a){
+    var steps=(a.steps||[]).filter(function(s){return s.typ==='zahlung';});
+    return '<div class="lcard" style="margin:0 0 8px"><div class="top"><div class="nm">'+esc(a.name||'Abschnitt')+'</div><span style="color:var(--gold);font-weight:700">'+zsChf(a.gesamtbetrag)+'</span></div>'+
+      steps.map(function(s){ return '<div class="meta" style="margin-top:3px"><span>💰 '+esc(s.bezeichnung)+'</span><span class="dot">'+zsChf(s.betrag)+'</span></div>'; }).join('')+'</div>';
+  }).join('');
+}
+function angPruefKonditionenHtml(ang){
+  var it=[['MWST',(ang.mwst_prozent!=null?ang.mwst_prozent:8.1)+'%']];
+  if(ang.rabatt_prozent) it.push(['Rabatt',ang.rabatt_prozent+'%']);
+  if(ang.zuschlag_prozent) it.push(['Zuschlag',ang.zuschlag_prozent+'%']);
+  if(ang.zahlungsziel_tage) it.push(['Zahlungsziel',ang.zahlungsziel_tage+' Tage']);
+  if(ang.gueltig_bis) it.push(['Gültig bis',ang.gueltig_bis]);
+  if(ang.ausfuehrung_von||ang.ausfuehrung_bis) it.push(['Ausführung',(ang.ausfuehrung_von||'?')+' – '+(ang.ausfuehrung_bis||'?')]);
+  it.push(['Gesamtbetrag brutto',zsChf(ang.gesamtbetrag)]);
+  return it.map(function(kv){ return '<div class="meta"><span>'+esc(kv[0])+'</span><span class="dot">'+esc(kv[1])+'</span></div>'; }).join('');
+}
+function openAngebotPruefung(p,ang){
+  if(!ang){ toast('Kein Angebot vorhanden'); return; }
+  function chk(id,label){ return '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:700;cursor:pointer"><input type="checkbox" id="'+id+'" style="width:18px;height:18px"/> '+label+'</label>'; }
+  openSheet('<h3>Angebot prüfen & abschicken</h3>'+
+    '<div class="sec-t">Positionen</div>'+angPruefPositionenHtml(ang)+chk('pr-pos','Positionen geprüft')+
+    '<div class="sec-t" style="margin-top:14px">Zahlungsplan</div>'+angPruefZahlungsplanHtml(ang)+chk('pr-plan','Zahlungsplan geprüft')+
+    '<div class="sec-t" style="margin-top:14px">Konditionen</div>'+angPruefKonditionenHtml(ang)+chk('pr-kond','Konditionen geprüft')+
+    '<div class="login-msg" id="pr-msg" style="margin-top:10px"></div>'+
+    '<button class="btn btn-gold" id="pr-send" style="margin-top:12px;opacity:0.5" disabled>📨 Abschicken</button>'+
+    '<button class="btn ghost" id="pr-cancel">Abbrechen</button>');
+  $('pr-cancel').onclick=closeSheet;
+  var boxes=['pr-pos','pr-plan','pr-kond'];
+  function upd(){ var all=boxes.every(function(id){ return ($(id)||{}).checked; }); var b=$('pr-send'); if(b){ b.disabled=!all; b.style.opacity=all?'1':'0.5'; } }
+  boxes.forEach(function(id){ var e=$(id); if(e) e.onchange=upd; }); upd();
+  $('pr-send').onclick=function(){
+    var b=$('pr-send'); if(b.disabled) return; b.disabled=true; b.textContent='…';
     api('msub_angebot_send',{projekt_id:p.id}).then(function(d){
-      if(d&&d.error){ sd.disabled=false; toast(d.error); return; }
-      toast('Angebot abgeschickt'); openSubAnfrage(p.id);
-    }).catch(function(){ sd.disabled=false; toast('Fehler'); });
+      if(d&&d.error){ b.disabled=false; b.textContent='📨 Abschicken'; $('pr-msg').className='login-msg err'; $('pr-msg').textContent=d.error; return; }
+      closeSheet(); toast('Angebot abgeschickt'); openSubAnfrage(p.id);
+    }).catch(function(){ b.disabled=false; b.textContent='📨 Abschicken'; $('pr-msg').className='login-msg err'; $('pr-msg').textContent='Fehler'; });
   };
 }
 

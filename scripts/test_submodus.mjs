@@ -541,6 +541,14 @@ async function suite(iter) {
   assert(r.d && r.d.steps.fortschritt === 3, '(B3) 12 Team-Tage → 3 Fortschritte');
   const fb = r.d.steps.liste.filter((s) => s.fortschritt).map((s) => s.bezeichnung);
   assert(fb[0] === 'Zwischenzahlung KW 1' && fb[1] === 'Zwischenzahlung KW 2' && fb[2] === 'Installation fertig', '(B3) 12T Benennung: 2× Zwischenzahlung + Installation fertig');
+
+  // ── BLOCK 4: Prüf-Ansicht braucht Positionen | Zahlungsplan | Konditionen ──
+  // spB1b hat einen Entwurf (Positionen auto aus Bauabschnitten + vorschlag/steps).
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: spB1b.id });
+  const b4 = r.d && r.d.sub_bundle && r.d.sub_bundle.angebot;
+  assert(b4 && Array.isArray(b4.positionen) && b4.positionen.length >= 1, '(B4) Prüf: Positionen vorhanden');
+  assert(b4 && Array.isArray(b4.bauabschnitt_vorschlag) && b4.bauabschnitt_vorschlag[0].steps.some((s) => s.typ === 'zahlung' && s.betrag > 0), '(B4) Prüf: Zahlungsplan (Steps mit Betrag)');
+  assert(b4 && b4.mwst_prozent != null, '(B4) Prüf: Konditionen (MWST) vorhanden');
 }
 
 const RUNS = 5;
