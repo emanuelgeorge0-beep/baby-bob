@@ -8263,7 +8263,40 @@ function subPaintDetail(d){
     ? '<button class="login-btn-magic" style="margin-top:14px;" onclick="subDoAnfrage(\''+p.id+'\')">📨 Anfrage abschicken</button>'
       +'<div class="pd-item-meta" style="text-align:center;margin-top:6px;">Danach ist das Projekt schreibgeschützt.</div>'
     : '';
-  c.innerHTML=back+head+lifecycle+dateiHtml+action;
+  c.innerHTML=back+head+lifecycle+subZahlungsplanHtml(d)+dateiHtml+action;
+}
+// ── Block 6/7 (Runde 6): Zahlungsplan-Ansicht + zweite Annahme + hinterlegen ──
+function subZpStatusLabel(s){ return {wartend:'wartet',aktiv:'fällig',hinterlegt:'hinterlegt',gs_fertig:'in Bestätigung',freigegeben:'bezahlt',geklaert:'erledigt',offen:'offen'}[s]||s; }
+function subZahlungsplanHtml(d){
+  var zp=d&&d.zahlungsplan; if(!zp) return '';
+  var p=d.projekt||{};
+  var stepsHtml=zp.abschnitte.map(function(a){
+    var rows=(a.steps||[]).map(function(s){
+      var isZ=s.typ==='zahlung';
+      var btn=s.hinterlegen_moeglich?('<button class="admin-act" style="margin-top:6px;width:100%;justify-content:center;background:linear-gradient(135deg,#3ecf8e,#2ba36a);color:#04140b;" onclick="subDoHinterlegen(\''+s.id+'\')">💳 '+pmChf(s.betrag)+' hinterlegen</button>'):'';
+      return '<div style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.06);"><div style="display:flex;justify-content:space-between;"><span>'+(isZ?'💰':'🔒')+' '+gsEsc(s.bezeichnung)+'</span><span style="color:#C9A961;font-weight:700;">'+(isZ?pmChf(s.betrag):'')+'</span></div><div class="pd-item-meta" style="font-size:11px;">'+subZpStatusLabel(s.status)+'</div>'+btn+'</div>';
+    }).join('');
+    return '<div style="margin-top:8px;"><div style="font-weight:700;">'+gsEsc(a.name||'Abschnitt')+'</div>'+rows+'</div>';
+  }).join('');
+  var head='<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:800;">💳 Zahlungsplan</span><span style="color:#C9A961;font-weight:800;">'+pmChf(zp.summe)+'</span></div>';
+  if(zp.status!=='angenommen'){
+    return '<div class="pd-item" style="border-color:rgba(201,169,97,0.3);">'+head
+      +'<div class="pd-item-meta" style="margin-top:4px;">Bitte prüfen Sie den Zahlungsplan und nehmen Sie ihn an, damit die Termine verbindlich werden.</div>'
+      +stepsHtml
+      +'<button class="login-btn-magic" style="margin-top:12px;" onclick="subDoZahlungsplan(\''+p.id+'\')">✓ Zahlungsplan annehmen</button></div>';
+  }
+  // Angenommen → aktiv. Block 7: Anzahlung ist Startbedingung.
+  var start=!zp.anzahlung_hinterlegt?('<div class="pd-item-meta" style="margin-top:6px;color:#f5b942;">⏳ Bitte Anzahlung hinterlegen, damit der Termin verbindlich wird.</div>'):'';
+  return '<div class="pd-item" style="border-color:rgba(62,207,142,0.35);">'+head
+    +'<div class="pd-item-meta" style="margin-top:4px;">Angenommen am '+gsEsc(subFmt(zp.zahlungsplan_angenommen_at))+'</div>'
+    +start+stepsHtml+'</div>';
+}
+function subDoZahlungsplan(id){
+  if(!window.confirm('Zahlungsplan verbindlich annehmen? Danach wird das Zahlungssystem aktiv.')) return;
+  pmApi('sub_zahlungsplan_annehmen',{projekt_id:id}).then(function(d){ if(d&&d.error){toast(d.error);return;} toast('Zahlungsplan angenommen'); subReload(); });
+}
+function subDoHinterlegen(stepId){
+  pmApi('sub_step_hinterlegen',{step_id:stepId}).then(function(d){ if(d&&d.error){toast(d.error);return;} toast('Hinterlegt'); subReload(); });
 }
 // Zeitstempel TT.MM.JJJJ, HH:MM (wie zsFmt im Master).
 function subFmt(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+', '+p(d.getHours())+':'+p(d.getMinutes()); }

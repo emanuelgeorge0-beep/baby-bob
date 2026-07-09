@@ -563,6 +563,48 @@ async function suite(iter) {
   assert(r.d && !('nummer' in r.d.auftrag), '(B5) Partner-Auftrag OHNE AB-Nummer');
   // (c) NEU/EISERN: Partner-Payload nirgends ab_nummer / nummer.
   assert(!deepHasKey(r.d, 'nummer') && !deepHasKey(r.d, 'ab_nummer'), '(c) partner-payload OHNE ab_nummer');
+
+  // ── BLOCK 6: Zahlungsplan-Generierung + zweite Annahme ──
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const spB6 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R6-Block6' })).d.projekt;
+  await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spB6.id, name: 'Rohbau', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1, personen: 2, team_tage: 7, ansatz_modus: 'detailliert' });
+  const qs = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB6.id });
+  const acceptBetrag = qs.d.angebot.gesamtbetrag; // brutto = angenommener Betrag
+  assert(acceptBetrag === r2(10080 * 1.081), '(B6) Angebot brutto = 10080 × 1.081');
+  // 1. Annahme (Angebot): Zahlungsplan wird generiert, aber INAKTIV.
+  r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: spB6.id, op: 'annehmen' });
+  assert(r.d && r.d.ok && r.d.zahlungsplan && r.d.zahlungsplan.status === 'offen' && r.d.zahlungsplan.aktiv === false, '(B6) nach Angebot-Annahme: Zahlungsplan offen + inaktiv');
+  assert(r.d.zahlungsplan.abschnitte.every((a) => a.steps.every((s) => s.status === 'wartend' && !s.hinterlegen_moeglich)), '(B6) Plan inaktiv: alle Steps wartend, kein hinterlegen');
+  // Summe aller generierten Steps == angenommener Angebotsbetrag.
+  const b6ids = BAUAB.filter((a) => a.projekt_id === spB6.id).map((a) => a.id);
+  const stepSum = r2(STEPS.filter((s) => b6ids.includes(s.bauabschnitt_id) && s.typ === 'zahlung').reduce((x, s) => x + Number(s.betrag || 0), 0));
+  assert(stepSum === acceptBetrag, '(B6) Summe aller Steps == Angebotsbetrag');
+  assert(r2(r.d.zahlungsplan.summe) === acceptBetrag, '(B6) Zahlungsplan.summe == Angebotsbetrag');
+  // Audit-Trail: angebot_angenommen_at gesetzt, zahlungsplan noch offen.
+  let prow = PROJEKTE.find((p) => p.id === spB6.id);
+  assert(prow.angebot_angenommen_at && prow.zahlungsplan_status === 'offen' && prow.zahlungsplan_aktiv === false, '(B6) audit: angebot_angenommen_at gesetzt, plan offen');
+  // Gating der 2. Annahme.
+  assert((await call(tok(P_SUB2), { action: 'sub_zahlungsplan_annehmen', projekt_id: spB6.id })).status === 403, '(B6) fremd: zahlungsplan_annehmen → 403');
+  // 2. Annahme (Zahlungsplan) → Zahlungssystem AKTIV, erster Step scharf.
+  r = await call(tok(P_ALL), { action: 'sub_zahlungsplan_annehmen', projekt_id: spB6.id });
+  assert(r.d && r.d.ok && r.d.zahlungsplan.status === 'angenommen' && r.d.zahlungsplan.aktiv === true, '(B6) 2. Annahme: Zahlungsplan aktiv');
+  const firstStep = r.d.zahlungsplan.abschnitte[0].steps[0];
+  assert(firstStep.zahlung_art === 'anzahlung' && firstStep.status === 'aktiv' && firstStep.hinterlegen_moeglich === true, '(B6) Anzahlung scharf + hinterlegen klickbar');
+  // Zwei getrennte Zustimmungen im Audit-Trail.
+  prow = PROJEKTE.find((p) => p.id === spB6.id);
+  assert(prow.angebot_angenommen_at && prow.zahlungsplan_angenommen_at && prow.zahlungsplan_angenommen_by, '(B6) audit: angebot_angenommen_at + zahlungsplan_angenommen_at + by');
+  // Doppelte 2. Annahme → Fehler.
+  r = await call(tok(P_ALL), { action: 'sub_zahlungsplan_annehmen', projekt_id: spB6.id });
+  assert(r.d && r.d.error && r.d.decided, '(B6) doppelte Zahlungsplan-Annahme → Fehler');
+  // Plan bleibt dauerhaft im Partner-Cockpit sichtbar.
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: spB6.id });
+  assert(r.d && r.d.zahlungsplan && r.d.zahlungsplan.status === 'angenommen' && r.d.zahlungsplan.abschnitte.length, '(B6) Zahlungsplan dauerhaft im Partner-Cockpit');
+  // (d) NEU/EISERN: Summe aller Steps == angenommener Angebotsbetrag.
+  assert(stepSum === acceptBetrag, '(d) Summe aller Steps == angenommener Angebotsbetrag');
+  // (c): auch der Zahlungsplan enthält kein split_profil/einheit_typ.
+  assert(!deepHasKey(r.d.zahlungsplan, 'split_profil') && !deepHasKey(r.d.zahlungsplan, 'einheit_typ'), '(c) Zahlungsplan ohne split_profil/einheit_typ');
+  // sub_step_hinterlegen: fremd → 403.
+  assert((await call(tok(P_SUB2), { action: 'sub_step_hinterlegen', step_id: firstStep.id })).status === 403, '(B6) fremd: step_hinterlegen → 403');
 }
 
 const RUNS = 5;

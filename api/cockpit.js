@@ -79,7 +79,7 @@ const PARTNER_FEATURE_ACTIONS = {
   pm_profil_get: 'partner_branding', pm_profil_save: 'partner_branding', pm_logo_upload: 'partner_branding',
   sub_projekte: 'sub_akkord', sub_projekt: 'sub_akkord', sub_projekt_save: 'sub_akkord', sub_anfrage: 'sub_akkord',
   sub_datei_upload: 'sub_akkord', sub_datei_list: 'sub_akkord', sub_datei_del: 'sub_akkord',
-  sub_entscheiden: 'sub_akkord',
+  sub_entscheiden: 'sub_akkord', sub_zahlungsplan_annehmen: 'sub_akkord', sub_step_hinterlegen: 'sub_akkord',
 };
 
 // Zugriffskontext bestimmen:
@@ -234,6 +234,8 @@ export default async function handler(req, res) {
       case 'sub_datei_list':   return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
       case 'sub_datei_del':    return res.status(200).json(await pmDateiDel(req.body, scope));
       case 'sub_entscheiden':  return res.status(200).json(await subEntscheiden(req.body, scope));
+      case 'sub_zahlungsplan_annehmen': return res.status(200).json(await subZahlungsplanAnnehmen(req.body, scope));
+      case 'sub_step_hinterlegen':      return res.status(200).json(await subStepHinterlegen(req.body, scope));
       // ── Zahlungssystem (Escrow-Engine) — Master-only (nicht in PM_ACTIONS) ──
       case 'zs_profile':       return res.status(200).json(await zsProfile());
       case 'zs_projekt':       return res.status(200).json(await zsProjekt(req.body.projekt_id));
@@ -2278,7 +2280,9 @@ async function subProjekt(id, scope) {
     auftrag = sanitizeAuftragForPartner(await subAuftrag(id));
   } catch (_) { /* Angebots-/AB-Tabelle evtl. noch nicht migriert → ohne */ }
   const anzeigeId = await projektAnzeigeId(projekt).catch(() => null);
-  return { projekt: { ...projekt, anzeige_id: anzeigeId }, dateien, angebot, auftrag };
+  // Block 6: Zahlungsplan bleibt nach Annahme dauerhaft im Partner-Cockpit sichtbar.
+  const zahlungsplan = await subZahlungsplanView(id).catch(() => null);
+  return { projekt: { ...projekt, anzeige_id: anzeigeId }, dateien, angebot, auftrag, zahlungsplan };
 }
 // Partner entscheidet über ein abgeschicktes Angebot: annehmen | ablehnen | besprechung.
 // Bei Annahme wird automatisch eine Auftragsbestätigung erzeugt. Server-seitig gescoped
@@ -2307,9 +2311,17 @@ async function subEntscheiden(b, scope) {
       const nummer = 'AB-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-6);
       const ar = await sbWrite('POST', 'gs_auftragsbestaetigung', { projekt_id: pid, angebot_id: angebot.id, nummer, gesamtbetrag: num(angebot.gesamtbetrag), bestaetigt_by: uid });
       auftrag = Array.isArray(ar) ? ar[0] : ar;
+      // Block 6: Zahlungsplan aus dem ANGENOMMENEN Betrag generieren (inaktiv bis
+      // zur zweiten Annahme). Audit-Trail: angebot_angenommen_at gesetzt.
+      await subGenerateZahlungsplan(pid, num(angebot.gesamtbetrag));
+      try {
+        await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { angebot_angenommen_at: now, zahlungsplan_status: 'offen', zahlungsplan_aktiv: false }, 'return=minimal');
+      } catch (e) { if (!/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) throw e; }
     }
-    // Partner sieht die AB INTERN gefiltert: nur „angenommen" + Zeitstempel (Block 5).
-    return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: newStatus, auftrag: sanitizeAuftragForPartner(auftrag) };
+    // Partner sieht die AB INTERN gefiltert: nur „angenommen" + Zeitstempel (Block 5)
+    // sowie den frisch generierten (noch inaktiven) Zahlungsplan (Block 6).
+    const zahlungsplan = op === 'annehmen' ? await subZahlungsplanView(pid).catch(() => null) : null;
+    return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: newStatus, auftrag: sanitizeAuftragForPartner(auftrag), zahlungsplan };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
 async function subAuftrag(projektId) {
@@ -2322,6 +2334,109 @@ async function subAuftrag(projektId) {
 function sanitizeAuftragForPartner(auf) {
   if (!auf) return null;
   return { angenommen: true, bestaetigt_am: auf.bestaetigt_am || null };
+}
+
+// ═══ Block 6 (Runde 6): Zahlungsplan-Generierung + zweite Annahme ═══════════
+// Nach Angebot-Annahme wird aus dem ANGENOMMENEN Betrag (nicht aus der Kalkulation)
+// der Zahlungsplan generiert: die bestehenden Bauabschnitte werden proportional auf
+// den Angebotsbetrag skaliert und ihre Step-Ketten neu — aber INAKTIV — erzeugt.
+// Summe aller Steps == angenommener Angebotsbetrag (Rappen-genau).
+async function subGenerateZahlungsplan(pid, betrag) {
+  const total = Math.round(num(betrag) * 100); // Rappen
+  if (total <= 0) return;
+  const abs = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=*&order=reihenfolge.asc`).catch(() => []);
+  if (!abs || !abs.length) return;
+  const curSum = abs.reduce((s, a) => s + num(a.gesamtbetrag), 0);
+  let allocated = 0;
+  for (let i = 0; i < abs.length; i++) {
+    const a = abs[i];
+    const shareC = (i === abs.length - 1)
+      ? (total - allocated) // letzter Abschnitt bekommt den Rest → Summe exakt = total
+      : Math.round(curSum > 0 ? total * num(a.gesamtbetrag) / curSum : total / abs.length);
+    if (i !== abs.length - 1) allocated += shareC;
+    const betragChf = shareC / 100;
+    await sbWrite('PATCH', `gs_bauabschnitte?id=eq.${a.id}`, { gesamtbetrag: betragChf }, 'return=minimal').catch(() => {});
+    a.gesamtbetrag = betragChf;
+    await zsGenerateChain(a, { activate: false }); // inaktiv bis zur 2. Annahme
+  }
+}
+// Partner-sichere Zahlungsplan-Ansicht (nur nach Angebot-Annahme). Enthält NIE
+// split_profil/einheit_typ — nur Abschnittsname + Steps (Bezeichnung + Betrag + Status).
+async function subZahlungsplanView(pid) {
+  const prow = await sbGet(`gs_projekte?id=eq.${pid}&select=*&limit=1`).catch(() => []);
+  const p = (prow && prow[0]) || {};
+  if (p.sub_status !== 'angenommen') return null; // Plan erst nach Angebot-Annahme
+  const abs = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=id,name,reihenfolge,gesamtbetrag&order=reihenfolge.asc`).catch(() => []);
+  if (!abs || !abs.length) return null;
+  const aktiv = p.zahlungsplan_aktiv === true || p.zahlungsplan_status === 'angenommen';
+  let summe = 0, anzahlungHinterlegt = false;
+  const abschnitte = [];
+  for (const a of abs) {
+    const steps = await sbGet(`gs_steps?bauabschnitt_id=eq.${a.id}&select=id,reihenfolge,typ,zahlung_art,bezeichnung,betrag,status&order=reihenfolge.asc`).catch(() => []);
+    const outSteps = (steps || []).map((s) => ({
+      id: s.id, reihenfolge: s.reihenfolge, typ: s.typ, zahlung_art: s.zahlung_art, bezeichnung: s.bezeichnung,
+      betrag: num(s.betrag), status: s.status,
+      hinterlegen_moeglich: aktiv && s.typ === 'zahlung' && s.status === 'aktiv',
+    }));
+    outSteps.forEach((s) => { if (s.typ === 'zahlung') summe += num(s.betrag); });
+    const anz = outSteps.find((s) => s.zahlung_art === 'anzahlung');
+    if (anz && ['hinterlegt', 'gs_fertig', 'freigegeben'].includes(anz.status)) anzahlungHinterlegt = true;
+    abschnitte.push({ name: a.name || 'Abschnitt', gesamtbetrag: num(a.gesamtbetrag), steps: outSteps });
+  }
+  return {
+    status: p.zahlungsplan_status || 'offen', aktiv,
+    angebot_angenommen_at: p.angebot_angenommen_at || null,
+    zahlungsplan_angenommen_at: p.zahlungsplan_angenommen_at || null,
+    summe: round2(summe), abschnitte, anzahlung_hinterlegt: anzahlungHinterlegt,
+  };
+}
+// Zweite Annahme: der Partner nimmt den generierten Zahlungsplan separat an. Erst
+// danach wird das Zahlungssystem AKTIV (Steps scharf, „hinterlegen" klickbar).
+async function subZahlungsplanAnnehmen(b, scope) {
+  const pid = uuid(b.projekt_id);
+  await requireOwnedProjekt(pid, scope);
+  const rows = await sbGet(`gs_projekte?id=eq.${pid}&select=*&limit=1`).catch(() => []);
+  const p = rows && rows[0];
+  if (!p) return { error: 'Projekt nicht gefunden' };
+  if (p.sub_status !== 'angenommen') return { error: 'Das Angebot ist noch nicht angenommen.' };
+  if (p.zahlungsplan_status === 'angenommen' || p.zahlungsplan_aktiv === true) return { error: 'Der Zahlungsplan wurde bereits angenommen.', decided: true };
+  const uid = (scope && scope.partnerId) || null;
+  const now = new Date().toISOString();
+  try {
+    await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { zahlungsplan_status: 'angenommen', zahlungsplan_angenommen_at: now, zahlungsplan_angenommen_by: uid, zahlungsplan_aktiv: true });
+  } catch (e) {
+    if (!/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) throw e; // Spalten fehlen → scripts/runde6.sql
+  }
+  // Steps scharf machen: der erste Zahlungs-Step (Anzahlung) wird hinterlegbar.
+  const absIds = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=id&order=reihenfolge.asc`).catch(() => []);
+  for (const a of (absIds || [])) { try { await zsRecompute(a.id); } catch (_) {} }
+  return { ok: true, zahlungsplan: await subZahlungsplanView(pid) };
+}
+// Partner hinterlegt (Escrow-Stub) den aktuell fälligen Zahlungs-Step. Nur möglich,
+// wenn der Zahlungsplan angenommen ist und der Step tatsächlich „aktiv" ist.
+async function subStepHinterlegen(b, scope) {
+  const stepId = uuid(b.step_id);
+  const srows = await sbGet(`gs_steps?id=eq.${stepId}&select=*&limit=1`).catch(() => []);
+  const step = srows && srows[0];
+  if (!step) return { error: 'Step nicht gefunden' };
+  const arows = await sbGet(`gs_bauabschnitte?id=eq.${step.bauabschnitt_id}&select=id,projekt_id&limit=1`).catch(() => []);
+  const abschnitt = arows && arows[0];
+  if (!abschnitt) return { error: 'Bauabschnitt nicht gefunden' };
+  await requireOwnedProjekt(abschnitt.projekt_id, scope);
+  const prow = await sbGet(`gs_projekte?id=eq.${abschnitt.projekt_id}&select=*&limit=1`).catch(() => []);
+  const p = prow && prow[0];
+  const aktiv = p && (p.zahlungsplan_aktiv === true || p.zahlungsplan_status === 'angenommen');
+  if (!aktiv) return { error: 'Zahlungsplan noch nicht angenommen.' };
+  if (step.typ !== 'zahlung') return { error: 'Kein Zahlungs-Step' };
+  if (step.status !== 'aktiv') return { error: 'Dieser Schritt ist noch nicht an der Reihe.' };
+  try {
+    await escrowHinterlegen(stepId, zsSb);
+    await zsRecompute(abschnitt.id);
+  } catch (e) {
+    if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true };
+    return { error: (e && e.message) || 'Hinterlegen fehlgeschlagen' };
+  }
+  return { ok: true, zahlungsplan: await subZahlungsplanView(abschnitt.projekt_id) };
 }
 // Profil vollständig? Pflichtfelder Firma/Adresse/PLZ/Ort (Firmenadresse, NICHT Baustelle).
 async function partnerProfilComplete(pid) {
@@ -2642,7 +2757,7 @@ function zsAllocate(specs, gesamtbetrag, vert) {
 
 // Step-Kette (+ Escrow) fuer einen Bauabschnitt (neu) erzeugen. Ersetzt eine
 // evtl. bestehende Kette (Escrow via FK-Cascade). Danach Status-Automat + Bob-Wissen.
-async function zsGenerateChain(abschnitt) {
+async function zsGenerateChain(abschnitt, opts = {}) {
   const profil = abschnitt.split_profil || 'stueck_15_70_15';
   const vert = await zsVerteilung(profil);
   const specs = zsBuildSpecs(profil, abschnitt.einheit_anzahl, vert, abschnitt.team_tage);
@@ -2661,6 +2776,14 @@ async function zsGenerateChain(abschnitt) {
     escRows.push({ step_id: idByR[i + 1], escrow_status: 'offen', betrag: betraege[i], rueckbehalt_prozent: s.rueckbehalt || 0 });
   });
   if (escRows.length) await sbWrite('POST', 'gs_escrow', escRows, 'return=minimal');
+  // Block 6 (Runde 6): activate:false lässt den frisch generierten Zahlungsplan
+  // INAKTIV (alle Steps 'wartend', kein 'hinterlegen'), bis der Partner ihn separat
+  // annimmt. Erst dann macht zsRecompute den ersten Step (Anzahlung) scharf.
+  if (opts.activate === false) {
+    const steps = await sbGet(`gs_steps?bauabschnitt_id=eq.${abschnitt.id}&select=*&order=reihenfolge.asc`);
+    await zsWriteBobWissen(abschnitt, steps);
+    return steps;
+  }
   const rec = await zsRecompute(abschnitt.id);
   await zsWriteBobWissen(abschnitt, rec.steps);
   return rec.steps;
@@ -3019,6 +3142,8 @@ async function msubDetail(id, access) {
       partner, angebot, auftrag, kalk,
       angebot_stale: angebotStale,
       bauabschnitt_summe: round2(kalkSum),
+      // Block 6/7: generierter Zahlungsplan + Annahme-/Start-Status (Master-Sicht).
+      zahlungsplan: await subZahlungsplanView(id).catch(() => null),
     };
     return pm;
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
