@@ -246,6 +246,8 @@ export default async function handler(req, res) {
       case 'msub_in_pruefung':  return res.status(200).json(await msubInPruefung(req.body, access));
       case 'msub_angebot_save': return res.status(200).json(await msubAngebotSave(req.body, access));
       case 'msub_angebot_send': return res.status(200).json(await msubAngebotSend(req.body, access));
+      case 'msub_angebot_quick_send': return res.status(200).json(await msubAngebotQuickSend(req.body, access));
+      case 'msub_kalk_preview':       return res.status(200).json(await msubKalkPreview(req.body, access));
       case 'msub_kalk_settings_get':  return res.status(200).json(await kalkSettingsGet(access));
       case 'msub_kalk_settings_save': return res.status(200).json(await kalkSettingsSave(req.body, access));
       case 'msub_kalk_apply':         return res.status(200).json(await msubKalkApply(req.body, access));
@@ -2238,9 +2240,15 @@ const SUB_EDITABLE = new Set([null, 'entwurf']);
 function sanitizeSubDetail(o) {
   o = (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
   const clip = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+  // Leistungsarten (2. Ebene): Array von Kurzbegriffen. Grund: später Bobs
+  // Trainingsmaterial (gs_bob_wissen). Dedupe, getrimmt, max 40 Einträge.
+  const arr = Array.isArray(o.leistungsarten) ? o.leistungsarten : [];
+  const seen = new Set(); const leistungsarten = [];
+  arr.forEach((x) => { const v = clip(x, 80); if (v && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); leistungsarten.push(v); } });
   return {
     strasse: clip(o.strasse, 160), plz: clip(o.plz, 12), ort: clip(o.ort, 120),
     beschreibung: clip(o.beschreibung, 2000), ansprechperson: clip(o.ansprechperson, 160),
+    leistungsarten: leistungsarten.slice(0, 40),
   };
 }
 async function subProjekte(scope) {
@@ -2248,6 +2256,8 @@ async function subProjekte(scope) {
   if (!pid) return { projekte: [] };
   try {
     const projekte = await sbGet(`gs_projekte?partner_user_id=eq.${pid}&projekt_art=eq.sub_akkord&select=*&order=created_at.desc`);
+    const seq = await anzeigeSeqMap(true);
+    (projekte || []).forEach((p) => { p.anzeige_id = anzeigeIdFmt('sub_akkord', anzeigeJahr(p.created_at), seq[p.id] || 0); });
     return { projekte };
   } catch (e) { if (isNoTable(e)) return { projekte: [], notMigrated: true }; throw e; }
 }
@@ -2263,11 +2273,12 @@ async function subProjekt(id, scope) {
   // + evtl. Auftragsbestätigung. So sieht der Partner das offene Angebot & kann entscheiden.
   let angebot = null, auftrag = null;
   try {
-    const a = await msubLatestAngebot(id);
-    if (a && a.status !== 'entwurf') angebot = a;
+    // Nur das zuletzt ABGESCHICKTE Angebot (nie ein Master-Entwurf) + INTERN gefiltert.
+    angebot = sanitizeAngebotForPartner(await msubLatestSentAngebot(id));
     auftrag = await subAuftrag(id);
   } catch (_) { /* Angebots-/AB-Tabelle evtl. noch nicht migriert → ohne */ }
-  return { projekt, dateien, angebot, auftrag };
+  const anzeigeId = await projektAnzeigeId(projekt).catch(() => null);
+  return { projekt: { ...projekt, anzeige_id: anzeigeId }, dateien, angebot, auftrag };
 }
 // Partner entscheidet über ein abgeschicktes Angebot: annehmen | ablehnen | besprechung.
 // Bei Annahme wird automatisch eine Auftragsbestätigung erzeugt. Server-seitig gescoped
@@ -2304,9 +2315,21 @@ async function subAuftrag(projektId) {
   const rows = await sbGet(`gs_auftragsbestaetigung?projekt_id=eq.${projektId}&select=*&order=bestaetigt_am.desc&limit=1`).catch(() => []);
   return (rows && rows[0]) || null;
 }
+// Profil vollständig? Pflichtfelder Firma/Adresse/PLZ/Ort (Firmenadresse, NICHT Baustelle).
+async function partnerProfilComplete(pid) {
+  const { profil } = await partnerProfilRead(pid).catch(() => ({ profil: null }));
+  const ok = !!(profil && String(profil.firma || '').trim() && String(profil.adresse || '').trim()
+    && String(profil.plz || '').trim() && String(profil.ort || '').trim());
+  return { ok, profil: profil || null };
+}
 async function subProjektSave(b, scope) {
   const pid = scope && scope.partnerId;
   if (!pid) throw new Forbidden();
+  // Aufgabe 5: ohne vollständiges Firmenprofil kein NEUES Projekt.
+  if (!b.id) {
+    const pc = await partnerProfilComplete(pid).catch(() => ({ ok: true })); // Tabelle fehlt → nicht blockieren
+    if (pc.ok === false) return { error: 'Bitte zuerst das Firmenprofil ausfüllen (Firma, Adresse, PLZ, Ort) unter ⚙️ Einstellungen.', profileIncomplete: true };
+  }
   let existing = null;
   if (b.id) {
     await requireOwnedProjekt(b.id, scope);
@@ -2848,6 +2871,47 @@ async function msubLatestAngebot(projektId) {
   const rows = await sbGet(`gs_angebote?projekt_id=eq.${projektId}&select=*&order=version.desc,created_at.desc&limit=1`).catch(() => []);
   return (rows && rows[0]) || null;
 }
+// Letztes an den Partner ABGESCHICKTES/entschiedenes Angebot (nie ein Master-Entwurf).
+// So sieht der Partner beim Erstellen einer neuen Version weiterhin die alte gesendete.
+async function msubLatestSentAngebot(projektId) {
+  const rows = await sbGet(`gs_angebote?projekt_id=eq.${projektId}&status=neq.entwurf&select=*&order=version.desc,created_at.desc&limit=1`).catch(() => []);
+  return (rows && rows[0]) || null;
+}
+// INTERN/EXTERN: Nur diese Whitelist geht an den Partner. Kosten, Rohgewinn,
+// Ampel, Ansatz (ansatz_chf_h) und Kostensätze bleiben INTERN und werden NIE
+// ausgeliefert — auch nicht, falls die Spalte irgendwann auf gs_angebote läge.
+function sanitizeAngebotForPartner(ang) {
+  if (!ang) return null;
+  return {
+    id: ang.id, projekt_id: ang.projekt_id, version: ang.version, status: ang.status,
+    gesamtbetrag: num(ang.gesamtbetrag), bemerkung: ang.bemerkung || null,
+    positionen: Array.isArray(ang.positionen) ? ang.positionen : null,
+    rabatt_prozent: ang.rabatt_prozent != null ? num(ang.rabatt_prozent) : 0,
+    zuschlag_prozent: ang.zuschlag_prozent != null ? num(ang.zuschlag_prozent) : 0,
+    mwst_prozent: ang.mwst_prozent != null ? num(ang.mwst_prozent) : 8.1,
+    zahlungsziel_tage: ang.zahlungsziel_tage != null ? ang.zahlungsziel_tage : null,
+    gueltig_bis: ang.gueltig_bis || null, ausfuehrung_von: ang.ausfuehrung_von || null, ausfuehrung_bis: ang.ausfuehrung_bis || null,
+    abgeschickt_am: ang.abgeschickt_am || null, entschieden_am: ang.entschieden_am || null,
+    bauabschnitt_vorschlag: Array.isArray(ang.bauabschnitt_vorschlag) ? ang.bauabschnitt_vorschlag : null,
+  };
+}
+// ── Sichtbare Projekt-ID: S-YYYY-NNN (Sub) / K-YYYY-NNN (Kapazität) ──
+// Laufzeit-Berechnung aus der globalen Erstell-Reihenfolge je Art (keine neue
+// Spalte nötig). Master und Partner sehen dieselbe Nummer, weil global gezählt.
+function anzeigeJahr(iso) { const s = String(iso || ''); return /^\d{4}/.test(s) ? s.slice(0, 4) : String(new Date().getFullYear()); }
+function anzeigeIdFmt(art, jahr, seq) { return (art === 'sub_akkord' ? 'S' : 'K') + '-' + jahr + '-' + String(seq).padStart(3, '0'); }
+async function anzeigeSeqMap(isSub) {
+  const filter = isSub ? 'projekt_art=eq.sub_akkord' : 'or=(projekt_art.is.null,projekt_art.neq.sub_akkord)';
+  const rows = await sbGet(`gs_projekte?${filter}&select=id,created_at&order=created_at.asc`).catch(() => []);
+  const map = {}; (rows || []).forEach((r, i) => { map[r.id] = i + 1; }); return map;
+}
+async function projektAnzeigeId(projekt) {
+  if (!projekt || !projekt.id) return null;
+  const isSub = projekt.projekt_art === 'sub_akkord';
+  const map = await anzeigeSeqMap(isSub);
+  const seq = map[projekt.id] || (Object.keys(map).length + 1);
+  return anzeigeIdFmt(projekt.projekt_art, anzeigeJahr(projekt.created_at), seq);
+}
 async function msubPartnerBrand(partnerUserId) {
   const empty = { firma: null, adresse: null, plz: null, ort: null, telefon: null, email: null, logo_url_signed: null };
   if (!partnerUserId) return empty;
@@ -2868,14 +2932,18 @@ async function msubListe(access) {
     for (const pid of [...new Set((projekte || []).map((p) => p.partner_user_id).filter(Boolean))]) {
       brandByPid[pid] = await msubPartnerBrand(pid);
     }
+    const seq = await anzeigeSeqMap(true);
     const anfragen = (projekte || []).map((p) => {
       const sub = (p.datenblatt && typeof p.datenblatt === 'object' && p.datenblatt.sub) || {};
       const brand = brandByPid[p.partner_user_id] || {};
       return {
         id: p.id, name: p.name, standort: p.standort || null, bereich: p.bereich || null,
+        anzeige_id: anzeigeIdFmt('sub_akkord', anzeigeJahr(p.created_at), seq[p.id] || 0),
         sub_status: p.sub_status || 'entwurf', angefragt_am: p.angefragt_am || null,
         beschreibung: sub.beschreibung || '', ansprechperson: sub.ansprechperson || '',
-        partner_firma: brand.firma || null, partner_logo: brand.logo_url_signed || null,
+        leistungsarten: Array.isArray(sub.leistungsarten) ? sub.leistungsarten : [],
+        // Fallback: fehlt der Firmenname → E-Mail statt „?" anzeigen.
+        partner_firma: brand.firma || brand.email || null, partner_logo: brand.logo_url_signed || null,
       };
     });
     return { anfragen };
@@ -2899,15 +2967,27 @@ async function msubDetail(id, access) {
     if (pm && pm.error) return pm;
     const projekt = pm.projekt || {};
     const partner = await msubPartnerBrand(projekt.partner_user_id);
+    if (partner && !partner.firma && partner.email) partner.firma = partner.email; // Fallback statt „?"
     const angebot = await msubLatestAngebot(id);
     const auftrag = await subAuftrag(id);
+    const kalk = await msubKalkData(id);   // INTERN — nur ueber diesen Master-Endpunkt
+    // Stale-Erkennung: Bauabschnitts-Summe (aktuelle Kalkulation) vs. Angebotsbetrag
+    // vor Rabatt/Zuschlag (Positionen-Netto). Abweichung → Angebot veraltet.
+    const kalkSum = ((kalk && kalk.positionen) || []).reduce((s, k) => s + num(k.gesamtbetrag), 0);
+    const angNetto = angebot && Array.isArray(angebot.positionen)
+      ? angebot.positionen.reduce((s, p) => s + num(p.menge) * num(p.einzelpreis), 0)
+      : (angebot ? num(angebot.gesamtbetrag) : 0);
+    const angebotStale = !!(angebot && angebot.status !== 'angenommen' && angebot.status !== 'abgelehnt'
+      && kalkSum > 0 && Math.abs(round2(kalkSum) - round2(angNetto)) >= 0.01);
     pm.sub_bundle = {
       projekt_id: id,
       sub_status: projekt.sub_status || 'entwurf',
       angefragt_am: projekt.angefragt_am || null,
+      anzeige_id: await projektAnzeigeId(projekt).catch(() => null),
       sub: (projekt.datenblatt && typeof projekt.datenblatt === 'object' && projekt.datenblatt.sub) || {},
-      partner, angebot, auftrag,
-      kalk: await msubKalkData(id),   // INTERN — nur ueber diesen Master-Endpunkt
+      partner, angebot, auftrag, kalk,
+      angebot_stale: angebotStale,
+      bauabschnitt_summe: round2(kalkSum),
     };
     return pm;
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
@@ -2990,6 +3070,50 @@ async function msubAngebotSend(b, access) {
     return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: 'angebot_offen' };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
+// Schnellweg: Angebot aus den Bauabschnitten erzeugen (Positionen automatisch) UND
+// direkt abschicken — ohne Umweg über den Editor. Ein bereits abgeschicktes Angebot
+// wird nicht still geändert; msubAngebotSave legt dann eine neue Version an.
+async function msubAngebotQuickSend(b, access) {
+  msubAssertMaster(access);
+  const pid = uuid(b.projekt_id);
+  const saved = await msubAngebotSave({ projekt_id: pid }, access); // Positionen auto aus Bauabschnitten
+  if (saved && saved.error) return saved;
+  const sent = await msubAngebotSend({ projekt_id: pid }, access);
+  if (sent && sent.error) return sent;
+  return { ok: true, angebot: sent.angebot, sub_status: 'angebot_offen', rechnung: saved.rechnung };
+}
+// Live-Vorschau fürs Kalk-Formular (Master-only): Kalk-Kennzahlen (INTERN) + die
+// echte Step-Vorschau aus der Engine (zsBuildSpecs/zsAllocate über gs_split_profile.
+// verteilung) — NIE hartcodiert nachgebaut. Schreibt nichts.
+async function msubKalkPreview(b, access) {
+  msubAssertMaster(access);
+  try {
+    const settings = await kalkSettingsRead();
+    const calc = kalkCompute({ personen: b.personen, team_tage: b.team_tage, ansatz_modus: b.ansatz_modus }, settings);
+    let profil = b.split_profil, einheitAnzahl = b.einheit_anzahl, einheitTyp = b.einheit_typ;
+    if (b.bauabschnitt_id) {
+      const r = await sbGet(`gs_bauabschnitte?id=eq.${uuid(b.bauabschnitt_id)}&select=split_profil,einheit_anzahl,einheit_typ&limit=1`).catch(() => []);
+      if (r && r[0]) { profil = profil || r[0].split_profil; einheitAnzahl = (einheitAnzahl != null ? einheitAnzahl : r[0].einheit_anzahl); einheitTyp = einheitTyp || r[0].einheit_typ; }
+    }
+    profil = profil || 'stueck_15_70_15';
+    const anzahl = einheitTyp === 'pauschal' ? 1 : Math.max(1, (num(einheitAnzahl) | 0) || 1);
+    const vert = await zsVerteilung(profil);
+    const specs = zsBuildSpecs(profil, anzahl, vert);
+    const betraege = zsAllocate(specs, calc.umsatz, vert);
+    const liste = specs.map((s, i) => ({ typ: s.typ, fortschritt: !!s.fortschritt, bezeichnung: s.bezeichnung, betrag: s.typ === 'zahlung' ? betraege[i] : 0 }));
+    const fort = liste.filter((s) => s.fortschritt);
+    return {
+      ok: true, kalk: calc,
+      steps: {
+        gesamt: specs.length,
+        zahlung: liste.filter((s) => s.typ === 'zahlung').length,
+        fortschritt: fort.length,
+        fortschritt_betrag: fort.length ? fort[0].betrag : 0,
+        einheit_anzahl: anzahl, liste,
+      },
+    };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // KALKULATIONSGENERATOR + ANGEBOTS-RECHNUNG (Runde 4)
@@ -3018,7 +3142,7 @@ function angRechnung(positionen, rabatt, zuschlag, mwst) {
   return { netto: round2(netto), zwischensumme: round2(zwischensumme), mwst_betrag: round2(mwstBetrag), brutto: round2(zwischensumme + mwstBetrag) };
 }
 // ── Kalkulations-Kostensaetze (Singleton) ──
-const KALK_DEFAULTS = { vollkosten_chf_h: 46, spesen_pro_person_tag: 40, kfz_pauschale_tag: 20, equipment_pro_woche: 280, stunden_pro_team_tag: 8, ansatz_detailliert: 90, ansatz_schnell: 85, ampel_gruen_ab: 70, ampel_rot_unter: 56 };
+const KALK_DEFAULTS = { vollkosten_chf_h: 46, spesen_pro_person_tag: 40, kfz_pauschale_tag: 20, equipment_pro_woche: 280, stunden_pro_team_tag: 8, ansatz_detailliert: 90, ansatz_schnell: 85, ansatz_minimum: 75, ampel_gruen_ab: 70, ampel_rot_unter: 56 };
 const KALK_SET_FELDER = Object.keys(KALK_DEFAULTS);
 async function kalkSettingsRead() {
   try {
@@ -3033,11 +3157,21 @@ async function kalkSettingsSave(b, access) {
   const patch = {};
   for (const f of KALK_SET_FELDER) if (b[f] !== undefined && b[f] !== '') patch[f] = Math.max(0, num(b[f]));
   patch.updated_at = new Date().toISOString();
-  try {
+  const doWrite = async (p) => {
     const rows = await sbGet('gs_kalk_settings?select=id&limit=1').catch(() => []);
-    const r = (rows && rows[0])
-      ? await sbWrite('PATCH', `gs_kalk_settings?id=eq.${rows[0].id}`, patch)
-      : await sbWrite('POST', 'gs_kalk_settings', patch);
+    return (rows && rows[0])
+      ? await sbWrite('PATCH', `gs_kalk_settings?id=eq.${rows[0].id}`, p)
+      : await sbWrite('POST', 'gs_kalk_settings', p);
+  };
+  try {
+    let r;
+    try { r = await doWrite(patch); }
+    catch (e) {
+      // Neue Spalte (ansatz_minimum) noch nicht migriert → ohne sie speichern.
+      if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) {
+        const { ansatz_minimum, ...core } = patch; r = await doWrite(core);
+      } else throw e;
+    }
     return { ok: true, settings: { ...KALK_DEFAULTS, ...(Array.isArray(r) ? r[0] : r) } };
   } catch (e) { if (isNoTable(e)) return { error: 'Kalk-Tabelle fehlt – scripts/kalk_settings.sql ausführen.', notMigrated: true }; throw e; }
 }
@@ -3047,8 +3181,10 @@ function kalkCompute(inp, s) {
   const stundenProTag = num(s.stunden_pro_team_tag) || 8;
   const personen = Math.max(1, (num(inp.personen) | 0) || 2);
   const teamTage = Math.max(0, num(inp.team_tage));
-  const modus = inp.ansatz_modus === 'schnell' ? 'schnell' : 'detailliert';
-  const ansatz = modus === 'schnell' ? num(s.ansatz_schnell) : num(s.ansatz_detailliert);
+  const modus = (inp.ansatz_modus === 'schnell' || inp.ansatz_modus === 'schmerzgrenze') ? inp.ansatz_modus : 'detailliert';
+  const ansatz = modus === 'schnell' ? num(s.ansatz_schnell)
+    : modus === 'schmerzgrenze' ? (num(s.ansatz_minimum) || 75)
+    : num(s.ansatz_detailliert);
   const vstunden = teamTage * personen * stundenProTag;
   const umsatz = vstunden * ansatz;
   const kosten = (vstunden * num(s.vollkosten_chf_h))
