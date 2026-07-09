@@ -2323,7 +2323,12 @@ function msubKalkPanelHtml(kalk){
       '<div class="meta" style="margin-top:2px"><span style="color:'+col+'">Rohgewinn '+zsChf(k.rohgewinn)+'</span><span class="dot">DB '+zsChf(k.db_pro_stunde)+'/h · eff. '+zsChf(k.eff_chf_h)+'/h</span></div>'+
       '<button class="chip" style="margin-top:8px;font-size:11px" onclick="openKalkSheet(\''+k.bauabschnitt_id+'\')">🧮 neu kalkulieren</button></div>';
   }).join(''):'<div class="empty" style="padding:12px">Noch keine kalkulierten Bauabschnitte. Über „＋ kalkulieren" den ersten anlegen.</div>';
-  var quick=pos.length?('<button class="btn" id="kalk-quicksend" style="margin-top:10px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Angebot direkt abschicken ('+zsChf(pos.reduce(function(s,k){return s+Number(k.gesamtbetrag||0);},0))+')</button>'):'';
+  // Block 1 (Runde 6): Nur EIN aktives Angebot. Sobald ein Angebot existiert
+  // (Entwurf/abgeschickt/…), verschwindet der Schnellweg — abgeschickt wird dann
+  // über die Prüf-Ansicht („Angebot bearbeiten"). Nur ein abgelehntes Angebot gibt
+  // den Schnellweg wieder frei.
+  var _ang=_subBundle&&_subBundle.angebot; var hatAktives=_ang&&_ang.status!=='abgelehnt';
+  var quick=(pos.length&&!hatAktives)?('<button class="btn" id="kalk-quicksend" style="margin-top:10px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Angebot direkt abschicken ('+zsChf(pos.reduce(function(s,k){return s+Number(k.gesamtbetrag||0);},0))+')</button>'):'';
   return head+rows+quick;
 }
 function kalkPreviewHtml(c){

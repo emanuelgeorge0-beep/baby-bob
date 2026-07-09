@@ -480,6 +480,28 @@ async function suite(iter) {
   assert(r.d && /^S-\d{4}-\d{3}$/.test(r.d.projekt.anzeige_id), '(7) partner-detail: anzeige_id');
   r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp.id });
   assert(r.d && /^S-\d{4}-\d{3}$/.test(r.d.sub_bundle.anzeige_id), '(7) master-detail: anzeige_id');
+
+  // ══ 10) RUNDE 6 – Zahlungsplan-Kette ════════════════════════════════════
+  // Settings zurück auf Default-Ansatz 90 (in §8 auf 95 gesetzt) für die Gegenproben.
+  await call(tok(MASTER_UID), { action: 'msub_kalk_settings_save', ansatz_detailliert: 90, vollkosten_chf_h: 46 });
+
+  // ── BLOCK 1: pro Projekt genau EIN aktives Angebot (kein Doppel-Angebot) ──
+  const spB1 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R6-Block1' })).d.projekt;
+  await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spB1.id, name: 'A', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  // Erster Klick: Schnellweg schickt ab.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB1.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt', '(B1) 1. quick_send → abgeschickt');
+  // Zweiter Klick: verweigert, weil bereits ein aktives Angebot existiert.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB1.id });
+  assert(r.d && r.d.error && r.d.hasActive && !r.d.ok, '(B1) 2. quick_send → verweigert (hasActive)');
+  assert(ANGEBOTE.filter((a) => a.projekt_id === spB1.id).length === 1, '(B1) zwei Klicks → nie zwei Angebote');
+  // Auch bei bestehendem Entwurf ist quick_send gesperrt.
+  const spB1b = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R6-Block1b' })).d.projekt;
+  await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spB1b.id, name: 'A', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spB1b.id }); // Entwurf
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB1b.id });
+  assert(r.d && r.d.error && r.d.hasActive, '(B1) quick_send bei bestehendem Entwurf → verweigert');
+  assert(ANGEBOTE.filter((a) => a.projekt_id === spB1b.id).length === 1 && ANGEBOTE.find((a) => a.projekt_id === spB1b.id).status === 'entwurf', '(B1) Entwurf bleibt unverändert (kein 2. Angebot)');
 }
 
 const RUNS = 5;

@@ -3076,6 +3076,14 @@ async function msubAngebotSend(b, access) {
 async function msubAngebotQuickSend(b, access) {
   msubAssertMaster(access);
   const pid = uuid(b.projekt_id);
+  // Block 1 (Runde 6): pro Projekt genau EIN aktives Angebot. Existiert bereits
+  // ein aktives Angebot (Entwurf/abgeschickt/besprechung/angenommen), wird der
+  // Schnellweg verweigert — eine neue Version läuft dann über die Prüf-Ansicht.
+  // Nur wenn kein Angebot existiert (oder das letzte abgelehnt wurde), ist quick_send offen.
+  const bestehend = await msubLatestAngebot(pid).catch(() => null);
+  if (bestehend && bestehend.status !== 'abgelehnt') {
+    return { error: 'Es existiert bereits ein aktives Angebot – bitte über „Angebot bearbeiten" / die Prüf-Ansicht abschicken.', hasActive: true };
+  }
   const saved = await msubAngebotSave({ projekt_id: pid }, access); // Positionen auto aus Bauabschnitten
   if (saved && saved.error) return saved;
   const sent = await msubAngebotSend({ projekt_id: pid }, access);
