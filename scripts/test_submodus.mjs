@@ -22,13 +22,17 @@ function mkid() {
 }
 
 // ── In-Memory-Zustand (pro Testlauf frisch via resetState) ──
-let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE;
+let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE, BAUAB, STEPS, ESCROW, ANGEBOTE;
 function resetState() {
   ROLES = new Map();      // userId → role
   ENTS = new Map();       // `${pid} ${key}` → enabled
   PROFIL = new Map();     // partner_user_id → row
   PROJEKTE = [];          // gs_projekte rows
   STORAGE = new Map();    // path → { buf, contentType, created_at }
+  BAUAB = [];             // gs_bauabschnitte
+  STEPS = [];             // gs_steps
+  ESCROW = [];            // gs_escrow
+  ANGEBOTE = [];          // gs_angebote
   _uc = 0;
 }
 function setPartner(id, feats) {
@@ -126,6 +130,25 @@ globalThis.fetch = async (url, opts = {}) => {
       if (method === 'GET') { return ok(PROJEKTE.filter((r) => match(r, filt))); }
       if (method === 'POST') { const row = { id: mkid(), created_at: '2026-07-09T00:00:00Z', ...body }; PROJEKTE.push(row); return ok([row]); }
       if (method === 'PATCH') { const hits = PROJEKTE.filter((r) => match(r, filt)); hits.forEach((r) => Object.assign(r, body)); return ok(hits); }
+    }
+    if (table.startsWith('gs_bauabschnitte')) {
+      if (method === 'GET') return ok(BAUAB.filter((r) => match(r, filt)));
+    }
+    if (table.startsWith('gs_steps')) {
+      if (method === 'GET') return ok(STEPS.filter((r) => match(r, filt)));
+    }
+    if (table.startsWith('gs_escrow')) {
+      if (method === 'GET') return ok([]); // in.()-Filter → im Test irrelevant (kein Escrow-Geld)
+    }
+    if (table.startsWith('gs_angebote')) {
+      if (method === 'GET') {
+        let rows = ANGEBOTE.filter((r) => match(r, filt));
+        rows = rows.sort((a, b) => (b.version || 0) - (a.version || 0));
+        if (/limit=1/.test(qs)) rows = rows.slice(0, 1);
+        return ok(rows);
+      }
+      if (method === 'POST') { const row = { id: mkid(), created_at: '2026-07-09T00:00:00Z', ...body }; ANGEBOTE.push(row); return ok([row]); }
+      if (method === 'PATCH') { const hits = ANGEBOTE.filter((r) => match(r, filt)); hits.forEach((r) => Object.assign(r, body)); return ok(hits); }
     }
     // Unbekannte Tabellen (gs_kunden, gs_blockaden, …) → leer / echo
     if (method === 'GET') return ok([]);
@@ -228,6 +251,55 @@ async function suite(iter) {
   assert((await call(tok(MASTER_UID), { action: 'pm_projekte' })).status === 200, 'Master pm_projekte→200');
   const mp = await call(tok(MASTER_UID), { action: 'pm_profil_get' });
   assert(mp.status === 200 && mp.d.profil === null, 'Master pm_profil_get→leeres Profil');
+
+  // ── 6) Master: Sub-Anfragen (Runde 2) ──
+  // Partner-Firma fuer die Anzeige setzen.
+  await call(tok(P_ALL), { action: 'pm_profil_save', firma: 'Sub GmbH' });
+  // Gating: Partner darf msub_* NICHT.
+  assert((await call(tok(P_ALL), { action: 'msub_liste' })).status === 403, 'Partner msub_liste→403');
+  assert((await call(tok(P_ALL), { action: 'msub_angebot_save', projekt_id: sp.id })).status === 403, 'Partner msub_angebot_save→403');
+
+  // Liste zeigt das Sub-Projekt mit Partner-Firma; sp ist aktuell 'angefragt'.
+  r = await call(tok(MASTER_UID), { action: 'msub_liste' });
+  const row = r.d && (r.d.anfragen || []).find((x) => x.id === sp.id);
+  assert(row && row.partner_firma === 'Sub GmbH' && row.sub_status === 'angefragt', 'msub_liste zeigt sub mit firma+status');
+
+  // Detail öffnen → Auto-Übergang angefragt → in_pruefung, Partner+Dateien dabei.
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp.id });
+  assert(r.d && r.d.projekt.sub_status === 'in_pruefung', 'msub_detail: auto angefragt→in_pruefung');
+  assert(r.d && r.d.partner.firma === 'Sub GmbH', 'msub_detail: partner-firma');
+  assert(r.d && (r.d.dateien || []).some((f) => /plan\.pdf/.test(f.name)), 'msub_detail: dateien');
+  assert(r.d && r.d.sub.beschreibung === 'Rohbau Sanitär', 'msub_detail: sub-beschreibung');
+  assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'in_pruefung', 'in_pruefung in DB persistiert');
+
+  // Kalkulation: einen Bauabschnitt „vorhanden" machen (wie nach zs_abschnitt_save).
+  const baId = mkid(), stId = mkid();
+  BAUAB.push({ id: baId, projekt_id: sp.id, name: 'Rohbau', reihenfolge: 1, einheit_typ: 'zone', einheit_anzahl: 3, team_tage: 5, gesamtbetrag: 30000, split_profil: 'stueck_15_70_15', status: 'geplant' });
+  STEPS.push({ id: stId, bauabschnitt_id: baId, reihenfolge: 1, typ: 'zahlung', zahlung_art: 'anzahlung', bezeichnung: 'Anzahlung', betrag: 4500, status: 'wartend' });
+
+  // Angebot erzeugen: gesamtbetrag = Summe der Bauabschnitte, vorschlag als Snapshot.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp.id, ansatz_chf_h: 62, bemerkung: 'Pilot' });
+  assert(r.d && r.d.ok && r.d.angebot.gesamtbetrag === 30000 && r.d.angebot.status === 'entwurf', 'msub_angebot_save: betrag+entwurf');
+  assert(r.d && Array.isArray(r.d.angebot.bauabschnitt_vorschlag) && r.d.angebot.bauabschnitt_vorschlag.length === 1, 'angebot: vorschlag-snapshot');
+  assert(r.d && r.d.angebot.ansatz_chf_h === 62 && r.d.angebot.bemerkung === 'Pilot', 'angebot: ansatz+bemerkung');
+
+  // Erneut speichern → aktualisiert denselben Entwurf (kein zweiter Datensatz).
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp.id, ansatz_chf_h: 65, bemerkung: 'Pilot v2' });
+  assert(ANGEBOTE.filter((a) => a.projekt_id === sp.id).length === 1 && r.d.angebot.ansatz_chf_h === 65, 'angebot_save aktualisiert entwurf');
+
+  // Abschicken → status abgeschickt + projekt sub_status angebot_offen.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: sp.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt' && r.d.angebot.abgeschickt_am, 'angebot_send: abgeschickt+datum');
+  assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'angebot_offen', 'projekt sub_status → angebot_offen');
+  // Zweites Abschicken → abgelehnt (schon abgeschickt).
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: sp.id });
+  assert(r.d && r.d.error && !r.d.ok, 'angebot_send erneut → Fehler');
+
+  // Angebot ohne Kalkulation → send verweigert (anderes Projekt ohne Bauabschnitte).
+  const sp2 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'Leer', bereich: '' })).d.projekt;
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp2.id });
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: sp2.id });
+  assert(r.d && r.d.error && /Betrag|Bauabschnitte/.test(r.d.error), 'send ohne kalkulation → Fehler');
 }
 
 const RUNS = 5;

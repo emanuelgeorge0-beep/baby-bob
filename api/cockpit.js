@@ -238,6 +238,12 @@ export default async function handler(req, res) {
       case 'zs_abschnitt_save':return res.status(200).json(await zsAbschnittSave(req.body, access));
       case 'zs_abschnitt_del': return res.status(200).json(await zsAbschnittDel(req.body.id));
       case 'zs_step_action':   return res.status(200).json(await zsStepAction(req.body, access));
+      // ── Master: Sub-/Akkord-Anfragen (Runde 2) — Master-only via resolveAccess ──
+      case 'msub_liste':        return res.status(200).json(await msubListe(access));
+      case 'msub_detail':       return res.status(200).json(await msubDetail(req.body.id, access));
+      case 'msub_in_pruefung':  return res.status(200).json(await msubInPruefung(req.body, access));
+      case 'msub_angebot_save': return res.status(200).json(await msubAngebotSave(req.body, access));
+      case 'msub_angebot_send': return res.status(200).json(await msubAngebotSend(req.body, access));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -2780,4 +2786,129 @@ async function zsProjekt(projektId) {
     }
     return { projekt, abschnitte, mig: true };
   } catch (e) { if (isNoTable(e)) return zsNotMigrated(e); throw e; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MASTER: SUB-/AKKORD-ANFRAGEN (Runde 2) — Master-only.
+//   Liste/Detail aller projekt_art='sub_akkord', Kalkulation ueber die BESTEHENDE
+//   Zahlungssystem-Engine (zs_abschnitt_save/zs_projekt — unveraendert), Angebot in
+//   gs_angebote. Status: angefragt → in_pruefung (beim Oeffnen) → angebot_offen.
+//   resolveAccess laesst Partner fuer msub_* nicht durch; msubAssertMaster doppelt ab.
+// ═══════════════════════════════════════════════════════════════════════════
+function msubAssertMaster(access) { if (!access || !access.isMaster) throw new Forbidden(); }
+async function msubLatestAngebot(projektId) {
+  const rows = await sbGet(`gs_angebote?projekt_id=eq.${projektId}&select=*&order=version.desc,created_at.desc&limit=1`).catch(() => []);
+  return (rows && rows[0]) || null;
+}
+async function msubPartnerBrand(partnerUserId) {
+  const empty = { firma: null, adresse: null, plz: null, ort: null, telefon: null, email: null, logo_url_signed: null };
+  if (!partnerUserId) return empty;
+  const rows = await sbGet(`gs_partner_profil?partner_user_id=eq.${partnerUserId}&select=*`).catch(() => []);
+  const p = rows && rows[0];
+  if (!p) return empty;
+  return {
+    firma: p.firma || null, adresse: p.adresse || null, plz: p.plz || null, ort: p.ort || null,
+    telefon: p.telefon || null, email: p.email || null,
+    logo_url_signed: p.logo_url ? await sbSignUrl(PM_DATEI_BUCKET, p.logo_url, 86400).catch(() => null) : null,
+  };
+}
+async function msubListe(access) {
+  msubAssertMaster(access);
+  try {
+    const projekte = await sbGet(`gs_projekte?projekt_art=eq.sub_akkord&select=*&order=created_at.desc`);
+    const brandByPid = {};
+    for (const pid of [...new Set((projekte || []).map((p) => p.partner_user_id).filter(Boolean))]) {
+      brandByPid[pid] = await msubPartnerBrand(pid);
+    }
+    const anfragen = (projekte || []).map((p) => {
+      const sub = (p.datenblatt && typeof p.datenblatt === 'object' && p.datenblatt.sub) || {};
+      const brand = brandByPid[p.partner_user_id] || {};
+      return {
+        id: p.id, name: p.name, standort: p.standort || null, bereich: p.bereich || null,
+        sub_status: p.sub_status || 'entwurf', angefragt_am: p.angefragt_am || null,
+        beschreibung: sub.beschreibung || '', ansprechperson: sub.ansprechperson || '',
+        partner_firma: brand.firma || null, partner_logo: brand.logo_url_signed || null,
+      };
+    });
+    return { anfragen };
+  } catch (e) { if (isNoTable(e)) return { anfragen: [], notMigrated: true }; throw e; }
+}
+async function msubDetail(id, access) {
+  msubAssertMaster(access);
+  try {
+    id = uuid(id);
+    const pr = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
+    const projekt = pr && pr[0];
+    if (!projekt) return { error: 'Projekt nicht gefunden' };
+    if (projekt.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
+    // Auto-Uebergang: sobald der Master die Anfrage oeffnet → in_pruefung.
+    if (projekt.sub_status === 'angefragt') {
+      try {
+        const r = await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, { sub_status: 'in_pruefung' });
+        projekt.sub_status = (Array.isArray(r) && r[0] && r[0].sub_status) || 'in_pruefung';
+      } catch (_) { /* Anzeige geht auch ohne den Uebergang weiter */ }
+    }
+    const sub = (projekt.datenblatt && typeof projekt.datenblatt === 'object' && projekt.datenblatt.sub) || {};
+    const partner = await msubPartnerBrand(projekt.partner_user_id);
+    let dateien = [];
+    try { dateien = await listProjektDateien(id); } catch (_) { dateien = []; }
+    const angebot = await msubLatestAngebot(id);
+    return {
+      projekt: { id: projekt.id, name: projekt.name, standort: projekt.standort || null, bereich: projekt.bereich || null, sub_status: projekt.sub_status, angefragt_am: projekt.angefragt_am || null },
+      sub, partner, dateien, angebot,
+    };
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
+}
+async function msubInPruefung(b, access) {
+  msubAssertMaster(access);
+  const id = uuid(b.id);
+  const rows = await sbGet(`gs_projekte?id=eq.${id}&select=sub_status,projekt_art&limit=1`).catch(() => []);
+  const cur = rows && rows[0];
+  if (!cur) return { error: 'Projekt nicht gefunden' };
+  if (cur.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
+  if (cur.sub_status !== 'angefragt' && cur.sub_status !== 'entwurf') return { ok: true, sub_status: cur.sub_status };
+  try {
+    const r = await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, { sub_status: 'in_pruefung' });
+    return { ok: true, sub_status: (Array.isArray(r) && r[0] && r[0].sub_status) || 'in_pruefung' };
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
+}
+// Angebot-Entwurf aus der aktuellen Kalkulation (Bauabschnitte) erzeugen/aktualisieren.
+async function msubAngebotSave(b, access) {
+  msubAssertMaster(access);
+  try {
+    const pid = uuid(b.projekt_id);
+    const zp = await zsProjekt(pid);
+    if (zp && zp.notMigrated) return zp;
+    const abschnitte = (zp && zp.abschnitte) || [];
+    const gesamtbetrag = abschnitte.reduce((s, a) => s + num(a.gesamtbetrag), 0);
+    const vorschlag = abschnitte.map((a) => ({
+      name: a.name, split_profil: a.split_profil, einheit_typ: a.einheit_typ,
+      einheit_anzahl: a.einheit_anzahl, team_tage: a.team_tage, gesamtbetrag: a.gesamtbetrag,
+      steps: (a.steps || []).map((s) => ({ reihenfolge: s.reihenfolge, typ: s.typ, zahlung_art: s.zahlung_art, bezeichnung: s.bezeichnung, betrag: s.betrag })),
+    }));
+    const ansatz = (b.ansatz_chf_h === '' || b.ansatz_chf_h == null) ? null : num(b.ansatz_chf_h);
+    const bemerkung = b.bemerkung != null ? String(b.bemerkung).slice(0, 2000) : null;
+    const existing = await msubLatestAngebot(pid);
+    let r;
+    if (existing && existing.status === 'entwurf') {
+      r = await sbWrite('PATCH', `gs_angebote?id=eq.${existing.id}`, { gesamtbetrag, ansatz_chf_h: ansatz, bemerkung, bauabschnitt_vorschlag: vorschlag });
+    } else {
+      const version = existing ? (num(existing.version) + 1) : 1;
+      r = await sbWrite('POST', 'gs_angebote', { projekt_id: pid, version, gesamtbetrag, ansatz_chf_h: ansatz, bemerkung, bauabschnitt_vorschlag: vorschlag, status: 'entwurf' });
+    }
+    return { ok: true, angebot: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
+}
+async function msubAngebotSend(b, access) {
+  msubAssertMaster(access);
+  try {
+    const pid = uuid(b.projekt_id);
+    const angebot = await msubLatestAngebot(pid);
+    if (!angebot) return { error: 'Kein Angebot vorhanden – zuerst „Angebot erzeugen".' };
+    if (angebot.status === 'abgeschickt') return { error: 'Angebot ist bereits abgeschickt.' };
+    if (!(num(angebot.gesamtbetrag) > 0)) return { error: 'Angebot hat keinen Betrag – bitte zuerst Bauabschnitte kalkulieren.' };
+    const r = await sbWrite('PATCH', `gs_angebote?id=eq.${angebot.id}`, { status: 'abgeschickt', abgeschickt_am: new Date().toISOString() });
+    await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { sub_status: 'angebot_offen' });
+    return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: 'angebot_offen' };
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
