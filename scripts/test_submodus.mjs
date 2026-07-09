@@ -22,7 +22,7 @@ function mkid() {
 }
 
 // ── In-Memory-Zustand (pro Testlauf frisch via resetState) ──
-let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE, BAUAB, STEPS, ESCROW, ANGEBOTE;
+let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE, BAUAB, STEPS, ESCROW, ANGEBOTE, AUFTRAG;
 function resetState() {
   ROLES = new Map();      // userId → role
   ENTS = new Map();       // `${pid} ${key}` → enabled
@@ -33,6 +33,7 @@ function resetState() {
   STEPS = [];             // gs_steps
   ESCROW = [];            // gs_escrow
   ANGEBOTE = [];          // gs_angebote
+  AUFTRAG = [];           // gs_auftragsbestaetigung
   _uc = 0;
 }
 function setPartner(id, feats) {
@@ -149,6 +150,10 @@ globalThis.fetch = async (url, opts = {}) => {
       }
       if (method === 'POST') { const row = { id: mkid(), created_at: '2026-07-09T00:00:00Z', ...body }; ANGEBOTE.push(row); return ok([row]); }
       if (method === 'PATCH') { const hits = ANGEBOTE.filter((r) => match(r, filt)); hits.forEach((r) => Object.assign(r, body)); return ok(hits); }
+    }
+    if (table.startsWith('gs_auftragsbestaetigung')) {
+      if (method === 'GET') { let rows = AUFTRAG.filter((r) => match(r, filt)); if (/limit=1/.test(qs)) rows = rows.slice(0, 1); return ok(rows); }
+      if (method === 'POST') { const row = { id: mkid(), bestaetigt_am: '2026-07-09T12:00:00Z', ...body }; AUFTRAG.push(row); return ok([row]); }
     }
     // Unbekannte Tabellen (gs_kunden, gs_blockaden, …) → leer / echo
     if (method === 'GET') return ok([]);
@@ -267,9 +272,9 @@ async function suite(iter) {
   // Detail öffnen → Auto-Übergang angefragt → in_pruefung, Partner+Dateien dabei.
   r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp.id });
   assert(r.d && r.d.projekt.sub_status === 'in_pruefung', 'msub_detail: auto angefragt→in_pruefung');
-  assert(r.d && r.d.partner.firma === 'Sub GmbH', 'msub_detail: partner-firma');
-  assert(r.d && (r.d.dateien || []).some((f) => /plan\.pdf/.test(f.name)), 'msub_detail: dateien');
-  assert(r.d && r.d.sub.beschreibung === 'Rohbau Sanitär', 'msub_detail: sub-beschreibung');
+  assert(r.d && r.d.sub_bundle && r.d.sub_bundle.partner.firma === 'Sub GmbH', 'msub_detail: partner-firma');
+  assert(r.d && (r.d.dateien || []).some((f) => /plan\.pdf/.test(f.name)), 'msub_detail: dateien (volle PM-Ansicht)');
+  assert(r.d && r.d.sub_bundle.sub.beschreibung === 'Rohbau Sanitär', 'msub_detail: sub-beschreibung');
   assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'in_pruefung', 'in_pruefung in DB persistiert');
 
   // Kalkulation: einen Bauabschnitt „vorhanden" machen (wie nach zs_abschnitt_save).
@@ -300,6 +305,42 @@ async function suite(iter) {
   await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp2.id });
   r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: sp2.id });
   assert(r.d && r.d.error && /Betrag|Bauabschnitte/.test(r.d.error), 'send ohne kalkulation → Fehler');
+
+  // ── 7) Partner entscheidet über das Angebot (Runde 3) ──
+  // sp: sub_status='angebot_offen', Angebot 'abgeschickt' (aus Abschnitt 6).
+  // Gating: fremder Partner → 403.
+  assert((await call(tok(P_SUB2), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'annehmen' })).status === 403, 'Fremd-Entscheidung→403');
+  // Annahme ohne abgeschicktes Angebot (sp2 hat nur einen Entwurf) → Fehler.
+  r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp2.id, op: 'annehmen' });
+  assert(r.d && r.d.error && /abgeschicktes Angebot/.test(r.d.error), 'annehmen ohne abgeschicktes Angebot → Fehler');
+  // Partner-Detail zeigt KEINEN Master-Entwurf (sp2) als Angebot.
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp2.id });
+  assert(r.d && r.d.angebot === null, 'Partner sieht Master-Entwurf NICHT');
+
+  // Besprechung anfragen → Angebot 'besprechung', Projekt bleibt angebot_offen.
+  r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'besprechung' });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'besprechung', 'besprechung → status besprechung');
+  assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'angebot_offen', 'besprechung: projekt bleibt angebot_offen');
+
+  // Annehmen → Angebot angenommen + Zeitstempel, Projekt angenommen, Auftragsbestätigung.
+  r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'annehmen' });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'angenommen' && r.d.angebot.entschieden_am && r.d.angebot.entschieden_by, 'annehmen: status+audit');
+  assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'angenommen', 'projekt sub_status → angenommen');
+  assert(r.d && r.d.auftrag && /^AB-\d{4}-\d{6}$/.test(r.d.auftrag.nummer) && r.d.auftrag.gesamtbetrag === 30000, 'auftragsbestätigung erzeugt (nr+betrag)');
+
+  // Doppelte Entscheidung → Fehler.
+  r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'ablehnen' });
+  assert(r.d && r.d.error && /bereits entschieden/.test(r.d.error), 'doppelte Entscheidung → Fehler');
+
+  // Partner-Detail zeigt jetzt Angebot (angenommen) + Auftragsbestätigung.
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp.id });
+  assert(r.d && r.d.angebot && r.d.angebot.status === 'angenommen' && r.d.auftrag && r.d.auftrag.nummer, 'Partner sieht angenommenes Angebot + AB');
+
+  // Master-Detail: volle PM-Ansicht (Arrays) + sub_bundle mit AB + Entscheidung.
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp.id });
+  assert(r.d && r.d.projekt && Array.isArray(r.d.techniker) && Array.isArray(r.d.dateien), 'msub_detail: volle PM-Ansicht');
+  assert(r.d && r.d.sub_bundle && r.d.sub_bundle.sub_status === 'angenommen' && r.d.sub_bundle.partner.firma === 'Sub GmbH', 'sub_bundle: status+partner');
+  assert(r.d && r.d.sub_bundle.auftrag && r.d.sub_bundle.auftrag.nummer && r.d.sub_bundle.angebot.status === 'angenommen', 'sub_bundle: AB + angenommenes angebot');
 }
 
 const RUNS = 5;

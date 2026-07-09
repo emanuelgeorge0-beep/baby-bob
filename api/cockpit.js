@@ -79,6 +79,7 @@ const PARTNER_FEATURE_ACTIONS = {
   pm_profil_get: 'partner_branding', pm_profil_save: 'partner_branding', pm_logo_upload: 'partner_branding',
   sub_projekte: 'sub_akkord', sub_projekt: 'sub_akkord', sub_projekt_save: 'sub_akkord', sub_anfrage: 'sub_akkord',
   sub_datei_upload: 'sub_akkord', sub_datei_list: 'sub_akkord', sub_datei_del: 'sub_akkord',
+  sub_entscheiden: 'sub_akkord',
 };
 
 // Zugriffskontext bestimmen:
@@ -232,6 +233,7 @@ export default async function handler(req, res) {
       case 'sub_datei_upload': return res.status(200).json(await pmDateiUpload(req.body, scope));
       case 'sub_datei_list':   return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
       case 'sub_datei_del':    return res.status(200).json(await pmDateiDel(req.body, scope));
+      case 'sub_entscheiden':  return res.status(200).json(await subEntscheiden(req.body, scope));
       // ── Zahlungssystem (Escrow-Engine) — Master-only (nicht in PM_ACTIONS) ──
       case 'zs_profile':       return res.status(200).json(await zsProfile());
       case 'zs_projekt':       return res.status(200).json(await zsProjekt(req.body.projekt_id));
@@ -2254,7 +2256,50 @@ async function subProjekt(id, scope) {
   if (scope && scope.partnerId && projekt.partner_user_id !== scope.partnerId) throw new Forbidden();
   let dateien = [];
   try { dateien = await listProjektDateien(id); } catch (_) { dateien = []; }
-  return { projekt, dateien };
+  // Angebot (nur wenn der Master es abgeschickt/entschieden hat — nie ein Master-Entwurf)
+  // + evtl. Auftragsbestätigung. So sieht der Partner das offene Angebot & kann entscheiden.
+  let angebot = null, auftrag = null;
+  try {
+    const a = await msubLatestAngebot(id);
+    if (a && a.status !== 'entwurf') angebot = a;
+    auftrag = await subAuftrag(id);
+  } catch (_) { /* Angebots-/AB-Tabelle evtl. noch nicht migriert → ohne */ }
+  return { projekt, dateien, angebot, auftrag };
+}
+// Partner entscheidet über ein abgeschicktes Angebot: annehmen | ablehnen | besprechung.
+// Bei Annahme wird automatisch eine Auftragsbestätigung erzeugt. Server-seitig gescoped
+// (requireOwnedProjekt → 403 bei fremdem Projekt) und gegen Doppelentscheidung geschützt.
+async function subEntscheiden(b, scope) {
+  const pid = uuid(b.projekt_id);
+  await requireOwnedProjekt(pid, scope);
+  const op = String(b.op || '');
+  if (!['annehmen', 'ablehnen', 'besprechung'].includes(op)) return { error: 'Unbekannte Aktion' };
+  try {
+    const angebot = await msubLatestAngebot(pid);
+    if (!angebot) return { error: 'Kein Angebot vorhanden.' };
+    if (angebot.status === 'angenommen' || angebot.status === 'abgelehnt') return { error: 'Angebot wurde bereits entschieden.', decided: true };
+    if (angebot.status !== 'abgeschickt' && angebot.status !== 'besprechung') return { error: 'Kein abgeschicktes Angebot vorhanden.' };
+    const uid = (scope && scope.partnerId) || null;
+    const now = new Date().toISOString();
+    if (op === 'besprechung') {
+      const r = await sbWrite('PATCH', `gs_angebote?id=eq.${angebot.id}`, { status: 'besprechung' });
+      return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: 'angebot_offen' }; // Projekt bleibt offen
+    }
+    const newStatus = op === 'annehmen' ? 'angenommen' : 'abgelehnt';
+    const r = await sbWrite('PATCH', `gs_angebote?id=eq.${angebot.id}`, { status: newStatus, entschieden_am: now, entschieden_by: uid });
+    await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { sub_status: newStatus });
+    let auftrag = null;
+    if (op === 'annehmen') {
+      const nummer = 'AB-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-6);
+      const ar = await sbWrite('POST', 'gs_auftragsbestaetigung', { projekt_id: pid, angebot_id: angebot.id, nummer, gesamtbetrag: num(angebot.gesamtbetrag), bestaetigt_by: uid });
+      auftrag = Array.isArray(ar) ? ar[0] : ar;
+    }
+    return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: newStatus, auftrag };
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
+}
+async function subAuftrag(projektId) {
+  const rows = await sbGet(`gs_auftragsbestaetigung?projekt_id=eq.${projektId}&select=*&order=bestaetigt_am.desc&limit=1`).catch(() => []);
+  return (rows && rows[0]) || null;
 }
 async function subProjektSave(b, scope) {
   const pid = scope && scope.partnerId;
@@ -2833,30 +2878,34 @@ async function msubListe(access) {
     return { anfragen };
   } catch (e) { if (isNoTable(e)) return { anfragen: [], notMigrated: true }; throw e; }
 }
+// Volle Projektansicht (identisch zur Kapazitaets-PM-Ansicht via getPmProjekt) +
+// sub_bundle (Partner-Branding, Angebot, Auftragsbestaetigung, Sub-Detail) obendrauf.
 async function msubDetail(id, access) {
   msubAssertMaster(access);
   try {
     id = uuid(id);
-    const pr = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
-    const projekt = pr && pr[0];
-    if (!projekt) return { error: 'Projekt nicht gefunden' };
-    if (projekt.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
+    const pr0 = await sbGet(`gs_projekte?id=eq.${id}&select=projekt_art,sub_status&limit=1`);
+    const p0 = pr0 && pr0[0];
+    if (!p0) return { error: 'Projekt nicht gefunden' };
+    if (p0.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
     // Auto-Uebergang: sobald der Master die Anfrage oeffnet → in_pruefung.
-    if (projekt.sub_status === 'angefragt') {
-      try {
-        const r = await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, { sub_status: 'in_pruefung' });
-        projekt.sub_status = (Array.isArray(r) && r[0] && r[0].sub_status) || 'in_pruefung';
-      } catch (_) { /* Anzeige geht auch ohne den Uebergang weiter */ }
+    if (p0.sub_status === 'angefragt') {
+      try { await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, { sub_status: 'in_pruefung' }, 'return=minimal'); } catch (_) {}
     }
-    const sub = (projekt.datenblatt && typeof projekt.datenblatt === 'object' && projekt.datenblatt.sub) || {};
+    const pm = await getPmProjekt(id, { partnerId: null }); // Master-Scope: volle Ansicht
+    if (pm && pm.error) return pm;
+    const projekt = pm.projekt || {};
     const partner = await msubPartnerBrand(projekt.partner_user_id);
-    let dateien = [];
-    try { dateien = await listProjektDateien(id); } catch (_) { dateien = []; }
     const angebot = await msubLatestAngebot(id);
-    return {
-      projekt: { id: projekt.id, name: projekt.name, standort: projekt.standort || null, bereich: projekt.bereich || null, sub_status: projekt.sub_status, angefragt_am: projekt.angefragt_am || null },
-      sub, partner, dateien, angebot,
+    const auftrag = await subAuftrag(id);
+    pm.sub_bundle = {
+      projekt_id: id,
+      sub_status: projekt.sub_status || 'entwurf',
+      angefragt_am: projekt.angefragt_am || null,
+      sub: (projekt.datenblatt && typeof projekt.datenblatt === 'object' && projekt.datenblatt.sub) || {},
+      partner, angebot, auftrag,
     };
+    return pm;
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
 async function msubInPruefung(b, access) {
