@@ -2380,9 +2380,14 @@ function openKalkSheet(baId){
         if(!d||d.error||d.notMigrated||!d.steps) return;
         _kalkLastPreview=d;
         var sp=$('k-steppreview'); if(!sp) return;
-        var st=d.steps; var anz=st.einheit_anzahl;
-        var warn=st.fortschritt>=15?'<div style="color:#e0a341;font-weight:700;margin-top:4px">⚠️ '+anz+' Einheiten ergeben '+st.zahlung+' Zahlungsschritte.</div>':'';
-        sp.innerHTML='<div class="lcard" style="margin:0"><div class="meta"><span>'+anz+' Einheit'+(anz!==1?'en':'')+' → <b>'+st.zahlung+' Zahlungsschritte</b>'+(st.fortschritt?(' à '+zsChf(st.fortschritt_betrag)):'')+'</span></div>'+warn+'</div>';
+        var st=d.steps;
+        // Block 3 (Runde 6): resultierende Step-Kette live anzeigen (Bezeichnung + Betrag).
+        var chain=(st.liste||[]).map(function(s){
+          var isZ=s.typ==='zahlung';
+          return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0'+(isZ?'':';color:var(--muted2)')+'"><span>'+(isZ?'💰':'🔒')+' '+esc(s.bezeichnung)+'</span><span>'+(isZ?zsChf(s.betrag):'—')+'</span></div>';
+        }).join('');
+        var warn=st.zahlung>=15?'<div style="color:#e0a341;font-weight:700;margin-top:4px">⚠️ ergibt '+st.zahlung+' Zahlungsschritte.</div>':'';
+        sp.innerHTML='<div class="lcard" style="margin:0"><div class="meta"><span><b>'+st.zahlung+' Zahlungsschritte</b>'+(st.fortschritt?(' · '+st.fortschritt+'× Fortschritt à '+zsChf(st.fortschritt_betrag)):'')+'</span></div>'+chain+warn+'</div>';
       }).catch(function(){});
     },300);
   }

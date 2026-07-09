@@ -2568,9 +2568,17 @@ async function zsVerteilung(profil) {
 
 // Step-Spezifikation je Profil (Reihenfolge = Array-Reihenfolge; Betraege folgen
 // in zsAllocate). fortschritt:true → teilt sich den einheiten-Prozentblock.
-function zsBuildSpecs(profil, einheitAnzahl, vert) {
+function zsBuildSpecs(profil, einheitAnzahl, vert, teamTage) {
   const units = Math.max(1, einheitAnzahl | 0);
   const rb = num(vert.rueckbehalt) || 0;
+  // Block 3 (Runde 6): GS finanziert nie länger als eine Woche vor. Pro
+  // angefangene 5 Team-Tage entsteht ein zusätzlicher Fortschritts-Step. Die
+  // Anzahl der Fortschritts-Steps ist damit max(Einheiten, aufgerundete Wochen).
+  const wochen = Math.max(1, Math.ceil(num(teamTage) / 5));
+  const fortschrittN = Math.max(units, wochen);
+  // Benennung der Fortschritts-Kette: 1 → „Fortschritt"; mehrere → „Zwischen-
+  // zahlung KW n" (freitags) und der letzte Schritt „Installation fertig".
+  const fortschrittBez = (i, n) => n === 1 ? 'Fortschritt' : (i === n ? 'Installation fertig' : `Zwischenzahlung KW ${i}`);
   const specs = [];
   if (profil === 'komplex_15_25_50_10') {
     const ms = Array.isArray(vert.meilensteine) ? vert.meilensteine : [25, 50];
@@ -2595,7 +2603,7 @@ function zsBuildSpecs(profil, einheitAnzahl, vert) {
     specs.push({ typ: 'zahlung', art: 'abnahme', bezeichnung: 'Abnahme', pct: num(vert.abnahme), rueckbehalt: rb });
   } else { // stueck_15_70_15 (Default)
     specs.push({ typ: 'zahlung', art: 'anzahlung', bezeichnung: 'Anzahlung', pct: num(vert.anzahlung) });
-    for (let i = 1; i <= units; i++) specs.push({ typ: 'zahlung', art: 'fortschritt', fortschritt: true, bezeichnung: `Fortschritt Einheit ${i}/${units}` });
+    for (let i = 1; i <= fortschrittN; i++) specs.push({ typ: 'zahlung', art: 'fortschritt', fortschritt: true, bezeichnung: fortschrittBez(i, fortschrittN) });
     specs.push({ typ: 'zahlung', art: 'abnahme', bezeichnung: 'Abnahme', pct: num(vert.abnahme), rueckbehalt: rb });
   }
   return specs;
@@ -2629,7 +2637,7 @@ function zsAllocate(specs, gesamtbetrag, vert) {
 async function zsGenerateChain(abschnitt) {
   const profil = abschnitt.split_profil || 'stueck_15_70_15';
   const vert = await zsVerteilung(profil);
-  const specs = zsBuildSpecs(profil, abschnitt.einheit_anzahl, vert);
+  const specs = zsBuildSpecs(profil, abschnitt.einheit_anzahl, vert, abschnitt.team_tage);
   const betraege = zsAllocate(specs, abschnitt.gesamtbetrag, vert);
   await sbWrite('DELETE', `gs_steps?bauabschnitt_id=eq.${abschnitt.id}`, undefined, 'return=minimal');
   const stepRows = specs.map((s, i) => ({
@@ -3121,7 +3129,7 @@ async function msubKalkPreview(b, access) {
     profil = profil || 'stueck_15_70_15';
     const anzahl = einheitTyp === 'pauschal' ? 1 : Math.max(1, (num(einheitAnzahl) | 0) || 1);
     const vert = await zsVerteilung(profil);
-    const specs = zsBuildSpecs(profil, anzahl, vert);
+    const specs = zsBuildSpecs(profil, anzahl, vert, calc.team_tage);
     const betraege = zsAllocate(specs, calc.umsatz, vert);
     const liste = specs.map((s, i) => ({ typ: s.typ, fortschritt: !!s.fortschritt, bezeichnung: s.bezeichnung, betrag: s.typ === 'zahlung' ? betraege[i] : 0 }));
     const fort = liste.filter((s) => s.fortschritt);

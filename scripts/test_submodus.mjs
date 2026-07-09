@@ -444,9 +444,10 @@ async function suite(iter) {
   r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 6, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 3 });
   assert(r.d && r.d.steps && r.d.steps.zahlung === 5 && r.d.steps.fortschritt === 3, '(2) kalk_preview: 5 zahlungsschritte, 3 fortschritt');
   assert(r.d && r.d.kalk && r.d.kalk.verrechnungsstunden === 96, '(2) kalk_preview: 6 T × 2 P × 8 h = 96 h');
-  // Pauschal → Anzahl 1 erzwungen (Anzahlung + Abnahme = 2 Zahlungsschritte).
+  // Pauschal → Anzahl 1 erzwungen. Ab Runde 6 kommt die Wochen-Regel dazu:
+  // 6 Team-Tage → 2 Wochen → 2 Fortschritte (Anzahlung + 2 + Abnahme = 4 Zahlungsschritte).
   r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 6, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 9 });
-  assert(r.d && r.d.steps.einheit_anzahl === 1 && r.d.steps.zahlung === 3, '(2) pauschal: anzahl→1');
+  assert(r.d && r.d.steps.einheit_anzahl === 1 && r.d.steps.zahlung === 4 && r.d.steps.fortschritt === 2, '(2) pauschal: anzahl→1, Wochen-Regel 6T→2 Fortschritte');
   assert((await call(tok(P_ALL), { action: 'msub_kalk_preview', personen: 2, team_tage: 1 })).status === 403, '(2) partner kalk_preview → 403');
 
   // (1) Quick-Send: Angebot aus Bauabschnitten + direkt abschicken (ohne Editor).
@@ -519,6 +520,27 @@ async function suite(iter) {
   assert(vf && Array.isArray(vf.steps) && vf.steps.length && vf.steps.every((s) => 'bezeichnung' in s && 'betrag' in s), '(B2) vorschlag: nur Schrittbezeichnung + Betrag');
   // (c) NEU/EISERN: Partner-Payload nirgends split_profil / einheit_typ.
   assert(!deepHasKey(r.d, 'split_profil') && !deepHasKey(r.d, 'einheit_typ'), '(c) partner-payload OHNE split_profil/einheit_typ');
+
+  // ── BLOCK 3: Zwischensteps aus Team-Tagen (Wochen-Regel) ──
+  // Gegenprobe: 7 T × 2 P, Ansatz 90, Profil stueck_15_70_15, 1 Einheit
+  //   → Umsatz 10'080, Anzahlung 1'512, zwei Fortschritte à 3'528, Abnahme 1'512.
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 7, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1 });
+  assert(r.d && r.d.kalk.umsatz === 10080, '(B3) 7T×2P×8h×90 = Umsatz 10080');
+  assert(r.d && r.d.steps.fortschritt === 2 && r.d.steps.zahlung === 4, '(B3) 7 Team-Tage → 2 Fortschritte (ceil(7/5))');
+  const l3 = r.d.steps.liste;
+  assert(l3[0].bezeichnung === 'Anzahlung' && l3[0].betrag === 1512, '(B3) Anzahlung 1512');
+  assert(l3[1].betrag === 3528 && l3[2].betrag === 3528, '(B3) zwei Fortschritte à 3528');
+  assert(l3[3].bezeichnung === 'Abnahme' && l3[3].betrag === 1512, '(B3) Abnahme 1512');
+  assert(l3[1].bezeichnung === 'Zwischenzahlung KW 1' && l3[2].bezeichnung === 'Installation fertig', '(B3) Benennung Zwischenzahlung/Installation fertig');
+  assert(l3.reduce((s, x) => s + (x.typ === 'zahlung' ? x.betrag : 0), 0) === 10080, '(B3) Summe Steps == Umsatz 10080');
+  // 5 Team-Tage → genau 1 Fortschritt „Fortschritt".
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 5, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1 });
+  assert(r.d && r.d.steps.fortschritt === 1 && r.d.steps.liste[1].bezeichnung === 'Fortschritt', '(B3) 5 Team-Tage → 1 Fortschritt');
+  // 12 Team-Tage → 3 Fortschritte (2× Zwischenzahlung + Installation fertig).
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 12, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1 });
+  assert(r.d && r.d.steps.fortschritt === 3, '(B3) 12 Team-Tage → 3 Fortschritte');
+  const fb = r.d.steps.liste.filter((s) => s.fortschritt).map((s) => s.bezeichnung);
+  assert(fb[0] === 'Zwischenzahlung KW 1' && fb[1] === 'Zwischenzahlung KW 2' && fb[2] === 'Installation fertig', '(B3) 12T Benennung: 2× Zwischenzahlung + Installation fertig');
 }
 
 const RUNS = 5;
