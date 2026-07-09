@@ -1282,6 +1282,8 @@ function showCockpitTempPw(email,pw){
 
 // ════ PROJEKTMANAGEMENT (Herzstück) — Projekte · Kunden · Techniker · Material · Blockaden ════
 var _pmData=null, _pmProjektId=null, _pmKunden=[];
+// Rueckweg der Projekt-Detailansicht: aus der Projektliste ODER aus Sub-Anfragen.
+var _pmBackFn=null, _pmBackLabel='‹ Projekte';
 var PM_PROJ_STATUS=['aktiv','pausiert','abgeschlossen','kritisch'];
 var PM_MAT_STATUS=['offen','bestellt','geliefert','verbaut'];
 function pmStatusColor(s){ s=String(s||'').toLowerCase();
@@ -1331,9 +1333,9 @@ function paintProjektListe(list){
 
 // ── Projekt-Detail: alles zu einem Projekt an einem Ort ──
 function openProjekt(id){
-  _pmProjektId=id;
-  $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Projekte</span></div><div class="empty">Lädt…</div>';
-  var b=$('pm-back'); if(b) b.onclick=renderProjektListe;
+  _pmProjektId=id; _pmBackFn=renderProjektListe; _pmBackLabel='‹ Projekte';
+  $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">'+esc(_pmBackLabel)+'</span></div><div class="empty">Lädt…</div>';
+  var b=$('pm-back'); if(b) b.onclick=_pmBackFn;
   loadProjekt();
 }
 function loadProjekt(){
@@ -1380,8 +1382,10 @@ function pmKW(y,w){ return 'KW '+w+'/'+String(y).slice(2); }
 
 function paintProjektDetail(d){
   var p=d.projekt||{}, k=d.kunde;
-  var head='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Projekte</span></div>'+
-    '<h2 style="margin-bottom:4px"><span class="acc">🏗️</span> '+esc(p.name||'Projekt')+'</h2>'+
+  var head='<div style="margin-bottom:14px"><span class="chip" id="pm-back">'+esc(_pmBackLabel||'‹ Projekte')+'</span></div>'+
+    // Sub-/Akkord-Lifecycle (Partner-Branding, Angebot, Auftragsbestätigung) GANZ OBEN.
+    (d.sub_bundle?msubLifecycleHtml(d.sub_bundle):'')+
+    '<h2 style="margin-bottom:4px"><span class="acc">'+(d.sub_bundle?'📐':'🏗️')+'</span> '+esc(p.name||'Projekt')+'</h2>'+
     '<div class="meta" style="margin-bottom:10px">'+pmPill(p.status||'—',pmStatusColor(p.status))+
       (p.projektnummer?'<span class="dot">'+esc(p.projektnummer)+'</span>':'')+
       (p.standort?'<span class="dot">'+esc(p.standort)+'</span>':'')+
@@ -1578,7 +1582,8 @@ function paintProjektDetail(d){
 
   $('view').innerHTML=head+kundeSec+apSec+dbSec+techSec+dateiSec+rapSec+matSec+rechSec+taetSec+blSec+zsSec;
 
-  var back=$('pm-back'); if(back) back.onclick=renderProjektListe;
+  var back=$('pm-back'); if(back) back.onclick=(_pmBackFn||renderProjektListe);
+  if(d.sub_bundle) wireMsubLifecycle(d.sub_bundle);
   var za=$('zs-add'); if(za) za.onclick=function(){ zsAbschnittForm(null); };
   zsLoad(_pmProjektId);
   $('pm-edit').onclick=function(){ openProjektEdit(p); };
@@ -2168,61 +2173,60 @@ function msubCardHtml(a){
     '<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">'+when+'</span></div>'+
   '</div>';
 }
+// Sub-Anfrage öffnen → GENAU dieselbe volle Projektansicht wie Kapazität
+// (paintProjektDetail über msub_detail = getPmProjekt + sub_bundle), mit dem
+// Sub-Lifecycle-Block obendrauf. Rückweg zeigt auf die Sub-Anfragen-Liste.
 function openSubAnfrage(id){
-  _pmProjektId=id;   // fuer die wiederverwendete zs-Kalkulation (zsLoad/zsAbschnittForm)
-  $('view').innerHTML='<div class="empty" style="padding:12px">Lädt…</div>';
+  _pmProjektId=id; _pmBackFn=renderSubAnfragen; _pmBackLabel='‹ Sub-Anfragen';
+  $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div><div class="empty">Lädt…</div>';
+  var bb=$('pm-back'); if(bb) bb.onclick=renderSubAnfragen;
   api('msub_detail',{id:id}).then(function(d){
-    if(d&&d.notMigrated){ $('view').innerHTML=migRow('Nicht migriert'); return; }
-    if(!d||d.error){ $('view').innerHTML='<div class="empty" style="padding:12px">'+esc((d&&d.error)||'Fehler')+'</div><div style="margin-top:10px"><span class="chip" id="msub-back">‹ Sub-Anfragen</span></div>'; var b=$('msub-back'); if(b) b.onclick=renderSubAnfragen; return; }
-    _msubDetail=d; paintSubAnfrage(d);
-  }).catch(function(){ $('view').innerHTML='<div class="empty" style="padding:12px">Ladefehler</div>'; });
+    if(d&&d.notMigrated){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div>'+migRow('Sub-Modus nicht migriert.'); var b=$('pm-back'); if(b) b.onclick=renderSubAnfragen; return; }
+    if(!d||d.error){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div><div class="empty">'+esc((d&&d.error)||'Fehler')+'</div>'; var b=$('pm-back'); if(b) b.onclick=renderSubAnfragen; return; }
+    _pmData=d; paintProjektDetail(d);
+  }).catch(function(){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div><div class="empty">Ladefehler</div>'; var b=$('pm-back'); if(b) b.onclick=renderSubAnfragen; });
 }
-function paintSubAnfrage(d){
-  var p=d.projekt||{}, sub=d.sub||{}, partner=d.partner||{}, ang=d.angebot||null;
-  var back='<div style="margin-bottom:12px"><span class="chip" id="msub-back">‹ Sub-Anfragen</span></div>';
-  var head='<div class="lcard"><div class="top" style="display:flex;align-items:center;gap:10px">'+
-    msubLogoHtml(partner.logo_url_signed,partner.firma,44)+
-    '<div style="flex:1;min-width:0"><div class="nm" style="font-size:16px">'+esc(p.name||'Projekt')+'</div>'+
-      '<div class="meta"><span>'+esc(partner.firma||'—')+'</span></div></div>'+
-    pmPill(msubStatusLabel(p.sub_status),msubStatusColor(p.sub_status))+'</div>'+
-    '<div class="meta" style="margin-top:8px">'+
-      [p.standort?'📍 '+esc(p.standort):'',p.bereich?'🔧 '+esc(p.bereich):'',sub.ansprechperson?'👤 '+esc(sub.ansprechperson):'',partner.telefon?'📞 '+esc(partner.telefon):'',partner.email?'✉ '+esc(partner.email):''].filter(Boolean).map(function(x){return '<span class="dot">'+x+'</span>';}).join('')+
-    '</div>'+
-    (sub.beschreibung?'<div class="meta" style="margin-top:6px"><span>📝 '+esc(sub.beschreibung)+'</span></div>':'')+
-    (p.angefragt_am?'<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">Angefragt: '+esc(zsFmt(p.angefragt_am,true))+'</span></div>':'')+
+// Angebot-Status → Label/Farbe (Farbcode wie Zahlungssystem).
+function angStatusLabel(s){ return ({entwurf:'Entwurf',abgeschickt:'abgeschickt',angenommen:'angenommen',abgelehnt:'abgelehnt',besprechung:'Besprechung'})[s]||s||'—'; }
+function angStatusColor(s){ return ({entwurf:'var(--gold)',abgeschickt:'#4aa8ff',angenommen:'#3dd68c',abgelehnt:'var(--muted)',besprechung:'#e0a341'})[s]||'var(--gold)'; }
+// Sub-Lifecycle-Block (Partner-Branding, sub_status, Besprechung, Auftragsbestätigung, Angebot).
+function msubLifecycleHtml(b){
+  b=b||{}; var partner=b.partner||{}, ang=b.angebot||null, auf=b.auftrag||null, sub=b.sub||{}, st=b.sub_status||'entwurf';
+  var kontakt=[sub.ansprechperson?'👤 '+esc(sub.ansprechperson):'',partner.telefon?'📞 '+esc(partner.telefon):'',partner.email?'✉ '+esc(partner.email):''].filter(Boolean).map(function(x){return '<span class="dot">'+x+'</span>';}).join('');
+  var ov='<div class="zs-ov">'+
+    '<div class="zs-ov-head"><div style="display:flex;align-items:center;gap:10px">'+
+      msubLogoHtml(partner.logo_url_signed,partner.firma,40)+
+      '<div><div style="font-weight:800;color:var(--txt);font-size:14px">'+esc(partner.firma||'Partner')+'</div>'+
+        '<div class="zs-ov-sub">Sub-/Akkordprojekt</div></div></div>'+
+      pmPill(msubStatusLabel(st),msubStatusColor(st))+'</div>'+
+    (kontakt?'<div class="zs-ov-stats" style="margin-top:8px">'+kontakt+'</div>':'')+
+    (b.angefragt_am?'<div class="zs-ov-stats">Angefragt: '+esc(zsFmt(b.angefragt_am,true))+'</div>':'')+
+    ((ang&&ang.status==='besprechung')?'<div class="zs-ov-line" style="margin-top:8px"><span style="color:#e0a341;font-weight:700">💬 Partner wünscht eine Besprechung zum Angebot</span></div>':'')+
+    (auf?'<div class="zs-ov-line" style="margin-top:8px"><span class="zs-ov-ok">✓ Auftragsbestätigung '+esc(auf.nummer||'')+'</span><span class="zs-ov-betr">'+zsChf(auf.gesamtbetrag)+'</span></div>'+
+      '<div class="zs-ov-stats">bestätigt am '+esc(zsFmt(auf.bestaetigt_am,true))+'</div>':'')+
   '</div>';
-  var files=d.dateien||[];
-  var fileInner=files.length?('<div class="list">'+files.map(function(f){
-    var ic=(/^image\//.test(f.contentType||''))?'🖼️':(/pdf/.test(f.contentType||'')?'📄':'📎');
-    return '<div class="lcard"><div class="top"><div class="nm">'+ic+' '+esc(f.name)+'</div>'+
-      '<a href="'+esc(f.url)+'" target="_blank" rel="noopener" class="src-tag" style="border-color:var(--gold-line);color:var(--gold);text-decoration:none">öffnen ›</a></div>'+
-      '<div class="meta"><span class="dot">'+esc(f.kategorie||'datei')+'</span></div></div>';
-  }).join('')+'</div>'):'<div class="empty" style="padding:12px">Keine Dateien.</div>';
-  var fileSec=pmSec('📎 Dateien / Pläne',fileInner);
-  var calcSec=pmSec('🧮 Kalkulation','<div id="zs-box"><div class="empty" style="padding:12px">Lädt…</div></div>','<button class="chip" id="msub-zs-add" style="font-size:11px">＋ Bauabschnitt</button>');
-  var angSec=pmSec('📄 Angebot',msubAngebotHtml(ang,p));
-  var statusAction=(p.sub_status==='angefragt')?'<button class="chip" id="msub-pruefen" style="font-size:11px;margin-bottom:12px">In Prüfung nehmen</button>':'';
-  $('view').innerHTML=back+head+statusAction+fileSec+calcSec+angSec;
-  var b=$('msub-back'); if(b) b.onclick=renderSubAnfragen;
-  var za=$('msub-zs-add'); if(za) za.onclick=function(){ zsAbschnittForm(null); };
-  var pr=$('msub-pruefen'); if(pr) pr.onclick=function(){ api('msub_in_pruefung',{id:p.id}).then(function(r){ if(r&&r.error){toast(r.error);return;} openSubAnfrage(p.id); }); };
-  wireMsubAngebot(p);
-  zsLoad(_pmProjektId);   // rendert die Kalkulation in #zs-box (identische Optik)
+  return ov+pmSec('📄 Angebot',msubAngebotHtml(ang,{id:b.projekt_id}));
 }
+function wireMsubLifecycle(b){ b=b||{}; wireMsubAngebot({id:b.projekt_id}); }
 function msubAngebotHtml(ang,p){
-  var abgeschickt=ang&&ang.status==='abgeschickt';
+  var decided=ang&&(ang.status==='angenommen'||ang.status==='abgelehnt');
+  var sent=ang&&ang.status==='abgeschickt';
   var info;
   if(ang){
-    info='<div class="lcard"><div class="top"><div class="nm">'+zsChf(ang.gesamtbetrag)+'</div>'+pmPill(abgeschickt?'abgeschickt':'Entwurf',abgeschickt?'#3dd68c':'var(--gold)')+'</div>'+
+    info='<div class="lcard"><div class="top"><div class="nm">'+zsChf(ang.gesamtbetrag)+'</div>'+pmPill(angStatusLabel(ang.status),angStatusColor(ang.status))+'</div>'+
       '<div class="meta">'+[ang.ansatz_chf_h!=null?('Ansatz '+zsChf(ang.ansatz_chf_h)+'/h'):'','Version '+esc(ang.version||1)].filter(Boolean).map(function(x){return '<span class="dot">'+esc(x)+'</span>';}).join('')+'</div>'+
       (ang.bemerkung?'<div class="meta" style="margin-top:4px"><span>📝 '+esc(ang.bemerkung)+'</span></div>':'')+
       (ang.abgeschickt_am?'<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">Abgeschickt: '+esc(zsFmt(ang.abgeschickt_am,true))+'</span></div>':'')+
+      (ang.entschieden_am?'<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">Entschieden: '+esc(zsFmt(ang.entschieden_am,true))+'</span></div>':'')+
     '</div>';
   } else {
-    info='<div class="empty" style="padding:12px">Noch kein Angebot. Kalkuliere oben die Bauabschnitte und erzeuge dann das Angebot – der Betrag kommt aus der Kalkulation.</div>';
+    info='<div class="empty" style="padding:12px">Noch kein Angebot. Kalkuliere unten im Zahlungssystem die Bauabschnitte und erzeuge dann das Angebot – der Betrag kommt aus der Kalkulation.</div>';
   }
-  if(abgeschickt){
-    return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Angebot ist beim Partner. (Annahme/Ablehnung folgt in Runde 3.)</span></div>';
+  if(decided){
+    return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Vom Partner '+(ang.status==='angenommen'?'angenommen':'abgelehnt')+'.</span></div>';
+  }
+  if(sent){
+    return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Angebot ist beim Partner – wartet auf Entscheidung.</span></div>';
   }
   var ansatz=(ang&&ang.ansatz_chf_h!=null)?ang.ansatz_chf_h:'';
   var bem=(ang&&ang.bemerkung)?ang.bemerkung:'';

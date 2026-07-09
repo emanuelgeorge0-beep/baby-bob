@@ -8190,15 +8190,79 @@ function subPaintDetail(d){
     +(sub.ansprechperson?'<div class="pd-item-meta">👤 '+gsEsc(sub.ansprechperson)+'</div>':'')
     +(sub.beschreibung?'<div class="pd-item-meta" style="margin-top:6px;white-space:pre-wrap;">'+gsEsc(sub.beschreibung)+'</div>':'')
     +'</div>';
-  var info=editable
-    ? ''
-    : '<div class="pd-item" style="border-color:rgba(245,185,66,0.32);"><div class="pd-item-meta">🔒 Anfrage abgeschickt – das Projekt ist jetzt <b>in Prüfung</b> und schreibgeschützt. George Solutions meldet sich mit einem Angebot.</div></div>';
+  // Lifecycle: Entwurf → editierbar; Angefragt/In Prüfung → Wartehinweis; ab
+  // Angebot offen → Angebot + Entscheidung; Angenommen → Auftragsbestätigung.
+  var lifecycle='';
+  if(!editable){
+    if(p.sub_status==='angefragt'||p.sub_status==='in_pruefung'){
+      lifecycle='<div class="pd-item" style="border-color:rgba(245,185,66,0.32);"><div class="pd-item-meta">🔒 Anfrage abgeschickt – das Projekt ist jetzt <b>in Prüfung</b> und schreibgeschützt. George Solutions meldet sich mit einem Angebot.</div></div>';
+    } else {
+      lifecycle=subAngebotHtml(d);
+    }
+  }
   var dateiHtml=subDateiHtml(d.dateien||[], editable);
   var action=editable
     ? '<button class="login-btn-magic" style="margin-top:14px;" onclick="subDoAnfrage(\''+p.id+'\')">📨 Anfrage abschicken</button>'
       +'<div class="pd-item-meta" style="text-align:center;margin-top:6px;">Danach ist das Projekt schreibgeschützt.</div>'
     : '';
-  c.innerHTML=back+head+info+dateiHtml+action;
+  c.innerHTML=back+head+lifecycle+dateiHtml+action;
+}
+// Zeitstempel TT.MM.JJJJ, HH:MM (wie zsFmt im Master).
+function subFmt(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+', '+p(d.getHours())+':'+p(d.getMinutes()); }
+// Angebot + Bauabschnitts-Vorschlag + Entscheidung (annehmen/ablehnen/besprechung) + Auftragsbestätigung.
+function subAngebotHtml(d){
+  var p=d.projekt||{}, ang=d.angebot||null, auf=d.auftrag||null, st=p.sub_status;
+  var html='';
+  if(auf){
+    html+='<div class="pd-item" style="border-color:rgba(62,207,142,0.4);">'
+      +'<div class="pd-item-tit" style="color:#3ecf8e;">✓ Auftragsbestätigung '+gsEsc(auf.nummer||'')+'</div>'
+      +'<div class="pd-item-meta" style="margin-top:4px;">'+pmChf(auf.gesamtbetrag)+' · bestätigt am '+gsEsc(subFmt(auf.bestaetigt_am))+'</div></div>';
+  }
+  if(!ang) return html || '<div class="pd-item"><div class="pd-item-meta">Noch kein Angebot.</div></div>';
+  var stLabel={entwurf:'Entwurf',abgeschickt:'Angebot erhalten',besprechung:'Besprechung angefragt',angenommen:'angenommen',abgelehnt:'abgelehnt'}[ang.status]||ang.status;
+  var stCls=ang.status==='angenommen'?'aktiv':(ang.status==='abgelehnt'?'fertig':'pausiert');
+  html+='<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">📄 Angebot · '+pmChf(ang.gesamtbetrag)+'</div>'
+    +'<span class="pd-st '+stCls+'">'+gsEsc(stLabel)+'</span></div>'
+    +(ang.ansatz_chf_h!=null?'<div class="pd-item-meta">Ansatz '+pmChf(ang.ansatz_chf_h)+'/h</div>':'')
+    +(ang.bemerkung?'<div class="pd-item-meta" style="white-space:pre-wrap;">📝 '+gsEsc(ang.bemerkung)+'</div>':'')
+    +(ang.abgeschickt_am?'<div class="pd-item-meta" style="color:rgba(232,237,245,0.5);">Erhalten: '+gsEsc(subFmt(ang.abgeschickt_am))+'</div>':'')
+    +subVorschlagHtml(ang.bauabschnitt_vorschlag)
+    +'</div>';
+  if(st==='angebot_offen' && (ang.status==='abgeschickt'||ang.status==='besprechung')){
+    html+='<div class="pd-item"><div class="pd-item-tit" style="font-size:13px;">Ihre Entscheidung</div>'
+      +'<button class="login-btn-magic" style="margin-top:10px;background:linear-gradient(135deg,#3ecf8e,#2ba36a);" onclick="subDoEntscheiden(\''+p.id+'\',\'annehmen\')">✓ Angebot annehmen</button>'
+      +'<button class="admin-act" style="margin-top:8px;width:100%;justify-content:center;" onclick="subDoEntscheiden(\''+p.id+'\',\'besprechung\')">💬 Besprechung anfragen</button>'
+      +'<button class="admin-act danger" style="margin-top:8px;width:100%;justify-content:center;" onclick="subDoEntscheiden(\''+p.id+'\',\'ablehnen\')">✕ Angebot ablehnen</button>'
+      +'</div>';
+  }
+  return html;
+}
+function subVorschlagHtml(v){
+  if(!Array.isArray(v)||!v.length) return '';
+  var total=v.reduce(function(s,a){return s+Number(a.gesamtbetrag||0);},0);
+  var rows=v.map(function(a){
+    var steps=(a.steps||[]).filter(function(s){return s.typ==='zahlung';});
+    var stepHtml=steps.length?('<div style="margin-top:4px;">'+steps.map(function(s){
+      return '<div style="display:flex;justify-content:space-between;font-size:11px;color:rgba(232,237,245,0.5);"><span>'+gsEsc(s.bezeichnung||'')+'</span><span>'+pmChf(s.betrag)+'</span></div>';
+    }).join('')+'</div>'):'';
+    return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);">'
+      +'<div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">'+gsEsc(a.name||'Abschnitt')+'</span><span style="color:#C9A961;font-weight:700;">'+pmChf(a.gesamtbetrag)+'</span></div>'
+      +((a.split_profil||a.einheit_anzahl)?'<div class="pd-item-meta" style="font-size:11px;">'+gsEsc(a.split_profil||'')+(a.einheit_anzahl?(' · '+gsEsc(a.einheit_typ||'')+' ×'+gsEsc(a.einheit_anzahl)):'')+'</div>':'')
+      +stepHtml+'</div>';
+  }).join('');
+  return '<div style="margin-top:10px;padding:11px;background:rgba(201,169,97,0.06);border:1px solid rgba(201,169,97,0.18);border-radius:12px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:800;">Bauabschnitts-Vorschlag</span><span style="color:#C9A961;font-weight:800;">'+pmChf(total)+'</span></div>'
+    +'<div class="pd-item-meta" style="font-size:11px;">'+v.length+' Abschnitt'+(v.length!==1?'e':'')+'</div>'
+    +rows+'</div>';
+}
+function subDoEntscheiden(id,op){
+  var msg=op==='annehmen'?'Angebot verbindlich annehmen? Es wird eine Auftragsbestätigung erstellt.':(op==='ablehnen'?'Angebot wirklich ablehnen?':'Besprechung zum Angebot anfragen?');
+  if(!window.confirm(msg)) return;
+  pmApi('sub_entscheiden',{projekt_id:id,op:op}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast(op==='annehmen'?'Angebot angenommen':(op==='ablehnen'?'Angebot abgelehnt':'Besprechung angefragt'));
+    subReload();
+  });
 }
 
 // ── Dateien (reuse Bucket projektdateien, 3 Kategorien) ──
