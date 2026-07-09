@@ -2383,11 +2383,16 @@ async function subZahlungsplanView(pid) {
     if (anz && ['hinterlegt', 'gs_fertig', 'freigegeben'].includes(anz.status)) anzahlungHinterlegt = true;
     abschnitte.push({ name: a.name || 'Abschnitt', gesamtbetrag: num(a.gesamtbetrag), steps: outSteps });
   }
+  // Block 7: Anzahlung ist Startbedingung. Solange sie nicht hinterlegt ist,
+  // zeigt der aktive Plan eine Statuszeile (Master + Partner, kein Blinken).
+  const startbedingung = (aktiv && !anzahlungHinterlegt)
+    ? { offen: true, master_hinweis: 'Anzahlung ausstehend – Termin nicht reserviert.', partner_hinweis: 'Bitte Anzahlung hinterlegen, damit der Termin verbindlich wird.' }
+    : { offen: false };
   return {
     status: p.zahlungsplan_status || 'offen', aktiv,
     angebot_angenommen_at: p.angebot_angenommen_at || null,
     zahlungsplan_angenommen_at: p.zahlungsplan_angenommen_at || null,
-    summe: round2(summe), abschnitte, anzahlung_hinterlegt: anzahlungHinterlegt,
+    summe: round2(summe), abschnitte, anzahlung_hinterlegt: anzahlungHinterlegt, startbedingung,
   };
 }
 // Zweite Annahme: der Partner nimmt den generierten Zahlungsplan separat an. Erst

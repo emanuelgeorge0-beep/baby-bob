@@ -2210,7 +2210,21 @@ function msubLifecycleHtml(b){
     (auf?'<div class="zs-ov-line" style="margin-top:8px"><span class="zs-ov-ok">✓ Auftragsbestätigung '+esc(auf.nummer||'')+'</span><span class="zs-ov-betr">'+zsChf(auf.gesamtbetrag)+'</span></div>'+
       '<div class="zs-ov-stats">bestätigt am '+esc(zsFmt(auf.bestaetigt_am,true))+'</div>':'')+
   '</div>';
-  return ov+msubKalkPanelHtml(b.kalk)+pmSec('📄 Angebot',msubAngebotHtml(ang));
+  return ov+msubKalkPanelHtml(b.kalk)+pmSec('📄 Angebot',msubAngebotHtml(ang))+msubZahlungsplanHtml(b.zahlungsplan);
+}
+// Block 6/7 (Runde 6): Zahlungsplan-Ansicht im Master-Cockpit (Status + Step-Kette).
+function msubZpStatusLabel(s){ return {wartend:'wartet',aktiv:'fällig',hinterlegt:'hinterlegt',gs_fertig:'in Bestätigung',freigegeben:'bezahlt',geklaert:'erledigt',offen:'offen'}[s]||s; }
+function msubZahlungsplanHtml(zp){
+  if(!zp) return '';
+  var rows=(zp.abschnitte||[]).map(function(a){
+    return '<div class="lcard" style="margin:0 0 8px"><div class="top"><div class="nm">'+esc(a.name||'Abschnitt')+'</div><span style="color:var(--gold);font-weight:700">'+zsChf(a.gesamtbetrag)+'</span></div>'+
+      (a.steps||[]).map(function(s){ var isZ=s.typ==='zahlung'; return '<div class="meta" style="margin-top:3px"><span>'+(isZ?'💰':'🔒')+' '+esc(s.bezeichnung)+' · '+esc(msubZpStatusLabel(s.status))+'</span><span class="dot">'+(isZ?zsChf(s.betrag):'')+'</span></div>'; }).join('')+'</div>';
+  }).join('');
+  var sb=zp.startbedingung||{};
+  var statusLine=sb.offen?('<div class="zs-ov-line" style="margin-top:6px"><span style="color:#e0a341;font-weight:700">⏳ '+esc(sb.master_hinweis||'Anzahlung ausstehend – Termin nicht reserviert.')+'</span></div>'):'';
+  var kopf='<div class="zs-ov" style="margin:0 0 8px"><div class="zs-ov-head"><div><div class="zs-ov-vol">'+zsChf(zp.summe)+'</div><div class="zs-ov-sub">Zahlungsplan · '+(zp.status==='angenommen'?'aktiv':'wartet auf Partner-Annahme')+'</div></div>'+
+    pmPill(zp.status==='angenommen'?'angenommen':'offen',zp.status==='angenommen'?'#3dd68c':'#e0a341')+'</div>'+statusLine+'</div>';
+  return pmSec('💳 Zahlungsplan',kopf+rows);
 }
 var _subBundle=null;
 function wireMsubLifecycle(b){

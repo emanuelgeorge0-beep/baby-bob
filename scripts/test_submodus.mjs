@@ -605,6 +605,17 @@ async function suite(iter) {
   assert(!deepHasKey(r.d.zahlungsplan, 'split_profil') && !deepHasKey(r.d.zahlungsplan, 'einheit_typ'), '(c) Zahlungsplan ohne split_profil/einheit_typ');
   // sub_step_hinterlegen: fremd → 403.
   assert((await call(tok(P_SUB2), { action: 'sub_step_hinterlegen', step_id: firstStep.id })).status === 403, '(B6) fremd: step_hinterlegen → 403');
+
+  // ── BLOCK 7: Anzahlung ist Startbedingung (Statuszeile, kein Blinken) ──
+  // Plan aktiv, Anzahlung noch nicht hinterlegt → Startbedingung offen.
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: spB6.id });
+  const mzp = r.d && r.d.sub_bundle && r.d.sub_bundle.zahlungsplan;
+  assert(mzp && mzp.startbedingung && mzp.startbedingung.offen === true, '(B7) Master: Startbedingung offen (Anzahlung ausstehend)');
+  assert(mzp && /Anzahlung ausstehend/.test(mzp.startbedingung.master_hinweis) && /Termin nicht reserviert/.test(mzp.startbedingung.master_hinweis), '(B7) Master-Hinweis: „Anzahlung ausstehend – Termin nicht reserviert."');
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: spB6.id });
+  const pzp = r.d && r.d.zahlungsplan;
+  assert(pzp && pzp.startbedingung.offen === true && /Anzahlung hinterlegen/.test(pzp.startbedingung.partner_hinweis) && /verbindlich/.test(pzp.startbedingung.partner_hinweis), '(B7) Partner-Hinweis: „Bitte Anzahlung hinterlegen, damit der Termin verbindlich wird."');
+  assert(pzp && pzp.anzahlung_hinterlegt === false, '(B7) Anzahlung noch nicht hinterlegt');
 }
 
 const RUNS = 5;
