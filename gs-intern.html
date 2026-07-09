@@ -2127,7 +2127,7 @@ function msubLogoHtml(url,firma,size){
   var ini=((firma||'?').trim().charAt(0)||'?').toUpperCase();
   return '<div style="width:'+size+'px;height:'+size+'px;border-radius:8px;background:var(--gold-soft);color:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:800;flex:0 0 auto">'+esc(ini)+'</div>';
 }
-function subHead(){ return '<h2><span class="acc">📐</span> Sub-Anfragen</h2>'+backRow(); }
+function subHead(){ return '<h2><span class="acc">📐</span> Sub-Anfragen <button class="chip" onclick="openKalkSettings()" style="float:right;font-size:11px;margin-top:2px">⚙️ Kalk-Sätze</button></h2>'+backRow(); }
 function renderSubAnfragen(){
   $('view').innerHTML=subHead()+'<div class="empty" style="padding:12px">Lädt…</div>'; wireBack();
   api('msub_liste').then(function(d){
@@ -2190,6 +2190,10 @@ function openSubAnfrage(id){
 function angStatusLabel(s){ return ({entwurf:'Entwurf',abgeschickt:'abgeschickt',angenommen:'angenommen',abgelehnt:'abgelehnt',besprechung:'Besprechung'})[s]||s||'—'; }
 function angStatusColor(s){ return ({entwurf:'var(--gold)',abgeschickt:'#4aa8ff',angenommen:'#3dd68c',abgelehnt:'var(--muted)',besprechung:'#e0a341'})[s]||'var(--gold)'; }
 // Sub-Lifecycle-Block (Partner-Branding, sub_status, Besprechung, Auftragsbestätigung, Angebot).
+// GS-Firmendaten (Konstante/Config) — für den Angebotskopf. NICHT gs_partner_profil.
+var GS_FIRMA={ name:'George Solutions', zeile2:'HKLS · Sub-/Akkordarbeiten', plzort:'8000 Zürich',
+  email:'info@george-solutions.ch', web:'george-solutions.ch', logo:'/cockpit-icon-192.png' };
+var _kalkSettings=null, _kalkPos=[], _kalkProjektId=null;
 function msubLifecycleHtml(b){
   b=b||{}; var partner=b.partner||{}, ang=b.angebot||null, auf=b.auftrag||null, sub=b.sub||{}, st=b.sub_status||'entwurf';
   var kontakt=[sub.ansprechperson?'👤 '+esc(sub.ansprechperson):'',partner.telefon?'📞 '+esc(partner.telefon):'',partner.email?'✉ '+esc(partner.email):''].filter(Boolean).map(function(x){return '<span class="dot">'+x+'</span>';}).join('');
@@ -2205,48 +2209,42 @@ function msubLifecycleHtml(b){
     (auf?'<div class="zs-ov-line" style="margin-top:8px"><span class="zs-ov-ok">✓ Auftragsbestätigung '+esc(auf.nummer||'')+'</span><span class="zs-ov-betr">'+zsChf(auf.gesamtbetrag)+'</span></div>'+
       '<div class="zs-ov-stats">bestätigt am '+esc(zsFmt(auf.bestaetigt_am,true))+'</div>':'')+
   '</div>';
-  return ov+pmSec('📄 Angebot',msubAngebotHtml(ang,{id:b.projekt_id}));
+  return ov+msubKalkPanelHtml(b.kalk)+pmSec('📄 Angebot',msubAngebotHtml(ang));
 }
-function wireMsubLifecycle(b){ b=b||{}; wireMsubAngebot({id:b.projekt_id}); }
-function msubAngebotHtml(ang,p){
+function wireMsubLifecycle(b){
+  b=b||{};
+  _kalkSettings=(b.kalk&&b.kalk.settings)||null; _kalkPos=(b.kalk&&b.kalk.positionen)||[]; _kalkProjektId=b.projekt_id;
+  var ka=$('kalk-add'); if(ka) ka.onclick=function(){ openKalkSheet(null); };
+  var kg=$('kalk-settings'); if(kg) kg.onclick=openKalkSettings;
+  wireMsubAngebot({id:b.projekt_id}, b.angebot||null);
+}
+// ── Angebot-Zusammenfassung (Editor als Sheet, Abschicken wie bisher) ──
+function msubAngebotHtml(ang){
   var decided=ang&&(ang.status==='angenommen'||ang.status==='abgelehnt');
   var sent=ang&&ang.status==='abgeschickt';
   var info;
   if(ang){
-    info='<div class="lcard"><div class="top"><div class="nm">'+zsChf(ang.gesamtbetrag)+'</div>'+pmPill(angStatusLabel(ang.status),angStatusColor(ang.status))+'</div>'+
-      '<div class="meta">'+[ang.ansatz_chf_h!=null?('Ansatz '+zsChf(ang.ansatz_chf_h)+'/h'):'','Version '+esc(ang.version||1)].filter(Boolean).map(function(x){return '<span class="dot">'+esc(x)+'</span>';}).join('')+'</div>'+
+    var nP=(ang.positionen||[]).length;
+    var kond=[ang.zahlungsziel_tage?('Zahlungsziel '+esc(ang.zahlungsziel_tage)+' T'):'',ang.gueltig_bis?('gültig bis '+esc(ang.gueltig_bis)):'',(ang.ausfuehrung_von||ang.ausfuehrung_bis)?('Ausführung '+esc(ang.ausfuehrung_von||'?')+'–'+esc(ang.ausfuehrung_bis||'?')):''].filter(Boolean).map(function(x){return '<span class="dot">'+x+'</span>';}).join('');
+    info='<div class="lcard"><div class="top"><div class="nm">'+zsChf(ang.gesamtbetrag)+' <span style="font-size:11px;color:var(--muted2);font-weight:600">brutto</span></div>'+pmPill(angStatusLabel(ang.status),angStatusColor(ang.status))+'</div>'+
+      '<div class="meta">'+[ (nP?nP+' Position'+(nP!==1?'en':''):''),'MWST '+esc(ang.mwst_prozent!=null?ang.mwst_prozent:8.1)+'%',ang.ansatz_chf_h!=null?('Ansatz '+zsChf(ang.ansatz_chf_h)+'/h'):'','Version '+esc(ang.version||1)].filter(Boolean).map(function(x){return '<span class="dot">'+esc(x)+'</span>';}).join('')+'</div>'+
+      (kond?'<div class="meta" style="margin-top:4px">'+kond+'</div>':'')+
       (ang.bemerkung?'<div class="meta" style="margin-top:4px"><span>📝 '+esc(ang.bemerkung)+'</span></div>':'')+
       (ang.abgeschickt_am?'<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">Abgeschickt: '+esc(zsFmt(ang.abgeschickt_am,true))+'</span></div>':'')+
       (ang.entschieden_am?'<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">Entschieden: '+esc(zsFmt(ang.entschieden_am,true))+'</span></div>':'')+
     '</div>';
   } else {
-    info='<div class="empty" style="padding:12px">Noch kein Angebot. Kalkuliere unten im Zahlungssystem die Bauabschnitte und erzeuge dann das Angebot – der Betrag kommt aus der Kalkulation.</div>';
+    info='<div class="empty" style="padding:12px">Noch kein Angebot. Kalkuliere die Bauabschnitte (oben) und erstelle dann das Angebot mit Positionen.</div>';
   }
-  if(decided){
-    return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Vom Partner '+(ang.status==='angenommen'?'angenommen':'abgelehnt')+'.</span></div>';
-  }
-  if(sent){
-    return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Angebot ist beim Partner – wartet auf Entscheidung.</span></div>';
-  }
-  var ansatz=(ang&&ang.ansatz_chf_h!=null)?ang.ansatz_chf_h:'';
-  var bem=(ang&&ang.bemerkung)?ang.bemerkung:'';
-  return info+'<div style="margin-top:10px">'+
-    '<input class="field" id="msub-ansatz" type="number" min="0" step="0.01" placeholder="Ansatz CHF/h (optional)" value="'+esc(ansatz)+'"/>'+
-    '<textarea class="field" id="msub-bem" placeholder="Bemerkung (optional)" style="margin-top:8px;min-height:64px">'+esc(bem)+'</textarea>'+
-    '<div class="login-msg" id="msub-ang-msg" style="margin-top:8px"></div>'+
-    '<button class="btn btn-gold" id="msub-ang-save" style="margin-top:10px">'+(ang?'Angebot aktualisieren':'Angebot erzeugen')+'</button>'+
-    (ang?'<button class="btn" id="msub-ang-send" style="margin-top:8px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Angebot abschicken</button>':'')+
+  if(decided) return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Vom Partner '+(ang.status==='angenommen'?'angenommen':'abgelehnt')+'.</span></div>';
+  if(sent) return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Angebot ist beim Partner – wartet auf Entscheidung.</span></div>';
+  return info+'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+    '<button class="btn btn-gold" id="msub-ang-edit" style="width:auto;flex:1;min-width:150px">'+(ang?'✏️ Angebot bearbeiten':'✏️ Angebot erstellen')+'</button>'+
+    (ang?'<button class="btn" id="msub-ang-send" style="width:auto;flex:1;min-width:150px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Abschicken</button>':'')+
   '</div>';
 }
-function wireMsubAngebot(p){
-  var sv=$('msub-ang-save'); if(sv) sv.onclick=function(){
-    var body={projekt_id:p.id,ansatz_chf_h:($('msub-ansatz')||{}).value,bemerkung:($('msub-bem')||{}).value};
-    sv.disabled=true; sv.textContent='…';
-    api('msub_angebot_save',body).then(function(d){
-      if(d&&d.error){ sv.disabled=false; var m=$('msub-ang-msg'); if(m){m.className='login-msg err';m.textContent=d.error;} return; }
-      toast('Angebot gespeichert'); openSubAnfrage(p.id);
-    }).catch(function(){ sv.disabled=false; toast('Fehler'); });
-  };
+function wireMsubAngebot(p,ang){
+  var ed=$('msub-ang-edit'); if(ed) ed.onclick=function(){ openAngebotEditor(p.id,ang||null); };
   var sd=$('msub-ang-send'); if(sd) sd.onclick=function(){
     if(!confirm('Angebot jetzt an den Partner abschicken? Danach steht der Status auf „Angebot offen".')) return;
     sd.disabled=true;
@@ -2255,6 +2253,194 @@ function wireMsubAngebot(p){
       toast('Angebot abgeschickt'); openSubAnfrage(p.id);
     }).catch(function(){ sd.disabled=false; toast('Fehler'); });
   };
+}
+
+// ═══ KALKULATIONSGENERATOR (INTERN, nur Master, nur Sub) ═══
+function kalkCalc(inp,s){
+  s=s||{}; var stundenProTag=Number(s.stunden_pro_team_tag||8)||8;
+  var personen=Math.max(1,(parseInt(inp.personen,10)||2));
+  var teamTage=Math.max(0,Number(inp.team_tage||0));
+  var modus=inp.ansatz_modus==='schnell'?'schnell':'detailliert';
+  var ansatz=modus==='schnell'?Number(s.ansatz_schnell||85):Number(s.ansatz_detailliert||90);
+  var v=teamTage*personen*stundenProTag, umsatz=v*ansatz;
+  var kosten=(v*Number(s.vollkosten_chf_h||46))+(teamTage*personen*Number(s.spesen_pro_person_tag||40))+(teamTage*Number(s.kfz_pauschale_tag||20))+((teamTage/5)*Number(s.equipment_pro_woche||280));
+  var rg=umsatz-kosten, dbh=v>0?rg/v:0, eff=v>0?(rg/v)+Number(s.vollkosten_chf_h||46):0;
+  var ampel=eff>=Number(s.ampel_gruen_ab||70)?'gruen':(eff>=Number(s.ampel_rot_unter||56)?'gelb':'rot');
+  var r2=function(x){return Math.round(x*100)/100;};
+  return {personen:personen,team_tage:r2(teamTage),ansatz_modus:modus,ansatz:r2(ansatz),verrechnungsstunden:r2(v),umsatz:r2(umsatz),kosten:r2(kosten),rohgewinn:r2(rg),db_pro_stunde:r2(dbh),eff_chf_h:r2(eff),ampel:ampel};
+}
+function kalkAmpelColor(a){ return a==='gruen'?'#3dd68c':(a==='gelb'?'#e0a341':'#ff5d5d'); }
+function kalkAmpelLabel(a){ return a==='gruen'?'🟢 grün':(a==='gelb'?'🟡 gelb':'🔴 rot'); }
+function msubKalkPanelHtml(kalk){
+  kalk=kalk||{}; var pos=kalk.positionen||[];
+  var head='<div class="cc-sec" style="display:flex;justify-content:space-between;align-items:center">'+
+    '<span>🧮 Kalkulation <span style="font-size:9.5px;color:#ff9b9b;font-weight:800;border:1px solid #ff9b9b;border-radius:6px;padding:1px 5px;vertical-align:middle">INTERN</span></span>'+
+    '<span style="display:flex;gap:4px"><button class="chip" id="kalk-settings" style="font-size:11px">⚙️ Sätze</button><button class="chip" id="kalk-add" style="font-size:11px">＋ kalkulieren</button></span></div>';
+  if(kalk.notMigrated) return head+migRow('Kalk-Tabellen fehlen – scripts/kalk_settings.sql ausführen.');
+  var rows=pos.length?pos.map(function(k){
+    var col=kalkAmpelColor(k.ampel);
+    return '<div class="lcard">'+
+      '<div class="top"><div class="nm">'+esc(k.name||'Abschnitt')+'</div>'+pmPill(kalkAmpelLabel(k.ampel),col)+'</div>'+
+      '<div class="meta" style="margin-top:4px"><span>'+esc(k.personen)+' P × '+esc(k.team_tage)+' T · '+esc(k.ansatz_modus)+' ('+zsChf(k.ansatz)+'/h)</span><span class="dot">'+esc(k.verrechnungsstunden)+' h</span></div>'+
+      '<div class="meta" style="margin-top:4px"><span style="color:var(--gold)">Umsatz '+zsChf(k.umsatz)+'</span><span class="dot" style="color:var(--muted2)">Kosten '+zsChf(k.kosten)+'</span></div>'+
+      '<div class="meta" style="margin-top:2px"><span style="color:'+col+'">Rohgewinn '+zsChf(k.rohgewinn)+'</span><span class="dot">DB '+zsChf(k.db_pro_stunde)+'/h · eff. '+zsChf(k.eff_chf_h)+'/h</span></div>'+
+      '<button class="chip" style="margin-top:8px;font-size:11px" onclick="openKalkSheet(\''+k.bauabschnitt_id+'\')">🧮 neu kalkulieren</button></div>';
+  }).join(''):'<div class="empty" style="padding:12px">Noch keine kalkulierten Bauabschnitte. Über „＋ kalkulieren" den ersten anlegen.</div>';
+  return head+rows;
+}
+function kalkPreviewHtml(c){
+  var col=kalkAmpelColor(c.ampel);
+  return '<div class="zs-ov" style="margin:0">'+
+    '<div class="zs-ov-head"><div><div class="zs-ov-vol">'+zsChf(c.umsatz)+'</div><div class="zs-ov-sub">Umsatz · '+esc(c.verrechnungsstunden)+' h</div></div>'+
+      '<div class="zs-ov-badge" style="color:'+col+';font-size:14px">'+kalkAmpelLabel(c.ampel)+'</div></div>'+
+    '<div class="zs-ov-line"><span class="zs-ov-mut">Kosten '+zsChf(c.kosten)+'</span><span class="zs-ov-ok" style="color:'+col+'">Rohgewinn '+zsChf(c.rohgewinn)+'</span></div>'+
+    '<div class="zs-ov-stats">Ansatz '+zsChf(c.ansatz)+'/h · DB '+zsChf(c.db_pro_stunde)+'/h · effektiv '+zsChf(c.eff_chf_h)+'/h (Ampel-Basis)</div>'+
+  '</div>';
+}
+function openKalkSheet(baId){
+  var k=null; if(baId){ (_kalkPos||[]).forEach(function(x){ if(x.bauabschnitt_id===baId) k=x; }); }
+  var isNew=!baId;
+  var s=_kalkSettings||{};
+  var neu=isNew?('<input class="field" id="k-name" placeholder="Name (z. B. Rohbau Haus A) *"/>'+
+    '<div class="sec-t">Split-Profil</div>'+pmSelect('k-profil',ZS_PROFILE,'stueck_15_70_15')+
+    '<div class="sec-t">Einheit</div>'+pmSelect('k-einheit',ZS_EINHEIT,'pauschal')+
+    '<input class="field" id="k-anzahl" type="number" min="0" placeholder="Anzahl Einheiten" style="margin-top:8px"/>'):'';
+  openSheet('<h3>'+(isNew?'Bauabschnitt kalkulieren':'Neu kalkulieren')+'</h3>'+neu+
+    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
+      '<input class="field" id="k-personen" type="number" min="1" placeholder="Personen" value="'+esc(k?k.personen:2)+'"/>'+
+      '<input class="field" id="k-tage" type="number" min="0" step="0.5" placeholder="Team-Tage" value="'+esc(k?k.team_tage:'')+'"/></div>'+
+    '<div class="sec-t">Ansatz</div>'+pmSelect('k-modus',[{v:'detailliert',t:'Detailliert ('+zsChf(s.ansatz_detailliert||90)+'/h)'},{v:'schnell',t:'Schnell ('+zsChf(s.ansatz_schnell||85)+'/h)'}],k?k.ansatz_modus:'detailliert')+
+    '<div id="k-preview" style="margin-top:12px"></div>'+
+    '<div class="login-msg" id="k-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="k-save" style="margin-top:12px">Berechnen & übernehmen</button>'+
+    '<button class="btn ghost" id="k-cancel">Abbrechen</button>');
+  $('k-cancel').onclick=closeSheet;
+  function upd(){ var c=kalkCalc({personen:($('k-personen')||{}).value,team_tage:($('k-tage')||{}).value,ansatz_modus:($('k-modus')||{}).value},_kalkSettings); var pv=$('k-preview'); if(pv) pv.innerHTML=kalkPreviewHtml(c); }
+  ['k-personen','k-tage','k-modus'].forEach(function(id){ var e=$(id); if(e){ e.oninput=upd; e.onchange=upd; } });
+  upd();
+  $('k-save').onclick=function(){ submitKalk(baId,isNew); };
+}
+function submitKalk(baId,isNew){
+  var body={personen:($('k-personen')||{}).value,team_tage:($('k-tage')||{}).value,ansatz_modus:($('k-modus')||{}).value};
+  if(isNew){
+    var name=(($('k-name')||{}).value||'').trim();
+    if(!name){ $('k-msg').className='login-msg err'; $('k-msg').textContent='Name erforderlich'; return; }
+    body.projekt_id=_kalkProjektId; body.name=name; body.split_profil=($('k-profil')||{}).value; body.einheit_typ=($('k-einheit')||{}).value; body.einheit_anzahl=($('k-anzahl')||{}).value||0;
+  } else { body.bauabschnitt_id=baId; }
+  if(!body.team_tage||Number(body.team_tage)<=0){ $('k-msg').className='login-msg err'; $('k-msg').textContent='Team-Tage erforderlich'; return; }
+  var btn=$('k-save'); if(btn){btn.disabled=true;btn.textContent='…';}
+  api('msub_kalk_apply',body).then(function(d){
+    if(d&&d.error){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} $('k-msg').className='login-msg err'; $('k-msg').textContent=d.error; return; }
+    closeSheet(); toast('Kalkuliert · Umsatz '+zsChf((d.kalk||{}).umsatz)); openSubAnfrage(_kalkProjektId);
+  }).catch(function(){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} $('k-msg').className='login-msg err'; $('k-msg').textContent='Fehler'; });
+}
+function openKalkSettings(){
+  api('msub_kalk_settings_get').then(function(d){
+    var s=(d&&d.settings)||{};
+    if(d&&d.notMigrated){ openSheet('<h3>Kalk-Kostensätze</h3>'+migRow('scripts/kalk_settings.sql ausführen.')+'<button class="btn ghost" id="ks-cancel">Schliessen</button>'); $('ks-cancel').onclick=closeSheet; return; }
+    var f=function(id,label,val){ return '<div class="sec-t">'+label+'</div><input class="field" id="'+id+'" type="number" min="0" step="0.01" value="'+esc(val)+'"/>'; };
+    openSheet('<h3>Kalk-Kostensätze <span style="font-size:10px;color:#ff9b9b">INTERN</span></h3>'+
+      f('ks-vk','Vollkosten CHF/h',s.vollkosten_chf_h)+f('ks-sp','Spesen / Person·Tag',s.spesen_pro_person_tag)+
+      f('ks-kfz','KFZ-Pauschale / Tag',s.kfz_pauschale_tag)+f('ks-eq','Equipment / Woche',s.equipment_pro_woche)+
+      f('ks-h','Stunden / Team-Tag',s.stunden_pro_team_tag)+f('ks-ad','Ansatz detailliert',s.ansatz_detailliert)+
+      f('ks-as','Ansatz schnell',s.ansatz_schnell)+f('ks-ag','Ampel grün ab',s.ampel_gruen_ab)+f('ks-ar','Ampel rot unter',s.ampel_rot_unter)+
+      '<div class="login-msg" id="ks-msg" style="margin-top:8px"></div>'+
+      '<button class="btn btn-gold" id="ks-save" style="margin-top:12px">Speichern</button>'+
+      '<button class="btn ghost" id="ks-cancel">Abbrechen</button>');
+    $('ks-cancel').onclick=closeSheet;
+    $('ks-save').onclick=function(){
+      var body={vollkosten_chf_h:$('ks-vk').value,spesen_pro_person_tag:$('ks-sp').value,kfz_pauschale_tag:$('ks-kfz').value,equipment_pro_woche:$('ks-eq').value,stunden_pro_team_tag:$('ks-h').value,ansatz_detailliert:$('ks-ad').value,ansatz_schnell:$('ks-as').value,ampel_gruen_ab:$('ks-ag').value,ampel_rot_unter:$('ks-ar').value};
+      api('msub_kalk_settings_save',body).then(function(r){ if(r&&r.error){ $('ks-msg').className='login-msg err'; $('ks-msg').textContent=r.error; return; } closeSheet(); toast('Kostensätze gespeichert'); if(_kalkProjektId) openSubAnfrage(_kalkProjektId); });
+    };
+  });
+}
+
+// ═══ ANGEBOT-EDITOR (Positionen, Netto→Rabatt/Zuschlag→MWST→Brutto, Konditionen) ═══
+var _angEditProjektId=null, _angPos=[], _angMeta={};
+function openAngebotEditor(projektId,ang){
+  _angEditProjektId=projektId;
+  _angPos=(ang&&Array.isArray(ang.positionen)&&ang.positionen.length)
+    ? ang.positionen.map(function(p){return {bezeichnung:p.bezeichnung,menge:p.menge,einheit:p.einheit,einzelpreis:p.einzelpreis};})
+    : ((ang&&Array.isArray(ang.bauabschnitt_vorschlag))?ang.bauabschnitt_vorschlag.map(function(a){return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.gesamtbetrag};}):[]);
+  _angMeta={ rabatt:(ang&&ang.rabatt_prozent)||0, zuschlag:(ang&&ang.zuschlag_prozent)||0, mwst:(ang&&ang.mwst_prozent!=null)?ang.mwst_prozent:8.1,
+    ansatz:(ang&&ang.ansatz_chf_h!=null)?ang.ansatz_chf_h:'', bemerkung:(ang&&ang.bemerkung)||'', zahlungsziel:(ang&&ang.zahlungsziel_tage)||'',
+    gueltig:(ang&&ang.gueltig_bis)||'', ausfvon:(ang&&ang.ausfuehrung_von)||'', ausfbis:(ang&&ang.ausfuehrung_bis)||'' };
+  angRenderEditor();
+}
+function angPosRowHtml(p,i){
+  return '<div data-pi="'+i+'" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">'+
+    '<input class="field" id="ap-bez-'+i+'" placeholder="Bezeichnung" value="'+esc(p.bezeichnung||'')+'"/>'+
+    '<div style="display:flex;gap:6px;margin-top:6px">'+
+      '<input class="field" id="ap-menge-'+i+'" type="number" min="0" step="0.01" placeholder="Menge" value="'+esc(p.menge!=null?p.menge:1)+'" style="flex:0 0 66px"/>'+
+      '<input class="field" id="ap-einh-'+i+'" placeholder="Einheit" value="'+esc(p.einheit||'Pauschal')+'" style="flex:0 0 88px"/>'+
+      '<input class="field" id="ap-preis-'+i+'" type="number" min="0" step="0.01" placeholder="Einzelpreis" value="'+esc(p.einzelpreis!=null?p.einzelpreis:0)+'" style="flex:1"/>'+
+      '<button class="chip" data-del="'+i+'" style="flex:0 0 auto">×</button></div></div>';
+}
+function angTotalsHtml(c){
+  return '<div class="zs-ov" style="margin:0">'+
+    '<div class="zs-ov-line"><span class="zs-ov-mut">Netto</span><span>'+zsChf(c.netto)+'</span></div>'+
+    '<div class="zs-ov-line"><span class="zs-ov-mut">Zwischensumme</span><span>'+zsChf(c.zwischensumme)+'</span></div>'+
+    '<div class="zs-ov-line"><span class="zs-ov-mut">+ MWST</span><span>'+zsChf(c.mwst)+'</span></div>'+
+    '<div class="zs-ov-line" style="font-weight:800;color:var(--gold);font-size:14px"><span>Brutto</span><span>'+zsChf(c.brutto)+'</span></div>'+
+  '</div>';
+}
+function angReadInputs(){
+  var rows=document.querySelectorAll('#ang-pos-rows [data-pi]');
+  _angPos=Array.prototype.map.call(rows,function(r){ var i=r.getAttribute('data-pi');
+    return { bezeichnung:(($('ap-bez-'+i)||{}).value||''), menge:Number(($('ap-menge-'+i)||{}).value||0), einheit:(($('ap-einh-'+i)||{}).value||'Pauschal'), einzelpreis:Number(($('ap-preis-'+i)||{}).value||0) }; });
+  _angMeta.rabatt=Number(($('ang-rabatt')||{}).value||0); _angMeta.zuschlag=Number(($('ang-zuschlag')||{}).value||0); _angMeta.mwst=Number(($('ang-mwst')||{}).value||0);
+  _angMeta.ansatz=($('ang-ansatz')||{}).value||''; _angMeta.bemerkung=($('ang-bem')||{}).value||''; _angMeta.zahlungsziel=($('ang-ziel')||{}).value||'';
+  _angMeta.gueltig=($('ang-gueltig')||{}).value||''; _angMeta.ausfvon=($('ang-von')||{}).value||''; _angMeta.ausfbis=($('ang-bis')||{}).value||'';
+}
+function angCalc(){
+  var netto=_angPos.reduce(function(s,p){return s+Number(p.menge||0)*Number(p.einzelpreis||0);},0);
+  var nz=netto*(1-Number(_angMeta.rabatt||0)/100)*(1+Number(_angMeta.zuschlag||0)/100);
+  var mw=nz*Number(_angMeta.mwst||0)/100; var r2=function(x){return Math.round(x*100)/100;};
+  return {netto:r2(netto),zwischensumme:r2(nz),mwst:r2(mw),brutto:r2(nz+mw)};
+}
+function angUpdateTotals(){ angReadInputs(); var t=$('ang-totals'); if(t) t.innerHTML=angTotalsHtml(angCalc()); }
+function angRenderEditor(){
+  var m=_angMeta, gs=GS_FIRMA;
+  var header='<div class="lcard" style="margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px">'+
+    '<img src="'+esc(gs.logo)+'" style="width:40px;height:40px;border-radius:9px;object-fit:contain" alt="GS"/>'+
+    '<div><div style="font-weight:800">'+esc(gs.name)+'</div><div class="meta"><span>'+esc(gs.plzort)+'</span><span class="dot">'+esc(gs.email)+'</span></div></div></div></div>';
+  openSheet('<h3>Angebot bearbeiten</h3>'+header+
+    '<div class="sec-t">Positionen</div><div id="ang-pos-rows">'+_angPos.map(angPosRowHtml).join('')+'</div>'+
+    '<button class="chip" id="ang-add" style="margin-top:2px">＋ Position</button>'+
+    '<div class="sec-t" style="margin-top:12px">Rabatt / Zuschlag / MWST (%)</div>'+
+    '<div style="display:flex;gap:8px">'+
+      '<input class="field" id="ang-rabatt" type="number" min="0" step="0.1" placeholder="Rabatt" value="'+esc(m.rabatt)+'"/>'+
+      '<input class="field" id="ang-zuschlag" type="number" min="0" step="0.1" placeholder="Zuschlag" value="'+esc(m.zuschlag)+'"/>'+
+      '<input class="field" id="ang-mwst" type="number" min="0" step="0.1" placeholder="MWST" value="'+esc(m.mwst)+'"/></div>'+
+    '<div id="ang-totals" style="margin-top:12px"></div>'+
+    '<div class="sec-t" style="margin-top:12px">Konditionen</div>'+
+    '<input class="field" id="ang-ansatz" type="number" min="0" step="0.01" placeholder="Ansatz CHF/h (optional, nur Info)" value="'+esc(m.ansatz)+'"/>'+
+    '<div style="display:flex;gap:8px;margin-top:8px"><input class="field" id="ang-ziel" type="number" min="0" placeholder="Zahlungsziel Tage" value="'+esc(m.zahlungsziel)+'"/><input class="field" id="ang-gueltig" type="date" value="'+esc(m.gueltig)+'"/></div>'+
+    '<div class="meta" style="margin-top:2px"><span style="color:var(--muted2)">Zahlungsziel · Gültig bis</span></div>'+
+    '<div style="display:flex;gap:8px;margin-top:8px"><input class="field" id="ang-von" type="date" value="'+esc(m.ausfvon)+'"/><input class="field" id="ang-bis" type="date" value="'+esc(m.ausfbis)+'"/></div>'+
+    '<div class="meta" style="margin-top:2px"><span style="color:var(--muted2)">Ausführung von · bis</span></div>'+
+    '<textarea class="field" id="ang-bem" placeholder="Bemerkung" style="margin-top:8px;min-height:56px">'+esc(m.bemerkung)+'</textarea>'+
+    '<div class="login-msg" id="ang-msg" style="margin-top:8px"></div>'+
+    '<button class="btn btn-gold" id="ang-save" style="margin-top:12px">Speichern</button>'+
+    '<button class="btn ghost" id="ang-cancel">Abbrechen</button>');
+  $('ang-cancel').onclick=closeSheet;
+  $('ang-add').onclick=function(){ angReadInputs(); _angPos.push({bezeichnung:'',menge:1,einheit:'Pauschal',einzelpreis:0}); angRenderEditor(); };
+  Array.prototype.forEach.call(document.querySelectorAll('#ang-pos-rows [data-del]'),function(x){ x.onclick=function(){ angReadInputs(); _angPos.splice(Number(x.getAttribute('data-del')),1); angRenderEditor(); }; });
+  var live=['ang-rabatt','ang-zuschlag','ang-mwst']; _angPos.forEach(function(p,i){ live.push('ap-menge-'+i,'ap-preis-'+i); });
+  live.forEach(function(id){ var e=$(id); if(e) e.oninput=angUpdateTotals; });
+  $('ang-save').onclick=saveAngebotEditor;
+  angUpdateTotals();
+}
+function saveAngebotEditor(){
+  angReadInputs();
+  if(!_angPos.length){ $('ang-msg').className='login-msg err'; $('ang-msg').textContent='Mindestens eine Position nötig'; return; }
+  var body={ projekt_id:_angEditProjektId, positionen:_angPos, rabatt_prozent:_angMeta.rabatt, zuschlag_prozent:_angMeta.zuschlag, mwst_prozent:_angMeta.mwst,
+    ansatz_chf_h:_angMeta.ansatz, bemerkung:_angMeta.bemerkung, zahlungsziel_tage:_angMeta.zahlungsziel, gueltig_bis:_angMeta.gueltig, ausfuehrung_von:_angMeta.ausfvon, ausfuehrung_bis:_angMeta.ausfbis };
+  var btn=$('ang-save'); if(btn){btn.disabled=true;btn.textContent='…';}
+  api('msub_angebot_save',body).then(function(d){
+    if(d&&d.error){ if(btn){btn.disabled=false;btn.textContent='Speichern';} $('ang-msg').className='login-msg err'; $('ang-msg').textContent=d.error; return; }
+    closeSheet(); toast('Angebot gespeichert'); openSubAnfrage(_angEditProjektId);
+  }).catch(function(){ if(btn){btn.disabled=false;btn.textContent='Speichern';} $('ang-msg').className='login-msg err'; $('ang-msg').textContent='Fehler'; });
 }
 
 // ── Kundenverwaltung ──

@@ -8209,6 +8209,46 @@ function subPaintDetail(d){
 }
 // Zeitstempel TT.MM.JJJJ, HH:MM (wie zsFmt im Master).
 function subFmt(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return (n<10?'0':'')+n;}; return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+', '+p(d.getHours())+':'+p(d.getMinutes()); }
+// GS-Firmendaten (Angebotskopf) — Absender ist George Solutions, NICHT der Partner.
+var SUB_GS_FIRMA={ name:'George Solutions', zeile2:'HKLS · Sub-/Akkordarbeiten', plzort:'8000 Zürich', email:'info@george-solutions.ch', logo:'/cockpit-icon-192.png' };
+// Netto/Zwischensumme/MWST/Brutto aus Positionen + Konditionen (Client-Spiegel von angRechnung).
+// KEINE Kosten/Rohgewinn/Ampel — diese sind INTERN und werden dem Partner nie geliefert.
+function subAngRechnung(ang){
+  var pos=Array.isArray(ang.positionen)?ang.positionen:[];
+  var netto=pos.reduce(function(s,p){return s+Number(p.menge||0)*Number(p.einzelpreis||0);},0);
+  var nz=netto*(1-Number(ang.rabatt_prozent||0)/100)*(1+Number(ang.zuschlag_prozent||0)/100);
+  var mw=nz*Number(ang.mwst_prozent!=null?ang.mwst_prozent:8.1)/100; var r2=function(x){return Math.round(x*100)/100;};
+  return {netto:r2(netto),zwischensumme:r2(nz),mwst:r2(mw),brutto:r2(nz+mw)};
+}
+function subPosTableHtml(ang){
+  var pos=Array.isArray(ang.positionen)?ang.positionen:[];
+  if(!pos.length) return '';
+  var rows=pos.map(function(p){
+    var sum=Number(p.menge||0)*Number(p.einzelpreis||0);
+    return '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06);">'
+      +'<div style="flex:1;"><div style="font-weight:600;">'+gsEsc(p.bezeichnung||'Position')+'</div>'
+      +'<div class="pd-item-meta" style="font-size:11px;">'+gsEsc(p.menge!=null?p.menge:1)+' × '+gsEsc(p.einheit||'Pauschal')+' à '+pmChf(p.einzelpreis)+'</div></div>'
+      +'<div style="font-weight:700;white-space:nowrap;">'+pmChf(sum)+'</div></div>';
+  }).join('');
+  var r=subAngRechnung(ang);
+  return '<div style="margin-top:10px;">'
+    +'<div style="font-weight:700;font-size:12px;color:rgba(232,237,245,0.75);">Positionen</div>'+rows
+    +'<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12);">'
+    +'<div style="display:flex;justify-content:space-between;"><span class="pd-item-meta">Netto</span><span>'+pmChf(r.netto)+'</span></div>'
+    +(r.zwischensumme!==r.netto?'<div style="display:flex;justify-content:space-between;"><span class="pd-item-meta">Zwischensumme</span><span>'+pmChf(r.zwischensumme)+'</span></div>':'')
+    +'<div style="display:flex;justify-content:space-between;"><span class="pd-item-meta">+ MWST '+gsEsc(ang.mwst_prozent!=null?ang.mwst_prozent:8.1)+'%</span><span>'+pmChf(r.mwst)+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;font-weight:800;color:#C9A961;font-size:14px;margin-top:2px;"><span>Brutto</span><span>'+pmChf(r.brutto)+'</span></div>'
+    +'</div></div>';
+}
+function subKonditionenHtml(ang){
+  var items=[];
+  if(ang.zahlungsziel_tage) items.push('Zahlungsziel '+gsEsc(ang.zahlungsziel_tage)+' Tage');
+  if(ang.gueltig_bis) items.push('Gültig bis '+gsEsc(subDateDe(ang.gueltig_bis)));
+  if(ang.ausfuehrung_von||ang.ausfuehrung_bis) items.push('Ausführung '+gsEsc(subDateDe(ang.ausfuehrung_von)||'?')+' – '+gsEsc(subDateDe(ang.ausfuehrung_bis)||'?'));
+  if(!items.length) return '';
+  return '<div class="pd-item-meta" style="margin-top:10px;font-size:11px;">'+items.map(function(x){return '📌 '+x;}).join(' &nbsp;·&nbsp; ')+'</div>';
+}
+function subDateDe(iso){ if(!iso) return ''; var s=String(iso).slice(0,10); var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m?(m[3]+'.'+m[2]+'.'+m[1]):s; }
 // Angebot + Bauabschnitts-Vorschlag + Entscheidung (annehmen/ablehnen/besprechung) + Auftragsbestätigung.
 function subAngebotHtml(d){
   var p=d.projekt||{}, ang=d.angebot||null, auf=d.auftrag||null, st=p.sub_status;
@@ -8221,11 +8261,18 @@ function subAngebotHtml(d){
   if(!ang) return html || '<div class="pd-item"><div class="pd-item-meta">Noch kein Angebot.</div></div>';
   var stLabel={entwurf:'Entwurf',abgeschickt:'Angebot erhalten',besprechung:'Besprechung angefragt',angenommen:'angenommen',abgelehnt:'abgelehnt'}[ang.status]||ang.status;
   var stCls=ang.status==='angenommen'?'aktiv':(ang.status==='abgelehnt'?'fertig':'pausiert');
-  html+='<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">📄 Angebot · '+pmChf(ang.gesamtbetrag)+'</div>'
+  var gs=SUB_GS_FIRMA;
+  var kopf='<div style="display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.08);">'
+    +'<img src="'+gsEsc(gs.logo)+'" alt="GS" style="width:38px;height:38px;border-radius:9px;object-fit:contain;">'
+    +'<div><div style="font-weight:800;">'+gsEsc(gs.name)+'</div><div class="pd-item-meta" style="font-size:11px;">'+gsEsc(gs.zeile2)+' · '+gsEsc(gs.plzort)+'</div></div></div>';
+  html+='<div class="pd-item">'+kopf
+    +'<div class="pd-item-top"><div class="pd-item-tit">📄 Angebot · '+pmChf(ang.gesamtbetrag)+'</div>'
     +'<span class="pd-st '+stCls+'">'+gsEsc(stLabel)+'</span></div>'
     +(ang.ansatz_chf_h!=null?'<div class="pd-item-meta">Ansatz '+pmChf(ang.ansatz_chf_h)+'/h</div>':'')
     +(ang.bemerkung?'<div class="pd-item-meta" style="white-space:pre-wrap;">📝 '+gsEsc(ang.bemerkung)+'</div>':'')
     +(ang.abgeschickt_am?'<div class="pd-item-meta" style="color:rgba(232,237,245,0.5);">Erhalten: '+gsEsc(subFmt(ang.abgeschickt_am))+'</div>':'')
+    +subPosTableHtml(ang)
+    +subKonditionenHtml(ang)
     +subVorschlagHtml(ang.bauabschnitt_vorschlag)
     +'</div>';
   if(st==='angebot_offen' && (ang.status==='abgeschickt'||ang.status==='besprechung')){
