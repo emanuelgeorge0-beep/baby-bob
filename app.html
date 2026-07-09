@@ -926,6 +926,14 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #partner-dash .bob-chat-mic{background:#0f1116;border-color:rgba(201,169,97,.28);color:#C9A961;}
 #partner-dash .bob-chat-send{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
 
+/* Segment-Umschalter Projekte: Kapazität | Sub-/Akkord */
+#partner-dash .pm-seg-wrap{display:flex;gap:8px;margin:0 0 14px;}
+#partner-dash .pm-seg{flex:1;background:#131519;border:1px solid rgba(255,255,255,.07);color:#8a97a8;
+  border-radius:50px;padding:10px 12px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;
+  transition:border-color .15s,color .15s,background .15s;-webkit-tap-highlight-color:transparent;line-height:1.2;}
+#partner-dash .pm-seg.act{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#C9A961;}
+#partner-dash .pm-seg.locked{opacity:.5;cursor:default;}
+
 /* ══ COMMAND CENTER · Hero + Bottom-Nav (Optik 1:1 aus Master gs-intern.html) ══ */
 #partner-dash .pd-hero{position:relative;text-align:center;overflow:hidden;cursor:default;
   margin:calc(14px + var(--safe-top,0px)) 18px 18px;padding:30px 18px 24px;border-radius:24px;
@@ -7171,10 +7179,17 @@ function pdRefreshEntitlements(showToast){
   });
 }
 function pdModule(tab){ for(var i=0;i<PD_MODULES.length;i++){ if(PD_MODULES[i].tab===tab) return PD_MODULES[i]; } return null; }
+// Modul gesperrt? Sonderfall „projekte": offen, sobald Kapazität (projektmanagement)
+// ODER Sub-/Akkord (sub_akkord) frei ist – die beiden Bereiche stecken in diesem Tab.
+function pdModLocked(m){
+  if(!m||!m.feature) return false;
+  if(m.tab==='projekte') return !(pdHas('projektmanagement')||pdHas('sub_akkord'));
+  return !pdHas(m.feature);
+}
 function pdBuildTabs(){
   var wrap=document.getElementById('pd-tabs'); if(!wrap) return;
   wrap.innerHTML=PD_MODULES.map(function(m){
-    var locked=!!(m.feature&&!pdHas(m.feature));
+    var locked=pdModLocked(m);
     var badge=m.badge?'<span class="pd-badge" id="pd-inbox-badge" style="display:none;">0</span>':'';
     var st=locked?' style="opacity:.45"':'';
     return '<div class="pd-tab" id="pdt-'+m.tab+'"'+st+' onclick="pdTab(\''+m.tab+'\')">'+(locked?'🔒 ':'')+m.label+badge+'</div>';
@@ -7374,7 +7389,7 @@ function pdRenderMehr(){
   var slot=document.getElementById('pd-bob-slot'); if(slot) slot.innerHTML='';
   var c=document.getElementById('pd-content'); if(!c) return;
   var rows=PD_MODULES.filter(function(m){ return PD_PRIMARY.indexOf(m.tab)===-1; }).map(function(m){
-    var locked=!!(m.feature&&!pdHas(m.feature));
+    var locked=pdModLocked(m);
     var lbl=(m.tab==='settings')?'⚙️ Einstellungen':m.label;
     var oc=locked?'':(' onclick="pdTab(\''+m.tab+'\')"');
     return '<div class="pd-mrow'+(locked?' locked':'')+'"'+oc+'>'
@@ -7529,7 +7544,7 @@ function pdTab(tab){
   pdNavActive(tab);      // passenden Bottom-Nav-Punkt markieren (Rest → „Mehr")
   var c=document.getElementById('pd-content');if(!c)return;
   var mod=pdModule(tab);
-  var locked=!!(mod&&mod.feature&&!pdHas(mod.feature));
+  var locked=pdModLocked(mod);
   // Bob-Einstiegspunkt für den Bereich einblenden (nur wenn bob_assist_<area> frei
   // und Modul nicht gesperrt). Reused die bestehende Bob-Chat-Funktion (/api/bob-chat).
   var slot=document.getElementById('pd-bob-slot'); if(slot) slot.innerHTML=locked?'':pdBobBar(tab);
@@ -7706,18 +7721,45 @@ function pmModal(title,bodyHtml){
 function pmModalClose(){ var ov=document.getElementById('pm-modal'); if(ov){ ov.style.display='none'; ov.innerHTML=''; } }
 
 // ── Liste ──
+// Zwei Bereiche als Umschalter: Kapazitätsunterstützung (projekt_art≠'sub_akkord')
+// und Sub-/Akkordprojekte (nur wenn Feature 'sub_akkord' frei). Der Sub-Bereich ist
+// eine eigene, entkoppelte Ansicht (subRender), server-seitig 'sub_akkord'-gated.
+var pmMode='kapazitaet';
+function pmTabsHtml(){
+  var kapLocked=!pdHas('projektmanagement');
+  var subLocked=!pdHas('sub_akkord');
+  function seg(mode,label,locked){
+    var act=(pmMode===mode)?' act':'';
+    var oc=locked?'':(' onclick="pmModeSet(\''+mode+'\')"');
+    return '<button class="pm-seg'+act+(locked?' locked':'')+'"'+oc+'>'+(locked?'🔒 ':'')+label+'</button>';
+  }
+  return '<div class="pm-seg-wrap">'+seg('kapazitaet','Kapazitätsunterstützung',kapLocked)+seg('sub','Sub-/Akkordprojekte',subLocked)+'</div>';
+}
+function pmModeSet(mode){
+  if(mode==='sub' && !pdHas('sub_akkord')) return;
+  if(mode==='kapazitaet' && !pdHas('projektmanagement')) return;
+  pmMode=mode; pmState.proj=null; subState.proj=null; pmRender();
+}
 function pmRender(){
   pmState.proj=null;
   var t=pdActiveTab||'projekte'; pdShowModule(); pdNavActive(t);
   var slot=document.getElementById('pd-bob-slot'); if(slot) slot.innerHTML=pdBobBar('projekte');
+  // Standard-Bereich nach Freischaltung wählen: fehlt Kapazität, aber Sub ist frei → Sub.
+  if(pmMode==='sub' && !pdHas('sub_akkord')) pmMode='kapazitaet';
+  if(pmMode==='kapazitaet' && !pdHas('projektmanagement') && pdHas('sub_akkord')) pmMode='sub';
+  if(pmMode==='sub'){ subRender(); return; }
   var c=document.getElementById('pd-content'); if(!c) return;
-  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  if(!pdHas('projektmanagement')){
+    c.innerHTML=pmTabsHtml()+'<div class="admin-empty">🔒 Kapazitätsunterstützung ist nicht freigeschaltet.</div>'; return;
+  }
+  c.innerHTML=pmTabsHtml()+'<div class="admin-empty">Lädt…</div>';
   pmApi('pm_projekte').then(function(d){
-    if(!d||d.error){ c.innerHTML='<div class="admin-empty">'+gsEsc((d&&d.error)||'Fehler')+'</div>'; return; }
+    if(!d||d.error){ c.innerHTML=pmTabsHtml()+'<div class="admin-empty">'+gsEsc((d&&d.error)||'Fehler')+'</div>'; return; }
     pmState.kunden=(d&&d.kunden)||[];
-    var list=(d&&d.projekte)||[];
+    // Kapazitätsbereich: alles außer Sub-/Akkord (Default 'kapazitaet' greift für Altbestand).
+    var list=((d&&d.projekte)||[]).filter(function(p){ return (p.projekt_art||'kapazitaet')!=='sub_akkord'; });
     var head='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">'
-      +'<div class="pd-sec-tit" style="margin:0;">🏗️ Projektmanagement</div>'
+      +'<div class="pd-sec-tit" style="margin:0;">🏗️ Kapazitätsunterstützung</div>'
       +'<button class="admin-act ok" style="flex:0 0 auto;" onclick="pmNew()">＋ Neues Projekt</button></div>';
     var rows=list.length?list.map(function(p){
       var meta=[p.projektnummer,p.standort,p.bereich].filter(Boolean).map(gsEsc).join(' · ');
@@ -7729,7 +7771,7 @@ function pmRender(){
         +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
         +'<div class="pd-item-meta">'+(meta||'—')+kn+bl+dbListDot(p)+'</div></div>';
     }).join(''):'<div class="admin-empty">Noch keine Projekte. Legen Sie mit „＋ Neues Projekt" das erste an.</div>';
-    c.innerHTML=head+rows;
+    c.innerHTML=pmTabsHtml()+head+rows;
   });
 }
 
@@ -8033,6 +8075,190 @@ function pmDoUpload(files,kategorie){
 function pmFileDel(pathEnc){
   var path=decodeURIComponent(pathEnc);
   pmApi('pm_datei_del',{projekt_id:pmState.proj,path:path}).then(function(d){ if(d&&d.error){toast(d.error);return;} pmReload(); });
+}
+
+// ══════════════════════════════════════════════════════════
+// ══ SUB-/AKKORDPROJEKTE (Feature 'sub_akkord') ════════════
+//   Eigene Ansicht: Liste + Anlegen/Bearbeiten (Entwurf) + Datei-Upload +
+//   „Anfrage abschicken". Nach der Anfrage schreibgeschützt („In Prüfung").
+//   Backend api/cockpit.js: sub_projekte/sub_projekt/sub_projekt_save/sub_anfrage
+//   + sub_datei_* (reuse). Alles server-seitig auf eigene Projekte gescoped.
+// ══════════════════════════════════════════════════════════
+var subState={proj:null,data:null};
+var SUB_BEREICHE=['Sanitär','Heizung','Lüftung','Klima','HKLS','Elektro','Sanierung'];
+function subStatusLabel(s){
+  return {entwurf:'Entwurf',angefragt:'Angefragt',in_pruefung:'In Prüfung',
+    angebot_offen:'Angebot offen',angenommen:'Angenommen',abgelehnt:'Abgelehnt',aktiv:'Aktiv'}[s||'entwurf']||'Entwurf';
+}
+function subStatusBadge(s){
+  s=s||'entwurf';
+  var cls={entwurf:'geplant',angefragt:'pausiert',in_pruefung:'pausiert',angebot_offen:'aktiv',
+    angenommen:'aktiv',abgelehnt:'fertig',aktiv:'aktiv'}[s]||'geplant';
+  return '<span class="pd-st '+cls+'">'+gsEsc(subStatusLabel(s))+'</span>';
+}
+function subEditable(s){ return !s || s==='entwurf'; }
+function subMeta(p){ return [p.projektnummer,p.standort,p.bereich].filter(Boolean).map(gsEsc).join(' · '); }
+
+// ── Liste ──
+function subRender(){
+  subState.proj=null;
+  var c=document.getElementById('pd-content'); if(!c) return;
+  c.innerHTML=pmTabsHtml()+'<div class="admin-empty">Lädt…</div>';
+  pmApi('sub_projekte').then(function(d){
+    if(!d||d.error){ c.innerHTML=pmTabsHtml()+'<div class="admin-empty">'+gsEsc((d&&d.error)||'Fehler')+'</div>'; return; }
+    var list=(d&&d.projekte)||[];
+    var head='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;">'
+      +'<div class="pd-sec-tit" style="margin:0;">📐 Sub-/Akkordprojekte</div>'
+      +'<button class="admin-act ok" style="flex:0 0 auto;" onclick="subNew()">＋ Neues Sub-/Akkordprojekt</button></div>'
+      +'<div class="pd-item-meta" style="margin:0 2px 12px;">Projekt anlegen, Pläne/Bilder/Dokumente hochladen und die Anfrage an George Solutions abschicken.</div>';
+    var rows=list.length?list.map(function(p){
+      return '<div class="pd-item" style="cursor:pointer;" onclick="subOpen(\''+p.id+'\')">'
+        +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
+        +'<div style="display:flex;align-items:center;gap:8px;">'+subStatusBadge(p.sub_status)
+        +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
+        +'<div class="pd-item-meta">'+(subMeta(p)||'—')+'</div></div>';
+    }).join(''):'<div class="admin-empty">Noch keine Sub-/Akkordprojekte. Legen Sie mit „＋ Neues Sub-/Akkordprojekt" das erste an.</div>';
+    c.innerHTML=pmTabsHtml()+head+rows;
+  });
+}
+
+// ── Formular (Anlegen/Bearbeiten, nur solange Entwurf) ──
+function subForm(p){
+  p=p||{}; var sub=(p.datenblatt&&p.datenblatt.sub)||{};
+  var bereiche=(p.bereich||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+  var chips=SUB_BEREICHE.map(function(b){ var on=bereiche.indexOf(b)>-1;
+    return '<span class="gs-chip'+(on?' sel':'')+'" data-b="'+b+'" onclick="subBereichPick(this)" style="cursor:pointer;">'+gsEsc(b)+'</span>'; }).join('');
+  return '<div class="ob-lbl">Projektname *</div><input class="login-inp" id="sub-name" value="'+gsEsc(p.name||'')+'"/>'
+    +'<div class="ob-lbl">Strasse</div><input class="login-inp" id="sub-strasse" value="'+gsEsc(sub.strasse||'')+'"/>'
+    +'<div style="display:flex;gap:8px;"><div style="flex:0 0 34%;"><div class="ob-lbl">PLZ</div><input class="login-inp" id="sub-plz" value="'+gsEsc(sub.plz||'')+'"/></div>'
+    +'<div style="flex:1;"><div class="ob-lbl">Ort</div><input class="login-inp" id="sub-ort" value="'+gsEsc(sub.ort||'')+'"/></div></div>'
+    +'<div class="ob-lbl">Ansprechperson</div><input class="login-inp" id="sub-ansprech" value="'+gsEsc(sub.ansprechperson||'')+'"/>'
+    +'<div class="ob-lbl">Bereich(e)</div><div class="gs-chips" id="sub-bereiche" style="display:flex;flex-wrap:wrap;gap:6px;">'+chips+'</div>'
+    +'<div class="ob-lbl" style="margin-top:8px;">Beschreibung / Notiz</div><textarea class="login-inp" id="sub-besch" rows="4">'+gsEsc(sub.beschreibung||'')+'</textarea>'
+    +'<button class="login-btn-magic" style="margin-top:12px;" onclick="subSave(\''+(p.id||'')+'\')">Speichern</button>'
+    +'<div class="login-msg" id="sub-msg"></div>';
+}
+function subBereichPick(el){ el.classList.toggle('sel'); }
+function subReadBereiche(){
+  var box=document.getElementById('sub-bereiche'); if(!box) return '';
+  return Array.prototype.slice.call(box.querySelectorAll('.gs-chip.sel')).map(function(x){return x.getAttribute('data-b');}).join(', ');
+}
+function subNew(){ pmModal('Neues Sub-/Akkordprojekt', subForm({})); }
+function subEdit(){ if(!subState.data) return; pmModal('Sub-/Akkordprojekt bearbeiten', subForm(subState.data.projekt||{})); }
+function subSave(id){
+  var name=((document.getElementById('sub-name')||{}).value||'').trim();
+  if(!name){ pmMsg('sub-msg','Projektname erforderlich','err'); return; }
+  var body={ id:id||undefined, name:name,
+    strasse:(document.getElementById('sub-strasse')||{}).value||'',
+    plz:(document.getElementById('sub-plz')||{}).value||'',
+    ort:(document.getElementById('sub-ort')||{}).value||'',
+    ansprechperson:(document.getElementById('sub-ansprech')||{}).value||'',
+    beschreibung:(document.getElementById('sub-besch')||{}).value||'',
+    bereich:subReadBereiche() };
+  pmApi('sub_projekt_save',body).then(function(d){
+    if(d&&d.error){ pmMsg('sub-msg',d.error,'err'); return; }
+    pmModalClose();
+    var pid=(d&&d.projekt&&d.projekt.id)||id;
+    if(pid) subOpen(pid); else subRender();
+  });
+}
+
+// ── Detail ──
+function subOpen(id){
+  var c=document.getElementById('pd-content'); if(!c) return;
+  pdShowModule(); pdNavActive(pdActiveTab||'projekte');
+  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  pmApi('sub_projekt',{id:id}).then(function(d){
+    if(!d||d.error){ c.innerHTML='<div class="admin-empty">'+gsEsc((d&&d.error)||'Projekt nicht gefunden')+'</div>'
+      +'<div class="pd-dl" onclick="subRender()" style="margin-top:10px;display:inline-block;">← Sub-/Akkordprojekte</div>'; return; }
+    subState.proj=id; subState.data=d;
+    subPaintDetail(d);
+  });
+}
+function subReload(){ if(subState.proj) subOpen(subState.proj); }
+function subPaintDetail(d){
+  var c=document.getElementById('pd-content'); if(!c) return;
+  var p=d.projekt||{}; var sub=(p.datenblatt&&p.datenblatt.sub)||{};
+  var editable=subEditable(p.sub_status);
+  var back='<div class="pd-dl" onclick="subRender()" style="margin:0 0 12px;display:inline-block;">← Sub-/Akkordprojekte</div>';
+  var head='<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;">'+subStatusBadge(p.sub_status)
+    +(editable?'<button class="admin-act" style="flex:0 0 auto;padding:5px 9px;" onclick="subEdit()">✎</button>':'')+'</div></div>'
+    +(p.projektnummer?'<div class="pd-item-meta">🔖 '+gsEsc(p.projektnummer)+'</div>':'')
+    +(p.standort?'<div class="pd-item-meta">📍 '+gsEsc(p.standort)+'</div>':'')
+    +(p.bereich?'<div class="pd-item-meta">🔧 '+gsEsc(p.bereich)+'</div>':'')
+    +(sub.ansprechperson?'<div class="pd-item-meta">👤 '+gsEsc(sub.ansprechperson)+'</div>':'')
+    +(sub.beschreibung?'<div class="pd-item-meta" style="margin-top:6px;white-space:pre-wrap;">'+gsEsc(sub.beschreibung)+'</div>':'')
+    +'</div>';
+  var info=editable
+    ? ''
+    : '<div class="pd-item" style="border-color:rgba(245,185,66,0.32);"><div class="pd-item-meta">🔒 Anfrage abgeschickt – das Projekt ist jetzt <b>in Prüfung</b> und schreibgeschützt. George Solutions meldet sich mit einem Angebot.</div></div>';
+  var dateiHtml=subDateiHtml(d.dateien||[], editable);
+  var action=editable
+    ? '<button class="login-btn-magic" style="margin-top:14px;" onclick="subDoAnfrage(\''+p.id+'\')">📨 Anfrage abschicken</button>'
+      +'<div class="pd-item-meta" style="text-align:center;margin-top:6px;">Danach ist das Projekt schreibgeschützt.</div>'
+    : '';
+  c.innerHTML=back+head+info+dateiHtml+action;
+}
+
+// ── Dateien (reuse Bucket projektdateien, 3 Kategorien) ──
+function subDateiHtml(dateien, editable){
+  function katFiles(kat){ return dateien.filter(function(f){return (f.kategorie||'dateien')===kat;}); }
+  function katBlock(kat,label,icon){
+    var fs=katFiles(kat);
+    var items=fs.length?('<div class="pm-gal">'+fs.map(function(f){
+      var isImg=/^image\//.test(f.contentType||'');
+      var inner=isImg?('<img src="'+f.url+'" style="width:100%;height:78px;object-fit:cover;border-radius:9px;display:block;">')
+        :('<div style="height:78px;display:flex;align-items:center;justify-content:center;font-size:26px;background:rgba(255,255,255,0.04);border-radius:9px;">'+pmFileIc(f.contentType,f.name)+'</div>');
+      return '<div style="width:calc(33.33% - 6px);">'+inner
+        +'<div style="font-size:9.5px;color:rgba(232,237,245,0.55);margin-top:3px;word-break:break-all;line-height:1.2;">'+gsEsc(f.name)+'</div>'
+        +'<div style="display:flex;gap:4px;margin-top:3px;">'
+        +'<a href="'+pmDl(f.url,f.name)+'" download="'+gsEsc(f.name)+'" class="admin-act" style="flex:1;text-align:center;text-decoration:none;padding:4px;font-size:10px;">⬇</a>'
+        +(editable?'<button class="admin-act danger" style="flex:0 0 auto;padding:4px 7px;font-size:10px;" onclick="subFileDel(\''+encodeURIComponent(f.path)+'\')">✕</button>':'')
+        +'</div></div>';
+    }).join('')+'</div>'):'<div class="pd-item-meta" style="margin:2px 2px 6px;">–</div>';
+    var addBtn=editable?'<button class="admin-act" style="flex:0 0 auto;" onclick="subFileUpload(\''+kat+'\')">＋ hochladen</button>':'';
+    return '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;align-items:center;margin:6px 2px 4px;">'
+      +'<div style="font-size:12px;font-weight:700;color:rgba(232,237,245,0.75);">'+icon+' '+label+' ('+fs.length+')</div>'
+      +addBtn+'</div>'+items+'</div>';
+  }
+  return '<div class="pd-sec-tit">📎 Dateien (Pläne, Bilder, Dokumente)</div>'
+    +katBlock('plaene','Pläne','📐')+katBlock('bilder','Bilder','🖼️')+katBlock('dateien','Dokumente','📄');
+}
+function subFileUpload(kategorie){
+  var inp=document.createElement('input'); inp.type='file';
+  inp.accept=(kategorie==='bilder')?'image/*':(kategorie==='plaene'?'application/pdf,.dwg,.dxf,image/*':'*/*');
+  inp.multiple=true;
+  inp.onchange=function(){ subDoUpload(Array.prototype.slice.call(inp.files||[]),kategorie); };
+  inp.click();
+}
+function subDoUpload(files,kategorie){
+  if(!files.length) return;
+  toast('Lädt '+files.length+' Datei'+(files.length>1?'en':'')+'…');
+  var i=0;
+  (function next(){
+    if(i>=files.length){ subReload(); return; }
+    var f=files[i++];
+    if(f.size>12*1024*1024){ toast('„'+f.name+'" zu gross (max. 12 MB)'); next(); return; }
+    var rd=new FileReader();
+    rd.onload=function(){
+      pmApi('sub_datei_upload',{projekt_id:subState.proj,kategorie:kategorie,filename:f.name,contentType:f.type||'',data:String(rd.result)})
+      .then(function(d){ if(d&&d.error) toast(d.error); next(); });
+    };
+    rd.onerror=function(){ toast('Lesefehler bei „'+f.name+'"'); next(); };
+    rd.readAsDataURL(f);
+  })();
+}
+function subFileDel(pathEnc){
+  var path=decodeURIComponent(pathEnc);
+  pmApi('sub_datei_del',{projekt_id:subState.proj,path:path}).then(function(d){ if(d&&d.error){toast(d.error);return;} subReload(); });
+}
+function subDoAnfrage(id){
+  if(!window.confirm('Anfrage jetzt abschicken? Danach ist das Projekt schreibgeschützt.')) return;
+  pmApi('sub_anfrage',{id:id}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('Anfrage abgeschickt'); subReload();
+  });
 }
 
 // ── PDF-Export (Material/Rapporte/Rechnungen) ──
