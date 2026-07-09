@@ -354,15 +354,18 @@ async function suite(iter) {
   r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'annehmen' });
   assert(r.d && r.d.ok && r.d.angebot.status === 'angenommen' && r.d.angebot.entschieden_am && r.d.angebot.entschieden_by, 'annehmen: status+audit');
   assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'angenommen', 'projekt sub_status → angenommen');
-  assert(r.d && r.d.auftrag && /^AB-\d{4}-\d{6}$/.test(r.d.auftrag.nummer) && r.d.auftrag.gesamtbetrag === 32430, 'auftragsbestätigung erzeugt (nr+brutto-betrag)');
+  // Block 5 (Runde 6): Partner-Antwort auf annehmen zeigt AB INTERN gefiltert.
+  assert(r.d && r.d.auftrag && r.d.auftrag.angenommen === true && r.d.auftrag.bestaetigt_am && !('nummer' in r.d.auftrag) && !('gesamtbetrag' in r.d.auftrag), 'annehmen: partner-auftrag ohne AB-Nummer/Betrag');
+  // Die AB existiert (mit Nummer) in der DB — nur für den Master.
+  assert(AUFTRAG.find((a) => a.projekt_id === sp.id && /^AB-\d{4}-\d{6}$/.test(a.nummer) && a.gesamtbetrag === 32430), 'AB in DB erzeugt (nr+brutto — intern)');
 
   // Doppelte Entscheidung → Fehler.
   r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: sp.id, op: 'ablehnen' });
   assert(r.d && r.d.error && /bereits entschieden/.test(r.d.error), 'doppelte Entscheidung → Fehler');
 
-  // Partner-Detail zeigt jetzt Angebot (angenommen) + Auftragsbestätigung.
+  // Partner-Detail zeigt jetzt Angebot (angenommen) + „Auftrag angenommen" (ohne AB-Nummer).
   r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp.id });
-  assert(r.d && r.d.angebot && r.d.angebot.status === 'angenommen' && r.d.auftrag && r.d.auftrag.nummer, 'Partner sieht angenommenes Angebot + AB');
+  assert(r.d && r.d.angebot && r.d.angebot.status === 'angenommen' && r.d.auftrag && r.d.auftrag.angenommen === true && r.d.auftrag.bestaetigt_am && !('nummer' in r.d.auftrag), 'Partner sieht angenommenes Angebot + Auftrag angenommen (ohne AB-Nummer)');
 
   // Master-Detail: volle PM-Ansicht (Arrays) + sub_bundle mit AB + Entscheidung.
   r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp.id });
@@ -549,6 +552,17 @@ async function suite(iter) {
   assert(b4 && Array.isArray(b4.positionen) && b4.positionen.length >= 1, '(B4) Prüf: Positionen vorhanden');
   assert(b4 && Array.isArray(b4.bauabschnitt_vorschlag) && b4.bauabschnitt_vorschlag[0].steps.some((s) => s.typ === 'zahlung' && s.betrag > 0), '(B4) Prüf: Zahlungsplan (Steps mit Betrag)');
   assert(b4 && b4.mwst_prozent != null, '(B4) Prüf: Konditionen (MWST) vorhanden');
+
+  // ── BLOCK 5: Auftragsbestätigung ist INTERN ──
+  // Master sieht die volle AB (Nummer + Zeitstempel).
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp.id });
+  assert(r.d && r.d.sub_bundle.auftrag && /^AB-\d{4}-\d{6}$/.test(r.d.sub_bundle.auftrag.nummer) && r.d.sub_bundle.auftrag.bestaetigt_am, '(B5) Master sieht AB-Nummer + Zeitstempel');
+  // Partner sieht NUR „Auftrag angenommen" + Zeitstempel.
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp.id });
+  assert(r.d && r.d.auftrag && r.d.auftrag.angenommen === true && r.d.auftrag.bestaetigt_am, '(B5) Partner: Auftrag angenommen + Zeitstempel');
+  assert(r.d && !('nummer' in r.d.auftrag), '(B5) Partner-Auftrag OHNE AB-Nummer');
+  // (c) NEU/EISERN: Partner-Payload nirgends ab_nummer / nummer.
+  assert(!deepHasKey(r.d, 'nummer') && !deepHasKey(r.d, 'ab_nummer'), '(c) partner-payload OHNE ab_nummer');
 }
 
 const RUNS = 5;

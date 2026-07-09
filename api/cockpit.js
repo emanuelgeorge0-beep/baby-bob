@@ -2275,7 +2275,7 @@ async function subProjekt(id, scope) {
   try {
     // Nur das zuletzt ABGESCHICKTE Angebot (nie ein Master-Entwurf) + INTERN gefiltert.
     angebot = sanitizeAngebotForPartner(await msubLatestSentAngebot(id));
-    auftrag = await subAuftrag(id);
+    auftrag = sanitizeAuftragForPartner(await subAuftrag(id));
   } catch (_) { /* Angebots-/AB-Tabelle evtl. noch nicht migriert → ohne */ }
   const anzeigeId = await projektAnzeigeId(projekt).catch(() => null);
   return { projekt: { ...projekt, anzeige_id: anzeigeId }, dateien, angebot, auftrag };
@@ -2308,12 +2308,20 @@ async function subEntscheiden(b, scope) {
       const ar = await sbWrite('POST', 'gs_auftragsbestaetigung', { projekt_id: pid, angebot_id: angebot.id, nummer, gesamtbetrag: num(angebot.gesamtbetrag), bestaetigt_by: uid });
       auftrag = Array.isArray(ar) ? ar[0] : ar;
     }
-    return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: newStatus, auftrag };
+    // Partner sieht die AB INTERN gefiltert: nur „angenommen" + Zeitstempel (Block 5).
+    return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: newStatus, auftrag: sanitizeAuftragForPartner(auftrag) };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
 async function subAuftrag(projektId) {
   const rows = await sbGet(`gs_auftragsbestaetigung?projekt_id=eq.${projektId}&select=*&order=bestaetigt_am.desc&limit=1`).catch(() => []);
   return (rows && rows[0]) || null;
+}
+// Block 5 (Runde 6): Die Auftragsbestätigung (AB-Nummer + Dokument) ist INTERN.
+// Der Partner sieht NUR die Tatsache „Auftrag angenommen" + Zeitstempel — nie die
+// AB-Nummer, nie das AB-Dokument. Serverseitig aus dem Partner-Payload gefiltert.
+function sanitizeAuftragForPartner(auf) {
+  if (!auf) return null;
+  return { angenommen: true, bestaetigt_am: auf.bestaetigt_am || null };
 }
 // Profil vollständig? Pflichtfelder Firma/Adresse/PLZ/Ort (Firmenadresse, NICHT Baustelle).
 async function partnerProfilComplete(pid) {

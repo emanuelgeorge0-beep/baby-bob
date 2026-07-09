@@ -8312,9 +8312,11 @@ function subAngebotHtml(d){
   var p=d.projekt||{}, ang=d.angebot||null, auf=d.auftrag||null, st=p.sub_status;
   var html='';
   if(auf){
+    // Block 5 (Runde 6): AB-Nummer + Dokument sind INTERN. Partner sieht nur
+    // „Auftrag angenommen" + Zeitstempel.
     html+='<div class="pd-item" style="border-color:rgba(62,207,142,0.4);">'
-      +'<div class="pd-item-tit" style="color:#3ecf8e;">✓ Auftragsbestätigung '+gsEsc(auf.nummer||'')+'</div>'
-      +'<div class="pd-item-meta" style="margin-top:4px;">'+pmChf(auf.gesamtbetrag)+' · bestätigt am '+gsEsc(subFmt(auf.bestaetigt_am))+'</div></div>';
+      +'<div class="pd-item-tit" style="color:#3ecf8e;">✓ Auftrag angenommen</div>'
+      +'<div class="pd-item-meta" style="margin-top:4px;">bestätigt am '+gsEsc(subFmt(auf.bestaetigt_am))+'</div></div>';
   }
   if(!ang) return html || '<div class="pd-item"><div class="pd-item-meta">Noch kein Angebot.</div></div>';
   var stLabel={entwurf:'Entwurf',abgeschickt:'Angebot erhalten',besprechung:'Besprechung angefragt',angenommen:'angenommen',abgelehnt:'abgelehnt'}[ang.status]||ang.status;
