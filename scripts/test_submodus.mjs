@@ -198,6 +198,12 @@ async function call(token, body) {
 
 let PASS = 0, FAIL = 0; const FAILS = [];
 function assert(cond, name) { if (cond) PASS++; else { FAIL++; FAILS.push(name); } }
+// Rekursiver Key-Scan: prüft, ob irgendwo im Payload (Objekte/Arrays) ein Key vorkommt.
+function deepHasKey(o, key) {
+  if (Array.isArray(o)) return o.some((x) => deepHasKey(x, key));
+  if (o && typeof o === 'object') return Object.keys(o).some((k) => k === key || deepHasKey(o[k], key));
+  return false;
+}
 
 async function suite(iter) {
   resetState();
@@ -502,6 +508,17 @@ async function suite(iter) {
   r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB1b.id });
   assert(r.d && r.d.error && r.d.hasActive, '(B1) quick_send bei bestehendem Entwurf → verweigert');
   assert(ANGEBOTE.filter((a) => a.projekt_id === spB1b.id).length === 1 && ANGEBOTE.find((a) => a.projekt_id === spB1b.id).status === 'entwurf', '(B1) Entwurf bleibt unverändert (kein 2. Angebot)');
+
+  // ── BLOCK 2: interne Bezeichner NICHT in der Partner-Ansicht ──
+  // spQ (aus §9) hat ein abgeschicktes Angebot mit bauabschnitt_vorschlag.
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: spQ.id });
+  const pAng = r.d && r.d.angebot;
+  assert(pAng && Array.isArray(pAng.bauabschnitt_vorschlag) && pAng.bauabschnitt_vorschlag.length >= 1, '(B2) partner: vorschlag vorhanden');
+  const vf = pAng.bauabschnitt_vorschlag[0];
+  assert(vf && !('split_profil' in vf) && !('einheit_typ' in vf) && !('einheit_anzahl' in vf) && !('team_tage' in vf), '(B2) vorschlag OHNE split_profil/einheit_typ/einheit_anzahl/team_tage');
+  assert(vf && Array.isArray(vf.steps) && vf.steps.length && vf.steps.every((s) => 'bezeichnung' in s && 'betrag' in s), '(B2) vorschlag: nur Schrittbezeichnung + Betrag');
+  // (c) NEU/EISERN: Partner-Payload nirgends split_profil / einheit_typ.
+  assert(!deepHasKey(r.d, 'split_profil') && !deepHasKey(r.d, 'einheit_typ'), '(c) partner-payload OHNE split_profil/einheit_typ');
 }
 
 const RUNS = 5;

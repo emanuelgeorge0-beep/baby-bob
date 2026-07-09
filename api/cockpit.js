@@ -2880,6 +2880,21 @@ async function msubLatestSentAngebot(projektId) {
 // INTERN/EXTERN: Nur diese Whitelist geht an den Partner. Kosten, Rohgewinn,
 // Ampel, Ansatz (ansatz_chf_h) und Kostensätze bleiben INTERN und werden NIE
 // ausgeliefert — auch nicht, falls die Spalte irgendwann auf gs_angebote läge.
+// Block 2 (Runde 6): Der Bauabschnitts-Vorschlag enthält INTERNES Vokabular
+// (split_profil, einheit_typ, einheit_anzahl, team_tage). Der Partner sieht davon
+// NICHTS — nur Abschnittsname + Zahlungsschritte (Bezeichnung + Betrag). Server-
+// seitig aus dem Payload gefiltert, nicht clientseitig ausgeblendet.
+function sanitizeVorschlagForPartner(v) {
+  if (!Array.isArray(v)) return null;
+  return v.map((a) => ({
+    name: a.name || 'Abschnitt',
+    gesamtbetrag: num(a.gesamtbetrag),
+    steps: Array.isArray(a.steps) ? a.steps.map((s) => ({
+      reihenfolge: s.reihenfolge, typ: s.typ, zahlung_art: s.zahlung_art,
+      bezeichnung: s.bezeichnung, betrag: num(s.betrag),
+    })) : [],
+  }));
+}
 function sanitizeAngebotForPartner(ang) {
   if (!ang) return null;
   return {
@@ -2892,7 +2907,7 @@ function sanitizeAngebotForPartner(ang) {
     zahlungsziel_tage: ang.zahlungsziel_tage != null ? ang.zahlungsziel_tage : null,
     gueltig_bis: ang.gueltig_bis || null, ausfuehrung_von: ang.ausfuehrung_von || null, ausfuehrung_bis: ang.ausfuehrung_bis || null,
     abgeschickt_am: ang.abgeschickt_am || null, entschieden_am: ang.entschieden_am || null,
-    bauabschnitt_vorschlag: Array.isArray(ang.bauabschnitt_vorschlag) ? ang.bauabschnitt_vorschlag : null,
+    bauabschnitt_vorschlag: sanitizeVorschlagForPartner(ang.bauabschnitt_vorschlag),
   };
 }
 // ── Sichtbare Projekt-ID: S-YYYY-NNN (Sub) / K-YYYY-NNN (Kapazität) ──
