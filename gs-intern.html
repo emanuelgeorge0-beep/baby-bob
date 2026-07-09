@@ -2140,15 +2140,16 @@ function renderSubAnfragen(){
 }
 function msubListeHtml(list){
   if(!list.length) return '<div class="empty" style="padding:12px">Noch keine Sub-/Akkord-Anfragen. Partner legen sie im Partner-Cockpit an und schicken sie ab.</div>';
-  var neu=list.filter(function(a){return a.sub_status==='angefragt';}).length;
+  // „offen" = braucht noch ein Angebot (angefragt ODER in_pruefung). Der Auto-
+  // Übergang angefragt→in_pruefung beim Öffnen darf den Zähler NICHT auf 0 setzen.
   var offen=list.filter(function(a){return a.sub_status==='angefragt'||a.sub_status==='in_pruefung';}).length;
   var angOffen=list.filter(function(a){return a.sub_status==='angebot_offen';}).length;
   var ov='<div class="zs-ov">'+
     '<div class="zs-ov-head"><div>'+
       '<div class="zs-ov-vol">'+list.length+'</div>'+
       '<div class="zs-ov-sub">Sub-/Akkord-Anfrage'+(list.length!==1?'n':'')+' gesamt</div></div>'+
-      '<div class="zs-ov-badge" style="color:var(--gold)">'+neu+' neu</div></div>'+
-    '<div class="zs-ov-line"><span class="zs-ov-mut">'+offen+' in Bearbeitung</span><span class="zs-ov-ok" style="color:#4aa8ff">'+angOffen+' Angebot offen</span></div>'+
+      '<div class="zs-ov-badge" style="color:var(--gold)">'+offen+' offen</div></div>'+
+    '<div class="zs-ov-line"><span class="zs-ov-mut">'+offen+' braucht Angebot</span><span class="zs-ov-ok" style="color:#4aa8ff">'+angOffen+' Angebot offen</span></div>'+
   '</div>';
   var groups='';
   MSUB_STATUS_ORDER.forEach(function(st){
@@ -2167,7 +2168,7 @@ function msubCardHtml(a){
       msubLogoHtml(a.partner_logo,a.partner_firma,34)+
       '<div style="flex:1;min-width:0">'+
         '<div class="nm">'+esc(a.name||'Projekt')+'</div>'+
-        '<div class="meta"><span>'+esc(a.partner_firma||'—')+'</span>'+(meta?'<span class="dot">'+meta+'</span>':'')+'</div></div>'+
+        '<div class="meta">'+(a.anzeige_id?'<span style="color:var(--gold);font-weight:700">'+esc(a.anzeige_id)+'</span><span class="dot">'+esc(a.partner_firma||'—')+'</span>':'<span>'+esc(a.partner_firma||'—')+'</span>')+(meta?'<span class="dot">'+meta+'</span>':'')+'</div></div>'+
       pmPill(msubStatusLabel(a.sub_status),msubStatusColor(a.sub_status))+'</div>'+
     (a.beschreibung?'<div class="meta" style="margin-top:6px"><span>📝 '+esc(String(a.beschreibung).slice(0,140))+'</span></div>':'')+
     '<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">'+when+'</span></div>'+
@@ -2201,7 +2202,7 @@ function msubLifecycleHtml(b){
     '<div class="zs-ov-head"><div style="display:flex;align-items:center;gap:10px">'+
       msubLogoHtml(partner.logo_url_signed,partner.firma,40)+
       '<div><div style="font-weight:800;color:var(--txt);font-size:14px">'+esc(partner.firma||'Partner')+'</div>'+
-        '<div class="zs-ov-sub">Sub-/Akkordprojekt</div></div></div>'+
+        '<div class="zs-ov-sub">'+(b.anzeige_id?'<span style="color:var(--gold);font-weight:700">'+esc(b.anzeige_id)+'</span> · ':'')+'Sub-/Akkordprojekt</div></div></div>'+
       pmPill(msubStatusLabel(st),msubStatusColor(st))+'</div>'+
     (kontakt?'<div class="zs-ov-stats" style="margin-top:8px">'+kontakt+'</div>':'')+
     (b.angefragt_am?'<div class="zs-ov-stats">Angefragt: '+esc(zsFmt(b.angefragt_am,true))+'</div>':'')+
@@ -2211,12 +2212,41 @@ function msubLifecycleHtml(b){
   '</div>';
   return ov+msubKalkPanelHtml(b.kalk)+pmSec('📄 Angebot',msubAngebotHtml(ang));
 }
+var _subBundle=null;
 function wireMsubLifecycle(b){
-  b=b||{};
+  b=b||{}; _subBundle=b;
   _kalkSettings=(b.kalk&&b.kalk.settings)||null; _kalkPos=(b.kalk&&b.kalk.positionen)||[]; _kalkProjektId=b.projekt_id;
   var ka=$('kalk-add'); if(ka) ka.onclick=function(){ openKalkSheet(null); };
   var kg=$('kalk-settings'); if(kg) kg.onclick=openKalkSettings;
+  var qs=$('kalk-quicksend'); if(qs) qs.onclick=function(){ msubQuickSend(b.projekt_id); };
   wireMsubAngebot({id:b.projekt_id}, b.angebot||null);
+}
+// Schnellweg: Angebot aus den Bauabschnitten direkt abschicken (ohne Editor).
+function msubQuickSend(pid){
+  if(!confirm('Angebot mit den Positionen AUS DEN BAUABSCHNITTEN erzeugen und sofort an den Partner abschicken?')) return;
+  toast('Sende…');
+  api('msub_angebot_quick_send',{projekt_id:pid}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('Angebot abgeschickt'); openSubAnfrage(pid);
+  }).catch(function(){ toast('Fehler'); });
+}
+// „Positionen neu übernehmen": frisches Angebot aus aktuellen Bauabschnitten,
+// bestehende Konditionen behalten. Bei bereits abgeschicktem Angebot legt der
+// Server automatisch eine NEUE Version an (nie stille Änderung).
+function msubReprefill(pid){
+  var ang=(_subBundle&&_subBundle.angebot)||null;
+  var pos=(_kalkPos||[]).map(function(k){ return {bezeichnung:k.name,menge:1,einheit:'Pauschal',einzelpreis:k.gesamtbetrag}; });
+  var body={projekt_id:pid,positionen:pos,
+    rabatt_prozent:(ang&&ang.rabatt_prozent)||0, zuschlag_prozent:(ang&&ang.zuschlag_prozent)||0,
+    mwst_prozent:(ang&&ang.mwst_prozent!=null)?ang.mwst_prozent:8.1,
+    ansatz_chf_h:(ang&&ang.ansatz_chf_h!=null)?ang.ansatz_chf_h:'', bemerkung:(ang&&ang.bemerkung)||'',
+    zahlungsziel_tage:(ang&&ang.zahlungsziel_tage)||'', gueltig_bis:(ang&&ang.gueltig_bis)||'',
+    ausfuehrung_von:(ang&&ang.ausfuehrung_von)||'', ausfuehrung_bis:(ang&&ang.ausfuehrung_bis)||''};
+  toast('Übernehme…');
+  api('msub_angebot_save',body).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('Positionen übernommen'); openSubAnfrage(pid);
+  }).catch(function(){ toast('Fehler'); });
 }
 // ── Angebot-Zusammenfassung (Editor als Sheet, Abschicken wie bisher) ──
 function msubAngebotHtml(ang){
@@ -2236,14 +2266,21 @@ function msubAngebotHtml(ang){
   } else {
     info='<div class="empty" style="padding:12px">Noch kein Angebot. Kalkuliere die Bauabschnitte (oben) und erstelle dann das Angebot mit Positionen.</div>';
   }
+  // Veraltet-Warnung: Kalkulation wurde nach Angebot-Erstellung geändert.
+  var stale=ang&&_subBundle&&_subBundle.angebot_stale;
+  var staleBox=stale?('<div class="lcard" style="border-color:#e0a341;background:rgba(224,163,65,0.08);margin-top:8px">'+
+    '<div style="color:#e0a341;font-weight:800">⚠️ Kalkulation geändert — Angebot veraltet</div>'+
+    '<div class="meta" style="margin-top:4px"><span>Bauabschnitte aktuell: '+zsChf(_subBundle.bauabschnitt_summe)+'</span></div>'+
+    '<button class="btn btn-gold" id="msub-ang-reprefill" style="margin-top:8px">↻ Positionen neu übernehmen</button></div>'):'';
   if(decided) return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Vom Partner '+(ang.status==='angenommen'?'angenommen':'abgelehnt')+'.</span></div>';
-  if(sent) return info+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Angebot ist beim Partner – wartet auf Entscheidung.</span></div>';
-  return info+'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+  if(sent) return info+staleBox+'<div class="meta" style="margin-top:8px"><span style="color:var(--muted2)">Angebot ist beim Partner – wartet auf Entscheidung.</span></div>';
+  return info+staleBox+'<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
     '<button class="btn btn-gold" id="msub-ang-edit" style="width:auto;flex:1;min-width:150px">'+(ang?'✏️ Angebot bearbeiten':'✏️ Angebot erstellen')+'</button>'+
     (ang?'<button class="btn" id="msub-ang-send" style="width:auto;flex:1;min-width:150px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Abschicken</button>':'')+
   '</div>';
 }
 function wireMsubAngebot(p,ang){
+  var rp=$('msub-ang-reprefill'); if(rp) rp.onclick=function(){ msubReprefill(p.id); };
   var ed=$('msub-ang-edit'); if(ed) ed.onclick=function(){ openAngebotEditor(p.id,ang||null); };
   var sd=$('msub-ang-send'); if(sd) sd.onclick=function(){
     if(!confirm('Angebot jetzt an den Partner abschicken? Danach steht der Status auf „Angebot offen".')) return;
@@ -2260,8 +2297,8 @@ function kalkCalc(inp,s){
   s=s||{}; var stundenProTag=Number(s.stunden_pro_team_tag||8)||8;
   var personen=Math.max(1,(parseInt(inp.personen,10)||2));
   var teamTage=Math.max(0,Number(inp.team_tage||0));
-  var modus=inp.ansatz_modus==='schnell'?'schnell':'detailliert';
-  var ansatz=modus==='schnell'?Number(s.ansatz_schnell||85):Number(s.ansatz_detailliert||90);
+  var modus=(inp.ansatz_modus==='schnell'||inp.ansatz_modus==='schmerzgrenze')?inp.ansatz_modus:'detailliert';
+  var ansatz=modus==='schnell'?Number(s.ansatz_schnell||85):(modus==='schmerzgrenze'?Number(s.ansatz_minimum||75):Number(s.ansatz_detailliert||90));
   var v=teamTage*personen*stundenProTag, umsatz=v*ansatz;
   var kosten=(v*Number(s.vollkosten_chf_h||46))+(teamTage*personen*Number(s.spesen_pro_person_tag||40))+(teamTage*Number(s.kfz_pauschale_tag||20))+((teamTage/5)*Number(s.equipment_pro_woche||280));
   var rg=umsatz-kosten, dbh=v>0?rg/v:0, eff=v>0?(rg/v)+Number(s.vollkosten_chf_h||46):0;
@@ -2286,7 +2323,8 @@ function msubKalkPanelHtml(kalk){
       '<div class="meta" style="margin-top:2px"><span style="color:'+col+'">Rohgewinn '+zsChf(k.rohgewinn)+'</span><span class="dot">DB '+zsChf(k.db_pro_stunde)+'/h · eff. '+zsChf(k.eff_chf_h)+'/h</span></div>'+
       '<button class="chip" style="margin-top:8px;font-size:11px" onclick="openKalkSheet(\''+k.bauabschnitt_id+'\')">🧮 neu kalkulieren</button></div>';
   }).join(''):'<div class="empty" style="padding:12px">Noch keine kalkulierten Bauabschnitte. Über „＋ kalkulieren" den ersten anlegen.</div>';
-  return head+rows;
+  var quick=pos.length?('<button class="btn" id="kalk-quicksend" style="margin-top:10px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Angebot direkt abschicken ('+zsChf(pos.reduce(function(s,k){return s+Number(k.gesamtbetrag||0);},0))+')</button>'):'';
+  return head+rows+quick;
 }
 function kalkPreviewHtml(c){
   var col=kalkAmpelColor(c.ampel);
@@ -2297,42 +2335,77 @@ function kalkPreviewHtml(c){
     '<div class="zs-ov-stats">Ansatz '+zsChf(c.ansatz)+'/h · DB '+zsChf(c.db_pro_stunde)+'/h · effektiv '+zsChf(c.eff_chf_h)+'/h (Ampel-Basis)</div>'+
   '</div>';
 }
+var _kalkLastPreview=null, _kalkPrevTimer=null;
+function labeled(label,inner,hint){ return '<div class="sec-t">'+label+'</div>'+inner+(hint?'<div class="meta" style="margin-top:3px"><span style="color:var(--muted2);font-size:11px">'+hint+'</span></div>':''); }
 function openKalkSheet(baId){
   var k=null; if(baId){ (_kalkPos||[]).forEach(function(x){ if(x.bauabschnitt_id===baId) k=x; }); }
   var isNew=!baId;
   var s=_kalkSettings||{};
-  var neu=isNew?('<input class="field" id="k-name" placeholder="Name (z. B. Rohbau Haus A) *"/>'+
-    '<div class="sec-t">Split-Profil</div>'+pmSelect('k-profil',ZS_PROFILE,'stueck_15_70_15')+
-    '<div class="sec-t">Einheit</div>'+pmSelect('k-einheit',ZS_EINHEIT,'pauschal')+
-    '<input class="field" id="k-anzahl" type="number" min="0" placeholder="Anzahl Einheiten" style="margin-top:8px"/>'):'';
+  var ansatzOpts=[{v:'detailliert',t:'Detailliert ('+zsChf(s.ansatz_detailliert||90)+'/h)'},{v:'schnell',t:'Schnell ('+zsChf(s.ansatz_schnell||85)+'/h)'},{v:'schmerzgrenze',t:'Schmerzgrenze ('+zsChf(s.ansatz_minimum||75)+'/h)'}];
+  var neu=isNew?(labeled('Name','<input class="field" id="k-name" placeholder="z. B. Rohbau Haus A"/>')+
+    labeled('Split-Profil',pmSelect('k-profil',ZS_PROFILE,'stueck_15_70_15'))+
+    labeled('Einheit',pmSelect('k-einheit',ZS_EINHEIT,'pauschal'))+
+    labeled('Anzahl Einheiten','<input class="field" id="k-anzahl" type="number" min="1" placeholder="Anzahl" value="1"/>','Wie oft wird abgenommen und abgerechnet? Bei Pauschal = 1.')):'';
   openSheet('<h3>'+(isNew?'Bauabschnitt kalkulieren':'Neu kalkulieren')+'</h3>'+neu+
-    '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
-      '<input class="field" id="k-personen" type="number" min="1" placeholder="Personen" value="'+esc(k?k.personen:2)+'"/>'+
-      '<input class="field" id="k-tage" type="number" min="0" step="0.5" placeholder="Team-Tage" value="'+esc(k?k.team_tage:'')+'"/></div>'+
-    '<div class="sec-t">Ansatz</div>'+pmSelect('k-modus',[{v:'detailliert',t:'Detailliert ('+zsChf(s.ansatz_detailliert||90)+'/h)'},{v:'schnell',t:'Schnell ('+zsChf(s.ansatz_schnell||85)+'/h)'}],k?k.ansatz_modus:'detailliert')+
+    '<div style="display:flex;gap:8px;margin-top:8px">'+
+      '<div style="flex:1">'+labeled('Personen','<input class="field" id="k-personen" type="number" min="1" placeholder="Personen" value="'+esc(k?k.personen:2)+'"/>')+'</div>'+
+      '<div style="flex:1">'+labeled('Team-Tage','<input class="field" id="k-tage" type="number" min="0" step="0.5" placeholder="Team-Tage" value="'+esc(k?k.team_tage:'')+'"/>')+'</div></div>'+
+    '<div class="meta" style="margin-top:4px"><span id="k-stunden" style="color:var(--gold);font-weight:700"></span></div>'+
+    labeled('Ansatz',pmSelect('k-modus',ansatzOpts,k?k.ansatz_modus:'detailliert'))+
     '<div id="k-preview" style="margin-top:12px"></div>'+
+    '<div id="k-steppreview" style="margin-top:8px"></div>'+
     '<div class="login-msg" id="k-msg" style="margin-top:8px"></div>'+
     '<button class="btn btn-gold" id="k-save" style="margin-top:12px">Berechnen & übernehmen</button>'+
     '<button class="btn ghost" id="k-cancel">Abbrechen</button>');
   $('k-cancel').onclick=closeSheet;
-  function upd(){ var c=kalkCalc({personen:($('k-personen')||{}).value,team_tage:($('k-tage')||{}).value,ansatz_modus:($('k-modus')||{}).value},_kalkSettings); var pv=$('k-preview'); if(pv) pv.innerHTML=kalkPreviewHtml(c); }
-  ['k-personen','k-tage','k-modus'].forEach(function(id){ var e=$(id); if(e){ e.oninput=upd; e.onchange=upd; } });
-  upd();
+  // Pauschal → Anzahl auf 1 sperren.
+  function applyPauschalLock(){ var et=$('k-einheit'), an=$('k-anzahl'); if(et&&an){ if(et.value==='pauschal'){ an.value=1; an.readOnly=true; an.style.opacity='0.6'; } else { an.readOnly=false; an.style.opacity=''; } } }
+  function clientUpd(){
+    var c=kalkCalc({personen:($('k-personen')||{}).value,team_tage:($('k-tage')||{}).value,ansatz_modus:($('k-modus')||{}).value},_kalkSettings);
+    var pv=$('k-preview'); if(pv) pv.innerHTML=kalkPreviewHtml(c);
+    var st=$('k-stunden'); if(st){ var p=Math.max(1,parseInt(($('k-personen')||{}).value,10)||2), t=Math.max(0,Number(($('k-tage')||{}).value||0)), h=Number((_kalkSettings&&_kalkSettings.stunden_pro_team_tag)||8)||8; st.textContent=t+' T × '+p+' P × '+h+' h = '+(t*p*h)+' h'; }
+  }
+  function serverPreview(){
+    if(_kalkPrevTimer) clearTimeout(_kalkPrevTimer);
+    _kalkPrevTimer=setTimeout(function(){
+      var body={personen:($('k-personen')||{}).value,team_tage:($('k-tage')||{}).value,ansatz_modus:($('k-modus')||{}).value};
+      if(isNew){ body.split_profil=($('k-profil')||{}).value; body.einheit_typ=($('k-einheit')||{}).value; body.einheit_anzahl=($('k-anzahl')||{}).value||1; }
+      else { body.bauabschnitt_id=baId; }
+      api('msub_kalk_preview',body).then(function(d){
+        if(!d||d.error||d.notMigrated||!d.steps) return;
+        _kalkLastPreview=d;
+        var sp=$('k-steppreview'); if(!sp) return;
+        var st=d.steps; var anz=st.einheit_anzahl;
+        var warn=st.fortschritt>=15?'<div style="color:#e0a341;font-weight:700;margin-top:4px">⚠️ '+anz+' Einheiten ergeben '+st.zahlung+' Zahlungsschritte.</div>':'';
+        sp.innerHTML='<div class="lcard" style="margin:0"><div class="meta"><span>'+anz+' Einheit'+(anz!==1?'en':'')+' → <b>'+st.zahlung+' Zahlungsschritte</b>'+(st.fortschritt?(' à '+zsChf(st.fortschritt_betrag)):'')+'</span></div>'+warn+'</div>';
+      }).catch(function(){});
+    },300);
+  }
+  function upd(){ applyPauschalLock(); clientUpd(); serverPreview(); }
+  ['k-personen','k-tage','k-modus','k-anzahl','k-profil','k-einheit'].forEach(function(id){ var e=$(id); if(e){ e.oninput=upd; e.onchange=upd; } });
+  _kalkLastPreview=null; upd();
   $('k-save').onclick=function(){ submitKalk(baId,isNew); };
 }
 function submitKalk(baId,isNew){
-  var body={personen:($('k-personen')||{}).value,team_tage:($('k-tage')||{}).value,ansatz_modus:($('k-modus')||{}).value};
+  var msg=$('k-msg'); function err(t){ if(msg){ msg.className='login-msg err'; msg.textContent=t; } }
+  var pers=($('k-personen')||{}).value, tage=($('k-tage')||{}).value, modus=($('k-modus')||{}).value;
+  var body={personen:pers,team_tage:tage,ansatz_modus:modus};
   if(isNew){
-    var name=(($('k-name')||{}).value||'').trim();
-    if(!name){ $('k-msg').className='login-msg err'; $('k-msg').textContent='Name erforderlich'; return; }
-    body.projekt_id=_kalkProjektId; body.name=name; body.split_profil=($('k-profil')||{}).value; body.einheit_typ=($('k-einheit')||{}).value; body.einheit_anzahl=($('k-anzahl')||{}).value||0;
+    var nameEl=$('k-name'); var name=(nameEl&&nameEl.value?nameEl.value:'').trim();
+    if(!name){ err('Name erforderlich'); if(nameEl) nameEl.focus(); return; }
+    body.projekt_id=_kalkProjektId; body.name=name;
+    body.split_profil=($('k-profil')||{}).value; body.einheit_typ=($('k-einheit')||{}).value;
+    body.einheit_anzahl=(($('k-einheit')||{}).value==='pauschal')?1:(($('k-anzahl')||{}).value||1);
   } else { body.bauabschnitt_id=baId; }
-  if(!body.team_tage||Number(body.team_tage)<=0){ $('k-msg').className='login-msg err'; $('k-msg').textContent='Team-Tage erforderlich'; return; }
+  if(!tage||Number(tage)<=0){ err('Team-Tage erforderlich'); return; }
+  // Warnung ab 15 Fortschritt-Steps (kein Blocker, Bestätigung nötig).
+  var st=_kalkLastPreview&&_kalkLastPreview.steps;
+  if(st&&st.fortschritt>=15){ if(!confirm(st.einheit_anzahl+' Einheiten ergeben '+st.zahlung+' Zahlungsschritte. Sicher?')) return; }
   var btn=$('k-save'); if(btn){btn.disabled=true;btn.textContent='…';}
   api('msub_kalk_apply',body).then(function(d){
-    if(d&&d.error){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} $('k-msg').className='login-msg err'; $('k-msg').textContent=d.error; return; }
+    if(d&&d.error){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} err(d.error); return; }
     closeSheet(); toast('Kalkuliert · Umsatz '+zsChf((d.kalk||{}).umsatz)); openSubAnfrage(_kalkProjektId);
-  }).catch(function(){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} $('k-msg').className='login-msg err'; $('k-msg').textContent='Fehler'; });
+  }).catch(function(){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} err('Fehler'); });
 }
 function openKalkSettings(){
   api('msub_kalk_settings_get').then(function(d){
@@ -2343,13 +2416,13 @@ function openKalkSettings(){
       f('ks-vk','Vollkosten CHF/h',s.vollkosten_chf_h)+f('ks-sp','Spesen / Person·Tag',s.spesen_pro_person_tag)+
       f('ks-kfz','KFZ-Pauschale / Tag',s.kfz_pauschale_tag)+f('ks-eq','Equipment / Woche',s.equipment_pro_woche)+
       f('ks-h','Stunden / Team-Tag',s.stunden_pro_team_tag)+f('ks-ad','Ansatz detailliert',s.ansatz_detailliert)+
-      f('ks-as','Ansatz schnell',s.ansatz_schnell)+f('ks-ag','Ampel grün ab',s.ampel_gruen_ab)+f('ks-ar','Ampel rot unter',s.ampel_rot_unter)+
+      f('ks-as','Ansatz schnell',s.ansatz_schnell)+f('ks-am','Ansatz Schmerzgrenze',s.ansatz_minimum!=null?s.ansatz_minimum:75)+f('ks-ag','Ampel grün ab',s.ampel_gruen_ab)+f('ks-ar','Ampel rot unter',s.ampel_rot_unter)+
       '<div class="login-msg" id="ks-msg" style="margin-top:8px"></div>'+
       '<button class="btn btn-gold" id="ks-save" style="margin-top:12px">Speichern</button>'+
       '<button class="btn ghost" id="ks-cancel">Abbrechen</button>');
     $('ks-cancel').onclick=closeSheet;
     $('ks-save').onclick=function(){
-      var body={vollkosten_chf_h:$('ks-vk').value,spesen_pro_person_tag:$('ks-sp').value,kfz_pauschale_tag:$('ks-kfz').value,equipment_pro_woche:$('ks-eq').value,stunden_pro_team_tag:$('ks-h').value,ansatz_detailliert:$('ks-ad').value,ansatz_schnell:$('ks-as').value,ampel_gruen_ab:$('ks-ag').value,ampel_rot_unter:$('ks-ar').value};
+      var body={vollkosten_chf_h:$('ks-vk').value,spesen_pro_person_tag:$('ks-sp').value,kfz_pauschale_tag:$('ks-kfz').value,equipment_pro_woche:$('ks-eq').value,stunden_pro_team_tag:$('ks-h').value,ansatz_detailliert:$('ks-ad').value,ansatz_schnell:$('ks-as').value,ansatz_minimum:$('ks-am').value,ampel_gruen_ab:$('ks-ag').value,ampel_rot_unter:$('ks-ar').value};
       api('msub_kalk_settings_save',body).then(function(r){ if(r&&r.error){ $('ks-msg').className='login-msg err'; $('ks-msg').textContent=r.error; return; } closeSheet(); toast('Kostensätze gespeichert'); if(_kalkProjektId) openSubAnfrage(_kalkProjektId); });
     };
   });
@@ -2359,11 +2432,19 @@ function openKalkSettings(){
 var _angEditProjektId=null, _angPos=[], _angMeta={};
 function openAngebotEditor(projektId,ang){
   _angEditProjektId=projektId;
+  // Positionen aus den Bauabschnitten vorbefüllen (Name + Betrag), damit der Editor
+  // NIE leer öffnet. Reihenfolge: bestehende Angebots-Positionen > Vorschlag-Snapshot
+  // > aktuelle Bauabschnitte (_kalkPos).
+  var fromKalk=(_kalkPos||[]).map(function(k){return {bezeichnung:k.name,menge:1,einheit:'Pauschal',einzelpreis:k.gesamtbetrag};});
   _angPos=(ang&&Array.isArray(ang.positionen)&&ang.positionen.length)
     ? ang.positionen.map(function(p){return {bezeichnung:p.bezeichnung,menge:p.menge,einheit:p.einheit,einzelpreis:p.einzelpreis};})
-    : ((ang&&Array.isArray(ang.bauabschnitt_vorschlag))?ang.bauabschnitt_vorschlag.map(function(a){return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.gesamtbetrag};}):[]);
+    : ((ang&&Array.isArray(ang.bauabschnitt_vorschlag)&&ang.bauabschnitt_vorschlag.length)
+        ? ang.bauabschnitt_vorschlag.map(function(a){return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.gesamtbetrag};})
+        : fromKalk);
+  // Ansatz aus der Kalkulation vorbefüllen (falls Angebot noch keinen hat).
+  var kalkAnsatz=(_kalkPos&&_kalkPos.length&&_kalkPos[0].ansatz!=null)?_kalkPos[0].ansatz:'';
   _angMeta={ rabatt:(ang&&ang.rabatt_prozent)||0, zuschlag:(ang&&ang.zuschlag_prozent)||0, mwst:(ang&&ang.mwst_prozent!=null)?ang.mwst_prozent:8.1,
-    ansatz:(ang&&ang.ansatz_chf_h!=null)?ang.ansatz_chf_h:'', bemerkung:(ang&&ang.bemerkung)||'', zahlungsziel:(ang&&ang.zahlungsziel_tage)||'',
+    ansatz:(ang&&ang.ansatz_chf_h!=null)?ang.ansatz_chf_h:kalkAnsatz, bemerkung:(ang&&ang.bemerkung)||'', zahlungsziel:(ang&&ang.zahlungsziel_tage)||'',
     gueltig:(ang&&ang.gueltig_bis)||'', ausfvon:(ang&&ang.ausfuehrung_von)||'', ausfbis:(ang&&ang.ausfuehrung_bis)||'' };
   angRenderEditor();
 }
