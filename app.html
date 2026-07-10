@@ -955,12 +955,13 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   font-weight:700;cursor:pointer;transition:border-color .15s,color .15s;-webkit-tap-highlight-color:transparent;}
 #partner-dash .pd-logout:hover{border-color:rgba(201,169,97,.4);color:#C9A961;}
 /* Firmenlogo + Name oben rechts. Kompakt gehalten, damit der zentrierte Orb nie verdeckt wird. */
-#partner-dash .pd-brand{position:absolute;top:8px;right:10px;z-index:2;display:flex;flex-direction:column;
-  align-items:flex-end;gap:3px;max-width:118px;pointer-events:none;}
-#partner-dash .pd-brand img{max-height:46px;max-width:118px;object-fit:contain;border-radius:8px;display:block;
-  background:rgba(255,255,255,.04);padding:2px;}
-#partner-dash .pd-brand .pd-brand-name{font-size:11px;font-weight:800;color:#C9A961;text-align:right;
-  line-height:1.2;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Block 8 (Runde 7): Partner-Logo deutlich grösser (harmonisch zum Hero, ca. 130 px breit). */
+#partner-dash .pd-brand{position:absolute;top:10px;right:12px;z-index:2;display:flex;flex-direction:column;
+  align-items:flex-end;gap:4px;max-width:150px;pointer-events:none;}
+#partner-dash .pd-brand img{max-height:84px;max-width:150px;object-fit:contain;border-radius:10px;display:block;
+  background:rgba(255,255,255,.04);padding:3px;}
+#partner-dash .pd-brand .pd-brand-name{font-size:12px;font-weight:800;color:#C9A961;text-align:right;
+  line-height:1.2;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 #partner-dash .pd-orb{position:relative;width:96px;height:96px;margin:0 auto 16px;filter:drop-shadow(0 0 18px rgba(201,169,97,.28));}
 #partner-dash .pd-orb .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(201,169,97,.28);animation:pdspin 9s linear infinite;}
 #partner-dash .pd-orb .ring::after{content:'';position:absolute;top:-3px;left:calc(50% - 4px);width:8px;height:8px;border-radius:50%;background:#C9A961;box-shadow:0 0 12px 2px #C9A961;}
@@ -3359,6 +3360,7 @@ function openInRealBrowser(){
 // Aufgabe 1: Voice input → STT → BOB scan → answer read aloud.
 var bobRec=null,bobRecOn=false;
 function startListening(){
+  window.__bobVoiceIntent=true; // Nutzer spricht Bob aktiv an → Ton-Button erlaubt
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   var btn=document.getElementById('bob-mic-btn');
   if(isInAppBrowser()||!SR){
@@ -3490,6 +3492,7 @@ function bobUpdateVoiceIcon(){
   }
 }
 function toggleVoice(){
+  window.__bobVoiceIntent=true; // Nutzer schaltet Vorlesen aktiv ein/um → Ton-Button erlaubt
   bobVoiceOn=!bobVoiceOn;
   try{ localStorage.setItem('bob_voice',bobVoiceOn?'1':'0'); }catch(e){}
   try{ sessionStorage.setItem('bob_voice',bobVoiceOn?'1':'0'); }catch(e){}
@@ -3601,6 +3604,9 @@ function bobIsGsSilent(){
 }
 function bobShowUnlockBtn(){
   if(bobIsGsSilent()) return;        // GS-Kontext: niemals "Ton aktivieren" zeigen
+  // Block 8 (Runde 7): nur zeigen, wenn der Nutzer Bob AKTIV per Sprache angesprochen hat
+  // (Mic/Vorlesen). Bei automatischer Diagnose-Vorlesung NICHT global aufpoppen.
+  if(!window.__bobVoiceIntent) return;
   var b=document.getElementById('audio-unlock-btn'); if(b) b.style.display='flex';
   if(isInAppBrowser()){ var h=document.getElementById('inapp-hint'); if(h) h.style.display='block'; }
 }
@@ -3664,6 +3670,7 @@ function bobArmGestureUnlock(){
 // Big visible button → guaranteed user gesture → unlock + play pending speech or greeting.
 // (Does NOT reset bobGreetDone, so it can't double up with the document-gesture handler.)
 function bobUnlockFromButton(){
+  window.__bobVoiceIntent=true;
   bobHideUnlockBtn();
   bobUnlockAudio(function(){
     if(__bobPendingSpeak){ var t=__bobPendingSpeak; __bobPendingSpeak=null; bobSpeak(t.text,t.opts); }
@@ -6985,6 +6992,7 @@ function blAdminLoad(){
 }
 // 🔊 Blockaden-Status vorlesen (fertigen Text vom Backend → /api/voice).
 function blSpeakOverview(btn){
+  window.__bobVoiceIntent=true;
   if(btn&&btn.classList.contains('playing')){blStopSpeak();return;}
   blApi({action:'speak_text',demo:demoMode}).then(function(d){var t=(d&&d.text)||'';if(!t){toast('Kein Text zum Vorlesen');return;}blSpeak(t,btn);}).catch(function(){toast('⚠️ Konnte nicht vorlesen');});
 }
@@ -8097,7 +8105,8 @@ function pmFileDel(pathEnc){
 //   + sub_datei_* (reuse). Alles server-seitig auf eigene Projekte gescoped.
 // ══════════════════════════════════════════════════════════
 var subState={proj:null,data:null};
-var SUB_BEREICHE=['Sanitär','Heizung','Lüftung','Klima','HKLS','Elektro','Sanierung'];
+// Block 8 (Runde 7): „HKLS" entfernt — redundant neben Sanitär/Heizung/Lüftung/Klima.
+var SUB_BEREICHE=['Sanitär','Heizung','Lüftung','Klima','Elektro','Sanierung'];
 // Leistungsart (2. Ebene). Grund: später Bobs Trainingsmaterial in gs_bob_wissen.
 var SUB_LEISTUNGEN=[
   {gruppe:'Sanitär',items:['Badsanierung','Küchensanierung','Steigzonen','Rohrsanierung','Apparate-Montage']},
@@ -8145,7 +8154,9 @@ function subRender(){
 function subForm(p){
   p=p||{}; var sub=(p.datenblatt&&p.datenblatt.sub)||{}; var isNew=!p.id;
   var bereiche=(p.bereich||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
-  var chips=SUB_BEREICHE.map(function(b){ var on=bereiche.indexOf(b)>-1;
+  // Bereits gespeicherte, aber nicht mehr gelistete Werte (z. B. Alt-„HKLS") als Chip erhalten.
+  var bereichList=SUB_BEREICHE.concat(bereiche.filter(function(b){return SUB_BEREICHE.indexOf(b)<0;}));
+  var chips=bereichList.map(function(b){ var on=bereiche.indexOf(b)>-1;
     return '<span class="gs-chip'+(on?' sel':'')+'" data-b="'+b+'" onclick="subBereichPick(this)" style="cursor:pointer;">'+gsEsc(b)+'</span>'; }).join('');
   // Firma + Logo AUS DEM PROFIL (kein Eingabefeld) — Absender ist der Partner.
   var firma=(pdProfil&&pdProfil.firma)||'';

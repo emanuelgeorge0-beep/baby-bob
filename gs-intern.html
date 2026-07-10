@@ -2444,12 +2444,13 @@ function kalkCalc(inp,s){
   var v=teamTage*personen*stundenProTag, umsatz=v*ansatz;
   var kosten=(v*Number(s.vollkosten_chf_h||46))+(teamTage*personen*Number(s.spesen_pro_person_tag||40))+(teamTage*Number(s.kfz_pauschale_tag||20))+((teamTage/5)*Number(s.equipment_pro_woche||280));
   var rg=umsatz-kosten, dbh=v>0?rg/v:0, eff=v>0?(rg/v)+Number(s.vollkosten_chf_h||46):0;
-  var ampel=eff>=Number(s.ampel_gruen_ab||70)?'gruen':(eff>=Number(s.ampel_rot_unter||56)?'gelb':'rot');
+  // Block 8 (Runde 7): 0 Team-Tage → neutral/grau (noch nichts berechnet), nicht rot.
+  var ampel=(teamTage<=0||v<=0)?'grau':(eff>=Number(s.ampel_gruen_ab||70)?'gruen':(eff>=Number(s.ampel_rot_unter||56)?'gelb':'rot'));
   var r2=function(x){return Math.round(x*100)/100;};
   return {personen:personen,team_tage:r2(teamTage),ansatz_modus:modus,ansatz:r2(ansatz),verrechnungsstunden:r2(v),umsatz:r2(umsatz),kosten:r2(kosten),rohgewinn:r2(rg),db_pro_stunde:r2(dbh),eff_chf_h:r2(eff),ampel:ampel};
 }
-function kalkAmpelColor(a){ return a==='gruen'?'#3dd68c':(a==='gelb'?'#e0a341':'#ff5d5d'); }
-function kalkAmpelLabel(a){ return a==='gruen'?'🟢 grün':(a==='gelb'?'🟡 gelb':'🔴 rot'); }
+function kalkAmpelColor(a){ return a==='gruen'?'#3dd68c':(a==='gelb'?'#e0a341':(a==='grau'?'var(--muted2)':'#ff5d5d')); }
+function kalkAmpelLabel(a){ return a==='gruen'?'🟢 grün':(a==='gelb'?'🟡 gelb':(a==='grau'?'⚪ neutral':'🔴 rot')); }
 function msubKalkPanelHtml(kalk){
   kalk=kalk||{}; var pos=kalk.positionen||[];
   var head='<div class="cc-sec" style="display:flex;justify-content:space-between;align-items:center">'+

@@ -3517,9 +3517,12 @@ function kalkCompute(inp, s) {
   const rohgewinn = umsatz - kosten;
   const dbProStunde = vstunden > 0 ? rohgewinn / vstunden : 0;
   const effChfH = vstunden > 0 ? (rohgewinn / vstunden) + num(s.vollkosten_chf_h) : 0;
-  let ampel = 'rot';
-  if (effChfH >= num(s.ampel_gruen_ab)) ampel = 'gruen';
-  else if (effChfH >= num(s.ampel_rot_unter)) ampel = 'gelb';
+  // Block 8 (Runde 7): 0 Team-Tage → neutral/grau (noch nichts berechnet), nicht rot.
+  let ampel = (teamTage <= 0 || vstunden <= 0) ? 'grau' : 'rot';
+  if (ampel !== 'grau') {
+    if (effChfH >= num(s.ampel_gruen_ab)) ampel = 'gruen';
+    else if (effChfH >= num(s.ampel_rot_unter)) ampel = 'gelb';
+  }
   return {
     personen, team_tage: round2(teamTage), ansatz_modus: modus, ansatz: round2(ansatz),
     verrechnungsstunden: round2(vstunden), umsatz: round2(umsatz), kosten: round2(kosten),

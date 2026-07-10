@@ -504,6 +504,9 @@ async function suite(iter) {
   r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 6, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 9 });
   assert(r.d && r.d.steps.einheit_anzahl === 1 && r.d.steps.zahlung === 4 && r.d.steps.fortschritt === 2, '(2) pauschal: anzahl→1, Wochen-Regel 6T→2 Fortschritte');
   assert((await call(tok(P_ALL), { action: 'msub_kalk_preview', personen: 2, team_tage: 1 })).status === 403, '(2) partner kalk_preview → 403');
+  // Block 8 (Runde 7): 0 Team-Tage → Ampel neutral/grau (nicht rot vor der Berechnung).
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 0, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 3 });
+  assert(r.d && r.d.kalk && r.d.kalk.ampel === 'grau', '(B8) 0 Team-Tage → Ampel grau/neutral');
 
   // (1) Quick-Send: Angebot aus Bauabschnitten + direkt abschicken (ohne Editor).
   const spQ = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'Quick' })).d.projekt;
