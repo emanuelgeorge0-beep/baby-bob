@@ -248,7 +248,9 @@ export default async function handler(req, res) {
       case 'msub_in_pruefung':  return res.status(200).json(await msubInPruefung(req.body, access));
       case 'msub_angebot_save': return res.status(200).json(await msubAngebotSave(req.body, access));
       case 'msub_angebot_send': return res.status(200).json(await msubAngebotSend(req.body, access));
-      case 'msub_angebot_quick_send': return res.status(200).json(await msubAngebotQuickSend(req.body, access));
+      // Block 1 (Runde 8a): 'msub_angebot_quick_send' ENTFERNT — es gibt genau EINEN
+      // Versandweg (msub_angebot_save → msub_angebot_send), und der führt im Cockpit
+      // immer durch die Prüf-Ansicht. Kein Versand darf daran vorbei.
       case 'msub_kalk_preview':       return res.status(200).json(await msubKalkPreview(req.body, access));
       case 'msub_kalk_settings_get':  return res.status(200).json(await kalkSettingsGet(access));
       case 'msub_kalk_settings_save': return res.status(200).json(await kalkSettingsSave(req.body, access));
@@ -3329,26 +3331,9 @@ async function msubAngebotSend(b, access) {
     return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: 'angebot_offen' };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
-// Schnellweg: Angebot aus den Bauabschnitten erzeugen (Positionen automatisch) UND
-// direkt abschicken — ohne Umweg über den Editor. Ein bereits abgeschicktes Angebot
-// wird nicht still geändert; msubAngebotSave legt dann eine neue Version an.
-async function msubAngebotQuickSend(b, access) {
-  msubAssertMaster(access);
-  const pid = uuid(b.projekt_id);
-  // Block 1 (Runde 6): pro Projekt genau EIN aktives Angebot. Existiert bereits
-  // ein aktives Angebot (Entwurf/abgeschickt/besprechung/angenommen), wird der
-  // Schnellweg verweigert — eine neue Version läuft dann über die Prüf-Ansicht.
-  // Nur wenn kein Angebot existiert (oder das letzte abgelehnt wurde), ist quick_send offen.
-  const bestehend = await msubLatestAngebot(pid).catch(() => null);
-  if (bestehend && bestehend.status !== 'abgelehnt') {
-    return { error: 'Es existiert bereits ein aktives Angebot – bitte über „Angebot bearbeiten" / die Prüf-Ansicht abschicken.', hasActive: true };
-  }
-  const saved = await msubAngebotSave({ projekt_id: pid }, access); // Positionen auto aus Bauabschnitten
-  if (saved && saved.error) return saved;
-  const sent = await msubAngebotSend({ projekt_id: pid }, access);
-  if (sent && sent.error) return sent;
-  return { ok: true, angebot: sent.angebot, sub_status: 'angebot_offen', rechnung: saved.rechnung };
-}
+// Block 1 (Runde 8a): msubAngebotQuickSend ENTFERNT. Der Schnellweg („Angebot
+// direkt abschicken") umging die Prüf-Ansicht mit dem Zahlungsplan-Editor.
+// Versand läuft ausschliesslich über msub_angebot_save + msub_angebot_send.
 // Live-Vorschau fürs Kalk-Formular (Master-only): Kalk-Kennzahlen (INTERN) + die
 // echte Step-Vorschau aus der Engine (zsBuildSpecs/zsAllocate über gs_split_profile.
 // verteilung) — NIE hartcodiert nachgebaut. Schreibt nichts.

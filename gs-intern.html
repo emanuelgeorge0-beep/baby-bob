@@ -2215,7 +2215,12 @@ var GS_FIRMA={ name:'George Solutions', zeile2:'HKLS · Sub-/Akkordarbeiten', pl
   email:'info@george-solutions.ch', web:'george-solutions.ch', logo:'/cockpit-icon-192.png' };
 var _kalkSettings=null, _kalkPos=[], _kalkProjektId=null;
 function msubLifecycleHtml(b){
-  b=b||{}; var partner=b.partner||{}, ang=b.angebot||null, auf=b.auftrag||null, sub=b.sub||{}, st=b.sub_status||'entwurf';
+  // Block 2 (Runde 8a): _subBundle SOFORT setzen — msubKalkPanelHtml/msubAngebotHtml
+  // lesen es beim HTML-Aufbau. Wurde es erst in wireMsubLifecycle (nach dem Rendern)
+  // gesetzt, sah der Kalk-Panel-Button den ALTEN Zustand und erschien nach dem
+  // Versand fälschlich weiter.
+  b=b||{}; _subBundle=b;
+  var partner=b.partner||{}, ang=b.angebot||null, auf=b.auftrag||null, sub=b.sub||{}, st=b.sub_status||'entwurf';
   var kontakt=[sub.ansprechperson?'👤 '+esc(sub.ansprechperson):'',partner.telefon?'📞 '+esc(partner.telefon):'',partner.email?'✉ '+esc(partner.email):''].filter(Boolean).map(function(x){return '<span class="dot">'+x+'</span>';}).join('');
   var ov='<div class="zs-ov">'+
     '<div class="zs-ov-head"><div style="display:flex;align-items:center;gap:10px">'+
@@ -2251,16 +2256,20 @@ function wireMsubLifecycle(b){
   _kalkSettings=(b.kalk&&b.kalk.settings)||null; _kalkPos=(b.kalk&&b.kalk.positionen)||[]; _kalkProjektId=b.projekt_id;
   var ka=$('kalk-add'); if(ka) ka.onclick=function(){ openKalkSheet(null); };
   var kg=$('kalk-settings'); if(kg) kg.onclick=openKalkSettings;
-  var qs=$('kalk-quicksend'); if(qs) qs.onclick=function(){ msubQuickSend(b.projekt_id); };
+  var qs=$('kalk-review'); if(qs) qs.onclick=function(){ msubCreateAndReview(b.projekt_id); };
   wireMsubAngebot({id:b.projekt_id}, b.angebot||null);
 }
-// Schnellweg: Angebot aus den Bauabschnitten direkt abschicken (ohne Editor).
-function msubQuickSend(pid){
-  if(!confirm('Angebot mit den Positionen AUS DEN BAUABSCHNITTEN erzeugen und sofort an den Partner abschicken?')) return;
-  toast('Sende…');
-  api('msub_angebot_quick_send',{projekt_id:pid}).then(function(d){
+// Block 1 (Runde 8a): EIN Versandweg. Der frühere Schnellweg („direkt abschicken")
+// ist weg — der Button erzeugt nur noch einen Angebots-Entwurf (Positionen
+// automatisch aus den Bauabschnitten) und öffnet IMMER die Prüf-Ansicht
+// „Angebot prüfen & abschicken" mit dem Zahlungsplan-Editor.
+function msubCreateAndReview(pid){
+  toast('Erstelle Entwurf…');
+  api('msub_angebot_save',{projekt_id:pid}).then(function(d){
     if(d&&d.error){ toast(d.error); return; }
-    toast('Angebot abgeschickt'); openSubAnfrage(pid);
+    if(!d||!d.angebot){ toast('Fehler'); return; }
+    if(_subBundle) _subBundle.angebot=d.angebot;
+    openAngebotPruefung({id:pid},d.angebot);
   }).catch(function(){ toast('Fehler'); });
 }
 // „Positionen neu übernehmen": frisches Angebot aus aktuellen Bauabschnitten,
@@ -2343,6 +2352,8 @@ function openAngebotPruefung(p,ang){
   var abschnitte=(ang.bauabschnitt_vorschlag||[]).map(function(a){ return {name:a.name||'Abschnitt',steps:(a.steps||[]).map(function(s){ return {typ:(s.typ==='blockade'?'blockade':'zahlung'),zahlung_art:s.zahlung_art||null,bezeichnung:s.bezeichnung||'',betrag:Number(s.betrag||0)}; })}; });
   if(!pos.length&&abschnitte.length) pos=abschnitte.map(function(a){ return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.steps.reduce(function(s,st){return s+(st.typ==='zahlung'?Number(st.betrag||0):0);},0),im_zahlungsplan:true}; });
   _pl={projektId:p.id,ang:ang,positionen:pos,abschnitte:abschnitte,
+    // Block 1 (Runde 8a): drei Pflicht-Häkchen — ohne sie kein Versand.
+    checks:{pos:false,plan:false,kond:false},
     kond:{rabatt_prozent:ang.rabatt_prozent||0,zuschlag_prozent:ang.zuschlag_prozent||0,mwst_prozent:(ang.mwst_prozent!=null?ang.mwst_prozent:8.1),zahlungsziel_tage:ang.zahlungsziel_tage||null,gueltig_bis:ang.gueltig_bis||null,ausfuehrung_von:ang.ausfuehrung_von||null,ausfuehrung_bis:ang.ausfuehrung_bis||null}};
   plRender();
 }
@@ -2381,10 +2392,17 @@ function plAbschnittHtml(a,ai){
       '<button class="chip" onclick="plStepAdd('+ai+',\'blockade\')">＋ Blockade</button>'+
     '</div></div>';
 }
+// Block 1 (Runde 8a): drei Pflicht-Häkchen (Positionen | Zahlungsplan | Konditionen).
+function plChkHtml(key,label){
+  var on=_pl.checks&&_pl.checks[key];
+  return '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--txt);margin-top:6px;cursor:pointer"><input type="checkbox" id="pl-ok-'+key+'" '+(on?'checked':'')+' onchange="plLive()"/> '+label+'</label>';
+}
+function plChecksOk(){ var c=_pl.checks||{}; return !!(c.pos&&c.plan&&c.kond); }
 function plRender(){
   // Achtung: NICHT plReadInputs() hier — Aufrufer haben Eingaben bereits gelesen und den
   // State mutiert (Move/Toggle). Erneutes Lesen des alten DOM würde die Mutation zerstören.
   var stepC=plStepSum(), posC=plPosBasis(), ok=(stepC===posC), diff=(posC-stepC)/100;
+  var sendOk=ok&&plChecksOk();
   var status=ok
     ? '<div class="zs-ov-ok" style="color:#3dd68c;font-weight:800">✓ Summe Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'
     : '<div style="color:#ff5d5d;font-weight:800">noch '+zsChf(Math.abs(diff))+(diff>0?' nicht zugeordnet':' zu viel verteilt')+' — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>';
@@ -2397,9 +2415,11 @@ function plRender(){
     '<div class="sec-t" style="margin-top:14px">Zahlungsplan-Kette</div>'+
       (_pl.abschnitte.length?_pl.abschnitte.map(plAbschnittHtml).join(''):'<div class="empty" style="padding:8px">Kein Bauabschnitt – zuerst kalkulieren.</div>')+
     '<div class="sec-t" style="margin-top:14px">Konditionen</div>'+angPruefKonditionenHtml(_pl.ang)+
+    '<div class="sec-t" style="margin-top:14px">Prüfung (Pflicht)</div>'+
+      plChkHtml('pos','Positionen geprüft')+plChkHtml('plan','Zahlungsplan geprüft')+plChkHtml('kond','Konditionen geprüft')+
     '<div class="zs-ov" style="margin:12px 0 4px"><div class="zs-ov-line" id="pl-status">'+status+'</div></div>'+
     '<div class="login-msg" id="pl-msg"></div>'+
-    '<button class="btn btn-gold" id="pl-send" style="margin-top:8px'+(ok?'':';opacity:0.5')+'" '+(ok?'':'disabled')+'>📨 Abschicken</button>'+
+    '<button class="btn btn-gold" id="pl-send" style="margin-top:8px'+(sendOk?'':';opacity:0.5')+'" '+(sendOk?'':'disabled')+'>📨 Abschicken</button>'+
     '<button class="btn ghost" id="pl-cancel">Abbrechen</button>');
   $('pl-cancel').onclick=closeSheet;
   $('pl-send').onclick=plSend;
@@ -2417,6 +2437,7 @@ function plReadInputs(){
       if(n)s.bezeichnung=n.value; if(b&&s.typ==='zahlung')s.betrag=Number(b.value)||0;
     });
   });
+  if(_pl.checks){ ['pos','plan','kond'].forEach(function(k){ var c=$('pl-ok-'+k); if(c)_pl.checks[k]=!!c.checked; }); }
 }
 // Live-Neuberechnung ohne Re-Render (Fokus bleibt): Summenzeile + Subtotals + Send-Gate.
 function plLive(){
@@ -2426,7 +2447,8 @@ function plLive(){
     ? '<div class="zs-ov-ok" style="color:#3dd68c;font-weight:800">✓ Summe Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'
     : '<div style="color:#ff5d5d;font-weight:800">noch '+zsChf(Math.abs(diff))+(diff>0?' nicht zugeordnet':' zu viel verteilt')+' — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'; }
   _pl.abschnitte.forEach(function(a,ai){ var st=$('pl-sub-'+ai); if(st){ var t=a.steps.reduce(function(s,x){return s+(x.typ==='zahlung'?Math.round((Number(x.betrag)||0)*100):0);},0)/100; st.textContent=zsChf(t); } });
-  var b=$('pl-send'); if(b){ b.disabled=!ok; b.style.opacity=ok?'1':'0.5'; }
+  var sendOk=ok&&plChecksOk();
+  var b=$('pl-send'); if(b){ b.disabled=!sendOk; b.style.opacity=sendOk?'1':'0.5'; }
 }
 function plPosAdd(){ plReadInputs(); _pl.positionen.push({bezeichnung:'',menge:1,einheit:'Pauschal',einzelpreis:0,im_zahlungsplan:true}); plRender(); }
 function plPosDel(i){ plReadInputs(); _pl.positionen.splice(i,1); plRender(); }
@@ -2438,6 +2460,7 @@ function plSend(){
   plReadInputs();
   var b=$('pl-send'); if(b&&b.disabled) return;
   if(plStepSum()!==plPosBasis()){ plLive(); return; }
+  if(!plChecksOk()){ var m0=$('pl-msg'); if(m0){m0.className='login-msg err';m0.textContent='Bitte alle drei Prüf-Häkchen setzen (Positionen, Zahlungsplan, Konditionen).';} plLive(); return; }
   if(b){ b.disabled=true; b.textContent='…'; }
   var plan=_pl.abschnitte.map(function(a){ return {name:a.name,steps:a.steps.map(function(s){ return {typ:s.typ,zahlung_art:s.zahlung_art,bezeichnung:s.bezeichnung,betrag:s.typ==='zahlung'?Number(s.betrag)||0:0}; })}; });
   var body={projekt_id:_pl.projektId,plan:plan,positionen:_pl.positionen,
@@ -2489,12 +2512,13 @@ function msubKalkPanelHtml(kalk){
       '<div class="meta" style="margin-top:2px"><span style="color:'+col+'">Rohgewinn '+zsChf(k.rohgewinn)+'</span><span class="dot">DB '+zsChf(k.db_pro_stunde)+'/h · eff. '+zsChf(k.eff_chf_h)+'/h</span></div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="chip" style="margin-top:8px;font-size:11px" onclick="openKalkSheet(\''+k.bauabschnitt_id+'\')">🧮 neu kalkulieren</button>'+delBtn+'</div></div>';
   }).join(''):'<div class="empty" style="padding:12px">Noch keine kalkulierten Bauabschnitte. Über „＋ kalkulieren" den ersten anlegen.</div>';
-  // Block 1 (Runde 6): Nur EIN aktives Angebot. Sobald ein Angebot existiert
-  // (Entwurf/abgeschickt/…), verschwindet der Schnellweg — abgeschickt wird dann
-  // über die Prüf-Ansicht („Angebot bearbeiten"). Nur ein abgelehntes Angebot gibt
-  // den Schnellweg wieder frei.
+  // Block 1+2 (Runde 8a): Nur EIN aktives Angebot und nur EIN Versandweg.
+  // Der Button erzeugt einen Entwurf und öffnet die Prüf-Ansicht („Angebot
+  // erstellen & prüfen"). Sobald ein Angebot existiert (Entwurf/abgeschickt/
+  // besprechung/angenommen), verschwindet er — weiter geht es dann über
+  // „Angebot bearbeiten"/„Abschicken". Nur ein abgelehntes Angebot gibt ihn frei.
   var hatAktives=_ang&&_ang.status!=='abgelehnt';
-  var quick=(pos.length&&!hatAktives)?('<button class="btn" id="kalk-quicksend" style="margin-top:10px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Angebot direkt abschicken ('+zsChf(pos.reduce(function(s,k){return s+Number(k.gesamtbetrag||0);},0))+')</button>'):'';
+  var quick=(pos.length&&!hatAktives)?('<button class="btn" id="kalk-review" style="margin-top:10px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📋 Angebot erstellen & prüfen ('+zsChf(pos.reduce(function(s,k){return s+Number(k.gesamtbetrag||0);},0))+')</button>'):'';
   return head+rows+quick;
 }
 function kalkPreviewHtml(c){

@@ -508,14 +508,22 @@ async function suite(iter) {
   r = await call(tok(MASTER_UID), { action: 'msub_kalk_preview', personen: 2, team_tage: 0, ansatz_modus: 'detailliert', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 3 });
   assert(r.d && r.d.kalk && r.d.kalk.ampel === 'grau', '(B8) 0 Team-Tage → Ampel grau/neutral');
 
-  // (1) Quick-Send: Angebot aus Bauabschnitten + direkt abschicken (ohne Editor).
+  // (1→Runde 8a Block 1): Der Schnellweg (quick_send) ist ENTFERNT — Versand läuft
+  // ausschliesslich über save (Entwurf, Positionen auto aus Bauabschnitten) + send.
   const spQ = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'Quick' })).d.projekt;
   await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spQ.id, name: 'A', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  // (f) EISERN (Runde 8a): kein Versandweg umgeht die Prüf-Ansicht — die Action
+  // existiert serverseitig nicht mehr (400 Unknown action, kein Angebot entsteht).
   r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spQ.id });
-  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt' && r.d.sub_status === 'angebot_offen', '(1) quick_send: abgeschickt + angebot_offen');
-  assert(PROJEKTE.find((p) => p.id === spQ.id).sub_status === 'angebot_offen', '(1) quick_send: projekt-status persistiert');
+  assert(r.status === 400 && r.d && /Unknown action/i.test(r.d.error || ''), '(f) quick_send entfernt → 400 Unknown action');
+  assert(ANGEBOTE.filter((a) => a.projekt_id === spQ.id).length === 0, '(f) quick_send erzeugt KEIN Angebot mehr');
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spQ.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'entwurf' && r.d.angebot.positionen.length === 1, '(1) „erstellen & prüfen": Entwurf mit Positionen auto aus Bauabschnitten');
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spQ.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt' && r.d.sub_status === 'angebot_offen', '(1) send (Prüf-Ansicht): abgeschickt + angebot_offen');
+  assert(PROJEKTE.find((p) => p.id === spQ.id).sub_status === 'angebot_offen', '(1) projekt-status persistiert');
   r = await call(tok(P_ALL), { action: 'sub_projekt', id: spQ.id });
-  assert(r.d && r.d.angebot && Array.isArray(r.d.angebot.positionen) && r.d.angebot.positionen.length === 1, '(1) quick_send: positionen auto aus bauabschnitten');
+  assert(r.d && r.d.angebot && Array.isArray(r.d.angebot.positionen) && r.d.angebot.positionen.length === 1, '(1) positionen auto aus bauabschnitten');
 
   // (Abschluss/EISERN) Partner-Angebot-Payload enthält KEINE INTERN-Felder.
   const pq = r.d.angebot;
@@ -550,23 +558,23 @@ async function suite(iter) {
   // Settings zurück auf Default-Ansatz 90 (in §8 auf 95 gesetzt) für die Gegenproben.
   await call(tok(MASTER_UID), { action: 'msub_kalk_settings_save', ansatz_detailliert: 90, vollkosten_chf_h: 46 });
 
-  // ── BLOCK 1: pro Projekt genau EIN aktives Angebot (kein Doppel-Angebot) ──
+  // ── BLOCK 1 (Runde 6→8a): pro Projekt genau EIN aktives Angebot; Versand NUR
+  //    über save+send (Prüf-Ansicht). Der Schnellweg existiert nicht mehr. ──
   const spB1 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R6-Block1' })).d.projekt;
   await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spB1.id, name: 'A', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
-  // Erster Klick: Schnellweg schickt ab.
-  r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB1.id });
-  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt', '(B1) 1. quick_send → abgeschickt');
-  // Zweiter Klick: verweigert, weil bereits ein aktives Angebot existiert.
-  r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB1.id });
-  assert(r.d && r.d.error && r.d.hasActive && !r.d.ok, '(B1) 2. quick_send → verweigert (hasActive)');
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spB1.id });
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spB1.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt', '(B1) save+send → abgeschickt');
+  // Zweiter Versand: verweigert, das Angebot ist schon draussen.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spB1.id });
+  assert(r.d && r.d.error && !r.d.ok, '(B1) 2. send → verweigert (bereits abgeschickt)');
   assert(ANGEBOTE.filter((a) => a.projekt_id === spB1.id).length === 1, '(B1) zwei Klicks → nie zwei Angebote');
-  // Auch bei bestehendem Entwurf ist quick_send gesperrt.
+  // Bei bestehendem Entwurf aktualisiert save den Entwurf (kein zweites Angebot).
   const spB1b = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R6-Block1b' })).d.projekt;
   await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spB1b.id, name: 'A', split_profil: 'stueck_15_70_15', einheit_typ: 'pauschal', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
   await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spB1b.id }); // Entwurf
-  r = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB1b.id });
-  assert(r.d && r.d.error && r.d.hasActive, '(B1) quick_send bei bestehendem Entwurf → verweigert');
-  assert(ANGEBOTE.filter((a) => a.projekt_id === spB1b.id).length === 1 && ANGEBOTE.find((a) => a.projekt_id === spB1b.id).status === 'entwurf', '(B1) Entwurf bleibt unverändert (kein 2. Angebot)');
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spB1b.id }); // erneut („erstellen & prüfen" 2×)
+  assert(ANGEBOTE.filter((a) => a.projekt_id === spB1b.id).length === 1 && ANGEBOTE.find((a) => a.projekt_id === spB1b.id).status === 'entwurf', '(B1) Entwurf wird aktualisiert (kein 2. Angebot)');
 
   // ── BLOCK 2: interne Bezeichner NICHT in der Partner-Ansicht ──
   // spQ (aus §9) hat ein abgeschicktes Angebot mit bauabschnitt_vorschlag.
@@ -623,7 +631,8 @@ async function suite(iter) {
   const r2 = (x) => Math.round(x * 100) / 100;
   const spB6 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R6-Block6' })).d.projekt;
   await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spB6.id, name: 'Rohbau', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1, personen: 2, team_tage: 7, ansatz_modus: 'detailliert' });
-  const qs = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB6.id });
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spB6.id });
+  const qs = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spB6.id });
   const acceptBetrag = qs.d.angebot.gesamtbetrag; // brutto = Vertrags-/AB-Betrag (inkl. MWST)
   assert(acceptBetrag === r2(10080 * 1.081), '(B6) Angebot brutto = 10080 × 1.081');
   // Block 5 (Runde 7): Die Escrow-Kette summiert auf die NETTO-Positionsbasis (= Summe
@@ -772,6 +781,22 @@ async function suite(iter) {
 
 const RUNS = 5;
 for (let i = 1; i <= RUNS; i++) await suite(i);
+
+// ── (f) statisch (Runde 8a Block 1/2): kein Versandweg umgeht die Prüf-Ansicht.
+// Quelltext-Checks am Cockpit: der Schnellweg ist restlos raus, es gibt genau
+// EINEN send-Aufruf (in plSend, hinter den drei Pflicht-Häkchen), und der
+// Kalk-Panel-Button liest den FRISCHEN Bundle-Zustand (nicht den alten).
+const { readFileSync } = await import('node:fs');
+const gsHtml = readFileSync(new URL('../gs-intern.html', import.meta.url), 'utf8');
+const apiSrc = readFileSync(new URL('../api/cockpit.js', import.meta.url), 'utf8');
+assert(!gsHtml.includes("'msub_angebot_quick_send'"), '(f) Cockpit ruft quick_send nirgends mehr auf');
+assert(!gsHtml.includes('Angebot direkt abschicken'), '(f) Button „Angebot direkt abschicken" entfernt');
+assert(gsHtml.includes('Angebot erstellen & prüfen'), '(B1) Button heisst „Angebot erstellen & prüfen"');
+assert((gsHtml.match(/api\('msub_angebot_send'/g) || []).length === 1, '(f) genau EIN msub_angebot_send-Aufruf (Prüf-Ansicht/plSend)');
+assert(["plChkHtml('pos'", "plChkHtml('plan'", "plChkHtml('kond'"].every((s) => gsHtml.includes(s)) && /if\(!plChecksOk\(\)\)/.test(gsHtml), '(B1) drei Pflicht-Häkchen (Positionen/Zahlungsplan/Konditionen) gaten den Versand');
+assert(!/case 'msub_angebot_quick_send'/.test(apiSrc) && !/async function msubAngebotQuickSend/.test(apiSrc), '(f) Server-Action quick_send entfernt');
+const lcIdx = gsHtml.indexOf('function msubLifecycleHtml');
+assert(lcIdx > -1 && /_subBundle=b;/.test(gsHtml.slice(lcIdx, lcIdx + 800)), '(B2) msubLifecycleHtml setzt _subBundle VOR dem HTML-Aufbau');
 console.log(`\n${RUNS}× durchlaufen · PASS=${PASS} FAIL=${FAIL}`);
 if (FAIL) { console.log('FEHLGESCHLAGEN:'); [...new Set(FAILS)].forEach((f) => console.log('  ✗ ' + f)); process.exit(1); }
 console.log('✓ Alle Assertions grün (Gating, Branding, Sub-Lifecycle, Datentrennung, Master).');
