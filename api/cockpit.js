@@ -3278,6 +3278,38 @@ async function msubAngebotSave(b, access) {
     return { ok: true, angebot: Array.isArray(r) ? r[0] : r, rechnung: rech };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
+// Block 7 (Runde 7): Bei jedem abgeschickten Angebot einen Lern-Datensatz in
+// gs_bob_wissen schreiben — aus der vom Master FINAL angepassten Kette (nicht dem
+// Generator-Vorschlag). Best-effort; ein Fehler darf den Versand NIE blockieren.
+// Zwei-Stufen-Schreiben: fehlen die Runde-7-Spalten (personen/projekt_art/…), wird der
+// Kern über die bestehenden Spalten + datensatz(jsonb) gesichert.
+async function subWriteBobTraining(pid, angebot) {
+  const prow = (await sbGet(`gs_projekte?id=eq.${pid}&select=projekt_art,datenblatt&limit=1`).catch(() => []))[0] || {};
+  const leistungsarten = (prow.datenblatt && prow.datenblatt.sub && prow.datenblatt.sub.leistungsarten) || [];
+  const abs = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=*&order=reihenfolge.asc`).catch(() => []);
+  const first = (abs && abs[0]) || {};
+  let personen = null;
+  if (first.id) {
+    const kp = (await sbGet(`gs_kalk_positionen?bauabschnitt_id=eq.${first.id}&select=personen&limit=1`).catch(() => []))[0];
+    if (kp) personen = num(kp.personen);
+  }
+  const std = num(first.team_tage) * 8;
+  const ansatz = std > 0 ? round2(num(first.gesamtbetrag) / std) : null;
+  const finale = Array.isArray(angebot.bauabschnitt_vorschlag) ? angebot.bauabschnitt_vorschlag : [];
+  const datensatz = { angebot_id: angebot.id, projekt_art: prow.projekt_art || 'sub_akkord', leistungsarten, personen, gesamtbetrag: num(angebot.gesamtbetrag), finale_step_kette: finale };
+  const base = {
+    quelle: 'angebot_final', einheit_typ: first.einheit_typ || null, team_tage: num(first.team_tage),
+    einheit_anzahl: first.einheit_anzahl != null ? (first.einheit_anzahl | 0) : null,
+    split_profil: first.split_profil || null, ansatz_chf_h: ansatz, eff_chf_h: ansatz, datensatz,
+  };
+  const rich = { ...base, projekt_art: prow.projekt_art || 'sub_akkord', leistungsarten, personen, gesamtbetrag: num(angebot.gesamtbetrag), finale_step_kette: finale };
+  try { await sbWrite('POST', 'gs_bob_wissen', rich, 'return=minimal'); }
+  catch (e) {
+    // Runde-7-Spalten fehlen → Kern trotzdem sichern (Kette liegt in datensatz).
+    if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) await sbWrite('POST', 'gs_bob_wissen', base, 'return=minimal');
+    else throw e;
+  }
+}
 async function msubAngebotSend(b, access) {
   msubAssertMaster(access);
   try {
@@ -3292,6 +3324,8 @@ async function msubAngebotSend(b, access) {
     if (!chk.ok) return { error: `Zahlungsplan (${chk.stepSum.toFixed(2)}) ≠ Positionen (${chk.posBasis.toFixed(2)}) – ${Math.abs(chk.differenz).toFixed(2)} noch nicht zugeordnet.`, planMismatch: true, check: chk };
     const r = await sbWrite('PATCH', `gs_angebote?id=eq.${angebot.id}`, { status: 'abgeschickt', abgeschickt_am: new Date().toISOString() });
     await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { sub_status: 'angebot_offen' });
+    // Block 7 (Runde 7): Trainingsdatensatz aus der FINAL abgeschickten Kette (best-effort).
+    await subWriteBobTraining(pid, angebot).catch(() => {});
     return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: 'angebot_offen' };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }

@@ -22,7 +22,7 @@ function mkid() {
 }
 
 // ── In-Memory-Zustand (pro Testlauf frisch via resetState) ──
-let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE, BAUAB, STEPS, ESCROW, ANGEBOTE, AUFTRAG, KSET, KPOS;
+let ROLES, ENTS, PROFIL, PROJEKTE, STORAGE, BAUAB, STEPS, ESCROW, ANGEBOTE, AUFTRAG, KSET, KPOS, BOBWISSEN;
 function resetState() {
   ROLES = new Map();      // userId → role
   ENTS = new Map();       // `${pid} ${key}` → enabled
@@ -36,6 +36,7 @@ function resetState() {
   AUFTRAG = [];           // gs_auftragsbestaetigung
   KSET = null;            // gs_kalk_settings (Singleton)
   KPOS = [];              // gs_kalk_positionen
+  BOBWISSEN = [];         // gs_bob_wissen (Trainingsdaten)
   _uc = 0;
 }
 function setPartner(id, feats) {
@@ -177,6 +178,10 @@ globalThis.fetch = async (url, opts = {}) => {
       }
       if (method === 'POST') { const row = { id: mkid(), created_at: '2026-07-09T00:00:00Z', ...body }; ANGEBOTE.push(row); return ok([row]); }
       if (method === 'PATCH') { const hits = ANGEBOTE.filter((r) => match(r, filt)); hits.forEach((r) => Object.assign(r, body)); return ok(hits); }
+    }
+    if (table.startsWith('gs_bob_wissen')) {
+      if (method === 'GET') return ok(BOBWISSEN.filter((r) => match(r, filt)));
+      if (method === 'POST') { const rows = (Array.isArray(body) ? body : [body]).map((x) => ({ id: mkid(), ...x })); BOBWISSEN.push(...rows); return ok(rows); }
     }
     if (table.startsWith('gs_auftragsbestaetigung')) {
       if (method === 'GET') { let rows = AUFTRAG.filter((r) => match(r, filt)); if (/limit=1/.test(qs)) rows = rows.slice(0, 1); return ok(rows); }
@@ -721,7 +726,18 @@ async function suite(iter) {
   assert(ppos && ppos.length === 2 && !('berechnung' in ppos[0]) && !('personen' in ppos[0]) && ppos[1].im_zahlungsplan === false, '(B6) Partner-Positionen sanitisiert (keine berechnung/personen)');
   assert(!deepHasKey(r.d.angebot, 'berechnung') && !deepHasKey(r.d.angebot, 'personen'), '(B6) Partner-Angebot ohne berechnung/personen (deep)');
 
-  // ── BLOCK 7: Anzahlung ist Startbedingung (Statuszeile, kein Blinken) ──
+  // ══ BLOCK 7 (Runde 7): Trainingsdaten für Bob bei jedem abgeschickten Angebot ══
+  // Aus der FINAL angepassten Kette (nicht dem Generator-Vorschlag). spM wurde mit
+  // dem editierten Plan „Rate 950" abgeschickt → genau dieser Step muss im Datensatz sein.
+  const train = BOBWISSEN.filter((w) => w.quelle === 'angebot_final');
+  const tRec = train[train.length - 1];
+  assert(tRec && tRec.projekt_art === 'sub_akkord' && tRec.personen === 2 && Array.isArray(tRec.leistungsarten), '(B7) Trainingsdatensatz: projekt_art/personen/leistungsarten');
+  assert(tRec && Array.isArray(tRec.finale_step_kette) && tRec.finale_step_kette[0].steps.some((s) => s.bezeichnung === 'Rate' && Number(s.betrag) === 950), '(B7) finale_step_kette = FINAL editierte Kette (Rate 950)');
+  assert(tRec && Number(tRec.gesamtbetrag) > 0 && tRec.split_profil && tRec.einheit_typ, '(B7) gesamtbetrag/split_profil/einheit_typ mitgeschrieben');
+  // Kette liegt zusätzlich im datensatz(jsonb) — überlebt auch fehlende Runde-7-Spalten.
+  assert(tRec && tRec.datensatz && Array.isArray(tRec.datensatz.finale_step_kette), '(B7) datensatz(jsonb) enthält finale_step_kette (Migrations-Fallback)');
+
+  // ── BLOCK 7b: Anzahlung ist Startbedingung (Statuszeile, kein Blinken) ──
   // Plan aktiv, Anzahlung noch nicht hinterlegt → Startbedingung offen.
   r = await call(tok(MASTER_UID), { action: 'msub_detail', id: spB6.id });
   const mzp = r.d && r.d.sub_bundle && r.d.sub_bundle.zahlungsplan;
