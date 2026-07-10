@@ -702,6 +702,17 @@ async function suite(iter) {
   const eZ = r2(eSteps.filter((s) => s.typ === 'zahlung').reduce((x, s) => x + Number(s.betrag || 0), 0));
   assert(eZ === eNetto, '(B5) materialisierte Zahlungs-Steps summieren auf Positionsbasis (netto)');
   assert(r.d && r.d.zahlungsplan && !deepHasKey(r.d.zahlungsplan, 'split_profil') && !deepHasKey(r.d.zahlungsplan, 'einheit_typ'), '(B5) Partner-Zahlungsplan bleibt intern-sauber');
+  // (e) EISERN (Runde 7): nach dem Abschicken ist die Step-Kette UNVERÄNDERLICH.
+  // Eine neue Bearbeitung erzeugt eine neue Version; die abgeschickte/angenommene
+  // Kette + die materialisierten Live-Steps bleiben eingefroren.
+  const eSentAng = ANGEBOTE.find((a) => a.projekt_id === spE.id && a.status === 'angenommen');
+  const eVorBefore = JSON.stringify(eSentAng.bauabschnitt_vorschlag);
+  const eAngCountBefore = ANGEBOTE.filter((a) => a.projekt_id === spE.id).length;
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spE.id, plan: [{ name: 'Etappe', steps: [{ typ: 'zahlung', bezeichnung: 'GEÄNDERT', betrag: eNetto }] }], positionen: [{ bezeichnung: 'W', menge: 1, einheit: 'Pauschal', einzelpreis: eNetto }] });
+  assert(ANGEBOTE.filter((a) => a.projekt_id === spE.id).length === eAngCountBefore + 1, '(e) neue Bearbeitung = NEUE Version (nie in-place am abgeschickten Angebot)');
+  assert(JSON.stringify(eSentAng.bauabschnitt_vorschlag) === eVorBefore, '(e) abgeschickte/angenommene Step-Kette unverändert');
+  const eStepsAfter = STEPS.filter((s) => eIds.includes(s.bauabschnitt_id));
+  assert(eStepsAfter.some((s) => s.bezeichnung === 'Startzahlung') && !eStepsAfter.some((s) => s.bezeichnung === 'GEÄNDERT'), '(e) materialisierte Live-Kette bleibt eingefroren');
 
   // ══ BLOCK 6 (Runde 7): Einheiten-Positionen + Zahlungsplan-Häkchen ══════════
   // Netto = ALLE Positionen; Zahlungsplan-Basis = nur Positionen MIT Häkchen.
