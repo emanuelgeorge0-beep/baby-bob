@@ -3393,6 +3393,25 @@ async function msubKalkData(projektId) {
   });
   return { settings, positionen };
 }
+// BLOCK 1 (Runde 7): Idempotenz-Helfer. Liefert die id eines bereits vorhandenen,
+// gleichnamigen Bauabschnitts im selben Projekt, sofern noch KEIN Geld im Escrow
+// liegt (nur 'wartend'/'offen'/'geklaert'-Steps) — dann darf er gefahrlos statt
+// eines Duplikats neu berechnet werden. Sonst null (echter neuer Abschnitt).
+async function msubFindReusableAbschnitt(projektId, name) {
+  const nm = String(name || '').trim().slice(0, 120);
+  if (!nm) return null;
+  try {
+    const rows = await sbGet(`gs_bauabschnitte?projekt_id=eq.${projektId}&select=id,name,reihenfolge&order=reihenfolge.asc`);
+    const cand = (rows || []).filter((r) => String(r.name || '').trim() === nm);
+    for (const c of cand) {
+      const steps = await sbGet(`gs_steps?bauabschnitt_id=eq.${c.id}&select=status`).catch(() => []);
+      const moved = (steps || []).some((s) => ['hinterlegt', 'gs_fertig', 'freigegeben'].includes(s.status));
+      if (!moved) return c.id;
+    }
+    return null;
+  } catch (e) { if (isNoTable(e)) return null; throw e; }
+}
+
 // Kalkulieren & uebernehmen: berechnet Umsatz und setzt ihn als gesamtbetrag ueber
 // die BESTEHENDE Engine (zsAbschnittSave → Kette). Legt bei Bedarf den Abschnitt an.
 async function msubKalkApply(b, access) {
@@ -3401,6 +3420,13 @@ async function msubKalkApply(b, access) {
     const settings = await kalkSettingsRead();
     const calc = kalkCompute({ personen: b.personen, team_tage: b.team_tage, ansatz_modus: b.ansatz_modus }, settings);
     let bauId = b.bauabschnitt_id ? uuid(b.bauabschnitt_id) : null;
+    // BLOCK 1 (Runde 7) — Doppelklick-/Retry-Schutz, serverseitig idempotent.
+    // Ohne bauabschnitt_id würde jeder Klick eine neue Zeile anlegen. Ein früherer
+    // (post-insert) Fehler ließ die Zeile stehen und die Client-Retry erzeugte
+    // Duplikate (Test: 4 identische Bauabschnitte). Fix: einen frisch angelegten,
+    // gleichnamigen Abschnitt desselben Projekts wiederverwenden, solange noch kein
+    // Geld im Escrow liegt. So kollabieren schnelle Mehrfachklicks auf EINEN Abschnitt.
+    if (!bauId && b.projekt_id) bauId = await msubFindReusableAbschnitt(uuid(b.projekt_id), b.name);
     const save = {
       id: bauId || undefined,
       projekt_id: bauId ? undefined : (b.projekt_id ? uuid(b.projekt_id) : undefined),
@@ -3411,11 +3437,13 @@ async function msubKalkApply(b, access) {
     if (zr && zr.error) return zr;
     bauId = (zr && zr.abschnitt && zr.abschnitt.id) || bauId;
     if (!bauId) return { error: 'Bauabschnitt nicht gespeichert' };
+    // Kalk-Eingaben sind nur ein Audit-Nebenprodukt; ein Fehler hier darf nach
+    // erfolgreichem Insert NIE einen 500 „Serverfehler" auslösen (Duplikat-Ursache).
     try {
       await sbWrite('POST', 'gs_kalk_positionen?on_conflict=bauabschnitt_id',
         { bauabschnitt_id: bauId, personen: calc.personen, team_tage: calc.team_tage, ansatz_modus: calc.ansatz_modus, updated_at: new Date().toISOString() },
         'resolution=merge-duplicates,return=minimal');
-    } catch (e) { if (!isNoTable(e)) throw e; /* Kalk-Tabelle fehlt → Umsatz ist dennoch gesetzt */ }
+    } catch (e) { console.error('kalk_positionen upsert (nicht kritisch):', e.message); }
     return { ok: true, bauabschnitt_id: bauId, kalk: calc };
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }

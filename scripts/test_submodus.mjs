@@ -390,6 +390,13 @@ async function suite(iter) {
   const baId3 = r.d.bauabschnitt_id;
   assert(BAUAB.find((a) => a.id === baId3).gesamtbetrag === 7200, 'kalk: umsatz → gesamtbetrag');
   assert(KPOS.find((k) => k.bauabschnitt_id === baId3).personen === 2, 'kalk: eingaben gespeichert');
+  // (d) BLOCK 1: ein Klick = EIN Bauabschnitt. Idempotenz: gleiches Projekt + gleicher
+  // Name erneut „berechnen & übernehmen" darf KEIN Duplikat erzeugen (Retry-Schutz),
+  // solange kein Geld im Escrow liegt. Vier Klicks = ein Abschnitt.
+  assert(BAUAB.filter((a) => a.projekt_id === sp3.id).length === 1, '(d) ein Klick = ein Bauabschnitt');
+  for (let k = 0; k < 3; k++) await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: sp3.id, name: 'Rohbau', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 3, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  assert(BAUAB.filter((a) => a.projekt_id === sp3.id).length === 1, '(d) vier Klicks (Retry) = weiterhin EIN Bauabschnitt');
+  assert(BAUAB.find((a) => a.id === baId3), '(d) Retry benutzt denselben Abschnitt (kein neuer)');
 
   // Interne Kalk-Daten im Master-Detail (nur hier).
   r = await call(tok(MASTER_UID), { action: 'msub_detail', id: sp3.id });
