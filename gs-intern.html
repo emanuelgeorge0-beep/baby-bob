@@ -2599,11 +2599,12 @@ function openAngebotEditor(projektId,ang){
   // Positionen aus den Bauabschnitten vorbefüllen (Name + Betrag), damit der Editor
   // NIE leer öffnet. Reihenfolge: bestehende Angebots-Positionen > Vorschlag-Snapshot
   // > aktuelle Bauabschnitte (_kalkPos).
-  var fromKalk=(_kalkPos||[]).map(function(k){return {bezeichnung:k.name,menge:1,einheit:'Pauschal',einzelpreis:k.gesamtbetrag};});
+  var kPers=(_kalkPos&&_kalkPos.length&&_kalkPos[0].personen)||2;
+  var fromKalk=(_kalkPos||[]).map(function(k){return {bezeichnung:k.name,menge:1,einheit:'Pauschal',einzelpreis:k.gesamtbetrag,berechnung:'pauschal',personen:kPers,im_zahlungsplan:true};});
   _angPos=(ang&&Array.isArray(ang.positionen)&&ang.positionen.length)
-    ? ang.positionen.map(function(p){return {bezeichnung:p.bezeichnung,menge:p.menge,einheit:p.einheit,einzelpreis:p.einzelpreis};})
+    ? ang.positionen.map(function(p){return {bezeichnung:p.bezeichnung,menge:p.menge,einheit:p.einheit,einzelpreis:p.einzelpreis,berechnung:p.berechnung||'pauschal',personen:p.personen||kPers,im_zahlungsplan:p.im_zahlungsplan!==false};})
     : ((ang&&Array.isArray(ang.bauabschnitt_vorschlag)&&ang.bauabschnitt_vorschlag.length)
-        ? ang.bauabschnitt_vorschlag.map(function(a){return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.gesamtbetrag};})
+        ? ang.bauabschnitt_vorschlag.map(function(a){return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.gesamtbetrag,berechnung:'pauschal',personen:kPers,im_zahlungsplan:true};})
         : fromKalk);
   // Ansatz aus der Kalkulation vorbefüllen (falls Angebot noch keinen hat).
   var kalkAnsatz=(_kalkPos&&_kalkPos.length&&_kalkPos[0].ansatz!=null)?_kalkPos[0].ansatz:'';
@@ -2612,14 +2613,49 @@ function openAngebotEditor(projektId,ang){
     gueltig:(ang&&ang.gueltig_bis)||'', ausfvon:(ang&&ang.ausfuehrung_von)||'', ausfbis:(ang&&ang.ausfuehrung_bis)||'' };
   angRenderEditor();
 }
+// Block 6 (Runde 7): Einheiten-Dropdown pro Position mit Live-Berechnung.
+var ANG_EINHEIT=[['pauschal','Pauschal'],['stunden','Stunden'],['team_tage','Team-Tage'],['stueck','Stück'],['material','Material'],['spesen','Spesen'],['anfahrt','Anfahrt'],['fremdgewerk','Fremdgewerk']];
+function angEinheitLabel(k){ for(var j=0;j<ANG_EINHEIT.length;j++) if(ANG_EINHEIT[j][0]===k) return ANG_EINHEIT[j][1]; return 'Pauschal'; }
+// Einzelpreis je Berechnungsart ableiten (Stunden/Team-Tage aus dem Ansatz).
+function angPosPreis(p,ansatz){
+  ansatz=Number(ansatz)||0;
+  if(p.berechnung==='stunden') return ansatz;
+  if(p.berechnung==='team_tage') return (Number(p.personen)||1)*8*ansatz;
+  return Number(p.einzelpreis)||0; // pauschal/stueck/material/spesen/anfahrt/fremdgewerk = manuell
+}
+function angPosLine(p,ansatz){
+  var ep=angPosPreis(p,ansatz);
+  var menge=(p.berechnung==='stunden'||p.berechnung==='team_tage'||p.berechnung==='stueck')?(Number(p.menge)||0):1;
+  return Math.round(menge*ep*100)/100;
+}
 function angPosRowHtml(p,i){
+  var ans=Number(_angMeta.ansatz)||0;
+  var computed=(p.berechnung==='stunden'||p.berechnung==='team_tage');
+  var freeAmount=(p.berechnung==='pauschal'||p.berechnung==='material'||p.berechnung==='spesen'||p.berechnung==='anfahrt'||p.berechnung==='fremdgewerk');
+  var opts=ANG_EINHEIT.map(function(o){return '<option value="'+o[0]+'"'+(p.berechnung===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('');
+  var fields='';
+  if(freeAmount){
+    fields='<input class="field" id="ap-preis-'+i+'" type="number" min="0" step="0.01" placeholder="Betrag" value="'+esc(p.einzelpreis!=null?p.einzelpreis:0)+'" style="flex:1"/>';
+  } else if(p.berechnung==='stunden'){
+    fields='<input class="field" id="ap-menge-'+i+'" type="number" min="0" step="0.01" placeholder="Std" value="'+esc(p.menge!=null?p.menge:1)+'" style="flex:0 0 70px"/>'+
+      '<span style="align-self:center;font-size:11px;color:var(--muted2)">Std × '+zsChf(ans)+'/h</span>';
+  } else if(p.berechnung==='team_tage'){
+    fields='<input class="field" id="ap-menge-'+i+'" type="number" min="0" step="0.01" placeholder="Tage" value="'+esc(p.menge!=null?p.menge:1)+'" style="flex:0 0 60px"/>'+
+      '<input class="field" id="ap-pers-'+i+'" type="number" min="1" step="1" placeholder="Pers" value="'+esc(p.personen||2)+'" style="flex:0 0 56px"/>'+
+      '<span style="align-self:center;font-size:11px;color:var(--muted2)">P×8×'+zsChf(ans)+'</span>';
+  } else { // stueck
+    fields='<input class="field" id="ap-menge-'+i+'" type="number" min="0" step="0.01" placeholder="Stk" value="'+esc(p.menge!=null?p.menge:1)+'" style="flex:0 0 60px"/>'+
+      '<input class="field" id="ap-preis-'+i+'" type="number" min="0" step="0.01" placeholder="Einzelpreis" value="'+esc(p.einzelpreis!=null?p.einzelpreis:0)+'" style="flex:1"/>';
+  }
   return '<div data-pi="'+i+'" style="border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px">'+
-    '<input class="field" id="ap-bez-'+i+'" placeholder="Bezeichnung" value="'+esc(p.bezeichnung||'')+'"/>'+
+    '<div style="display:flex;gap:6px"><input class="field" id="ap-bez-'+i+'" placeholder="Bezeichnung" value="'+esc(p.bezeichnung||'')+'" style="flex:1"/>'+
+      '<button class="chip" data-del="'+i+'" style="flex:0 0 auto">×</button></div>'+
     '<div style="display:flex;gap:6px;margin-top:6px">'+
-      '<input class="field" id="ap-menge-'+i+'" type="number" min="0" step="0.01" placeholder="Menge" value="'+esc(p.menge!=null?p.menge:1)+'" style="flex:0 0 66px"/>'+
-      '<input class="field" id="ap-einh-'+i+'" placeholder="Einheit" value="'+esc(p.einheit||'Pauschal')+'" style="flex:0 0 88px"/>'+
-      '<input class="field" id="ap-preis-'+i+'" type="number" min="0" step="0.01" placeholder="Einzelpreis" value="'+esc(p.einzelpreis!=null?p.einzelpreis:0)+'" style="flex:1"/>'+
-      '<button class="chip" data-del="'+i+'" style="flex:0 0 auto">×</button></div></div>';
+      '<select class="field" id="ap-ber-'+i+'" style="flex:0 0 108px">'+opts+'</select>'+fields+'</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">'+
+      '<label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer" title="Fliesst in den Zahlungsplan (Escrow)"><input type="checkbox" id="ap-plan-'+i+'" '+(p.im_zahlungsplan!==false?'checked':'')+' onchange="angUpdateTotals()"/> in Zahlungsplan</label>'+
+      '<span class="dot" id="ap-line-'+i+'" style="color:var(--gold);font-weight:700">'+zsChf(angPosLine(p,ans))+'</span></div>'+
+  '</div>';
 }
 function angTotalsHtml(c){
   return '<div class="zs-ov" style="margin:0">'+
@@ -2630,11 +2666,21 @@ function angTotalsHtml(c){
   '</div>';
 }
 function angReadInputs(){
+  // Ansatz zuerst lesen — Stunden/Team-Tage-Positionen rechnen damit.
+  var ansatz=($('ang-ansatz')||{}).value||'';
   var rows=document.querySelectorAll('#ang-pos-rows [data-pi]');
   _angPos=Array.prototype.map.call(rows,function(r){ var i=r.getAttribute('data-pi');
-    return { bezeichnung:(($('ap-bez-'+i)||{}).value||''), menge:Number(($('ap-menge-'+i)||{}).value||0), einheit:(($('ap-einh-'+i)||{}).value||'Pauschal'), einzelpreis:Number(($('ap-preis-'+i)||{}).value||0) }; });
+    var ber=(($('ap-ber-'+i)||{}).value||'pauschal');
+    var free=(ber==='pauschal'||ber==='material'||ber==='spesen'||ber==='anfahrt'||ber==='fremdgewerk');
+    var menge=free?1:Number(($('ap-menge-'+i)||{}).value||0);
+    var pers=Number(($('ap-pers-'+i)||{}).value||2)||2;
+    var p={ bezeichnung:(($('ap-bez-'+i)||{}).value||''), menge:menge, einheit:angEinheitLabel(ber), berechnung:ber, personen:pers,
+      einzelpreis:Number(($('ap-preis-'+i)||{}).value||0), im_zahlungsplan:!!(($('ap-plan-'+i)||{}).checked) };
+    // Einzelpreis für berechnete Arten aus dem Ansatz ableiten (Backend rechnet menge×einzelpreis).
+    p.einzelpreis=angPosPreis(p,ansatz);
+    return p; });
   _angMeta.rabatt=Number(($('ang-rabatt')||{}).value||0); _angMeta.zuschlag=Number(($('ang-zuschlag')||{}).value||0); _angMeta.mwst=Number(($('ang-mwst')||{}).value||0);
-  _angMeta.ansatz=($('ang-ansatz')||{}).value||''; _angMeta.bemerkung=($('ang-bem')||{}).value||''; _angMeta.zahlungsziel=($('ang-ziel')||{}).value||'';
+  _angMeta.ansatz=ansatz; _angMeta.bemerkung=($('ang-bem')||{}).value||''; _angMeta.zahlungsziel=($('ang-ziel')||{}).value||'';
   _angMeta.gueltig=($('ang-gueltig')||{}).value||''; _angMeta.ausfvon=($('ang-von')||{}).value||''; _angMeta.ausfbis=($('ang-bis')||{}).value||'';
 }
 function angCalc(){
@@ -2643,7 +2689,12 @@ function angCalc(){
   var mw=nz*Number(_angMeta.mwst||0)/100; var r2=function(x){return Math.round(x*100)/100;};
   return {netto:r2(netto),zwischensumme:r2(nz),mwst:r2(mw),brutto:r2(nz+mw)};
 }
-function angUpdateTotals(){ angReadInputs(); var t=$('ang-totals'); if(t) t.innerHTML=angTotalsHtml(angCalc()); }
+function angUpdateTotals(){
+  angReadInputs();
+  var ans=_angMeta.ansatz;
+  _angPos.forEach(function(p,i){ var el=$('ap-line-'+i); if(el) el.textContent=zsChf(angPosLine(p,ans)); });
+  var t=$('ang-totals'); if(t) t.innerHTML=angTotalsHtml(angCalc());
+}
 function angRenderEditor(){
   var m=_angMeta, gs=GS_FIRMA;
   var header='<div class="lcard" style="margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px">'+
@@ -2669,9 +2720,11 @@ function angRenderEditor(){
     '<button class="btn btn-gold" id="ang-save" style="margin-top:12px">Speichern</button>'+
     '<button class="btn ghost" id="ang-cancel">Abbrechen</button>');
   $('ang-cancel').onclick=closeSheet;
-  $('ang-add').onclick=function(){ angReadInputs(); _angPos.push({bezeichnung:'',menge:1,einheit:'Pauschal',einzelpreis:0}); angRenderEditor(); };
+  $('ang-add').onclick=function(){ angReadInputs(); _angPos.push({bezeichnung:'',menge:1,einheit:'Pauschal',einzelpreis:0,berechnung:'pauschal',personen:2,im_zahlungsplan:true}); angRenderEditor(); };
   Array.prototype.forEach.call(document.querySelectorAll('#ang-pos-rows [data-del]'),function(x){ x.onclick=function(){ angReadInputs(); _angPos.splice(Number(x.getAttribute('data-del')),1); angRenderEditor(); }; });
-  var live=['ang-rabatt','ang-zuschlag','ang-mwst']; _angPos.forEach(function(p,i){ live.push('ap-menge-'+i,'ap-preis-'+i); });
+  // Berechnungsart wechseln → Felder ändern sich → Re-Render. Übrige Eingaben rechnen live.
+  _angPos.forEach(function(p,i){ var sel=$('ap-ber-'+i); if(sel) sel.onchange=function(){ angReadInputs(); angRenderEditor(); }; });
+  var live=['ang-rabatt','ang-zuschlag','ang-mwst','ang-ansatz']; _angPos.forEach(function(p,i){ live.push('ap-menge-'+i,'ap-preis-'+i,'ap-pers-'+i); });
   live.forEach(function(id){ var e=$(id); if(e) e.oninput=angUpdateTotals; });
   $('ang-save').onclick=saveAngebotEditor;
   angUpdateTotals();

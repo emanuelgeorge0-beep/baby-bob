@@ -695,6 +695,32 @@ async function suite(iter) {
   assert(eZ === eNetto, '(B5) materialisierte Zahlungs-Steps summieren auf Positionsbasis (netto)');
   assert(r.d && r.d.zahlungsplan && !deepHasKey(r.d.zahlungsplan, 'split_profil') && !deepHasKey(r.d.zahlungsplan, 'einheit_typ'), '(B5) Partner-Zahlungsplan bleibt intern-sauber');
 
+  // ══ BLOCK 6 (Runde 7): Einheiten-Positionen + Zahlungsplan-Häkchen ══════════
+  // Netto = ALLE Positionen; Zahlungsplan-Basis = nur Positionen MIT Häkchen.
+  // Material (Kundenkonto) → Häkchen aus → NICHT in der Escrow-Kette.
+  const spM = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R7-Einheiten' })).d.projekt;
+  await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spM.id, name: 'Etappe', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  const posM = [
+    { bezeichnung: 'Arbeit', berechnung: 'stunden', menge: 10, einheit: 'Stunden', einzelpreis: 95, im_zahlungsplan: true },
+    { bezeichnung: 'Material Rohre', berechnung: 'material', menge: 1, einheit: 'Material', einzelpreis: 500, im_zahlungsplan: false },
+  ];
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spM.id, positionen: posM });
+  assert(r.d && r.d.rechnung.netto === 1450, '(B6) Netto = ALLE Positionen (950 Arbeit + 500 Material)');
+  assert(r.d.angebot.positionen[0].berechnung === 'stunden' && r.d.angebot.positionen[1].im_zahlungsplan === false, '(B6) Berechnungsart + Häkchen gespeichert (Master)');
+  // Zahlungsplan-Basis = 950 (Material ohne Häkchen ausgeschlossen): Steps 1450 → Mismatch.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spM.id, positionen: posM, plan: [{ name: 'Etappe', steps: [{ typ: 'zahlung', bezeichnung: 'Rate', betrag: 1450 }] }] });
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spM.id });
+  assert(r.d && r.d.error && r2(r.d.check.posBasis) === 950, '(B6) Material NICHT in Zahlungsplan-Basis (950, nicht 1450)');
+  // Steps = 950 → passt zur Häkchen-Basis → Abschicken erlaubt.
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spM.id, positionen: posM, plan: [{ name: 'Etappe', steps: [{ typ: 'zahlung', bezeichnung: 'Rate', betrag: 950 }] }] });
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spM.id });
+  assert(r.d && r.d.ok, '(B6) Steps == Häkchen-Basis (950) → abgeschickt');
+  // Partner sieht Positionen OHNE interne Berechnungsart/Personen (nur neutrale Felder + Häkchen).
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: spM.id });
+  const ppos = r.d && r.d.angebot && r.d.angebot.positionen;
+  assert(ppos && ppos.length === 2 && !('berechnung' in ppos[0]) && !('personen' in ppos[0]) && ppos[1].im_zahlungsplan === false, '(B6) Partner-Positionen sanitisiert (keine berechnung/personen)');
+  assert(!deepHasKey(r.d.angebot, 'berechnung') && !deepHasKey(r.d.angebot, 'personen'), '(B6) Partner-Angebot ohne berechnung/personen (deep)');
+
   // ── BLOCK 7: Anzahlung ist Startbedingung (Statuszeile, kein Blinken) ──
   // Plan aktiv, Anzahlung noch nicht hinterlegt → Startbedingung offen.
   r = await call(tok(MASTER_UID), { action: 'msub_detail', id: spB6.id });

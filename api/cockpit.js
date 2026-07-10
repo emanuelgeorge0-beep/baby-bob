@@ -3093,7 +3093,7 @@ function sanitizeAngebotForPartner(ang) {
   return {
     id: ang.id, projekt_id: ang.projekt_id, version: ang.version, status: ang.status,
     gesamtbetrag: num(ang.gesamtbetrag), bemerkung: ang.bemerkung || null,
-    positionen: Array.isArray(ang.positionen) ? ang.positionen : null,
+    positionen: sanitizePositionenForPartner(ang.positionen),
     rabatt_prozent: ang.rabatt_prozent != null ? num(ang.rabatt_prozent) : 0,
     zuschlag_prozent: ang.zuschlag_prozent != null ? num(ang.zuschlag_prozent) : 0,
     mwst_prozent: ang.mwst_prozent != null ? num(ang.mwst_prozent) : 8.1,
@@ -3358,6 +3358,7 @@ async function msubKalkPreview(b, access) {
 function round2(n) { return Math.round(num(n) * 100) / 100; }
 function dateOrNull(v) { if (!v) return null; const s = String(v).slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null; }
 // ── Angebots-Positionen: Netto → Rabatt/Zuschlag → MWST → Brutto ──
+const ANG_BERECHNUNG = new Set(['pauschal', 'stunden', 'team_tage', 'stueck', 'material', 'spesen', 'anfahrt', 'fremdgewerk']);
 function angPosSanitize(arr) {
   if (!Array.isArray(arr)) return null;
   return arr.slice(0, 60).map((p) => ({
@@ -3368,7 +3369,18 @@ function angPosSanitize(arr) {
     // Block 6 (Runde 7): fliesst diese Position in den Zahlungsplan (Escrow)? Default ja.
     // Material läuft laut Geschäftsmodell übers Kundenkonto → Häkchen aus (false).
     im_zahlungsplan: (p && p.im_zahlungsplan === false) ? false : true,
+    // Berechnungsart (INTERN, wird für den Partner gestrippt) + Personen für Team-Tage.
+    berechnung: ANG_BERECHNUNG.has(p && p.berechnung) ? p.berechnung : 'pauschal',
+    personen: Math.max(1, num(p && p.personen) || 1),
   })).filter((p) => p.bezeichnung || p.einzelpreis);
+}
+// Partner sieht nur die neutralen Positionsfelder — nie die interne Berechnungsart/Personen.
+function sanitizePositionenForPartner(arr) {
+  if (!Array.isArray(arr)) return null;
+  return arr.map((p) => ({
+    bezeichnung: p.bezeichnung, menge: num(p.menge), einheit: p.einheit || 'Pauschal',
+    einzelpreis: num(p.einzelpreis), im_zahlungsplan: p.im_zahlungsplan !== false,
+  }));
 }
 // Block 5 (Runde 7): Basis des Zahlungsplans = Summe der Positionen MIT Häkchen (netto).
 function angPosBasis(positionen) {
