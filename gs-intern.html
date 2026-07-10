@@ -2300,20 +2300,7 @@ function wireMsubAngebot(p,ang){
   // Zahlungsplan | Konditionen, je Häkchen).
   var sd=$('msub-ang-send'); if(sd) sd.onclick=function(){ openAngebotPruefung(p,ang); };
 }
-// ── Prüf-Ansicht vor dem Abschicken (3 Häkchen: Positionen, Zahlungsplan, Konditionen) ──
-function angPruefPositionenHtml(ang){
-  var pos=(ang&&ang.positionen)||[];
-  return pos.length?pos.map(function(p){ return '<div class="meta"><span>'+esc(p.bezeichnung||'')+' ('+esc(p.menge)+' '+esc(p.einheit||'')+' × '+zsChf(p.einzelpreis)+')</span><span class="dot">'+zsChf(Number(p.menge||0)*Number(p.einzelpreis||0))+'</span></div>'; }).join(''):'<div class="empty" style="padding:10px">Keine Positionen.</div>';
-}
-function angPruefZahlungsplanHtml(ang){
-  var v=(ang&&ang.bauabschnitt_vorschlag)||[];
-  if(!v.length) return '<div class="empty" style="padding:10px">Kein Zahlungsplan – zuerst Bauabschnitte kalkulieren.</div>';
-  return v.map(function(a){
-    var steps=(a.steps||[]).filter(function(s){return s.typ==='zahlung';});
-    return '<div class="lcard" style="margin:0 0 8px"><div class="top"><div class="nm">'+esc(a.name||'Abschnitt')+'</div><span style="color:var(--gold);font-weight:700">'+zsChf(a.gesamtbetrag)+'</span></div>'+
-      steps.map(function(s){ return '<div class="meta" style="margin-top:3px"><span>💰 '+esc(s.bezeichnung)+'</span><span class="dot">'+zsChf(s.betrag)+'</span></div>'; }).join('')+'</div>';
-  }).join('');
-}
+// ── Konditionen (read-only in der Prüf-/Editor-Ansicht; editiert werden sie im Angebot-Editor) ──
 function angPruefKonditionenHtml(ang){
   var it=[['MWST',(ang.mwst_prozent!=null?ang.mwst_prozent:8.1)+'%']];
   if(ang.rabatt_prozent) it.push(['Rabatt',ang.rabatt_prozent+'%']);
@@ -2324,27 +2311,127 @@ function angPruefKonditionenHtml(ang){
   it.push(['Gesamtbetrag brutto',zsChf(ang.gesamtbetrag)]);
   return it.map(function(kv){ return '<div class="meta"><span>'+esc(kv[0])+'</span><span class="dot">'+esc(kv[1])+'</span></div>'; }).join('');
 }
+// ════ BLOCK 5 (Runde 7): Zahlungsplan-EDITOR in „Angebot prüfen & abschicken" ════
+// Ersetzt die reine Leseansicht. Der Generator schlägt vor, der Master entscheidet:
+// Steps umbenennen/Betrag/hinzufügen/löschen/verschieben, Zahlung↔Blockade, Positionen
+// bearbeiten. Live-Validierung Steps==Positionen; Abschicken gesperrt bis exakt.
+var _pl=null;
+var PL_BLOCKADEN=['Material-Gate','Druckprobe/Dichtheitsprüfung','Druckprotokoll','Fliesenleger','Vorleistung Dritter','Endabnahme'];
+function plr2(x){ return Math.round((Number(x)||0)*100)/100; }
 function openAngebotPruefung(p,ang){
   if(!ang){ toast('Kein Angebot vorhanden'); return; }
-  function chk(id,label){ return '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:700;cursor:pointer"><input type="checkbox" id="'+id+'" style="width:18px;height:18px"/> '+label+'</label>'; }
+  var pos=(ang.positionen||[]).map(function(x){ return {bezeichnung:x.bezeichnung||'',menge:Number(x.menge||1),einheit:x.einheit||'Pauschal',einzelpreis:Number(x.einzelpreis||0),im_zahlungsplan:x.im_zahlungsplan!==false}; });
+  var abschnitte=(ang.bauabschnitt_vorschlag||[]).map(function(a){ return {name:a.name||'Abschnitt',steps:(a.steps||[]).map(function(s){ return {typ:(s.typ==='blockade'?'blockade':'zahlung'),zahlung_art:s.zahlung_art||null,bezeichnung:s.bezeichnung||'',betrag:Number(s.betrag||0)}; })}; });
+  if(!pos.length&&abschnitte.length) pos=abschnitte.map(function(a){ return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.steps.reduce(function(s,st){return s+(st.typ==='zahlung'?Number(st.betrag||0):0);},0),im_zahlungsplan:true}; });
+  _pl={projektId:p.id,ang:ang,positionen:pos,abschnitte:abschnitte,
+    kond:{rabatt_prozent:ang.rabatt_prozent||0,zuschlag_prozent:ang.zuschlag_prozent||0,mwst_prozent:(ang.mwst_prozent!=null?ang.mwst_prozent:8.1),zahlungsziel_tage:ang.zahlungsziel_tage||null,gueltig_bis:ang.gueltig_bis||null,ausfuehrung_von:ang.ausfuehrung_von||null,ausfuehrung_bis:ang.ausfuehrung_bis||null}};
+  plRender();
+}
+function plStepSum(){ var c=0; _pl.abschnitte.forEach(function(a){ a.steps.forEach(function(s){ if(s.typ==='zahlung') c+=Math.round((Number(s.betrag)||0)*100); }); }); return c; }
+function plPosBasis(){ var c=0; _pl.positionen.forEach(function(p){ if(p.im_zahlungsplan!==false) c+=Math.round((Number(p.menge)||0)*(Number(p.einzelpreis)||0)*100); }); return c; }
+function plPosRowHtml(p,i){
+  return '<div class="lcard" style="margin:0 0 6px"><div style="display:flex;gap:6px;align-items:center">'+
+    '<input class="field" style="flex:1" id="pl-pb-'+i+'" value="'+esc(p.bezeichnung)+'" placeholder="Position"/>'+
+    '<button class="chip" style="color:#ff9b9b;border-color:#ff9b9b" onclick="plPosDel('+i+')" title="Position löschen">✕</button></div>'+
+    '<div style="display:flex;gap:6px;margin-top:5px;align-items:center">'+
+      '<span style="font-size:11px;color:var(--muted2)">Menge</span><input class="field" style="width:64px" type="number" min="0" step="0.01" id="pl-pm-'+i+'" value="'+esc(p.menge)+'" oninput="plLive()"/>'+
+      '<span style="font-size:11px;color:var(--muted2)">×</span><input class="field" style="width:96px" type="number" min="0" step="0.01" id="pl-pp-'+i+'" value="'+esc(p.einzelpreis)+'" oninput="plLive()"/>'+
+      '<label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-left:auto;cursor:pointer" title="Fliesst in den Zahlungsplan (Escrow)"><input type="checkbox" id="pl-ph-'+i+'" '+(p.im_zahlungsplan!==false?'checked':'')+' onchange="plLive()"/> Plan</label>'+
+    '</div></div>';
+}
+function plStepRowHtml(ai,s,si,n){
+  var isB=s.typ==='blockade';
+  var amount=isB?'<span style="width:96px;text-align:right;color:var(--muted2);font-size:11px">Blockade</span>'
+    :'<input class="field" style="width:96px" type="number" min="0" step="0.01" id="pl-sb-'+ai+'-'+si+'" value="'+esc(s.betrag)+'" oninput="plLive()"/>';
+  return '<div style="display:flex;gap:5px;align-items:center;margin-top:5px">'+
+    '<span style="font-size:14px" title="'+(isB?'Blockade':'Zahlung')+'">'+(isB?'⛔':'💰')+'</span>'+
+    '<input class="field" style="flex:1" id="pl-sn-'+ai+'-'+si+'"'+(isB?' list="pl-blk-list"':'')+' value="'+esc(s.bezeichnung)+'" placeholder="'+(isB?'Blockade':'Zahlung')+'"/>'+
+    amount+
+    '<button class="chip" style="padding:2px 6px" title="Typ umschalten" onclick="plStepToggle('+ai+','+si+')">⇄</button>'+
+    '<button class="chip" style="padding:2px 6px" title="nach oben" onclick="plStepMove('+ai+','+si+',-1)"'+(si===0?' disabled':'')+'>▲</button>'+
+    '<button class="chip" style="padding:2px 6px" title="nach unten" onclick="plStepMove('+ai+','+si+',1)"'+(si===n-1?' disabled':'')+'>▼</button>'+
+    '<button class="chip" style="padding:2px 6px;color:#ff9b9b;border-color:#ff9b9b" title="löschen" onclick="plStepDel('+ai+','+si+')">✕</button>'+
+  '</div>';
+}
+function plAbschnittHtml(a,ai){
+  var subtot=a.steps.reduce(function(s,st){return s+(st.typ==='zahlung'?Math.round((Number(st.betrag)||0)*100):0);},0)/100;
+  return '<div class="lcard" style="margin:0 0 8px"><div class="top"><div class="nm">'+esc(a.name||'Abschnitt')+'</div><span style="color:var(--gold);font-weight:700" id="pl-sub-'+ai+'">'+zsChf(subtot)+'</span></div>'+
+    a.steps.map(function(s,si){ return plStepRowHtml(ai,s,si,a.steps.length); }).join('')+
+    '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
+      '<button class="chip" onclick="plStepAdd('+ai+',\'zahlung\')">＋ Zahlung</button>'+
+      '<button class="chip" onclick="plStepAdd('+ai+',\'blockade\')">＋ Blockade</button>'+
+    '</div></div>';
+}
+function plRender(){
+  // Achtung: NICHT plReadInputs() hier — Aufrufer haben Eingaben bereits gelesen und den
+  // State mutiert (Move/Toggle). Erneutes Lesen des alten DOM würde die Mutation zerstören.
+  var stepC=plStepSum(), posC=plPosBasis(), ok=(stepC===posC), diff=(posC-stepC)/100;
+  var status=ok
+    ? '<div class="zs-ov-ok" style="color:#3dd68c;font-weight:800">✓ Summe Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'
+    : '<div style="color:#ff5d5d;font-weight:800">noch '+zsChf(Math.abs(diff))+(diff>0?' nicht zugeordnet':' zu viel verteilt')+' — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>';
   openSheet('<h3>Angebot prüfen & abschicken</h3>'+
-    '<div class="sec-t">Positionen</div>'+angPruefPositionenHtml(ang)+chk('pr-pos','Positionen geprüft')+
-    '<div class="sec-t" style="margin-top:14px">Zahlungsplan</div>'+angPruefZahlungsplanHtml(ang)+chk('pr-plan','Zahlungsplan geprüft')+
-    '<div class="sec-t" style="margin-top:14px">Konditionen</div>'+angPruefKonditionenHtml(ang)+chk('pr-kond','Konditionen geprüft')+
-    '<div class="login-msg" id="pr-msg" style="margin-top:10px"></div>'+
-    '<button class="btn btn-gold" id="pr-send" style="margin-top:12px;opacity:0.5" disabled>📨 Abschicken</button>'+
-    '<button class="btn ghost" id="pr-cancel">Abbrechen</button>');
-  $('pr-cancel').onclick=closeSheet;
-  var boxes=['pr-pos','pr-plan','pr-kond'];
-  function upd(){ var all=boxes.every(function(id){ return ($(id)||{}).checked; }); var b=$('pr-send'); if(b){ b.disabled=!all; b.style.opacity=all?'1':'0.5'; } }
-  boxes.forEach(function(id){ var e=$(id); if(e) e.onchange=upd; }); upd();
-  $('pr-send').onclick=function(){
-    var b=$('pr-send'); if(b.disabled) return; b.disabled=true; b.textContent='…';
-    api('msub_angebot_send',{projekt_id:p.id}).then(function(d){
-      if(d&&d.error){ b.disabled=false; b.textContent='📨 Abschicken'; $('pr-msg').className='login-msg err'; $('pr-msg').textContent=d.error; return; }
-      closeSheet(); toast('Angebot abgeschickt'); openSubAnfrage(p.id);
-    }).catch(function(){ b.disabled=false; b.textContent='📨 Abschicken'; $('pr-msg').className='login-msg err'; $('pr-msg').textContent='Fehler'; });
-  };
+    '<datalist id="pl-blk-list">'+PL_BLOCKADEN.map(function(b){return '<option value="'+esc(b)+'">';}).join('')+'</datalist>'+
+    '<div class="sec-t">Positionen</div>'+
+      (_pl.positionen.length?_pl.positionen.map(plPosRowHtml).join(''):'<div class="empty" style="padding:8px">Keine Positionen.</div>')+
+      '<button class="chip" style="margin-top:2px" onclick="plPosAdd()">＋ Position</button>'+
+      '<div class="meta" style="margin-top:4px"><span style="color:var(--muted2);font-size:11px">Häkchen „Plan" = fliesst in den Zahlungsplan. Material (Kundenkonto) → Häkchen aus.</span></div>'+
+    '<div class="sec-t" style="margin-top:14px">Zahlungsplan-Kette</div>'+
+      (_pl.abschnitte.length?_pl.abschnitte.map(plAbschnittHtml).join(''):'<div class="empty" style="padding:8px">Kein Bauabschnitt – zuerst kalkulieren.</div>')+
+    '<div class="sec-t" style="margin-top:14px">Konditionen</div>'+angPruefKonditionenHtml(_pl.ang)+
+    '<div class="zs-ov" style="margin:12px 0 4px"><div class="zs-ov-line" id="pl-status">'+status+'</div></div>'+
+    '<div class="login-msg" id="pl-msg"></div>'+
+    '<button class="btn btn-gold" id="pl-send" style="margin-top:8px'+(ok?'':';opacity:0.5')+'" '+(ok?'':'disabled')+'>📨 Abschicken</button>'+
+    '<button class="btn ghost" id="pl-cancel">Abbrechen</button>');
+  $('pl-cancel').onclick=closeSheet;
+  $('pl-send').onclick=plSend;
+}
+// Liest alle DOM-Eingaben zurück in _pl (vor jeder strukturellen Änderung / bei Re-Render).
+function plReadInputs(){
+  if(!$('pl-send')&&!$('pl-status')) return; // Sheet (noch) nicht gerendert
+  _pl.positionen.forEach(function(p,i){
+    var b=$('pl-pb-'+i),m=$('pl-pm-'+i),pp=$('pl-pp-'+i),h=$('pl-ph-'+i);
+    if(b)p.bezeichnung=b.value; if(m)p.menge=Number(m.value)||0; if(pp)p.einzelpreis=Number(pp.value)||0; if(h)p.im_zahlungsplan=!!h.checked;
+  });
+  _pl.abschnitte.forEach(function(a,ai){
+    a.steps.forEach(function(s,si){
+      var n=$('pl-sn-'+ai+'-'+si),b=$('pl-sb-'+ai+'-'+si);
+      if(n)s.bezeichnung=n.value; if(b&&s.typ==='zahlung')s.betrag=Number(b.value)||0;
+    });
+  });
+}
+// Live-Neuberechnung ohne Re-Render (Fokus bleibt): Summenzeile + Subtotals + Send-Gate.
+function plLive(){
+  plReadInputs();
+  var stepC=plStepSum(), posC=plPosBasis(), ok=(stepC===posC), diff=(posC-stepC)/100;
+  var el=$('pl-status'); if(el){ el.innerHTML=ok
+    ? '<div class="zs-ov-ok" style="color:#3dd68c;font-weight:800">✓ Summe Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'
+    : '<div style="color:#ff5d5d;font-weight:800">noch '+zsChf(Math.abs(diff))+(diff>0?' nicht zugeordnet':' zu viel verteilt')+' — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'; }
+  _pl.abschnitte.forEach(function(a,ai){ var st=$('pl-sub-'+ai); if(st){ var t=a.steps.reduce(function(s,x){return s+(x.typ==='zahlung'?Math.round((Number(x.betrag)||0)*100):0);},0)/100; st.textContent=zsChf(t); } });
+  var b=$('pl-send'); if(b){ b.disabled=!ok; b.style.opacity=ok?'1':'0.5'; }
+}
+function plPosAdd(){ plReadInputs(); _pl.positionen.push({bezeichnung:'',menge:1,einheit:'Pauschal',einzelpreis:0,im_zahlungsplan:true}); plRender(); }
+function plPosDel(i){ plReadInputs(); _pl.positionen.splice(i,1); plRender(); }
+function plStepAdd(ai,typ){ plReadInputs(); _pl.abschnitte[ai].steps.push(typ==='blockade'?{typ:'blockade',zahlung_art:null,bezeichnung:'',betrag:0}:{typ:'zahlung',zahlung_art:null,bezeichnung:'Zahlung',betrag:0}); plRender(); }
+function plStepDel(ai,si){ plReadInputs(); _pl.abschnitte[ai].steps.splice(si,1); plRender(); }
+function plStepMove(ai,si,dir){ plReadInputs(); var st=_pl.abschnitte[ai].steps; var j=si+dir; if(j<0||j>=st.length) return; var t=st[si]; st[si]=st[j]; st[j]=t; plRender(); }
+function plStepToggle(ai,si){ plReadInputs(); var s=_pl.abschnitte[ai].steps[si]; if(s.typ==='blockade'){ s.typ='zahlung'; if(!s.bezeichnung)s.bezeichnung='Zahlung'; } else { s.typ='blockade'; s.betrag=0; } plRender(); }
+function plSend(){
+  plReadInputs();
+  var b=$('pl-send'); if(b&&b.disabled) return;
+  if(plStepSum()!==plPosBasis()){ plLive(); return; }
+  if(b){ b.disabled=true; b.textContent='…'; }
+  var plan=_pl.abschnitte.map(function(a){ return {name:a.name,steps:a.steps.map(function(s){ return {typ:s.typ,zahlung_art:s.zahlung_art,bezeichnung:s.bezeichnung,betrag:s.typ==='zahlung'?Number(s.betrag)||0:0}; })}; });
+  var body={projekt_id:_pl.projektId,plan:plan,positionen:_pl.positionen,
+    rabatt_prozent:_pl.kond.rabatt_prozent,zuschlag_prozent:_pl.kond.zuschlag_prozent,mwst_prozent:_pl.kond.mwst_prozent,
+    zahlungsziel_tage:_pl.kond.zahlungsziel_tage,gueltig_bis:_pl.kond.gueltig_bis,ausfuehrung_von:_pl.kond.ausfuehrung_von,ausfuehrung_bis:_pl.kond.ausfuehrung_bis};
+  function fail(t){ if(b){b.disabled=false;b.textContent='📨 Abschicken';} var m=$('pl-msg'); if(m){m.className='login-msg err';m.textContent=t;} }
+  api('msub_angebot_save',body).then(function(d){
+    if(d&&d.error){ fail(d.error); return; }
+    api('msub_angebot_send',{projekt_id:_pl.projektId}).then(function(d2){
+      if(d2&&d2.error){ fail(d2.error); return; }
+      closeSheet(); toast('Angebot abgeschickt'); openSubAnfrage(_pl.projektId);
+    }).catch(function(){ fail('Fehler beim Abschicken'); });
+  }).catch(function(){ fail('Fehler beim Speichern'); });
 }
 
 // ═══ KALKULATIONSGENERATOR (INTERN, nur Master, nur Sub) ═══

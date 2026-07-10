@@ -2324,9 +2324,9 @@ async function subEntscheiden(b, scope) {
       const nummer = 'AB-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-6);
       const ar = await sbWrite('POST', 'gs_auftragsbestaetigung', { projekt_id: pid, angebot_id: angebot.id, nummer, gesamtbetrag: num(angebot.gesamtbetrag), bestaetigt_by: uid });
       auftrag = Array.isArray(ar) ? ar[0] : ar;
-      // Block 6: Zahlungsplan aus dem ANGENOMMENEN Betrag generieren (inaktiv bis
-      // zur zweiten Annahme). Audit-Trail: angebot_angenommen_at gesetzt.
-      await subGenerateZahlungsplan(pid, num(angebot.gesamtbetrag));
+      // Block 6/5: Zahlungsplan aus der im Angebot EINGEFRORENEN (final editierten)
+      // Kette materialisieren (inaktiv bis zur zweiten Annahme). Audit: angebot_angenommen_at.
+      await subGenerateZahlungsplan(pid, angebot);
       try {
         await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { angebot_angenommen_at: now, zahlungsplan_status: 'offen', zahlungsplan_aktiv: false }, 'return=minimal');
       } catch (e) { if (!/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) throw e; }
@@ -2354,24 +2354,60 @@ function sanitizeAuftragForPartner(auf) {
 // der Zahlungsplan generiert: die bestehenden Bauabschnitte werden proportional auf
 // den Angebotsbetrag skaliert und ihre Step-Ketten neu — aber INAKTIV — erzeugt.
 // Summe aller Steps == angenommener Angebotsbetrag (Rappen-genau).
-async function subGenerateZahlungsplan(pid, betrag) {
-  const total = Math.round(num(betrag) * 100); // Rappen
-  if (total <= 0) return;
+// Block 5 (Runde 7): Nach Angebot-Annahme wird die FINAL vom Master angepasste,
+// im Angebot eingefrorene Step-Kette 1:1 materialisiert (nicht aus split_profil neu
+// generiert — sonst gingen die Editor-Änderungen verloren). Fällt der Vorschlag (Alt-
+// Angebot ohne Editor) weg, greift der frühere proportionale Generator als Fallback.
+async function subGenerateZahlungsplan(pid, angebot) {
   const abs = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=*&order=reihenfolge.asc`).catch(() => []);
   if (!abs || !abs.length) return;
+  const vorschlag = angebot && Array.isArray(angebot.bauabschnitt_vorschlag) ? angebot.bauabschnitt_vorschlag : null;
+  const hasFrozenSteps = vorschlag && vorschlag.some((v) => Array.isArray(v.steps) && v.steps.length);
+  if (hasFrozenSteps) {
+    for (let i = 0; i < abs.length; i++) {
+      const a = abs[i];
+      const v = vorschlag.find((x) => String(x.name || '').trim() === String(a.name || '').trim()) || vorschlag[i];
+      if (!v) continue;
+      const steps = angNormSteps(v.steps);
+      const betragChf = round2(steps.reduce((s, st) => (st.typ === 'zahlung' ? s + Math.round(num(st.betrag) * 100) : s), 0) / 100);
+      await sbWrite('PATCH', `gs_bauabschnitte?id=eq.${a.id}`, { gesamtbetrag: betragChf }, 'return=minimal').catch(() => {});
+      a.gesamtbetrag = betragChf;
+      await zsWriteExplicitChain(a, steps); // inaktiv (alle Steps 'wartend')
+    }
+    return;
+  }
+  // Fallback (kein eingefrorener Editor-Vorschlag): proportional auf den Betrag skalieren.
+  const total = Math.round(num(angebot && angebot.gesamtbetrag) * 100); // Rappen
+  if (total <= 0) return;
   const curSum = abs.reduce((s, a) => s + num(a.gesamtbetrag), 0);
   let allocated = 0;
   for (let i = 0; i < abs.length; i++) {
     const a = abs[i];
     const shareC = (i === abs.length - 1)
-      ? (total - allocated) // letzter Abschnitt bekommt den Rest → Summe exakt = total
+      ? (total - allocated)
       : Math.round(curSum > 0 ? total * num(a.gesamtbetrag) / curSum : total / abs.length);
     if (i !== abs.length - 1) allocated += shareC;
     const betragChf = shareC / 100;
     await sbWrite('PATCH', `gs_bauabschnitte?id=eq.${a.id}`, { gesamtbetrag: betragChf }, 'return=minimal').catch(() => {});
     a.gesamtbetrag = betragChf;
-    await zsGenerateChain(a, { activate: false }); // inaktiv bis zur 2. Annahme
+    await zsGenerateChain(a, { activate: false });
   }
+}
+// Schreibt eine explizite (editierte) Step-Liste als inaktive Kette in einen Abschnitt:
+// alte Steps löschen, neue + Escrow anlegen. Betrag/Bezeichnung/Typ kommen 1:1 aus dem
+// eingefrorenen Vorschlag; ein Step = eine Transaktion (Stripe-Payment-Intent-tauglich).
+async function zsWriteExplicitChain(abschnitt, steps) {
+  await sbWrite('DELETE', `gs_steps?bauabschnitt_id=eq.${abschnitt.id}`, undefined, 'return=minimal');
+  const stepRows = steps.map((s, i) => ({
+    bauabschnitt_id: abschnitt.id, reihenfolge: i + 1, typ: s.typ,
+    zahlung_art: s.typ === 'zahlung' ? (s.zahlung_art || 'fortschritt') : null,
+    bezeichnung: s.bezeichnung, betrag: s.typ === 'zahlung' ? num(s.betrag) : 0, status: 'wartend',
+  }));
+  const inserted = await sbWrite('POST', 'gs_steps', stepRows);
+  const idByR = {}; (inserted || []).forEach((r) => { idByR[r.reihenfolge] = r.id; });
+  const escRows = [];
+  stepRows.forEach((s, i) => { if (s.typ === 'zahlung') escRows.push({ step_id: idByR[i + 1], escrow_status: 'offen', betrag: s.betrag, rueckbehalt_prozent: 0 }); });
+  if (escRows.length) await sbWrite('POST', 'gs_escrow', escRows, 'return=minimal');
 }
 // Partner-sichere Zahlungsplan-Ansicht (nur nach Angebot-Annahme). Enthält NIE
 // split_profil/einheit_typ — nur Abschnittsname + Steps (Bezeichnung + Betrag + Status).
@@ -3188,11 +3224,22 @@ async function msubAngebotSave(b, access) {
     if (zp && zp.notMigrated) return zp;
     const abschnitte = (zp && zp.abschnitte) || [];
     const gesamtbetrag = abschnitte.reduce((s, a) => s + num(a.gesamtbetrag), 0);
-    const vorschlag = abschnitte.map((a) => ({
-      name: a.name, split_profil: a.split_profil, einheit_typ: a.einheit_typ,
-      einheit_anzahl: a.einheit_anzahl, team_tage: a.team_tage, gesamtbetrag: a.gesamtbetrag,
-      steps: (a.steps || []).map((s) => ({ reihenfolge: s.reihenfolge, typ: s.typ, zahlung_art: s.zahlung_art, bezeichnung: s.bezeichnung, betrag: s.betrag })),
-    }));
+    // Block 5 (Runde 7): Der Master kann den Generator-Vorschlag im Editor anpassen
+    // (Steps umbenennen/verschieben/hinzufügen/löschen, Zahlung↔Blockade). Kommt eine
+    // editierte Kette (b.plan) mit, wird SIE eingefroren — sonst der Generator-Vorschlag.
+    const editPlan = Array.isArray(b.plan) ? b.plan : null;
+    const vorschlag = abschnitte.map((a, idx) => {
+      const edited = editPlan && (editPlan.find((p) => p && String(p.name || '').trim() === String(a.name || '').trim()) || editPlan[idx]);
+      const steps = edited ? angNormSteps(edited.steps) : (a.steps || []).map((s) => ({ reihenfolge: s.reihenfolge, typ: s.typ, zahlung_art: s.zahlung_art, bezeichnung: s.bezeichnung, betrag: s.betrag }));
+      const stepBetrag = steps.reduce((s2, st) => (st.typ === 'zahlung' ? s2 + Math.round(num(st.betrag) * 100) : s2), 0) / 100;
+      return {
+        name: a.name, split_profil: a.split_profil, einheit_typ: a.einheit_typ,
+        einheit_anzahl: a.einheit_anzahl, team_tage: a.team_tage,
+        // gesamtbetrag des Abschnitts = Summe seiner Zahlungs-Steps (editierbar).
+        gesamtbetrag: edited ? round2(stepBetrag) : a.gesamtbetrag,
+        steps,
+      };
+    });
     const ansatz = (b.ansatz_chf_h === '' || b.ansatz_chf_h == null) ? null : num(b.ansatz_chf_h);
     const bemerkung = b.bemerkung != null ? String(b.bemerkung).slice(0, 2000) : null;
     // Positionen: gegeben ODER aus den Bauabschnitten vorbefuellen (Menge 1, Pauschal).
@@ -3239,6 +3286,10 @@ async function msubAngebotSend(b, access) {
     if (!angebot) return { error: 'Kein Angebot vorhanden – zuerst „Angebot erzeugen".' };
     if (angebot.status === 'abgeschickt') return { error: 'Angebot ist bereits abgeschickt.' };
     if (!(num(angebot.gesamtbetrag) > 0)) return { error: 'Angebot hat keinen Betrag – bitte zuerst Bauabschnitte kalkulieren.' };
+    // Block 5 (Runde 7): Abschicken NUR wenn die Zahlungsplan-Summe exakt der
+    // Positionsbasis (Positionen mit Häkchen) entspricht — keine Auto-Neuverteilung.
+    const chk = angPlanCheck(angebot.bauabschnitt_vorschlag, angebot.positionen);
+    if (!chk.ok) return { error: `Zahlungsplan (${chk.stepSum.toFixed(2)}) ≠ Positionen (${chk.posBasis.toFixed(2)}) – ${Math.abs(chk.differenz).toFixed(2)} noch nicht zugeordnet.`, planMismatch: true, check: chk };
     const r = await sbWrite('PATCH', `gs_angebote?id=eq.${angebot.id}`, { status: 'abgeschickt', abgeschickt_am: new Date().toISOString() });
     await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { sub_status: 'angebot_offen' });
     return { ok: true, angebot: Array.isArray(r) ? r[0] : r, sub_status: 'angebot_offen' };
@@ -3314,7 +3365,51 @@ function angPosSanitize(arr) {
     menge: Math.max(0, num(p && p.menge)),
     einheit: String((p && p.einheit) || 'Pauschal').slice(0, 30),
     einzelpreis: Math.max(0, num(p && p.einzelpreis)),
+    // Block 6 (Runde 7): fliesst diese Position in den Zahlungsplan (Escrow)? Default ja.
+    // Material läuft laut Geschäftsmodell übers Kundenkonto → Häkchen aus (false).
+    im_zahlungsplan: (p && p.im_zahlungsplan === false) ? false : true,
   })).filter((p) => p.bezeichnung || p.einzelpreis);
+}
+// Block 5 (Runde 7): Basis des Zahlungsplans = Summe der Positionen MIT Häkchen (netto).
+function angPosBasis(positionen) {
+  return round2((positionen || []).reduce((s, p) => (p && p.im_zahlungsplan === false) ? s : s + num(p.menge) * num(p.einzelpreis), 0));
+}
+// Summe der Zahlungs-Steps über alle Bauabschnitte des Vorschlags (Blockaden = 0).
+function angPlanStepSum(vorschlag) {
+  let c = 0;
+  (vorschlag || []).forEach((a) => (a.steps || []).forEach((s) => { if (s.typ === 'zahlung') c += Math.round(num(s.betrag) * 100); }));
+  return round2(c / 100);
+}
+// Live-Validierung: Steps-Summe muss EXAKT der Positionsbasis entsprechen (keine
+// Auto-Neuverteilung). Rappen-genau verglichen. Steuert das Abschicken-Gate.
+function angPlanCheck(vorschlag, positionen) {
+  const stepSum = angPlanStepSum(vorschlag);
+  const posBasis = angPosBasis(positionen);
+  const diffC = Math.round(stepSum * 100) - Math.round(posBasis * 100);
+  return { stepSum, posBasis, differenz: round2(diffC / 100), ok: diffC === 0 };
+}
+// Übernimmt eine vom Master editierte Step-Liste in einen (Vorschlags-)Bauabschnitt:
+// Reihenfolge normalisieren, Typ/Bezeichnung/Betrag säubern, zahlung_art gültig halten
+// (CHECK-Constraint anzahlung|fortschritt|meilenstein|abnahme|schlussrate; Blockade→null).
+function angNormSteps(steps) {
+  const arr = Array.isArray(steps) ? steps : [];
+  const zahlIdx = arr.map((s, i) => ({ s, i })).filter((x) => x.s && x.s.typ !== 'blockade');
+  const validArt = new Set(['anzahlung', 'fortschritt', 'meilenstein', 'abnahme', 'schlussrate']);
+  return arr.map((s, i) => {
+    const isBlock = s && s.typ === 'blockade';
+    let art = null;
+    if (!isBlock) {
+      art = validArt.has(s && s.zahlung_art) ? s.zahlung_art
+        : (zahlIdx.length && zahlIdx[0].i === i ? 'anzahlung' : (zahlIdx.length && zahlIdx[zahlIdx.length - 1].i === i ? 'abnahme' : 'fortschritt'));
+    }
+    return {
+      reihenfolge: i + 1,
+      typ: isBlock ? 'blockade' : 'zahlung',
+      zahlung_art: art,
+      bezeichnung: String((s && s.bezeichnung) || (isBlock ? 'Blockade' : 'Zahlung')).slice(0, 120),
+      betrag: isBlock ? 0 : Math.max(0, num(s && s.betrag)),
+    };
+  });
 }
 function angRechnung(positionen, rabatt, zuschlag, mwst) {
   const netto = (positionen || []).reduce((s, p) => s + num(p.menge) * num(p.einzelpreis), 0);

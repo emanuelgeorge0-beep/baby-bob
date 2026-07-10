@@ -321,9 +321,14 @@ async function suite(iter) {
   assert(PROJEKTE.find((p) => p.id === sp.id).sub_status === 'in_pruefung', 'in_pruefung in DB persistiert');
 
   // Kalkulation: einen Bauabschnitt „vorhanden" machen (wie nach zs_abschnitt_save).
-  const baId = mkid(), stId = mkid();
+  // Realistisch: die Step-Kette summiert exakt auf den Abschnittsbetrag (15/70/15 von 30000).
+  const baId = mkid();
   BAUAB.push({ id: baId, projekt_id: sp.id, name: 'Rohbau', reihenfolge: 1, einheit_typ: 'zone', einheit_anzahl: 3, team_tage: 5, gesamtbetrag: 30000, split_profil: 'stueck_15_70_15', status: 'geplant' });
-  STEPS.push({ id: stId, bauabschnitt_id: baId, reihenfolge: 1, typ: 'zahlung', zahlung_art: 'anzahlung', bezeichnung: 'Anzahlung', betrag: 4500, status: 'wartend' });
+  STEPS.push(
+    { id: mkid(), bauabschnitt_id: baId, reihenfolge: 1, typ: 'zahlung', zahlung_art: 'anzahlung', bezeichnung: 'Anzahlung', betrag: 4500, status: 'wartend' },
+    { id: mkid(), bauabschnitt_id: baId, reihenfolge: 2, typ: 'zahlung', zahlung_art: 'fortschritt', bezeichnung: 'Fortschritt', betrag: 21000, status: 'wartend' },
+    { id: mkid(), bauabschnitt_id: baId, reihenfolge: 3, typ: 'zahlung', zahlung_art: 'abnahme', bezeichnung: 'Abnahme', betrag: 4500, status: 'wartend' },
+  );
 
   // Angebot erzeugen: gesamtbetrag = Summe der Bauabschnitte, vorschlag als Snapshot.
   r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp.id, ansatz_chf_h: 62, bemerkung: 'Pilot' });
@@ -448,7 +453,13 @@ async function suite(iter) {
   assert(r.d && r.d.angebot.rabatt_prozent === 10 && r.d.angebot.zahlungsziel_tage === 30 && r.d.angebot.gueltig_bis === '2026-08-31', 'angebot: konditionen gespeichert');
 
   // KRITISCH — INTERN/EXTERN: Partner sieht Angebot, aber NIE Kosten/Rohgewinn/Ampel/Kalk.
-  await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: sp3.id });
+  // Block 5 (Runde 7): Vor dem Abschicken müssen Steps == Positionen sein. Der obige
+  // Rabatt-Test hatte Positionen (Material 200) ≠ Kette (6800) — bewusst inkonsistent.
+  // Für den Versand Positionen wieder aus den Bauabschnitten übernehmen (netto 6800 == Kette).
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp3.id });
+  assert(r.d && r.d.ok && r.d.rechnung.netto === 6800, 'angebot: positionen für Versand konsistent (netto 6800)');
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: sp3.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt', 'angebot_send: Steps==Positionen → abgeschickt');
   r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp3.id });
   const pa = r.d && r.d.angebot;
   assert(pa && Array.isArray(pa.positionen), 'partner: sieht positionen');
@@ -605,8 +616,12 @@ async function suite(iter) {
   const spB6 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R6-Block6' })).d.projekt;
   await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spB6.id, name: 'Rohbau', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1, personen: 2, team_tage: 7, ansatz_modus: 'detailliert' });
   const qs = await call(tok(MASTER_UID), { action: 'msub_angebot_quick_send', projekt_id: spB6.id });
-  const acceptBetrag = qs.d.angebot.gesamtbetrag; // brutto = angenommener Betrag
+  const acceptBetrag = qs.d.angebot.gesamtbetrag; // brutto = Vertrags-/AB-Betrag (inkl. MWST)
   assert(acceptBetrag === r2(10080 * 1.081), '(B6) Angebot brutto = 10080 × 1.081');
+  // Block 5 (Runde 7): Die Escrow-Kette summiert auf die NETTO-Positionsbasis (= Summe
+  // der Bauabschnitte, hier 10080), NICHT auf den Brutto-Betrag. MWST/Rabatt sind reine
+  // Rechnungsgrössen; ein Step = eine Transaktion über den netto vereinbarten Werklohn.
+  const acceptNetto = r2(BAUAB.filter((a) => a.projekt_id === spB6.id).reduce((x, a) => x + Number(a.gesamtbetrag || 0), 0));
   // 1. Annahme (Angebot): Zahlungsplan wird generiert, aber INAKTIV.
   r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: spB6.id, op: 'annehmen' });
   assert(r.d && r.d.ok && r.d.zahlungsplan && r.d.zahlungsplan.status === 'offen' && r.d.zahlungsplan.aktiv === false, '(B6) nach Angebot-Annahme: Zahlungsplan offen + inaktiv');
@@ -614,8 +629,8 @@ async function suite(iter) {
   // Summe aller generierten Steps == angenommener Angebotsbetrag.
   const b6ids = BAUAB.filter((a) => a.projekt_id === spB6.id).map((a) => a.id);
   const stepSum = r2(STEPS.filter((s) => b6ids.includes(s.bauabschnitt_id) && s.typ === 'zahlung').reduce((x, s) => x + Number(s.betrag || 0), 0));
-  assert(stepSum === acceptBetrag, '(B6) Summe aller Steps == Angebotsbetrag');
-  assert(r2(r.d.zahlungsplan.summe) === acceptBetrag, '(B6) Zahlungsplan.summe == Angebotsbetrag');
+  assert(stepSum === acceptNetto, '(B6) Summe aller Steps == Positionsbasis (netto)');
+  assert(r2(r.d.zahlungsplan.summe) === acceptNetto, '(B6) Zahlungsplan.summe == Positionsbasis (netto)');
   // Audit-Trail: angebot_angenommen_at gesetzt, zahlungsplan noch offen.
   let prow = PROJEKTE.find((p) => p.id === spB6.id);
   assert(prow.angebot_angenommen_at && prow.zahlungsplan_status === 'offen' && prow.zahlungsplan_aktiv === false, '(B6) audit: angebot_angenommen_at gesetzt, plan offen');
@@ -635,12 +650,50 @@ async function suite(iter) {
   // Plan bleibt dauerhaft im Partner-Cockpit sichtbar.
   r = await call(tok(P_ALL), { action: 'sub_projekt', id: spB6.id });
   assert(r.d && r.d.zahlungsplan && r.d.zahlungsplan.status === 'angenommen' && r.d.zahlungsplan.abschnitte.length, '(B6) Zahlungsplan dauerhaft im Partner-Cockpit');
-  // (d) NEU/EISERN: Summe aller Steps == angenommener Angebotsbetrag.
-  assert(stepSum === acceptBetrag, '(d) Summe aller Steps == angenommener Angebotsbetrag');
+  // (c) EISERN (Runde 7): Summe aller Steps == Positionsbasis (Positionen mit Häkchen).
+  assert(stepSum === acceptNetto, '(c) Summe aller Steps == Positionen mit Zahlungsplan-Häkchen');
   // (c): auch der Zahlungsplan enthält kein split_profil/einheit_typ.
   assert(!deepHasKey(r.d.zahlungsplan, 'split_profil') && !deepHasKey(r.d.zahlungsplan, 'einheit_typ'), '(c) Zahlungsplan ohne split_profil/einheit_typ');
   // sub_step_hinterlegen: fremd → 403.
   assert((await call(tok(P_SUB2), { action: 'sub_step_hinterlegen', step_id: firstStep.id })).status === 403, '(B6) fremd: step_hinterlegen → 403');
+
+  // ══ BLOCK 5 (Runde 7): Zahlungsplan-EDITOR im Angebot ══════════════════════
+  // Der Master passt den Generator-Vorschlag an (umbenennen, Beträge, Blockade
+  // einfügen, Zahlung↔Blockade). Abschicken NUR wenn Steps == Positionen (netto).
+  const spE = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R7-Editor' })).d.projekt;
+  await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: spE.id, name: 'Etappe', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 1, personen: 2, team_tage: 5, ansatz_modus: 'detailliert' });
+  const eNetto = r2(BAUAB.filter((a) => a.projekt_id === spE.id).reduce((x, a) => x + Number(a.gesamtbetrag || 0), 0));
+  // (1) Editierter Plan mit MISMATCH (Steps < Positionen) + eingefügte Blockade.
+  const planMismatch = [{ name: 'Etappe', steps: [
+    { typ: 'zahlung', bezeichnung: 'Startzahlung', betrag: 2000 },
+    { typ: 'blockade', bezeichnung: 'Druckprobe/Dichtheitsprüfung' },
+    { typ: 'zahlung', bezeichnung: 'Schlussrate', betrag: 3000 },
+  ] }];
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spE.id, plan: planMismatch, positionen: [{ bezeichnung: 'Werkleistung', menge: 1, einheit: 'Pauschal', einzelpreis: eNetto }] });
+  const vs = r.d && r.d.angebot.bauabschnitt_vorschlag[0];
+  assert(vs && vs.steps.length === 3 && vs.steps[0].bezeichnung === 'Startzahlung' && vs.steps[1].typ === 'blockade' && vs.steps[1].betrag === 0, '(B5) editierte Kette gespeichert (Blockade = Betrag 0)');
+  assert(vs.steps[0].zahlung_art === 'anzahlung' && vs.steps[2].zahlung_art === 'abnahme', '(B5) zahlung_art bleibt CHECK-gültig (anzahlung/abnahme abgeleitet)');
+  // Abschicken blockiert: 5000 Steps ≠ eNetto Positionen.
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spE.id });
+  assert(r.d && r.d.error && r.d.planMismatch && r2(r.d.check.stepSum) === 5000 && r2(r.d.check.posBasis) === eNetto, '(B5) Abschicken gesperrt: Summe stimmt nicht');
+  assert(PROJEKTE.find((p) => p.id === spE.id).sub_status !== 'angebot_offen', '(B5) Projekt NICHT abgeschickt bei Mismatch');
+  // (2) Plan korrigiert: Steps == Positionen (netto) → Abschicken erlaubt.
+  const planOk = [{ name: 'Etappe', steps: [
+    { typ: 'zahlung', bezeichnung: 'Startzahlung', betrag: r2(eNetto * 0.3) },
+    { typ: 'blockade', bezeichnung: 'Druckprobe/Dichtheitsprüfung' },
+    { typ: 'zahlung', bezeichnung: 'Schlussrate', betrag: r2(eNetto - r2(eNetto * 0.3)) },
+  ] }];
+  await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: spE.id, plan: planOk, positionen: [{ bezeichnung: 'Werkleistung', menge: 1, einheit: 'Pauschal', einzelpreis: eNetto }] });
+  r = await call(tok(MASTER_UID), { action: 'msub_angebot_send', projekt_id: spE.id });
+  assert(r.d && r.d.ok && r.d.angebot.status === 'abgeschickt', '(B5) korrigierter Plan → abgeschickt');
+  // (3) Annahme → FINAL editierte Kette wird 1:1 materialisiert (nicht neu generiert).
+  r = await call(tok(P_ALL), { action: 'sub_entscheiden', projekt_id: spE.id, op: 'annehmen' });
+  const eIds = BAUAB.filter((a) => a.projekt_id === spE.id).map((a) => a.id);
+  const eSteps = STEPS.filter((s) => eIds.includes(s.bauabschnitt_id)).sort((a, b) => a.reihenfolge - b.reihenfolge);
+  assert(eSteps.length === 3 && eSteps[0].bezeichnung === 'Startzahlung' && eSteps[1].typ === 'blockade' && eSteps[1].bezeichnung === 'Druckprobe/Dichtheitsprüfung', '(B5) editierte Kette materialisiert (Blockade erhalten)');
+  const eZ = r2(eSteps.filter((s) => s.typ === 'zahlung').reduce((x, s) => x + Number(s.betrag || 0), 0));
+  assert(eZ === eNetto, '(B5) materialisierte Zahlungs-Steps summieren auf Positionsbasis (netto)');
+  assert(r.d && r.d.zahlungsplan && !deepHasKey(r.d.zahlungsplan, 'split_profil') && !deepHasKey(r.d.zahlungsplan, 'einheit_typ'), '(B5) Partner-Zahlungsplan bleibt intern-sauber');
 
   // ── BLOCK 7: Anzahlung ist Startbedingung (Statuszeile, kein Blinken) ──
   // Plan aktiv, Anzahlung noch nicht hinterlegt → Startbedingung offen.
