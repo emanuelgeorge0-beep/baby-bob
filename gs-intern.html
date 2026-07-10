@@ -2182,16 +2182,28 @@ function msubListeHtml(list){
 function msubCardHtml(a){
   var meta=[a.standort,a.bereich].filter(Boolean).map(esc).join(' · ');
   var when=a.angefragt_am?('angefragt '+esc(zsFmt(a.angefragt_am,true))):'Entwurf';
+  // Block 3 (Runde 8a): x-Button = Soft-Delete (mit Bestätigung). Bei hinterlegtem
+  // Escrow-Geld verweigert der Server (nur Stornierung).
+  var delBtn='<button class="chip" title="Projekt löschen" style="padding:2px 8px;color:#ff9b9b;border-color:#ff9b9b" onclick="event.stopPropagation();msubProjektDelete(\''+a.id+'\',\''+esc(String(a.name||'Projekt')).replace(/'/g,"\\'")+'\')">✕</button>';
   return '<div class="lcard" data-msub="'+a.id+'" style="cursor:pointer">'+
     '<div class="top" style="display:flex;align-items:center;gap:10px">'+
       msubLogoHtml(a.partner_logo,a.partner_firma,34)+
       '<div style="flex:1;min-width:0">'+
         '<div class="nm">'+esc(a.name||'Projekt')+'</div>'+
         '<div class="meta">'+(a.anzeige_id?'<span style="color:var(--gold);font-weight:700">'+esc(a.anzeige_id)+'</span><span class="dot">'+esc(a.partner_firma||'—')+'</span>':'<span>'+esc(a.partner_firma||'—')+'</span>')+(meta?'<span class="dot">'+meta+'</span>':'')+'</div></div>'+
-      pmPill(msubStatusLabel(a.sub_status),msubStatusColor(a.sub_status))+'</div>'+
+      pmPill(msubStatusLabel(a.sub_status),msubStatusColor(a.sub_status))+delBtn+'</div>'+
     (a.beschreibung?'<div class="meta" style="margin-top:6px"><span>📝 '+esc(String(a.beschreibung).slice(0,140))+'</span></div>':'')+
     '<div class="meta" style="margin-top:4px"><span style="color:var(--muted2)">'+when+'</span></div>'+
   '</div>';
+}
+// Block 3 (Runde 8a): Sub-Projekt löschen (Soft-Delete, Bestätigung Pflicht).
+function msubProjektDelete(id,name){
+  if(!confirm('Projekt „'+name+'" wirklich löschen? Alle Bauabschnitte, Angebote und Zahlungspläne werden entfernt.')) return;
+  toast('Lösche…');
+  api('msub_projekt_del',{id:id}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('Projekt gelöscht'); renderSubAnfragen();
+  }).catch(function(){ toast('Fehler'); });
 }
 // Sub-Anfrage öffnen → GENAU dieselbe volle Projektansicht wie Kapazität
 // (paintProjektDetail über msub_detail = getPmProjekt + sub_bundle), mit dem

@@ -80,6 +80,7 @@ const PARTNER_FEATURE_ACTIONS = {
   sub_projekte: 'sub_akkord', sub_projekt: 'sub_akkord', sub_projekt_save: 'sub_akkord', sub_anfrage: 'sub_akkord',
   sub_datei_upload: 'sub_akkord', sub_datei_list: 'sub_akkord', sub_datei_del: 'sub_akkord',
   sub_entscheiden: 'sub_akkord', sub_zahlungsplan_annehmen: 'sub_akkord', sub_step_hinterlegen: 'sub_akkord',
+  sub_projekt_del: 'sub_akkord',
 };
 
 // Zugriffskontext bestimmen:
@@ -127,6 +128,11 @@ async function requireOwnedProjekt(projektId, scope) {
   const owner = rows && rows[0] ? (rows[0].partner_user_id ?? null) : undefined;
   if (owner !== scope.partnerId) throw new Forbidden();
 }
+// Block 3 (Runde 8a): Soft-Delete. Projekte mit geloescht_at verschwinden aus
+// ALLEN Listen (Master + Partner), bleiben aber in der DB. JS-seitig gefiltert
+// (nicht per Query-Filter), damit das Cockpit auch VOR dem Lauf von
+// scripts/runde8a.sql funktioniert (Spalte fehlt → Feld undefined → kein Filter).
+const ohneGeloeschte = (rows) => (rows || []).filter((p) => !p.geloescht_at);
 // Zeilen-Besitz (Material/Tätigkeit/…): über die zugehörige projekt_id prüfen.
 async function requireOwnedRow(table, id, scope) {
   if (!scope || !scope.partnerId) return;
@@ -230,6 +236,7 @@ export default async function handler(req, res) {
       case 'sub_projekt':      return res.status(200).json(await subProjekt(req.body.id, scope));
       case 'sub_projekt_save': return res.status(200).json(await subProjektSave(req.body, scope));
       case 'sub_anfrage':      return res.status(200).json(await subAnfrage(req.body, scope));
+      case 'sub_projekt_del':  return res.status(200).json(await subProjektDel(req.body, scope));
       case 'sub_datei_upload': return res.status(200).json(await pmDateiUpload(req.body, scope));
       case 'sub_datei_list':   return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
       case 'sub_datei_del':    return res.status(200).json(await pmDateiDel(req.body, scope));
@@ -246,6 +253,7 @@ export default async function handler(req, res) {
       case 'msub_liste':        return res.status(200).json(await msubListe(access));
       case 'msub_detail':       return res.status(200).json(await msubDetail(req.body.id, access));
       case 'msub_in_pruefung':  return res.status(200).json(await msubInPruefung(req.body, access));
+      case 'msub_projekt_del':  return res.status(200).json(await msubProjektDel(req.body, access));
       case 'msub_angebot_save': return res.status(200).json(await msubAngebotSave(req.body, access));
       case 'msub_angebot_send': return res.status(200).json(await msubAngebotSend(req.body, access));
       // Block 1 (Runde 8a): 'msub_angebot_quick_send' ENTFERNT — es gibt genau EINEN
@@ -353,7 +361,7 @@ async function getDashboard() {
   // ── Command-Center: Projekte / Techniker / Umsatz-Tracking (echte Quellen) ──
   let projGesamt = 0, projAktiv = 0, technikerGesamt = 0, technikerFrei = 0;
   try {
-    const pr = await sbGet('gs_projekte?select=status');
+    const pr = ohneGeloeschte(await sbGet('gs_projekte?select=*'));
     projGesamt = pr.length;
     projAktiv = pr.filter((p) => String(p.status || '').toLowerCase() === 'aktiv').length;
   } catch (_) {}
@@ -864,7 +872,7 @@ async function getMargePickers() {
   });
   let projektItems = [];
   try {
-    const pr = await sbGet('gs_projekte?select=id,name,projektnummer,status&order=created_at.desc');
+    const pr = ohneGeloeschte(await sbGet('gs_projekte?select=*&order=created_at.desc'));
     projektItems = pr.map((p) => ({
       id: p.id, label: [p.projektnummer, p.name].filter(Boolean).join(' · ') || 'Projekt',
       status: p.status || null,
@@ -888,7 +896,7 @@ async function getSaeulen() {
 
   // Optionale Quellen — alle resilient (Tabelle evtl. (noch) nicht da).
   let projekte = [], techniker = [], margen = [];
-  try { projekte = await sbGet('gs_projekte?select=id,status,bereich,stundensatz'); } catch (_) {}
+  try { projekte = ohneGeloeschte(await sbGet('gs_projekte?select=*')); } catch (_) {}
   try { techniker = await sbGet('gs_techniker?select=verfuegbar,rating'); } catch (_) {}
   try { margen = await sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell'); } catch (_) {}
 
@@ -1119,7 +1127,7 @@ async function getJarvisFacts(opts = {}) {
     sbGet('gs_crm_aufgaben?status=eq.offen&select=faelligkeit').catch(() => []),
     sbGet('gs_todos?status=eq.offen&select=titel,zustaendig,faelligkeit,prioritaet&order=faelligkeit.asc.nullslast&limit=8').catch(() => []),
     sbGet('gs_margen?select=einkauf,stundensatz,stunden,umsatz_manuell').catch(() => null),
-    sbGet('gs_projekte?select=status').catch(() => []),
+    sbGet('gs_projekte?select=*').then(ohneGeloeschte).catch(() => []),
     sbGet('gs_techniker?select=verfuegbar').catch(() => []),
     sbGet('gs_tagesrapporte?select=status').catch(() => []),
     sbGet('gs_material?select=id').catch(() => null),
@@ -1479,7 +1487,7 @@ async function findProjekt(spoken) {
   const target = norm(spoken);
   if (!target) return null;
   const [projekte, kunden] = await Promise.all([
-    sbGet('gs_projekte?select=id,name,projektnummer,standort,status,kunde_id&order=created_at.desc').catch(() => []),
+    sbGet('gs_projekte?select=*&order=created_at.desc').then(ohneGeloeschte).catch(() => []),
     sbGet('gs_kunden?select=id,firma,kontaktperson,ort').catch(() => []),
   ]);
   const kById = {};
@@ -1690,7 +1698,7 @@ async function getPmProjekte(scope) {
   const projFilter = scope && scope.partnerId ? `&partner_user_id=eq.${scope.partnerId}` : '';
   const kundeFilter = scope && scope.partnerId ? `&partner_user_id=eq.${scope.partnerId}` : '';
   const [projekte, kunden] = await Promise.all([
-    sbGet(`gs_projekte?select=*&order=created_at.desc${projFilter}`).catch(() => []),
+    sbGet(`gs_projekte?select=*&order=created_at.desc${projFilter}`).then(ohneGeloeschte).catch(() => []),
     sbGet(`gs_kunden?select=id,firma,kontaktperson,telefon,email,ort${kundeFilter}`).catch(() => []),
   ]);
   const kById = {};
@@ -1714,7 +1722,7 @@ async function getPmProjekt(id, scope) {
   id = uuid(id);
   const pr = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
   const projekt = pr && pr[0];
-  if (!projekt) return { error: 'Projekt nicht gefunden' };
+  if (!projekt || projekt.geloescht_at) return { error: 'Projekt nicht gefunden' };
   // Datentrennung: Partner darf nur EIGENE Projekte öffnen.
   if (scope && scope.partnerId && projekt.partner_user_id !== scope.partnerId) throw new Forbidden();
   const kunde = projekt.kunde_id
@@ -2272,7 +2280,7 @@ async function subProjekte(scope) {
   const pid = scope && scope.partnerId;
   if (!pid) return { projekte: [] };
   try {
-    const projekte = await sbGet(`gs_projekte?partner_user_id=eq.${pid}&projekt_art=eq.sub_akkord&select=*&order=created_at.desc`);
+    const projekte = ohneGeloeschte(await sbGet(`gs_projekte?partner_user_id=eq.${pid}&projekt_art=eq.sub_akkord&select=*&order=created_at.desc`));
     const seq = await anzeigeSeqMap(true);
     (projekte || []).forEach((p) => { p.anzeige_id = anzeigeIdFmt('sub_akkord', anzeigeJahr(p.created_at), seq[p.id] || 0); });
     return { projekte };
@@ -2282,7 +2290,7 @@ async function subProjekt(id, scope) {
   id = uuid(id);
   const pr = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
   const projekt = pr && pr[0];
-  if (!projekt) return { error: 'Projekt nicht gefunden' };
+  if (!projekt || projekt.geloescht_at) return { error: 'Projekt nicht gefunden' };
   if (scope && scope.partnerId && projekt.partner_user_id !== scope.partnerId) throw new Forbidden();
   let dateien = [];
   try { dateien = await listProjektDateien(id); } catch (_) { dateien = []; }
@@ -2554,6 +2562,50 @@ async function subAnfrage(b, scope) {
     if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) return { error: 'Sub-Modus-Spalten fehlen – scripts/submodus_migration.sql ausführen.', notMigrated: true };
     throw e;
   }
+}
+
+// ══ BLOCK 3 (Runde 8a): Projekte löschen (Soft-Delete geloescht_at) ═════════
+// Gelöschte Projekte verschwinden aus allen Listen (ohneGeloeschte), bleiben in
+// der DB. Master: jedes Sub-Projekt, ausser es liegt Escrow-Geld — dann nur
+// Stornierung. Partner: nur eigene Projekte, nur solange sub_status='entwurf'.
+async function projektHatEscrowGeld(pid) {
+  const abs = await sbGet(`gs_bauabschnitte?projekt_id=eq.${pid}&select=id`).catch(() => []);
+  for (const a of (abs || [])) {
+    const steps = await sbGet(`gs_steps?bauabschnitt_id=eq.${a.id}&select=status`).catch(() => []);
+    if ((steps || []).some((s) => ['hinterlegt', 'gs_fertig', 'freigegeben'].includes(s.status))) return true;
+  }
+  return false;
+}
+async function projektSoftDelete(pid) {
+  try {
+    await sbWrite('PATCH', `gs_projekte?id=eq.${pid}`, { geloescht_at: new Date().toISOString() }, 'return=minimal');
+    return { ok: true };
+  } catch (e) {
+    if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) return { error: 'Spalte geloescht_at fehlt – scripts/runde8a.sql ausführen.', notMigrated: true };
+    throw e;
+  }
+}
+async function msubProjektDel(b, access) {
+  msubAssertMaster(access);
+  try {
+    const id = uuid(b.id);
+    const rows = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`).catch(() => []);
+    const p = rows && rows[0];
+    if (!p || p.geloescht_at) return { error: 'Projekt nicht gefunden' };
+    if (p.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
+    if (await projektHatEscrowGeld(id)) return { error: 'Escrow-Geld hinterlegt – Projekt kann nicht gelöscht werden. Nur Stornierung möglich.', escrowLocked: true };
+    return await projektSoftDelete(id);
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
+}
+async function subProjektDel(b, scope) {
+  const id = uuid(b.id);
+  await requireOwnedProjekt(id, scope);
+  const rows = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`).catch(() => []);
+  const p = rows && rows[0];
+  if (!p || p.geloescht_at) return { error: 'Projekt nicht gefunden' };
+  if (p.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
+  if (!SUB_EDITABLE.has(p.sub_status || null)) return { error: 'Anfrage ist bereits abgeschickt – Projekt kann nicht mehr gelöscht werden.', locked: true };
+  return await projektSoftDelete(id);
 }
 
 // ── PDF-Export pro Abschnitt (wiederverwendet lib/pdf.buildPdf) ────────────
@@ -3137,7 +3189,7 @@ async function msubPartnerBrand(partnerUserId) {
 async function msubListe(access) {
   msubAssertMaster(access);
   try {
-    const projekte = await sbGet(`gs_projekte?projekt_art=eq.sub_akkord&select=*&order=created_at.desc`);
+    const projekte = ohneGeloeschte(await sbGet(`gs_projekte?projekt_art=eq.sub_akkord&select=*&order=created_at.desc`));
     const brandByPid = {};
     for (const pid of [...new Set((projekte || []).map((p) => p.partner_user_id).filter(Boolean))]) {
       brandByPid[pid] = await msubPartnerBrand(pid);
@@ -3165,9 +3217,9 @@ async function msubDetail(id, access) {
   msubAssertMaster(access);
   try {
     id = uuid(id);
-    const pr0 = await sbGet(`gs_projekte?id=eq.${id}&select=projekt_art,sub_status&limit=1`);
+    const pr0 = await sbGet(`gs_projekte?id=eq.${id}&select=*&limit=1`);
     const p0 = pr0 && pr0[0];
-    if (!p0) return { error: 'Projekt nicht gefunden' };
+    if (!p0 || p0.geloescht_at) return { error: 'Projekt nicht gefunden' };
     if (p0.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
     // Auto-Uebergang: sobald der Master die Anfrage oeffnet → in_pruefung.
     if (p0.sub_status === 'angefragt') {

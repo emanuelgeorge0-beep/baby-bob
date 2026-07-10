@@ -8140,9 +8140,11 @@ function subRender(){
       +'<button class="admin-act ok" style="flex:0 0 auto;" onclick="subNew()">＋ Neues Sub-/Akkordprojekt</button></div>'
       +'<div class="pd-item-meta" style="margin:0 2px 12px;">Projekt anlegen, Pläne/Bilder/Dokumente hochladen und die Anfrage an George Solutions abschicken.</div>';
     var rows=list.length?list.map(function(p){
+      // Block 3 (Runde 8a): Löschen nur solange Entwurf (Anfrage noch nicht raus).
+      var del=subEditable(p.sub_status)?'<button class="admin-act" style="flex:0 0 auto;padding:4px 9px;color:#ff9b9b;border-color:rgba(255,155,155,0.4);" title="Projekt löschen" onclick="event.stopPropagation();subDelete(\''+p.id+'\',\''+gsEsc(String(p.name||'Projekt')).replace(/'/g,"\\'")+'\')">✕</button>':'';
       return '<div class="pd-item" style="cursor:pointer;" onclick="subOpen(\''+p.id+'\')">'
         +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
-        +'<div style="display:flex;align-items:center;gap:8px;">'+subStatusBadge(p.sub_status)
+        +'<div style="display:flex;align-items:center;gap:8px;">'+subStatusBadge(p.sub_status)+del
         +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
         +'<div class="pd-item-meta">'+(subMeta(p)||'—')+'</div></div>';
     }).join(''):'<div class="admin-empty">Noch keine Sub-/Akkordprojekte. Legen Sie mit „＋ Neues Sub-/Akkordprojekt" das erste an.</div>';
@@ -8229,6 +8231,15 @@ function subNew(){
   });
 }
 function subEdit(){ if(!subState.data) return; pmModal('Sub-/Akkordprojekt bearbeiten', subForm(subState.data.projekt||{})); }
+// Block 3 (Runde 8a): Eigenes Sub-Projekt löschen (Soft-Delete) — nur solange
+// Entwurf; der Server erzwingt das zusätzlich (locked nach der Anfrage).
+function subDelete(id,name){
+  if(!confirm('Projekt „'+name+'" wirklich löschen?')) return;
+  pmApi('sub_projekt_del',{id:id}).then(function(d){
+    if(d&&d.error){ alert(d.error); return; }
+    subRender();
+  });
+}
 function subSave(id){
   var name=((document.getElementById('sub-name')||{}).value||'').trim();
   if(!name){ pmMsg('sub-msg','Projektname erforderlich','err'); return; }

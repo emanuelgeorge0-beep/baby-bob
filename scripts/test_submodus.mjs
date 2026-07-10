@@ -777,6 +777,52 @@ async function suite(iter) {
     assert(!deepHasKey(r.d, k), '(a) partner-payload (mit Zahlungsplan) OHNE ' + k));
   ['split_profil', 'einheit_typ', 'nummer', 'ab_nummer'].forEach((k) =>
     assert(!deepHasKey(r.d, k), '(c) partner-payload (mit Zahlungsplan) OHNE ' + k));
+
+  // ══ BLOCK 3 (Runde 8a): Projekte löschen (Soft-Delete geloescht_at) ══════════
+  // Master löscht ein Sub-Projekt → verschwindet aus ALLEN Listen (g), bleibt in DB.
+  const spD = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R8a-Del' })).d.projekt;
+  // Partner ohne sub_akkord darf die Delete-Action gar nicht.
+  assert((await call(tok(P_BRAND), { action: 'sub_projekt_del', id: spD.id })).status === 403, '(B3) ohne sub_akkord: löschen → 403');
+  assert((await call(tok(P_ALL), { action: 'msub_projekt_del', id: spD.id })).status === 403, '(B3) Partner msub_projekt_del → 403 (Master-only)');
+  r = await call(tok(MASTER_UID), { action: 'msub_projekt_del', id: spD.id });
+  assert(r.d && r.d.ok, '(B3) Master löscht Sub-Projekt (soft)');
+  const spDrow = PROJEKTE.find((p) => p.id === spD.id);
+  assert(spDrow && spDrow.geloescht_at, '(B3) Soft-Delete: Zeile bleibt in DB, geloescht_at gesetzt');
+  r = await call(tok(MASTER_UID), { action: 'msub_liste' });
+  assert(!(r.d.anfragen || []).some((a) => a.id === spD.id), '(g) Master Sub-Anfragen-Liste OHNE gelöschtes Projekt');
+  r = await call(tok(P_ALL), { action: 'sub_projekte' });
+  assert(!(r.d.projekte || []).some((p) => p.id === spD.id), '(g) Partner-Liste OHNE gelöschtes Projekt');
+  r = await call(tok(MASTER_UID), { action: 'pm_projekte' });
+  assert(!(r.d.projekte || []).some((p) => p.id === spD.id), '(g) Master pm_projekte OHNE gelöschtes Projekt');
+  r = await call(tok(P_ALL), { action: 'pm_projekte' });
+  assert(!(r.d.projekte || []).some((p) => p.id === spD.id), '(g) Partner pm_projekte OHNE gelöschtes Projekt');
+  r = await call(tok(MASTER_UID), { action: 'msub_detail', id: spD.id });
+  assert(r.d && r.d.error, '(B3) gelöschtes Projekt: Master-Detail → Fehler');
+  r = await call(tok(P_ALL), { action: 'sub_projekt', id: spD.id });
+  assert(r.d && r.d.error, '(B3) gelöschtes Projekt: Partner-Detail → Fehler');
+  r = await call(tok(MASTER_UID), { action: 'msub_projekt_del', id: spD.id });
+  assert(r.d && r.d.error, '(B3) doppelt löschen → Projekt nicht gefunden');
+  // Kapazitäts-Projekt ist über msub_projekt_del NICHT löschbar (nur Sub).
+  const kap = PROJEKTE.find((p) => p.name === 'Kap-Projekt');
+  r = await call(tok(MASTER_UID), { action: 'msub_projekt_del', id: kap.id });
+  assert(r.d && r.d.error && /Sub/.test(r.d.error), '(B3) Kapazitäts-Projekt: kein msub-Löschen');
+  // Partner: eigener Entwurf löschbar; fremd → 403; nach Anfrage gesperrt.
+  const spD2 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R8a-Del2' })).d.projekt;
+  assert((await call(tok(P_SUB2), { action: 'sub_projekt_del', id: spD2.id })).status === 403, '(B3) fremdes Projekt löschen → 403');
+  r = await call(tok(P_ALL), { action: 'sub_projekt_del', id: spD2.id });
+  assert(r.d && r.d.ok && PROJEKTE.find((p) => p.id === spD2.id).geloescht_at, '(B3) Partner löscht eigenen Entwurf (soft)');
+  const spD3 = (await call(tok(P_ALL), { action: 'sub_projekt_save', name: 'R8a-Del3' })).d.projekt;
+  await call(tok(P_ALL), { action: 'sub_anfrage', id: spD3.id });
+  r = await call(tok(P_ALL), { action: 'sub_projekt_del', id: spD3.id });
+  assert(r.d && r.d.error && r.d.locked && !PROJEKTE.find((p) => p.id === spD3.id).geloescht_at, '(B3) nach Anfrage: Partner-Löschen gesperrt');
+  // Master darf spD3 (angefragt, kein Escrow-Geld) trotzdem löschen.
+  r = await call(tok(MASTER_UID), { action: 'msub_projekt_del', id: spD3.id });
+  assert(r.d && r.d.ok, '(B3) Master löscht auch angefragtes Projekt (kein Escrow-Geld)');
+  // Escrow-Sperre: sobald Geld hinterlegt ist, nur noch Stornierung.
+  STEPS.filter((s) => b6ids.includes(s.bauabschnitt_id) && s.typ === 'zahlung')[0].status = 'hinterlegt';
+  r = await call(tok(MASTER_UID), { action: 'msub_projekt_del', id: spB6.id });
+  assert(r.d && r.d.error && r.d.escrowLocked, '(B3) Escrow-Geld hinterlegt → löschen gesperrt (nur Stornierung)');
+  assert(!PROJEKTE.find((p) => p.id === spB6.id).geloescht_at, '(B3) Escrow-Sperre: Projekt NICHT gelöscht');
 }
 
 const RUNS = 5;
