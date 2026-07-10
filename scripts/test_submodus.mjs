@@ -263,6 +263,10 @@ async function suite(iter) {
   assert(r.d && r.d.ok, 'sub_datei_upload ok');
   r = await call(tok(P_ALL), { action: 'sub_projekt', id: sp.id });
   assert(r.d && (r.d.dateien || []).some((f) => f.kategorie === 'plaene' && /plan\.pdf/.test(f.name)), 'sub detail listet plan.pdf');
+  // Block 2 (Runde 7): Upload scheitert NIE lautlos. Fehlende Datei → sauberer Fehler
+  // (kein 500), damit das Frontend eine Meldung zeigen kann statt still zu schlucken.
+  r = await call(tok(P_ALL), { action: 'sub_datei_upload', projekt_id: sp.id, kategorie: 'plaene', filename: 'leer.pdf' });
+  assert(r.status === 200 && r.d && r.d.error && !r.d.ok, '(B2) Upload ohne Daten → sichtbarer Fehler, kein 500');
 
   // Anfrage abschicken → angefragt + angefragt_am
   r = await call(tok(P_ALL), { action: 'sub_anfrage', id: sp.id });

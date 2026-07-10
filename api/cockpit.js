@@ -2090,7 +2090,7 @@ async function pmDateiUpload(b, scope) {
   const projektId = uuid(b.projekt_id);
   await requireOwnedProjekt(projektId, scope); // VOR dem Storage-Write (kein Leak)
   const buf = sbDecodeB64(b.data);
-  if (!buf) throw new Error('Datei (base64) erforderlich');
+  if (!buf) return { error: 'Datei (base64) erforderlich' }; // sauberer Fehler statt 500
   if (buf.length > 12 * 1024 * 1024) return { error: 'Datei zu gross (max. 12 MB)' };
   const safe = sbSafeName(b.filename || 'datei');
   const kat = pmKategorie(b.kategorie);
