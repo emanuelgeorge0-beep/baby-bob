@@ -140,6 +140,14 @@ globalThis.fetch = async (url, opts = {}) => {
       if (method === 'GET') return ok(BAUAB.filter((r) => match(r, filt)));
       if (method === 'POST') { const row = { id: mkid(), status: 'geplant', ...body }; BAUAB.push(row); return ok([row]); }
       if (method === 'PATCH') { const hits = BAUAB.filter((r) => match(r, filt)); hits.forEach((r) => Object.assign(r, body)); return ok(hits); }
+      if (method === 'DELETE') {
+        const del = BAUAB.filter((r) => match(r, filt)); const ids = new Set(del.map((r) => r.id));
+        // FK on delete cascade: gs_steps / gs_kalk_positionen / (gs_escrow via step) mitlöschen.
+        const stepIds = new Set(STEPS.filter((s) => ids.has(s.bauabschnitt_id)).map((s) => s.id));
+        [[BAUAB, (r) => ids.has(r.id)], [STEPS, (r) => ids.has(r.bauabschnitt_id)], [KPOS, (r) => ids.has(r.bauabschnitt_id)], [ESCROW, (r) => stepIds.has(r.step_id)]]
+          .forEach(([arr, pred]) => { const keep = arr.filter((r) => !pred(r)); arr.length = 0; arr.push(...keep); });
+        return ok([]);
+      }
     }
     if (table.startsWith('gs_steps')) {
       if (method === 'GET') return ok(STEPS.filter((r) => match(r, filt)));
@@ -414,6 +422,20 @@ async function suite(iter) {
   r = await call(tok(MASTER_UID), { action: 'msub_kalk_apply', bauabschnitt_id: baId3, personen: 2, team_tage: 5, ansatz_modus: 'schnell' });
   assert(r.d && r.d.kalk.umsatz === 6800 && r.d.kalk.ansatz === 85, 'kalk schnell: umsatz 6800');
   assert(BAUAB.find((a) => a.id === baId3).gesamtbetrag === 6800, 'kalk schnell → gesamtbetrag 6800');
+
+  // ── BLOCK 4 (Runde 7): Bauabschnitt löschen (nur vor Angebotsversand) ──
+  // Zweiter Abschnitt auf sp3 (noch kein Angebot abgeschickt) → löschbar.
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_apply', projekt_id: sp3.id, name: 'Wegwerf', split_profil: 'stueck_15_70_15', einheit_typ: 'zone', einheit_anzahl: 2, personen: 2, team_tage: 3, ansatz_modus: 'detailliert' });
+  const baWeg = r.d.bauabschnitt_id;
+  assert(BAUAB.filter((a) => a.projekt_id === sp3.id).length === 2, '(B4) zweiter Bauabschnitt angelegt');
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_del', bauabschnitt_id: baWeg });
+  assert(r.d && r.d.ok && !BAUAB.find((a) => a.id === baWeg) && !STEPS.some((s) => s.bauabschnitt_id === baWeg), '(B4) löschen entfernt Abschnitt + Steps (cascade)');
+  assert(BAUAB.find((a) => a.id === baId3), '(B4) anderer Abschnitt bleibt unberührt');
+  // Partner darf NICHT löschen (Master-only).
+  assert((await call(tok(P_ALL), { action: 'msub_kalk_del', bauabschnitt_id: baId3 })).status === 403, '(B4) Partner kalk_del → 403');
+  // Gating: sp hat ein angenommenes Angebot → Löschen serverseitig verweigert.
+  r = await call(tok(MASTER_UID), { action: 'msub_kalk_del', bauabschnitt_id: baId });
+  assert(r.d && r.d.error && /abgeschickt/i.test(r.d.error) && BAUAB.find((a) => a.id === baId), '(B4) nach Angebotsversand: löschen verweigert, Abschnitt bleibt');
 
   // Angebot: Positionen aus Bauabschnitten vorbefüllt, Brutto = netto × 1.081.
   r = await call(tok(MASTER_UID), { action: 'msub_angebot_save', projekt_id: sp3.id });

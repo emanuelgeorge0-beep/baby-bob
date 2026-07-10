@@ -2369,20 +2369,24 @@ function msubKalkPanelHtml(kalk){
     '<span>🧮 Kalkulation <span style="font-size:9.5px;color:#ff9b9b;font-weight:800;border:1px solid #ff9b9b;border-radius:6px;padding:1px 5px;vertical-align:middle">INTERN</span></span>'+
     '<span style="display:flex;gap:4px"><button class="chip" id="kalk-settings" style="font-size:11px">⚙️ Sätze</button><button class="chip" id="kalk-add" style="font-size:11px">＋ kalkulieren</button></span></div>';
   if(kalk.notMigrated) return head+migRow('Kalk-Tabellen fehlen – scripts/kalk_settings.sql ausführen.');
+  // Block 4 (Runde 7): Löschen nur solange kein Angebot ABGESCHICKT (Entwurf/abgelehnt ok).
+  var _ang=_subBundle&&_subBundle.angebot;
+  var gesendet=_ang&&(_ang.status==='abgeschickt'||_ang.status==='besprechung'||_ang.status==='angenommen');
   var rows=pos.length?pos.map(function(k){
     var col=kalkAmpelColor(k.ampel);
+    var delBtn=gesendet?'':'<button class="chip" title="Bauabschnitt löschen" style="margin-top:8px;font-size:11px;color:#ff9b9b;border-color:#ff9b9b" onclick="subKalkDel(\''+k.bauabschnitt_id+'\',\''+esc((k.name||'Abschnitt')).replace(/'/g,"\\'")+'\')">✕ löschen</button>';
     return '<div class="lcard">'+
       '<div class="top"><div class="nm">'+esc(k.name||'Abschnitt')+'</div>'+pmPill(kalkAmpelLabel(k.ampel),col)+'</div>'+
       '<div class="meta" style="margin-top:4px"><span>'+esc(k.personen)+' P × '+esc(k.team_tage)+' T · '+esc(k.ansatz_modus)+' ('+zsChf(k.ansatz)+'/h)</span><span class="dot">'+esc(k.verrechnungsstunden)+' h</span></div>'+
       '<div class="meta" style="margin-top:4px"><span style="color:var(--gold)">Umsatz '+zsChf(k.umsatz)+'</span><span class="dot" style="color:var(--muted2)">Kosten '+zsChf(k.kosten)+'</span></div>'+
       '<div class="meta" style="margin-top:2px"><span style="color:'+col+'">Rohgewinn '+zsChf(k.rohgewinn)+'</span><span class="dot">DB '+zsChf(k.db_pro_stunde)+'/h · eff. '+zsChf(k.eff_chf_h)+'/h</span></div>'+
-      '<button class="chip" style="margin-top:8px;font-size:11px" onclick="openKalkSheet(\''+k.bauabschnitt_id+'\')">🧮 neu kalkulieren</button></div>';
+      '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="chip" style="margin-top:8px;font-size:11px" onclick="openKalkSheet(\''+k.bauabschnitt_id+'\')">🧮 neu kalkulieren</button>'+delBtn+'</div></div>';
   }).join(''):'<div class="empty" style="padding:12px">Noch keine kalkulierten Bauabschnitte. Über „＋ kalkulieren" den ersten anlegen.</div>';
   // Block 1 (Runde 6): Nur EIN aktives Angebot. Sobald ein Angebot existiert
   // (Entwurf/abgeschickt/…), verschwindet der Schnellweg — abgeschickt wird dann
   // über die Prüf-Ansicht („Angebot bearbeiten"). Nur ein abgelehntes Angebot gibt
   // den Schnellweg wieder frei.
-  var _ang=_subBundle&&_subBundle.angebot; var hatAktives=_ang&&_ang.status!=='abgelehnt';
+  var hatAktives=_ang&&_ang.status!=='abgelehnt';
   var quick=(pos.length&&!hatAktives)?('<button class="btn" id="kalk-quicksend" style="margin-top:10px;background:#3dd68c;color:#04140b;border-color:#3dd68c">📨 Angebot direkt abschicken ('+zsChf(pos.reduce(function(s,k){return s+Number(k.gesamtbetrag||0);},0))+')</button>'):'';
   return head+rows+quick;
 }
@@ -2471,6 +2475,14 @@ function submitKalk(baId,isNew){
     if(d&&d.error){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} err(d.error); return; }
     closeSheet(); toast('Kalkuliert · Umsatz '+zsChf((d.kalk||{}).umsatz)); openSubAnfrage(_kalkProjektId);
   }).catch(function(){ if(btn){btn.disabled=false;btn.textContent='Berechnen & übernehmen';} err('Fehler'); });
+}
+// Block 4 (Runde 7): Bauabschnitt löschen (Bestätigung, nur vor Angebotsversand).
+function subKalkDel(baId,name){
+  if(!confirm('Bauabschnitt „'+name+'" wirklich löschen? Kalkulation und Zahlungsplan-Kette dieses Abschnitts gehen verloren.')) return;
+  api('msub_kalk_del',{bauabschnitt_id:baId}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('Bauabschnitt gelöscht'); if(_kalkProjektId) openSubAnfrage(_kalkProjektId);
+  }).catch(function(){ toast('Fehler beim Löschen'); });
 }
 function openKalkSettings(){
   api('msub_kalk_settings_get').then(function(d){

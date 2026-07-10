@@ -253,6 +253,7 @@ export default async function handler(req, res) {
       case 'msub_kalk_settings_get':  return res.status(200).json(await kalkSettingsGet(access));
       case 'msub_kalk_settings_save': return res.status(200).json(await kalkSettingsSave(req.body, access));
       case 'msub_kalk_apply':         return res.status(200).json(await msubKalkApply(req.body, access));
+      case 'msub_kalk_del':           return res.status(200).json(await msubKalkDel(req.body, access));
       default:                return res.status(400).json({ error: 'Unknown action' });
     }
   } catch (err) {
@@ -3422,6 +3423,25 @@ async function msubFindReusableAbschnitt(projektId, name) {
     }
     return null;
   } catch (e) { if (isNoTable(e)) return null; throw e; }
+}
+
+// BLOCK 4 (Runde 7): Bauabschnitt löschen (inkl. Steps/Escrow/Kalk via FK-Cascade).
+// Serverseitige Durchsetzung: NUR solange kein Angebot abgeschickt/entschieden ist –
+// danach ist die Kalkulation Teil eines rausgegangenen Angebots und bleibt eingefroren.
+async function msubKalkDel(b, access) {
+  msubAssertMaster(access);
+  try {
+    const id = uuid(b.bauabschnitt_id);
+    const rows = await sbGet(`gs_bauabschnitte?id=eq.${id}&select=projekt_id&limit=1`);
+    const pid = rows && rows[0] && rows[0].projekt_id;
+    if (!pid) return { error: 'Bauabschnitt nicht gefunden' };
+    const ang = await sbGet(`gs_angebote?projekt_id=eq.${pid}&select=status`).catch(() => []);
+    if ((ang || []).some((a) => ['abgeschickt', 'angenommen', 'besprechung'].includes(a.status)))
+      return { error: 'Angebot bereits abgeschickt – Bauabschnitt nicht mehr löschbar.' };
+    const dr = await zsAbschnittDel(id);
+    if (dr && dr.error) return dr;
+    return { ok: true };
+  } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }
 
 // Kalkulieren & uebernehmen: berechnet Umsatz und setzt ihn als gesamtbetrag ueber
