@@ -795,8 +795,16 @@ function paintDashboard(d){
       ccTile('🤝','Kunden', d.kundenGesamt, 'aktiv erfasst')+
       ccTile('💎','Umsatz gesamt', umGesV, umGesS, (um.present?'ok':'muted'))+
       ccTile('🏆','Bester Monat', bestV, bestS, (um.present&&um.bester?'gold':'muted'))+
-      ccTile('🏗️','Aktive Projekte', d.projekteAktiv, 'von '+d.projekteGesamt+' gesamt', 'ok', 'saeulen')+
+      ccTile('🏗️','Aktive Projekte', d.projekteAktiv, 'von '+d.projekteGesamt+' gesamt', 'ok', 'projekte')+
       ccTile('🛠️','Techniker frei', d.technikerFrei, 'von '+d.technikerGesamt+' im Pool', 'gold', 'saeulen')+
+    '</div>'+
+
+    // Block 9 (Runde 7): Schnellzugriff direkt im Cockpit — Sub-Anfragen (Anzahl offen)
+    // + Kapazitäts-Projekte, statt nur unter „Mehr" versteckt.
+    '<div class="cc-sec">Schnellzugriff</div>'+
+    '<div class="cc-grid">'+
+      ccTile('📐','Sub-Anfragen', '<span id="cc-subcount">…</span>', 'offen · kalkulieren & Angebot', 'gold', 'subanfragen')+
+      ccTile('🏢','Kapazitäts-Projekte', d.projekteGesamt, 'planen & steuern', 'ok', 'projekte')+
     '</div>'+
 
     chartHtml+
@@ -822,6 +830,17 @@ function paintDashboard(d){
   var tm=$('view').querySelector('[data-tap="margen"]'); if(tm) tm.onclick=function(){ go('margen'); };
   startCcClock();
   loadWeather();
+  loadSubCount();
+}
+// Block 9 (Runde 7): Anzahl offener Sub-Anfragen (angefragt + in_pruefung) für die
+// Schnellzugriff-Kachel im Cockpit. Fehler unkritisch (Kachel bleibt „–").
+function loadSubCount(){
+  var el=$('cc-subcount'); if(!el) return;
+  api('msub_liste').then(function(d){
+    if(!d||d.error){ el.textContent='–'; return; }
+    var n=(d.anfragen||[]).filter(function(a){ return a.sub_status==='angefragt'||a.sub_status==='in_pruefung'; }).length;
+    el.textContent=n;
+  }).catch(function(){ el.textContent='–'; });
 }
 // ── Wetter (Zürich, Wien, Barcelona) — dezente Zeile im Command Center ──
 // Quelle: /api/weather (open-meteo, kein Key). 15-Min-Cache im Browser; Fehler
@@ -3868,15 +3887,21 @@ function paintSaeulen(d){
     var kpis=(p.kennzahlen||[]).map(function(k){
       return '<div class="cell"><div class="kk">'+esc(k.label)+'</div><div class="vv '+(k.cls||'')+' mono">'+esc(k.value)+'</div></div>';
     }).join('');
-    return '<div class="pillar">'+
+    // Block 9 (Runde 7): Die Säule „George Solutions" ist klickbar → Sub-Anfragen.
+    // Übrige Säulen sind reine Info-Karten (kein toter Klick).
+    var goSub=/george\s*solutions/i.test(p.name||'');
+    return '<div class="pillar'+(goSub?'" data-sae-go="subanfragen" style="cursor:pointer':'')+'">'+
       '<div class="ph"><span class="nr">'+esc(p.nr)+'</span><span class="pn">'+esc(p.name)+'</span>'+
         '<span class="st-badge st-'+(p.status||'geplant')+'">'+(ST_LABEL[p.status]||p.status)+'</span></div>'+
       '<div class="ptag">'+esc(p.tagline||'')+'</div>'+
       '<div class="pkpi">'+kpis+'</div>'+
-      (p.hinweis?'<div class="phint">'+esc(p.hinweis)+'</div>':'')+
+      (goSub?'<div class="phint" style="color:var(--gold);font-weight:700">→ Sub-Anfragen öffnen</div>':(p.hinweis?'<div class="phint">'+esc(p.hinweis)+'</div>':''))+
     '</div>';
   }).join('');
   $('sae-body').innerHTML=head+cards;
+  Array.prototype.forEach.call($('sae-body').querySelectorAll('[data-sae-go]'),function(c){
+    c.onclick=function(){ go(c.getAttribute('data-sae-go')); };
+  });
 }
 
 // ── PWA: Service-Worker + Install-Hinweis ──
