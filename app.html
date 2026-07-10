@@ -8152,8 +8152,11 @@ function subForm(p){
   var header=(firma||pdLogoUrl)?('<div style="display:flex;align-items:center;gap:10px;padding:8px 0 10px;border-bottom:1px solid rgba(255,255,255,0.08);margin-bottom:8px;">'
     +(pdLogoUrl?'<img src="'+pdLogoUrl+'" alt="Logo" style="width:34px;height:34px;border-radius:8px;object-fit:contain;">':'')
     +'<div><div style="font-weight:800;">'+gsEsc(firma||'Ihre Firma')+'</div><div class="pd-item-meta" style="font-size:11px;">Absender · aus ⚙️ Einstellungen</div></div></div>'):'';
-  // Ansprechperson vorbefüllen (überschreibbar): gespeicherter Wert, sonst Login.
-  var ansprechVal=sub.ansprechperson||(isNew?((authUser&&authUser.email)||''):'');
+  // Block 3 (Runde 7): Ansprechperson vorbefüllen (überschreibbar). Fallback-Reihenfolge
+  // ansprechperson (echter Name aus dem Profil) → firma → E-Mail. Kein E-Mail-Default mehr,
+  // solange das Profil einen Namen/eine Firma trägt.
+  var _pp=pdProfil||{};
+  var ansprechVal=sub.ansprechperson||(isNew?(_pp.ansprechperson||_pp.firma||(authUser&&authUser.email)||''):'');
   return header
     +'<div class="ob-lbl">Projektname *</div><input class="login-inp" id="sub-name" value="'+gsEsc(p.name||'')+'"/>'
     +'<div class="ob-lbl">Strasse (Baustelle)</div><input class="login-inp" id="sub-strasse" value="'+gsEsc(sub.strasse||'')+'"/>'
@@ -8727,6 +8730,7 @@ function pdBrandingBlockHtml(){
     : '<div class="pd-item-meta" style="margin:6px 0;">Noch kein Logo hochgeladen.</div>';
   return '<div class="pd-item"><div class="pd-item-tit">🏢 Firmendaten & Branding</div>'
     +'<div class="ob-lbl">Firmenname</div><input class="login-inp" id="br-firma" value="'+gsEsc(p.firma||'')+'"/>'
+    +'<div class="ob-lbl">Ansprechperson</div><input class="login-inp" id="br-ansprechperson" placeholder="Name der Kontaktperson" value="'+gsEsc(p.ansprechperson||'')+'"/>'
     +'<div class="ob-lbl">Adresse</div><input class="login-inp" id="br-adresse" value="'+gsEsc(p.adresse||'')+'"/>'
     +'<div style="display:flex;gap:8px;"><div style="flex:0 0 34%;"><div class="ob-lbl">PLZ</div><input class="login-inp" id="br-plz" value="'+gsEsc(p.plz||'')+'"/></div>'
     +'<div style="flex:1;"><div class="ob-lbl">Ort</div><input class="login-inp" id="br-ort" value="'+gsEsc(p.ort||'')+'"/></div></div>'
@@ -8739,7 +8743,7 @@ function pdBrandingBlockHtml(){
 }
 function pdSaveBranding(){
   var params={};
-  ['firma','adresse','plz','ort','telefon','email'].forEach(function(k){
+  ['firma','ansprechperson','adresse','plz','ort','telefon','email'].forEach(function(k){
     var el=document.getElementById('br-'+k); params[k]=el?el.value.trim():'';
   });
   pmApi('pm_profil_save',params).then(function(d){

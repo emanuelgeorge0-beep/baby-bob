@@ -232,6 +232,9 @@ async function suite(iter) {
   assert(r.d && r.d.ok && r.d.profil.firma === 'Muster AG' && r.d.profil.ort === 'Zürich', 'profil_save firma+ort');
   r = await call(tok(P_BRAND), { action: 'pm_profil_get' });
   assert(r.d && r.d.profil && r.d.profil.firma === 'Muster AG', 'profil_get persistiert');
+  // Block 3 (Runde 7): Ansprechperson (echter Name) wird im Profil gespeichert & gelesen.
+  r = await call(tok(P_BRAND), { action: 'pm_profil_save', ansprechperson: 'Anna Muster' });
+  assert(r.d && r.d.ok && r.d.profil.ansprechperson === 'Anna Muster' && r.d.profil.firma === 'Muster AG', '(B3) ansprechperson gespeichert, firma unberührt');
   const b64 = 'data:image/png;base64,' + Buffer.from('PNGDATA').toString('base64');
   r = await call(tok(P_BRAND), { action: 'pm_logo_upload', filename: 'logo.png', contentType: 'image/png', data: b64 });
   assert(r.d && r.d.ok && /^_branding\//.test(r.d.profil.logo_url) && r.d.logo_url_signed, 'logo_upload → pfad + signed');

@@ -2193,12 +2193,24 @@ async function partnerProfilSave(b, scope) {
     const v = String(b[f] || '').trim().slice(0, 200);
     patch[f] = (f === 'firma') ? v : (v || null);
   }
+  // Block 3 (Runde 7): Ansprechperson (echter Name). Spalte kommt via scripts/runde7.sql;
+  // solange sie fehlt, darf der Rest des Profils trotzdem speicherbar bleiben.
+  let ansprech;
+  if (b.ansprechperson !== undefined) ansprech = String(b.ansprechperson || '').trim().slice(0, 200) || null;
   try {
-    const profil = await partnerProfilUpsert(pid, patch);
+    const full = (ansprech !== undefined) ? { ...patch, ansprechperson: ansprech } : patch;
+    const profil = await partnerProfilUpsert(pid, full);
     let logo_url_signed = null;
     if (profil && profil.logo_url) logo_url_signed = await sbSignUrl(PM_DATEI_BUCKET, profil.logo_url, 86400).catch(() => null);
     return { ok: true, profil, logo_url_signed };
   } catch (e) {
+    // Spalte ansprechperson noch nicht migriert → ohne sie speichern (kein Blocker).
+    if (ansprech !== undefined && /ansprechperson/i.test((e && e.message) || '')) {
+      const profil = await partnerProfilUpsert(pid, patch);
+      let logo_url_signed = null;
+      if (profil && profil.logo_url) logo_url_signed = await sbSignUrl(PM_DATEI_BUCKET, profil.logo_url, 86400).catch(() => null);
+      return { ok: true, profil, logo_url_signed, ansprechperson_pending: true };
+    }
     if (isNoTable(e)) return { error: 'Profil-Tabelle fehlt – scripts/submodus_migration.sql ausführen.', notMigrated: true };
     throw e;
   }
