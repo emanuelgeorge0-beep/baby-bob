@@ -2593,7 +2593,13 @@ async function msubProjektDel(b, access) {
     const p = rows && rows[0];
     if (!p || p.geloescht_at) return { error: 'Projekt nicht gefunden' };
     if (p.projekt_art !== 'sub_akkord') return { error: 'Kein Sub-/Akkordprojekt' };
-    if (await projektHatEscrowGeld(id)) return { error: 'Escrow-Geld hinterlegt – Projekt kann nicht gelöscht werden. Nur Stornierung möglich.', escrowLocked: true };
+    // Block 4 (zahlplan-ux): Testprojekte mit Escrow-Stub-Geld blockierten die
+    // Test-Bereinigung dauerhaft. force=true (nur Master, UI verlangt doppelte
+    // Bestätigung) löscht trotzdem — Soft-Delete, Daten bleiben in der DB.
+    // ACHTUNG: vor Stripe-Go-Live (echtes Geld statt Stub) wieder einschränken.
+    if (await projektHatEscrowGeld(id) && b.force !== true) {
+      return { error: 'Escrow-Geld hinterlegt – Projekt kann nicht gelöscht werden. Nur Stornierung möglich.', escrowLocked: true };
+    }
     return await projektSoftDelete(id);
   } catch (e) { if (isNoTable(e)) return { error: 'Nicht migriert', notMigrated: true }; throw e; }
 }

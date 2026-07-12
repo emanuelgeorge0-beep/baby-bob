@@ -2207,10 +2207,20 @@ function msubCardHtml(a){
   '</div>';
 }
 // Block 3 (Runde 8a): Sub-Projekt löschen (Soft-Delete, Bestätigung Pflicht).
+// Block 4 (zahlplan-ux): escrowLocked → zweite, explizite Bestätigung erlaubt die
+// Test-Löschung (force) — reine Weste für Testprojekte trotz Escrow-Stub-Geld.
 function msubProjektDelete(id,name){
   if(!confirm('Projekt „'+name+'" wirklich löschen? Alle Bauabschnitte, Angebote und Zahlungspläne werden entfernt.')) return;
   toast('Lösche…');
   api('msub_projekt_del',{id:id}).then(function(d){
+    if(d&&d.escrowLocked){
+      if(!confirm('⚠️ Escrow-Geld hinterlegt (Test-Stub). Handelt es sich um ein TESTPROJEKT, kann es trotzdem gelöscht werden.\n\nTestprojekt „'+name+'" endgültig löschen?')) return;
+      api('msub_projekt_del',{id:id,force:true}).then(function(d2){
+        if(d2&&d2.error){ toast(d2.error); return; }
+        toast('Testprojekt gelöscht'); renderSubAnfragen();
+      }).catch(function(){ toast('Fehler'); });
+      return;
+    }
     if(d&&d.error){ toast(d.error); return; }
     toast('Projekt gelöscht'); renderSubAnfragen();
   }).catch(function(){ toast('Fehler'); });
