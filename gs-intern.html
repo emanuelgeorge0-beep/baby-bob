@@ -484,6 +484,11 @@
   .zs-agg-line{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:5px;}
   .zs-next{font-size:12px;color:var(--gold);margin-top:4px;}
   .zs-steps{display:flex;flex-direction:column;gap:7px;}
+  /* Block 2 (zahlplan-ux): Ziehgriff-Sortierung im Zahlungsplan-Editor */
+  .pl-grip{cursor:grab;color:var(--muted2);font-size:15px;padding:2px 4px;flex:0 0 auto;touch-action:none;user-select:none;-webkit-user-select:none;}
+  .pl-grip:active{cursor:grabbing;color:var(--gold);}
+  .pl-row.pl-dragging{opacity:.4;}
+  .pl-row.pl-dropover{box-shadow:0 -2px 0 0 var(--gold);}
   .zs-step{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:9px 11px;}
   .zs-step-h{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
   .zs-no{width:20px;height:20px;border-radius:50%;background:var(--gold-soft);color:var(--gold);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
@@ -2385,15 +2390,44 @@ function plStepRowHtml(ai,s,si,n){
   var isB=s.typ==='blockade';
   var amount=isB?'<span style="width:96px;text-align:right;color:var(--muted2);font-size:11px">Blockade</span>'
     :'<input class="field" style="width:96px" type="number" min="0" step="0.01" id="pl-sb-'+ai+'-'+si+'" value="'+esc(s.betrag)+'" oninput="plLive()"/>';
-  return '<div style="display:flex;gap:5px;align-items:center;margin-top:5px">'+
+  // Block 2 (zahlplan-ux): Ziehgriff (HTML5 draggable) sortiert innerhalb des
+  // Abschnitts; die ▲/▼-Pfeile bleiben als Fallback (Touch/ältere Browser).
+  return '<div class="pl-row" id="pl-row-'+ai+'-'+si+'" style="display:flex;gap:5px;align-items:center;margin-top:5px;flex-wrap:wrap" '+
+    'ondragover="plDragOver(event,'+ai+','+si+')" ondragleave="plDragLeave(event,'+ai+','+si+')" ondrop="plDrop(event,'+ai+','+si+')">'+
+    '<span class="pl-grip" draggable="true" title="ziehen zum Sortieren" ondragstart="plDragStart(event,'+ai+','+si+')" ondragend="plDragEnd(event)">⠿</span>'+
     '<span style="font-size:14px" title="'+(isB?'Blockade':'Zahlung')+'">'+(isB?'⛔':'💰')+'</span>'+
-    '<input class="field" style="flex:1" id="pl-sn-'+ai+'-'+si+'"'+(isB?' list="pl-blk-list"':'')+' value="'+esc(s.bezeichnung)+'" placeholder="'+(isB?'Blockade':'Zahlung')+'"/>'+
+    '<input class="field" style="flex:1;min-width:110px" id="pl-sn-'+ai+'-'+si+'"'+(isB?' list="pl-blk-list"':'')+' value="'+esc(s.bezeichnung)+'" placeholder="'+(isB?'Blockade':'Zahlung')+'"/>'+
     amount+
     '<button class="chip" style="padding:2px 6px" title="Typ umschalten" onclick="plStepToggle('+ai+','+si+')">⇄</button>'+
     '<button class="chip" style="padding:2px 6px" title="nach oben" onclick="plStepMove('+ai+','+si+',-1)"'+(si===0?' disabled':'')+'>▲</button>'+
     '<button class="chip" style="padding:2px 6px" title="nach unten" onclick="plStepMove('+ai+','+si+',1)"'+(si===n-1?' disabled':'')+'>▼</button>'+
     '<button class="chip" style="padding:2px 6px;color:#ff9b9b;border-color:#ff9b9b" title="löschen" onclick="plStepDel('+ai+','+si+')">✕</button>'+
   '</div>';
+}
+// Block 2 (zahlplan-ux): Drag-Sortierung. Nur innerhalb desselben Abschnitts —
+// Drop verschiebt den gezogenen Step VOR den Ziel-Step (bzw. ans Ende).
+var _plDrag=null;
+function plDragStart(e,ai,si){
+  plReadInputs(); _plDrag={ai:ai,si:si};
+  try{ e.dataTransfer.setData('text/plain',ai+':'+si); e.dataTransfer.effectAllowed='move'; }catch(_){}
+  var r=$('pl-row-'+ai+'-'+si); if(r)r.classList.add('pl-dragging');
+}
+function plDragEnd(e){
+  _plDrag=null;
+  document.querySelectorAll('.pl-row.pl-dragging,.pl-row.pl-dropover').forEach(function(x){ x.classList.remove('pl-dragging','pl-dropover'); });
+}
+function plDragOver(e,ai,si){
+  if(!_plDrag||_plDrag.ai!==ai) return; // nur gleicher Abschnitt
+  e.preventDefault(); e.dataTransfer.dropEffect='move';
+  var r=$('pl-row-'+ai+'-'+si); if(r&&!(ai===_plDrag.ai&&si===_plDrag.si))r.classList.add('pl-dropover');
+}
+function plDragLeave(e,ai,si){ var r=$('pl-row-'+ai+'-'+si); if(r)r.classList.remove('pl-dropover'); }
+function plDrop(e,ai,si){
+  e.preventDefault();
+  if(!_plDrag||_plDrag.ai!==ai){ plDragEnd(e); return; }
+  var st=_pl.abschnitte[ai].steps, from=_plDrag.si; _plDrag=null;
+  if(from!==si){ var mv=st.splice(from,1)[0]; st.splice(si,0,mv); }
+  plRender();
 }
 function plAbschnittHtml(a,ai){
   var subtot=a.steps.reduce(function(s,st){return s+(st.typ==='zahlung'?Math.round((Number(st.betrag)||0)*100):0);},0)/100;
