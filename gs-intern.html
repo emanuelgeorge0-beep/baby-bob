@@ -489,6 +489,11 @@
   .pl-grip:active{cursor:grabbing;color:var(--gold);}
   .pl-row.pl-dragging{opacity:.4;}
   .pl-row.pl-dropover{box-shadow:0 -2px 0 0 var(--gold);}
+  /* Block 3 (zahlplan-ux): Preset-Typeahead im Zahlungsplan-Editor */
+  .pl-psl{position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:40;background:var(--card);border:1px solid var(--line);border-radius:11px;max-height:230px;overflow:auto;box-shadow:0 10px 26px rgba(0,0,0,.45);}
+  .pl-psi{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--line);}
+  .pl-psi:last-child{border-bottom:none;}
+  .pl-psi:hover{background:var(--gold-soft);}
   .zs-step{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:9px 11px;}
   .zs-step-h{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
   .zs-no{width:20px;height:20px;border-radius:50%;background:var(--gold-soft);color:var(--gold);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
@@ -2366,7 +2371,10 @@ function plr2(x){ return Math.round((Number(x)||0)*100)/100; }
 function openAngebotPruefung(p,ang){
   if(!ang){ toast('Kein Angebot vorhanden'); return; }
   var pos=(ang.positionen||[]).map(function(x){ return {bezeichnung:x.bezeichnung||'',menge:Number(x.menge||1),einheit:x.einheit||'Pauschal',einzelpreis:Number(x.einzelpreis||0),im_zahlungsplan:x.im_zahlungsplan!==false}; });
-  var abschnitte=(ang.bauabschnitt_vorschlag||[]).map(function(a){ return {name:a.name||'Abschnitt',steps:(a.steps||[]).map(function(s){ return {typ:(s.typ==='blockade'?'blockade':'zahlung'),zahlung_art:s.zahlung_art||null,bezeichnung:s.bezeichnung||'',betrag:Number(s.betrag||0)}; })}; });
+  // Block 3 (zahlplan-ux): fix=true für geladene Zahlungs-Steps mit Betrag — der
+  // %-Motor verteilt nur ungesperrte Steps und zerstört so nie die bestehende
+  // (Generator-/final editierte) Verteilung beim blossen Öffnen.
+  var abschnitte=(ang.bauabschnitt_vorschlag||[]).map(function(a){ return {name:a.name||'Abschnitt',steps:(a.steps||[]).map(function(s){ return {typ:(s.typ==='blockade'?'blockade':'zahlung'),zahlung_art:s.zahlung_art||null,bezeichnung:s.bezeichnung||'',betrag:Number(s.betrag||0),fix:(s.typ!=='blockade'&&Number(s.betrag||0)>0)}; })}; });
   if(!pos.length&&abschnitte.length) pos=abschnitte.map(function(a){ return {bezeichnung:a.name,menge:1,einheit:'Pauschal',einzelpreis:a.steps.reduce(function(s,st){return s+(st.typ==='zahlung'?Number(st.betrag||0):0);},0),im_zahlungsplan:true}; });
   _pl={projektId:p.id,ang:ang,positionen:pos,abschnitte:abschnitte,
     // Block 1 (Runde 8a): drei Pflicht-Häkchen — ohne sie kein Versand.
@@ -2381,15 +2389,21 @@ function plPosRowHtml(p,i){
     '<input class="field" style="flex:1" id="pl-pb-'+i+'" value="'+esc(p.bezeichnung)+'" placeholder="Position"/>'+
     '<button class="chip" style="color:#ff9b9b;border-color:#ff9b9b" onclick="plPosDel('+i+')" title="Position löschen">✕</button></div>'+
     '<div style="display:flex;gap:6px;margin-top:5px;align-items:center">'+
-      '<span style="font-size:11px;color:var(--muted2)">Menge</span><input class="field" style="width:64px" type="number" min="0" step="0.01" id="pl-pm-'+i+'" value="'+esc(p.menge)+'" oninput="plLive()"/>'+
-      '<span style="font-size:11px;color:var(--muted2)">×</span><input class="field" style="width:96px" type="number" min="0" step="0.01" id="pl-pp-'+i+'" value="'+esc(p.einzelpreis)+'" oninput="plLive()"/>'+
-      '<label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-left:auto;cursor:pointer" title="Fliesst in den Zahlungsplan (Escrow)"><input type="checkbox" id="pl-ph-'+i+'" '+(p.im_zahlungsplan!==false?'checked':'')+' onchange="plLive()"/> Plan</label>'+
+      '<span style="font-size:11px;color:var(--muted2)">Menge</span><input class="field" style="width:64px" type="number" min="0" step="0.01" id="pl-pm-'+i+'" value="'+esc(p.menge)+'" oninput="plLive()" onchange="plPosChanged()"/>'+
+      '<span style="font-size:11px;color:var(--muted2)">×</span><input class="field" style="width:96px" type="number" min="0" step="0.01" id="pl-pp-'+i+'" value="'+esc(p.einzelpreis)+'" oninput="plLive()" onchange="plPosChanged()"/>'+
+      '<label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-left:auto;cursor:pointer" title="Fliesst in den Zahlungsplan (Escrow)"><input type="checkbox" id="pl-ph-'+i+'" '+(p.im_zahlungsplan!==false?'checked':'')+' onchange="plPosChanged()"/> Plan</label>'+
     '</div></div>';
 }
 function plStepRowHtml(ai,s,si,n){
   var isB=s.typ==='blockade';
-  var amount=isB?'<span style="width:96px;text-align:right;color:var(--muted2);font-size:11px">Blockade</span>'
-    :'<input class="field" style="width:96px" type="number" min="0" step="0.01" id="pl-sb-'+ai+'-'+si+'" value="'+esc(s.betrag)+'" oninput="plLive()"/>';
+  // Block 3 (zahlplan-ux): % und CHF live gekoppelt; explizite Eingabe fixiert den
+  // Step (🔒), der Motor verteilt den Rest auf die ungesperrten Zahlungs-Steps.
+  var totalC=plPosBasis();
+  var pct=totalC>0?Math.round(Math.round((Number(s.betrag)||0)*100)/totalC*1000)/10:0;
+  var amount=isB?'<span style="width:142px;text-align:right;color:var(--muted2);font-size:11px">Gate / Blockade</span>'
+    :('<input class="field" style="width:52px" type="number" min="0" max="100" step="0.1" id="pl-sp-'+ai+'-'+si+'" value="'+pct+'" title="Prozent der Netto-Positionsbasis" oninput="plPctIn('+ai+','+si+')" onchange="plStepFix('+ai+','+si+')"/><span style="font-size:11px;color:var(--muted2)">%</span>'+
+      '<input class="field" style="width:84px" type="number" min="0" step="0.01" id="pl-sb-'+ai+'-'+si+'" value="'+esc(s.betrag)+'" oninput="plChfIn('+ai+','+si+')" onchange="plStepFix('+ai+','+si+')"/>'+
+      '<button class="chip" style="padding:2px 6px'+(s.fix?';color:var(--gold);border-color:var(--gold)':'')+'" title="'+(s.fix?'fixiert – tippen für Automatik':'automatisch verteilt – tippen zum Fixieren')+'" onclick="plStepLock('+ai+','+si+')">'+(s.fix?'🔒':'🔓')+'</button>');
   // Block 2 (zahlplan-ux): Ziehgriff (HTML5 draggable) sortiert innerhalb des
   // Abschnitts; die ▲/▼-Pfeile bleiben als Fallback (Touch/ältere Browser).
   return '<div class="pl-row" id="pl-row-'+ai+'-'+si+'" style="display:flex;gap:5px;align-items:center;margin-top:5px;flex-wrap:wrap" '+
@@ -2427,31 +2441,141 @@ function plDrop(e,ai,si){
   if(!_plDrag||_plDrag.ai!==ai){ plDragEnd(e); return; }
   var st=_pl.abschnitte[ai].steps, from=_plDrag.si; _plDrag=null;
   if(from!==si){ var mv=st.splice(from,1)[0]; st.splice(si,0,mv); }
-  plRender();
+  plRecalc(); plRender();
 }
 function plAbschnittHtml(a,ai){
   var subtot=a.steps.reduce(function(s,st){return s+(st.typ==='zahlung'?Math.round((Number(st.betrag)||0)*100):0);},0)/100;
   return '<div class="lcard" style="margin:0 0 8px"><div class="top"><div class="nm">'+esc(a.name||'Abschnitt')+'</div><span style="color:var(--gold);font-weight:700" id="pl-sub-'+ai+'">'+zsChf(subtot)+'</span></div>'+
     a.steps.map(function(s,si){ return plStepRowHtml(ai,s,si,a.steps.length); }).join('')+
-    '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'+
-      '<button class="chip" onclick="plStepAdd('+ai+',\'zahlung\')">＋ Zahlung</button>'+
-      '<button class="chip" onclick="plStepAdd('+ai+',\'blockade\')">＋ Blockade</button>'+
+    // Block 3 (zahlplan-ux): Preset-SUCHE statt fester Chip-Leiste. Tippen zeigt
+    // passende Presets (Typeahead), Antippen fügt den Step ein.
+    '<div style="position:relative;margin-top:8px">'+
+      '<input class="field" id="pl-ps-'+ai+'" placeholder="＋ Step suchen: Anzahlung, Gate, Fortschritt …" autocomplete="off" oninput="plPresetSearch('+ai+')" onfocus="plPresetSearch('+ai+')" onblur="plPresetBlur('+ai+')"/>'+
+      '<div class="pl-psl" id="pl-psl-'+ai+'" style="display:none"></div>'+
     '</div></div>';
 }
+// ── Block 3 (zahlplan-ux): Presets für die Step-Suche ──────────────────────
+// Quellen: (1) bestehende HKLS-Vorlagen: PL_BLOCKADEN (oben) wird WIEDERVERWENDET,
+// die Zahlungs-/Meilenstein-Namen spiegeln den Server-Generator zsBuildSpecs
+// (api/cockpit.js – 'Speicher gestellt', 'Installation komplett', 'Abnahme');
+// (2) neue Presets dieser Runde. PM_MAT_VORLAGE ist Material, KEINE Step-Quelle.
+var PL_GATES_NEU=['Materialauszug / Materialorganisation','Installation fertiggestellt','Anlage unter Druck','Dichtheit geprüft','Anlage füllen & entlüften','Inbetriebnahme','Übergabe'];
+var PL_ZAHLUNG_PRESETS=[
+  {l:'Anzahlung',pct:15,art:'anzahlung'},
+  {l:'Installationstag 1',art:'fortschritt'},
+  {l:'Installationstag 3',art:'fortschritt'},
+  {l:'Installationstag 5',art:'fortschritt'},
+  {l:'Installation abgeschlossen',art:'abnahme'},
+  {l:'Speicher gestellt',art:'meilenstein'},
+  {l:'Installation komplett',art:'meilenstein'},
+  {l:'Abnahme',art:'abnahme'}
+];
+function plPresetList(){
+  var out=[{k:'zahlung',l:'Zahlung (leer)'},{k:'gate',l:'Gate / Blockade (leer)'}];
+  PL_ZAHLUNG_PRESETS.forEach(function(p){ out.push({k:'zahlung',l:p.l,pct:p.pct||null,art:p.art||null}); });
+  out.push({k:'fortschritt',l:'Installationsfortschritt (10–100 %)'});
+  var seen={};
+  PL_BLOCKADEN.concat(PL_GATES_NEU).forEach(function(l){ var key=l.toLowerCase(); if(seen[key]) return; seen[key]=1; out.push({k:'gate',l:l}); });
+  return out;
+}
+var _plPsList=[];
+function plPresetSearch(ai){
+  var inp=$('pl-ps-'+ai),box=$('pl-psl-'+ai); if(!inp||!box) return;
+  var q=(inp.value||'').trim().toLowerCase();
+  _plPsList=plPresetList().filter(function(p){ return !q||p.l.toLowerCase().indexOf(q)>=0; });
+  if(!_plPsList.length){ box.style.display='none'; return; }
+  box.innerHTML=_plPsList.map(function(p,i){
+    var tag=p.k==='gate'?'⛔ Gate':(p.k==='fortschritt'?'📈 Fortschritt':'💰 Zahlung'+(p.pct?' · '+p.pct+'%':''));
+    return '<div class="pl-psi" onmousedown="plPresetPick('+ai+','+i+');event.preventDefault()"><span>'+esc(p.l)+'</span><span style="color:var(--muted2);font-size:10.5px">'+tag+'</span></div>';
+  }).join('');
+  box.style.display='block';
+}
+function plPresetBlur(ai){ setTimeout(function(){ var b=$('pl-psl-'+ai); if(b) b.style.display='none'; },150); }
+function plPresetPick(ai,i){
+  var p=_plPsList[i]; if(!p) return;
+  if(p.k==='fortschritt'){ // %-Wähler 10–100 in 10er-Schritten einblenden
+    var box=$('pl-psl-'+ai); if(!box) return;
+    box.innerHTML='<div class="pl-psi" style="cursor:default;color:var(--muted2)">Installationsfortschritt – Prozent wählen:</div>'+
+      [10,20,30,40,50,60,70,80,90,100].map(function(v){
+        return '<div class="pl-psi" onmousedown="plPresetFortschritt('+ai+','+v+');event.preventDefault()"><span>Installationsfortschritt</span><span style="color:var(--gold);font-weight:700">'+v+'%</span></div>';
+      }).join('');
+    return;
+  }
+  if(p.k==='gate'){ plPresetInsert(ai,{typ:'blockade',zahlung_art:null,bezeichnung:p.l==='Gate / Blockade (leer)'?'':p.l,betrag:0,fix:false}); return; }
+  var bez=p.l==='Zahlung (leer)'?'Zahlung':p.l;
+  var st={typ:'zahlung',zahlung_art:p.art||null,bezeichnung:bez,betrag:0,fix:false};
+  if(p.pct){ st.betrag=Math.round((plPosBasis()/100)*(p.pct/100)); st.fix=true; } // Default-% (editierbar), ganze Franken
+  plPresetInsert(ai,st);
+}
+function plPresetFortschritt(ai,pct){
+  plPresetInsert(ai,{typ:'zahlung',zahlung_art:'fortschritt',bezeichnung:'Installationsfortschritt',betrag:Math.round((plPosBasis()/100)*(pct/100)),fix:true});
+}
+function plPresetInsert(ai,step){ plReadInputs(); _pl.abschnitte[ai].steps.push(step); plRecalc(); plRender(); }
 // Block 1 (Runde 8a): drei Pflicht-Häkchen (Positionen | Zahlungsplan | Konditionen).
 function plChkHtml(key,label){
   var on=_pl.checks&&_pl.checks[key];
   return '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--txt);margin-top:6px;cursor:pointer"><input type="checkbox" id="pl-ok-'+key+'" '+(on?'checked':'')+' onchange="plLive()"/> '+label+'</label>';
 }
 function plChecksOk(){ var c=_pl.checks||{}; return !!(c.pos&&c.plan&&c.kond); }
+// ── Block 3 (zahlplan-ux): %-Verteilungsmotor ───────────────────────────────
+// Zielsumme = Netto-Positionsbasis (plPosBasis). Fixierte Zahlungs-Steps behalten
+// ihren Betrag; die ungesperrten teilen den Rest gleichmässig (ganze Franken),
+// der Rundungsrest landet auf dem LETZTEN ungesperrten Step → Summe exakt.
+// Gates (typ 'blockade') zählen nie. Alles fixiert → keine Umverteilung, die
+// Rest-Anzeige zeigt die Differenz.
+function plRecalc(){
+  if(!_pl) return;
+  var totalC=plPosBasis(), lockedC=0, free=[];
+  _pl.abschnitte.forEach(function(a){ a.steps.forEach(function(s){
+    if(s.typ!=='zahlung') return;
+    if(s.fix) lockedC+=Math.round((Number(s.betrag)||0)*100); else free.push(s);
+  }); });
+  if(!free.length) return;
+  var restC=totalC-lockedC;
+  var baseF=Math.max(0,Math.floor(restC/100/free.length));   // ganze Franken je Step
+  free.forEach(function(s){ s.betrag=baseF; });
+  var diffC=restC-baseF*100*free.length;                      // Rest (inkl. Rappen)
+  free[free.length-1].betrag=Math.max(0,baseF*100+diffC)/100; // auf letzten ungesperrten
+}
+// % ↔ CHF live gekoppelt (nur Anzeige/State, Fixierung erst onchange via plStepFix).
+function plChfIn(ai,si){
+  var c=$('pl-sb-'+ai+'-'+si),p=$('pl-sp-'+ai+'-'+si);
+  if(c&&p){ var t=plPosBasis(),bc=Math.round((Number(c.value)||0)*100); p.value=t>0?Math.round(bc/t*1000)/10:0; }
+  plLive();
+}
+function plPctIn(ai,si){
+  var c=$('pl-sb-'+ai+'-'+si),p=$('pl-sp-'+ai+'-'+si);
+  if(c&&p){ var t=plPosBasis(); c.value=Math.round((t/100)*((Number(p.value)||0)/100)); }
+  plLive();
+}
+// Explizite Eingabe committed (blur/Enter): Betrag 0 → Step wird Gate, sonst fixieren.
+function plStepFix(ai,si){
+  plReadInputs();
+  var s=_pl.abschnitte[ai]&&_pl.abschnitte[ai].steps[si]; if(!s||s.typ!=='zahlung') return;
+  if(!(Number(s.betrag)||0)){ s.typ='blockade'; s.zahlung_art=null; s.betrag=0; s.fix=false; }
+  else s.fix=true;
+  plRecalc(); plRender();
+}
+function plStepLock(ai,si){
+  plReadInputs();
+  var s=_pl.abschnitte[ai]&&_pl.abschnitte[ai].steps[si]; if(!s||s.typ!=='zahlung') return;
+  s.fix=!s.fix; plRecalc(); plRender();
+}
+// Rest-Anzeige: CHF und %, wird 0/grün wenn voll verteilt (Rappen-genau).
+function plStatusHtml(stepC,posC){
+  var ok=(stepC===posC), diffC=posC-stepC;
+  var pct=posC>0?Math.round(Math.abs(diffC)/posC*1000)/10:0;
+  if(ok) return '<div class="zs-ov-ok" style="color:#3dd68c;font-weight:800">✓ Voll verteilt · Rest CHF 0 (0%) — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>';
+  return '<div style="color:#ff5d5d;font-weight:800">Rest '+zsChf(Math.abs(diffC)/100)+' ('+pct+'%)'+(diffC>0?' nicht zugeordnet':' zu viel verteilt')+' — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>';
+}
+// Positionsbasis geändert (Menge/Preis/Plan-Häkchen committed) → Motor neu rechnen.
+function plPosChanged(){ plReadInputs(); plRecalc(); plRender(); }
 function plRender(){
   // Achtung: NICHT plReadInputs() hier — Aufrufer haben Eingaben bereits gelesen und den
   // State mutiert (Move/Toggle). Erneutes Lesen des alten DOM würde die Mutation zerstören.
-  var stepC=plStepSum(), posC=plPosBasis(), ok=(stepC===posC), diff=(posC-stepC)/100;
+  var stepC=plStepSum(), posC=plPosBasis(), ok=(stepC===posC);
   var sendOk=ok&&plChecksOk();
-  var status=ok
-    ? '<div class="zs-ov-ok" style="color:#3dd68c;font-weight:800">✓ Summe Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'
-    : '<div style="color:#ff5d5d;font-weight:800">noch '+zsChf(Math.abs(diff))+(diff>0?' nicht zugeordnet':' zu viel verteilt')+' — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>';
+  var status=plStatusHtml(stepC,posC);
   openSheet('<h3>Angebot prüfen & abschicken</h3>'+
     '<datalist id="pl-blk-list">'+PL_BLOCKADEN.map(function(b){return '<option value="'+esc(b)+'">';}).join('')+'</datalist>'+
     '<div class="sec-t">Positionen</div>'+
@@ -2488,20 +2612,18 @@ function plReadInputs(){
 // Live-Neuberechnung ohne Re-Render (Fokus bleibt): Summenzeile + Subtotals + Send-Gate.
 function plLive(){
   plReadInputs();
-  var stepC=plStepSum(), posC=plPosBasis(), ok=(stepC===posC), diff=(posC-stepC)/100;
-  var el=$('pl-status'); if(el){ el.innerHTML=ok
-    ? '<div class="zs-ov-ok" style="color:#3dd68c;font-weight:800">✓ Summe Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'
-    : '<div style="color:#ff5d5d;font-weight:800">noch '+zsChf(Math.abs(diff))+(diff>0?' nicht zugeordnet':' zu viel verteilt')+' — Steps '+zsChf(stepC/100)+' · Positionen '+zsChf(posC/100)+'</div>'; }
+  var stepC=plStepSum(), posC=plPosBasis(), ok=(stepC===posC);
+  var el=$('pl-status'); if(el){ el.innerHTML=plStatusHtml(stepC,posC); }
   _pl.abschnitte.forEach(function(a,ai){ var st=$('pl-sub-'+ai); if(st){ var t=a.steps.reduce(function(s,x){return s+(x.typ==='zahlung'?Math.round((Number(x.betrag)||0)*100):0);},0)/100; st.textContent=zsChf(t); } });
   var sendOk=ok&&plChecksOk();
   var b=$('pl-send'); if(b){ b.disabled=!sendOk; b.style.opacity=sendOk?'1':'0.5'; }
 }
-function plPosAdd(){ plReadInputs(); _pl.positionen.push({bezeichnung:'',menge:1,einheit:'Pauschal',einzelpreis:0,im_zahlungsplan:true}); plRender(); }
-function plPosDel(i){ plReadInputs(); _pl.positionen.splice(i,1); plRender(); }
-function plStepAdd(ai,typ){ plReadInputs(); _pl.abschnitte[ai].steps.push(typ==='blockade'?{typ:'blockade',zahlung_art:null,bezeichnung:'',betrag:0}:{typ:'zahlung',zahlung_art:null,bezeichnung:'Zahlung',betrag:0}); plRender(); }
-function plStepDel(ai,si){ plReadInputs(); _pl.abschnitte[ai].steps.splice(si,1); plRender(); }
-function plStepMove(ai,si,dir){ plReadInputs(); var st=_pl.abschnitte[ai].steps; var j=si+dir; if(j<0||j>=st.length) return; var t=st[si]; st[si]=st[j]; st[j]=t; plRender(); }
-function plStepToggle(ai,si){ plReadInputs(); var s=_pl.abschnitte[ai].steps[si]; if(s.typ==='blockade'){ s.typ='zahlung'; if(!s.bezeichnung)s.bezeichnung='Zahlung'; } else { s.typ='blockade'; s.betrag=0; } plRender(); }
+function plPosAdd(){ plReadInputs(); _pl.positionen.push({bezeichnung:'',menge:1,einheit:'Pauschal',einzelpreis:0,im_zahlungsplan:true}); plRecalc(); plRender(); }
+function plPosDel(i){ plReadInputs(); _pl.positionen.splice(i,1); plRecalc(); plRender(); }
+function plStepAdd(ai,typ){ plReadInputs(); _pl.abschnitte[ai].steps.push(typ==='blockade'?{typ:'blockade',zahlung_art:null,bezeichnung:'',betrag:0,fix:false}:{typ:'zahlung',zahlung_art:null,bezeichnung:'Zahlung',betrag:0,fix:false}); plRecalc(); plRender(); }
+function plStepDel(ai,si){ plReadInputs(); _pl.abschnitte[ai].steps.splice(si,1); plRecalc(); plRender(); }
+function plStepMove(ai,si,dir){ plReadInputs(); var st=_pl.abschnitte[ai].steps; var j=si+dir; if(j<0||j>=st.length) return; var t=st[si]; st[si]=st[j]; st[j]=t; plRecalc(); plRender(); }
+function plStepToggle(ai,si){ plReadInputs(); var s=_pl.abschnitte[ai].steps[si]; if(s.typ==='blockade'){ s.typ='zahlung'; s.fix=false; if(!s.bezeichnung)s.bezeichnung='Zahlung'; } else { s.typ='blockade'; s.betrag=0; s.fix=false; s.zahlung_art=null; } plRecalc(); plRender(); }
 function plSend(){
   plReadInputs();
   var b=$('pl-send'); if(b&&b.disabled) return;
