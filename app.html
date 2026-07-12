@@ -8063,11 +8063,59 @@ function pmMatDel(id){ pmApi('pm_material_del',{id:id}).then(function(d){ if(d&&
 function pmVerr(id,status){ pmApi('pm_rapport_verrechnet',{id:id,status:status}).then(function(d){ if(d&&d.error){toast(d.error);return;} pmReload(); }); }
 
 // ── Datei-Upload (3 Kategorien) — Bucket 'projektdateien' via api/cockpit ──
-// Block 2 (Runde 7): Datei-Upload läuft als base64-JSON durch die Serverless-Function.
-// Vercel begrenzt den Request-Body auf ~4.5 MB; base64 bläht ~1,37× auf. 3 MB Rohdatei
-// bleiben mit Sicherheitsmarge darunter und garantieren: was der Client durchlässt,
-// kommt auch an (kein lautloses Scheitern grosser Pläne/Fotos).
-var UPLOAD_MAX_MB=3, UPLOAD_MAX_BYTES=UPLOAD_MAX_MB*1024*1024;
+// Upload läuft als base64-JSON durch die Serverless-Function; Vercel begrenzt den
+// Request-Body auf ~4.5 MB (base64 bläht ~1,37× auf). Der frühere 3-MB-Cap wies
+// normale Baustellen-Fotos ab („zu gross"). Fix (fix/datei-upload): Bilder werden
+// clientseitig per Canvas verkleinert, bis die base64-Nutzlast sicher unter das
+// Body-Limit passt — dadurch darf der Roh-Cap wieder hoch (12 MB, wie Backend/Master).
+// Nicht-Bilder (PDF/DWG …) gehen unverändert; sind sie >~3 MB, meldet der Server
+// sichtbar 413 (kein lautloses Scheitern).
+var UPLOAD_MAX_MB=12, UPLOAD_MAX_BYTES=UPLOAD_MAX_MB*1024*1024;
+// base64-Nutzlast-Budget für Bilder: deutlich unter Vercels ~4.5 MB Body-Limit,
+// inkl. Reserve für token/action/filename im JSON. Länge der data-URL ≈ Bytes.
+var UPLOAD_BODY_SAFE_CHARS=4.0*1024*1024;
+// Nicht-Bilder (PDF/DWG …) lassen sich nicht komprimieren und gehen ungefiltert
+// durch die Function → müssen unter das Body-Budget passen (base64 ~1,37×).
+// Grössere klar & früh abweisen statt am Vercel-413 lautlos scheitern zu lassen.
+var UPLOAD_NONIMG_MAX_BYTES=Math.floor(UPLOAD_BODY_SAFE_CHARS/1.37);
+var UPLOAD_NONIMG_MAX_MB=(UPLOAD_NONIMG_MAX_BYTES/1048576).toFixed(0);
+// Liefert die data-URL (base64) für den Upload. Bilder werden vorher so weit
+// verkleinert (Dimension, dann JPEG-Qualität), dass sie unter das Body-Budget passen.
+function fileToUploadData(f){
+  return new Promise(function(resolve,reject){
+    if(!/^image\//.test(f.type||'')){ // PDF/DWG/… unverändert einlesen
+      var rd0=new FileReader();
+      rd0.onload=function(){ resolve(String(rd0.result)); };
+      rd0.onerror=function(){ reject(new Error('read')); };
+      rd0.readAsDataURL(f); return;
+    }
+    var url=URL.createObjectURL(f), img=new Image();
+    img.onload=function(){
+      URL.revokeObjectURL(url);
+      var w=img.naturalWidth||1, h=img.naturalHeight||1;
+      function render(maxDim,q){
+        var s=Math.min(1,maxDim/Math.max(w,h));
+        var cw=Math.max(1,Math.round(w*s)), ch=Math.max(1,Math.round(h*s));
+        var c=document.createElement('canvas'); c.width=cw; c.height=ch;
+        c.getContext('2d').drawImage(img,0,0,cw,ch);
+        return c.toDataURL('image/jpeg',q);
+      }
+      var maxDim=2400, q=0.85, out=render(maxDim,q), guard=0;
+      while(out.length>UPLOAD_BODY_SAFE_CHARS && guard++<12){
+        if(q>0.4){ q=Math.round((q-0.12)*100)/100; } else { maxDim=Math.round(maxDim*0.8); }
+        out=render(maxDim,q);
+      }
+      resolve(out); // im schlimmsten Fall (guard erschöpft) fängt der Server-413 sichtbar ab
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); // kein Bild-Decode → roh einlesen
+      var rd1=new FileReader();
+      rd1.onload=function(){ resolve(String(rd1.result)); };
+      rd1.onerror=function(){ reject(new Error('read')); };
+      rd1.readAsDataURL(f);
+    };
+    img.src=url;
+  });
+}
 function pmFileUpload(kategorie){
   var inp=document.createElement('input'); inp.type='file';
   inp.accept=(kategorie==='bilder')?'image/*':(kategorie==='plaene'?'application/pdf,.dwg,.dxf,image/*':'*/*');
@@ -8083,13 +8131,15 @@ function pmDoUpload(files,kategorie){
     if(i>=files.length){ if(fails) toast(fails+' Datei'+(fails>1?'en':'')+' fehlgeschlagen'); pmReload(); return; }
     var f=files[i++];
     if(f.size>UPLOAD_MAX_BYTES){ toast('„'+f.name+'" zu gross (max. '+UPLOAD_MAX_MB+' MB)'); fails++; next(); return; }
-    var rd=new FileReader();
-    rd.onload=function(){
-      pmApi('pm_datei_upload',{projekt_id:pmState.proj,kategorie:kategorie,filename:f.name,contentType:f.type||'',data:String(rd.result)})
-      .then(function(d){ if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fails++; } next(); });
-    };
-    rd.onerror=function(){ toast('Lesefehler bei „'+f.name+'"'); fails++; next(); };
-    rd.readAsDataURL(f);
+    if(!/^image\//.test(f.type||'') && f.size>UPLOAD_NONIMG_MAX_BYTES){ toast('„'+f.name+'" zu gross für Direkt-Upload (max ~'+UPLOAD_NONIMG_MAX_MB+' MB) — bitte komprimieren.'); fails++; next(); return; }
+    fileToUploadData(f).then(function(data){
+      // Bilder werden als JPEG komprimiert → Content-Type + Dateiendung entsprechend setzen.
+      var isImg=/^data:image\//.test(data);
+      var ct=isImg?'image/jpeg':(f.type||'');
+      var nm=isImg?f.name.replace(/\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i,'')+'.jpg':f.name;
+      return pmApi('pm_datei_upload',{projekt_id:pmState.proj,kategorie:kategorie,filename:nm,contentType:ct,data:data})
+      .then(function(d){ if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fails++; } });
+    }).catch(function(){ toast('Lesefehler bei „'+f.name+'"'); fails++; }).then(next);
   })();
 }
 function pmFileDel(pathEnc){
@@ -8481,15 +8531,16 @@ function subDoUpload(files,kategorie){
   (function next(){
     if(i>=files.length){ if(fails) toast(fails+' Datei'+(fails>1?'en':'')+' fehlgeschlagen'); subReload(); return; }
     var f=files[i++];
-    // Plattform-Limit (Vercel ~4.5 MB Request): grosse Pläne/Fotos früh & sichtbar abfangen.
+    // Roh-Cap (12 MB); Bilder werden vor dem Upload unter das Body-Limit komprimiert.
     if(f.size>UPLOAD_MAX_BYTES){ toast('„'+f.name+'" zu gross (max. '+UPLOAD_MAX_MB+' MB)'); fails++; next(); return; }
-    var rd=new FileReader();
-    rd.onload=function(){
-      pmApi('sub_datei_upload',{projekt_id:subState.proj,kategorie:kategorie,filename:f.name,contentType:f.type||'',data:String(rd.result)})
-      .then(function(d){ if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fails++; } next(); });
-    };
-    rd.onerror=function(){ toast('Lesefehler bei „'+f.name+'"'); fails++; next(); };
-    rd.readAsDataURL(f);
+    if(!/^image\//.test(f.type||'') && f.size>UPLOAD_NONIMG_MAX_BYTES){ toast('„'+f.name+'" zu gross für Direkt-Upload (max ~'+UPLOAD_NONIMG_MAX_MB+' MB) — bitte komprimieren.'); fails++; next(); return; }
+    fileToUploadData(f).then(function(data){
+      var isImg=/^data:image\//.test(data);
+      var ct=isImg?'image/jpeg':(f.type||'');
+      var nm=isImg?f.name.replace(/\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i,'')+'.jpg':f.name;
+      return pmApi('sub_datei_upload',{projekt_id:subState.proj,kategorie:kategorie,filename:nm,contentType:ct,data:data})
+      .then(function(d){ if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fails++; } });
+    }).catch(function(){ toast('Lesefehler bei „'+f.name+'"'); fails++; }).then(next);
   })();
 }
 function subFileDel(pathEnc){
