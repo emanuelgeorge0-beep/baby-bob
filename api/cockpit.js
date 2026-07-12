@@ -2283,6 +2283,15 @@ async function subProjekte(scope) {
     const projekte = ohneGeloeschte(await sbGet(`gs_projekte?partner_user_id=eq.${pid}&projekt_art=eq.sub_akkord&select=*&order=created_at.desc`));
     const seq = await anzeigeSeqMap(true);
     (projekte || []).forEach((p) => { p.anzeige_id = anzeigeIdFmt('sub_akkord', anzeigeJahr(p.created_at), seq[p.id] || 0); });
+    // Block 5 (zahlplan-ux): minimales Angebots-Signal (NIE Entwurf, nur Status +
+    // Zeitstempel, keine Positionen/Kalkulation) für den Ungelesen-Punkt beim
+    // Partner: neues bzw. aktualisiertes Angebot lässt den Eintrag blinken.
+    const ids = (projekte || []).map((p) => p.id);
+    if (ids.length) {
+      const angs = await sbGet(`gs_angebote?projekt_id=in.(${ids.join(',')})&status=neq.entwurf&select=projekt_id,status,abgeschickt_am,version&order=version.asc`).catch(() => []);
+      const by = {}; (angs || []).forEach((a) => { by[a.projekt_id] = a; });
+      (projekte || []).forEach((p) => { const a = by[p.id]; p.angebot_status = a ? a.status : null; p.angebot_abgeschickt_am = a ? (a.abgeschickt_am || null) : null; });
+    }
     return { projekte };
   } catch (e) { if (isNoTable(e)) return { projekte: [], notMigrated: true }; throw e; }
 }
@@ -3200,6 +3209,15 @@ async function msubListe(access) {
     for (const pid of [...new Set((projekte || []).map((p) => p.partner_user_id).filter(Boolean))]) {
       brandByPid[pid] = await msubPartnerBrand(pid);
     }
+    // Block 5 (zahlplan-ux): letztes Angebot je Projekt (EINE Batch-Query) für die
+    // Ungelesen-Signatur im Cockpit — Kundenaktion (angenommen/abgelehnt/Termin)
+    // ändert angebot.status/entschieden_am, ohne dass sub_status sich bewegen muss.
+    const angByPid = {};
+    const pids = (projekte || []).map((p) => p.id);
+    if (pids.length) {
+      const angs = await sbGet(`gs_angebote?projekt_id=in.(${pids.join(',')})&select=projekt_id,status,entschieden_am,version&order=version.asc`).catch(() => []);
+      (angs || []).forEach((a) => { angByPid[a.projekt_id] = a; }); // version.asc → höchste gewinnt
+    }
     const seq = await anzeigeSeqMap(true);
     const anfragen = (projekte || []).map((p) => {
       const sub = (p.datenblatt && typeof p.datenblatt === 'object' && p.datenblatt.sub) || {};
@@ -3208,6 +3226,8 @@ async function msubListe(access) {
         id: p.id, name: p.name, standort: p.standort || null, bereich: p.bereich || null,
         anzeige_id: anzeigeIdFmt('sub_akkord', anzeigeJahr(p.created_at), seq[p.id] || 0),
         sub_status: p.sub_status || 'entwurf', angefragt_am: p.angefragt_am || null,
+        zahlungsplan_status: p.zahlungsplan_status || null, zahlungsplan_angenommen_at: p.zahlungsplan_angenommen_at || null,
+        angebot_status: (angByPid[p.id] || {}).status || null, angebot_entschieden_am: (angByPid[p.id] || {}).entschieden_am || null,
         beschreibung: sub.beschreibung || '', ansprechperson: sub.ansprechperson || '',
         leistungsarten: Array.isArray(sub.leistungsarten) ? sub.leistungsarten : [],
         // Fallback: fehlt der Firmenname → E-Mail statt „?" anzeigen.

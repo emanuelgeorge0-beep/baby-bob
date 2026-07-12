@@ -494,6 +494,11 @@
   .pl-psi{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 11px;font-size:12.5px;cursor:pointer;border-bottom:1px solid var(--line);}
   .pl-psi:last-child{border-bottom:none;}
   .pl-psi:hover{background:var(--gold-soft);}
+  /* Block 5 (zahlplan-ux): dezenter Blink-Punkt für ungelesene Eingänge */
+  .unread-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--gold);flex:0 0 auto;animation:unreadPulse 1.8s ease-in-out infinite;}
+  .cc-tile{position:relative;}
+  .cc-tile .unread-dot{position:absolute;top:9px;right:9px;}
+  @keyframes unreadPulse{0%,100%{opacity:1;}50%{opacity:.25;}}
   .zs-step{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:9px 11px;}
   .zs-step-h{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
   .zs-no{width:20px;height:20px;border-radius:50%;background:var(--gold-soft);color:var(--gold);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
@@ -850,7 +855,42 @@ function loadSubCount(){
     if(!d||d.error){ el.textContent='–'; return; }
     var n=(d.anfragen||[]).filter(function(a){ return a.sub_status==='angefragt'||a.sub_status==='in_pruefung'; }).length;
     el.textContent=n;
+    // Block 5 (zahlplan-ux): ungelesener Eingang → Punkt an der Kachel blinkt.
+    var tile=el.closest?el.closest('.cc-tile'):null;
+    var un=(d.anfragen||[]).some(msubUnread);
+    if(tile){ var dot=tile.querySelector('.unread-dot');
+      if(un&&!dot){ var s=document.createElement('span'); s.className='unread-dot'; tile.appendChild(s); }
+      if(!un&&dot) dot.remove(); }
   }).catch(function(){ el.textContent='–'; });
+}
+// ── Block 5 (zahlplan-ux): Ungelesen-Blink (localStorage, geräte-lokal) ──────
+// Signatur je Projekt aus Status + Ereignis-Zeitstempeln (neue Anfrage, Angebot-
+// Entscheid/Termin des Kunden, Zahlungsplan-Annahme). Weicht die aktuelle Signatur
+// vom gespeicherten Stand ab, blinkt der Punkt; Öffnen des Eintrags speichert die
+// Signatur → Blinken stoppt. Kein DB-Feld: SQL-Vorschlag für die spätere
+// Cross-Device-Variante liegt in scripts/zahlplan_ux_gesehen.sql.
+function msubSig(a,st){ return [st||a.sub_status||'',a.angebot_status||'',a.angebot_entschieden_am||'',a.zahlungsplan_status||'',a.zahlungsplan_angenommen_at||''].join('|'); }
+function msubSeenMap(){ try{ return JSON.parse(localStorage.getItem('gs_msub_seen')||'{}'); }catch(_){ return {}; } }
+function msubUnread(a){
+  var seen=msubSeenMap()[a.id];
+  if(seen==null) return a.sub_status==='angefragt'; // frisches Gerät: nur echte neue Anfrage
+  return seen!==msubSig(a);
+}
+function msubMarkSeen(a){
+  if(!a) return;
+  var m=msubSeenMap();
+  // Öffnen transitioniert angefragt→in_pruefung serverseitig — Signatur direkt mit
+  // dem Zielstatus speichern, sonst blinkt der Eintrag nach dem Öffnen erneut.
+  m[a.id]=msubSig(a,a.sub_status==='angefragt'?'in_pruefung':null);
+  try{ localStorage.setItem('gs_msub_seen',JSON.stringify(m)); }catch(_){}
+}
+// Nach dem Detail-Load erneut markieren: die Detail-Daten tragen die Signatur NACH
+// Statusübergängen bzw. nach eigenen Aktionen (Angebot geschickt) → kein Fehl-Blinken.
+function msubMarkSeenDetail(id,d){
+  var p=(d&&d.projekt)||{}, sb=(d&&d.sub_bundle)||{}, ang=sb.angebot||null;
+  msubMarkSeen({ id:id, sub_status:sb.sub_status||p.sub_status||'',
+    angebot_status:ang?(ang.status||null):null, angebot_entschieden_am:ang?(ang.entschieden_am||null):null,
+    zahlungsplan_status:p.zahlungsplan_status||null, zahlungsplan_angenommen_at:p.zahlungsplan_angenommen_at||null });
 }
 // ── Wetter (Zürich, Wien, Barcelona) — dezente Zeile im Command Center ──
 // Quelle: /api/weather (open-meteo, kein Key). 15-Min-Cache im Browser; Fehler
@@ -2197,6 +2237,7 @@ function msubCardHtml(a){
   var delBtn='<button class="chip" title="Projekt löschen" style="padding:2px 8px;color:#ff9b9b;border-color:#ff9b9b" onclick="event.stopPropagation();msubProjektDelete(\''+a.id+'\',\''+esc(String(a.name||'Projekt')).replace(/'/g,"\\'")+'\')">✕</button>';
   return '<div class="lcard" data-msub="'+a.id+'" style="cursor:pointer">'+
     '<div class="top" style="display:flex;align-items:center;gap:10px">'+
+      (msubUnread(a)?'<span class="unread-dot" title="Neu / ungelesen"></span>':'')+
       msubLogoHtml(a.partner_logo,a.partner_firma,34)+
       '<div style="flex:1;min-width:0">'+
         '<div class="nm">'+esc(a.name||'Projekt')+'</div>'+
@@ -2229,13 +2270,15 @@ function msubProjektDelete(id,name){
 // (paintProjektDetail über msub_detail = getPmProjekt + sub_bundle), mit dem
 // Sub-Lifecycle-Block obendrauf. Rückweg zeigt auf die Sub-Anfragen-Liste.
 function openSubAnfrage(id){
+  // Block 5 (zahlplan-ux): Öffnen = gelesen (Signatur speichern, Blinken stoppt).
+  var _li=(_msubList||[]).filter(function(x){return x.id===id;})[0]; if(_li) msubMarkSeen(_li);
   _pmProjektId=id; _pmBackFn=renderSubAnfragen; _pmBackLabel='‹ Sub-Anfragen';
   $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div><div class="empty">Lädt…</div>';
   var bb=$('pm-back'); if(bb) bb.onclick=renderSubAnfragen;
   api('msub_detail',{id:id}).then(function(d){
     if(d&&d.notMigrated){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div>'+migRow('Sub-Modus nicht migriert.'); var b=$('pm-back'); if(b) b.onclick=renderSubAnfragen; return; }
     if(!d||d.error){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div><div class="empty">'+esc((d&&d.error)||'Fehler')+'</div>'; var b=$('pm-back'); if(b) b.onclick=renderSubAnfragen; return; }
-    _pmData=d; paintProjektDetail(d);
+    _pmData=d; msubMarkSeenDetail(id,d); paintProjektDetail(d);
   }).catch(function(){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="pm-back">‹ Sub-Anfragen</span></div><div class="empty">Ladefehler</div>'; var b=$('pm-back'); if(b) b.onclick=renderSubAnfragen; });
 }
 // Angebot-Status → Label/Farbe (Farbcode wie Zahlungssystem).

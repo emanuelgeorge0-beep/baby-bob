@@ -836,6 +836,9 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #partner-dash .pd-card{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:13px;}
 #partner-dash .pd-card-n{color:#C9A961;}
 #partner-dash .pd-card-l{color:#8a97a8;}
+/* Block 5 (zahlplan-ux): dezenter Blink-Punkt für ungelesene Eingänge */
+.unread-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#C9A961;flex:0 0 auto;animation:unreadPulse 1.8s ease-in-out infinite;vertical-align:middle;}
+@keyframes unreadPulse{0%,100%{opacity:1;}50%{opacity:.25;}}
 #partner-dash .admin-badge.active{background:rgba(62,207,142,.16);color:#3ecf8e;}
 #partner-dash .admin-badge.must_change_password{background:rgba(245,185,66,.16);color:#f5b942;}
 /* ── Übersicht: Kachel-Raster wie Master Cockpit ── */
@@ -7312,6 +7315,7 @@ function initPartnerDash(){
     pdSetupHeroCta();         // „Antippen & sprechen" nur, wenn Bob freigeschaltet
     pdStartClock();           // Live-Zeit im Command-Center-Hero
     pdLoadBadge();
+    pdUpdateSubDot(null);     // Block 5 (zahlplan-ux): Blink-Punkt „Projekte" beim Start
     pdLoadCards();
     pdLoadProfil(pdRenderBrand);   // Firmenlogo/Name oben rechts (nur wenn freigeschaltet)
     pdGoCockpit();            // Startseite = eigene Schnellzugriffe (Cockpit)
@@ -8155,6 +8159,39 @@ function pmFileDel(pathEnc){
 //   + sub_datei_* (reuse). Alles server-seitig auf eigene Projekte gescoped.
 // ══════════════════════════════════════════════════════════
 var subState={proj:null,data:null};
+// ── Block 5 (zahlplan-ux): Ungelesen-Blink (localStorage, geräte-lokal) ──────
+// Signatur je Projekt aus Status + Angebots-Signal (neues/aktualisiertes Angebot,
+// Zahlungsplan-Status). Weicht sie vom gespeicherten Stand ab, blinkt der Punkt
+// in Liste und Leiste; Öffnen des Projekts speichert die Signatur → Blinken stoppt.
+// Kein DB-Feld (SQL-Vorschlag für Cross-Device: scripts/zahlplan_ux_gesehen.sql).
+function subSeenKey(){ return 'gs_psub_seen_'+((authUser&&(authUser.id||authUser.email))||'x'); }
+function subSig(p){ return [p.sub_status||'',p.angebot_status||'',p.angebot_abgeschickt_am||'',p.zahlungsplan_status||''].join('|'); }
+function subSeenMap(){ try{ return JSON.parse(localStorage.getItem(subSeenKey())||'{}'); }catch(_){ return {}; } }
+function subUnread(p){
+  var seen=subSeenMap()[p.id];
+  if(seen==null) return p.sub_status==='angebot_offen'; // frisches Gerät: nur offenes Angebot
+  return seen!==subSig(p);
+}
+function subMarkSeen(id,sig){ var m=subSeenMap(); m[id]=sig; try{ localStorage.setItem(subSeenKey(),JSON.stringify(m)); }catch(_){} }
+function subMarkSeenDetail(id,d){
+  var p=(d&&d.projekt)||{}, a=(d&&d.angebot)||null;
+  subMarkSeen(id,[p.sub_status||'',a?(a.status||''):'',a?(a.abgeschickt_am||''):'',p.zahlungsplan_status||''].join('|'));
+  pdUpdateSubDot(null);
+}
+// Punkt in der Leiste (Projekte-Tab + Bottom-Nav): blinkt, solange mind. ein
+// Eintrag ungelesen ist. list=null → Liste selbst nachladen (Dashboard-Start).
+function pdUpdateSubDot(list){
+  var apply=function(n){
+    [document.getElementById('pdt-projekte'),document.querySelector('#pd-nav button[data-v="projekte"]')].forEach(function(t){
+      if(!t) return; var dot=t.querySelector('.unread-dot');
+      if(n&&!dot){ var s=document.createElement('span'); s.className='unread-dot'; s.style.marginLeft='6px'; t.appendChild(s); }
+      if(!n&&dot) dot.remove();
+    });
+  };
+  if(list){ apply(list.filter(subUnread).length); return; }
+  if(!pdHas('sub_akkord')) return;
+  pmApi('sub_projekte').then(function(d){ apply(((d&&d.projekte)||[]).filter(subUnread).length); }).catch(function(){});
+}
 // Block 8 (Runde 7): „HKLS" entfernt — redundant neben Sanitär/Heizung/Lüftung/Klima.
 var SUB_BEREICHE=['Sanitär','Heizung','Lüftung','Klima','Elektro','Sanierung'];
 // Leistungsart (2. Ebene). Grund: später Bobs Trainingsmaterial in gs_bob_wissen.
@@ -8193,12 +8230,13 @@ function subRender(){
       // Block 3 (Runde 8a): Löschen nur solange Entwurf (Anfrage noch nicht raus).
       var del=subEditable(p.sub_status)?'<button class="admin-act" style="flex:0 0 auto;padding:4px 9px;color:#ff9b9b;border-color:rgba(255,155,155,0.4);" title="Projekt löschen" onclick="event.stopPropagation();subDelete(\''+p.id+'\',\''+gsEsc(String(p.name||'Projekt')).replace(/'/g,"\\'")+'\')">✕</button>':'';
       return '<div class="pd-item" style="cursor:pointer;" onclick="subOpen(\''+p.id+'\')">'
-        +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name||'Projekt')+'</div>'
+        +'<div class="pd-item-top"><div class="pd-item-tit">'+(subUnread(p)?'<span class="unread-dot" style="margin-right:7px;" title="Neu / ungelesen"></span>':'')+gsEsc(p.name||'Projekt')+'</div>'
         +'<div style="display:flex;align-items:center;gap:8px;">'+subStatusBadge(p.sub_status)+del
         +'<span style="color:rgba(232,237,245,0.4);font-size:18px;">›</span></div></div>'
         +'<div class="pd-item-meta">'+(subMeta(p)||'—')+'</div></div>';
     }).join(''):'<div class="admin-empty">Noch keine Sub-/Akkordprojekte. Legen Sie mit „＋ Neues Sub-/Akkordprojekt" das erste an.</div>';
     c.innerHTML=pmTabsHtml()+head+rows;
+    pdUpdateSubDot(list);
   });
 }
 
@@ -8317,6 +8355,7 @@ function subOpen(id){
     if(!d||d.error){ c.innerHTML='<div class="admin-empty">'+gsEsc((d&&d.error)||'Projekt nicht gefunden')+'</div>'
       +'<div class="pd-dl" onclick="subRender()" style="margin-top:10px;display:inline-block;">← Sub-/Akkordprojekte</div>'; return; }
     subState.proj=id; subState.data=d;
+    subMarkSeenDetail(id,d); // Block 5 (zahlplan-ux): Öffnen = gelesen
     subPaintDetail(d);
   });
 }
