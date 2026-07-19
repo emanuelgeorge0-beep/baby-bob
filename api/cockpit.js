@@ -83,6 +83,14 @@ const PARTNER_FEATURE_ACTIONS = {
   sub_projekt_del: 'sub_akkord',
 };
 
+// ── Feature A: Actions, die ein eingeloggter TECHNIKER nutzen darf ──
+// Techniker sehen NUR zugewiesene Projekte und buchen Rapporte NUR darauf.
+// Enforcement-Kette (in Live-DB verifiziert):
+//   auth.uid() → gs_techniker.user_id → gs_techniker.id → gs_projekt_techniker.techniker_id → projekt_id
+const TECHNIKER_ACTIONS = new Set([
+  'tech_projekte', 'tech_projekt', 'tech_rapporte', 'tech_rapport_add',
+]);
+
 // Zugriffskontext bestimmen:
 //   • Master/Admin  → { isMaster:true,  partnerId:null }  (sieht ALLE Projekte)
 //   • Partner + PM  → { isMaster:false, partnerId:uid  }  (nur EIGENE Projekte,
@@ -115,6 +123,21 @@ async function resolveAccess(token, action) {
     if (feat && await isEntitled(user.id, feat)) {
       return { isMaster: false, partnerId: user.id, userId: user.id };
     }
+  }
+  // Techniker: nur für die TECHNIKER_ACTIONS. Auth-User → gs_techniker-Profil über
+  // user_id auflösen; dessen id (= gs_techniker.id) ist der Join-Schlüssel für die
+  // Projekt-Zuweisung. Ohne verknüpftes Profil bleibt technikerId null (fail-safe:
+  // die Handler liefern dann leere Listen / verweigern Schreibzugriff).
+  if (role === 'techniker' && TECHNIKER_ACTIONS.has(action)) {
+    let technikerId = null;
+    try {
+      const rows = await sbGet(`gs_techniker?user_id=eq.${user.id}&select=id&limit=1`);
+      technikerId = rows?.[0]?.id || null;
+    } catch (_) { technikerId = null; }
+    return {
+      isMaster: false, partnerId: null, role: 'techniker',
+      technikerId, technikerUserId: user.id, userId: user.id,
+    };
   }
   return null;
 }
@@ -154,7 +177,15 @@ export default async function handler(req, res) {
   const { token, action } = req.body || {};
   const access = await resolveAccess(token, action);
   if (!access) return res.status(403).json({ error: 'Kein Zugriff' }); // generisch, kein Leak
-  const scope = { partnerId: access.partnerId }; // Master: null → sieht alles
+  // Master: partnerId null → sieht alles. Partner: partnerId=uid. Techniker: partnerId
+  // null ABER technikerId gesetzt (Techniker erreichen nur tech_*-Handler, nie Master-Handler,
+  // weil resolveAccess sie für alles andere auf null/403 setzt).
+  const scope = {
+    partnerId: access.partnerId,
+    technikerId: access.technikerId ?? null,
+    technikerUserId: access.technikerUserId ?? null,
+    role: access.role || (access.isMaster ? 'master' : 'partner'),
+  };
 
   // Zahlungssystem-Modul zusaetzlich per Entitlement gaten. Master hat den Key
   // 'zahlungssystem' immer; Partner brauchen die Freischaltung in der Matrix.
@@ -227,6 +258,11 @@ export default async function handler(req, res) {
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
       case 'pm_datenblatt_save':   return res.status(200).json(await savePmDatenblatt(req.body, scope));
+      // ── Feature A: Techniker-Rolle (nur zugewiesene Projekte, Rapport buchen) ──
+      case 'tech_projekte':    return res.status(200).json(await getTechProjekte(scope));
+      case 'tech_projekt':     return res.status(200).json(await getTechProjekt(req.body.id, scope));
+      case 'tech_rapporte':    return res.status(200).json(await getTechRapporte(scope));
+      case 'tech_rapport_add': return res.status(200).json(await addTechRapport(req.body, scope));
       // ── Partner-Branding (Firmenprofil + Logo) — Feature 'partner_branding' ──
       case 'pm_profil_get':    return res.status(200).json(await partnerProfilGet(scope));
       case 'pm_profil_save':   return res.status(200).json(await partnerProfilSave(req.body, scope));
@@ -2005,6 +2041,146 @@ async function unassignTech(b, scope) {
   const id = uuid(b.id);
   try { await sbWrite('DELETE', `gs_projekt_techniker?id=eq.${id}`, {}, 'return=minimal'); return { ok: true }; }
   catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FEATURE A — TECHNIKER-ROLLE & RAPPORT-ENFORCEMENT
+//  Ein eingeloggter Techniker (user_roles.role='techniker') sieht NUR die ihm
+//  zugewiesenen Projekte und bucht Rapporte NUR darauf. Zwei IDs im scope:
+//    • scope.technikerId     = gs_techniker.id   → Join gs_projekt_techniker.techniker_id
+//    • scope.technikerUserId = auth user id      → Rapport-Autorschaft in gs_tagesrapporte
+//  KEINE internen Felder (kosten/rohgewinn/ampel/ansatz_chf_h/stundensatz) in
+//  techniker-sichtbaren Payloads (techSafeProjekt whitelisted).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// String[] normalisieren (Array oder Zeilen/Kommas → getrimmte, nicht-leere Einträge).
+function toStrArr(v) {
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean).slice(0, 100);
+  if (v == null || v === '') return [];
+  return String(v).split(/[\n,]/).map((x) => x.trim()).filter(Boolean).slice(0, 100);
+}
+// ISO-Kalenderwoche + Jahr aus 'YYYY-MM-DD' (best-effort; nur Anzeige/Gruppierung).
+function isoWeekJahr(datumStr) {
+  const t = new Date(`${datumStr}T00:00:00Z`);
+  if (isNaN(t)) return { woche: null, jahr: null };
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const woche = Math.ceil((((t - yearStart) / 86400000) + 1) / 7);
+  return { woche, jahr: t.getUTCFullYear() };
+}
+
+// Techniker darf nur auf ihm ZUGEWIESENE Projekte. Kette:
+// scope.technikerId (= gs_techniker.id) → gs_projekt_techniker.techniker_id=eq → projekt_id.
+// Ohne verknüpftes gs_techniker-Profil (technikerId null) → immer Forbidden.
+async function requireAssignedProjekt(projektId, scope) {
+  if (!scope || !scope.technikerId) throw new Forbidden();
+  const id = uuid(projektId);
+  const rows = await sbGet(
+    `gs_projekt_techniker?projekt_id=eq.${id}&techniker_id=eq.${scope.technikerId}&select=projekt_id&limit=1`,
+  ).catch(() => []);
+  if (!rows || !rows[0]) throw new Forbidden();
+}
+
+// Techniker-sichere Projektsicht: NUR Whitelist, keine internen Felder/Preise/Kunde.
+function techSafeProjekt(p) {
+  if (!p) return null;
+  const db = p.datenblatt || {};
+  return {
+    id: p.id, name: p.name, projektnummer: p.projektnummer || null,
+    standort: p.standort || null, bereich: p.bereich || null, status: p.status || null,
+    umfang: Array.isArray(db.umfang) ? db.umfang : [],
+    anlagenart: Array.isArray(db.anlagenart) ? db.anlagenart : [],
+    start: db.start || null,
+  };
+}
+
+// Liste der dem Techniker zugewiesenen Projekte (gefiltert über die Kette).
+async function getTechProjekte(scope) {
+  if (!scope.technikerId) return { projekte: [] };
+  const asg = await sbGet(
+    `gs_projekt_techniker?techniker_id=eq.${scope.technikerId}&select=projekt_id,taetigkeit,seit`,
+  ).catch(() => []);
+  const ids = [...new Set((asg || []).map((a) => a.projekt_id).filter(Boolean))];
+  if (!ids.length) return { projekte: [] };
+  const rows = await sbGet(`gs_projekte?id=in.(${ids.join(',')})&select=*&order=created_at.desc`)
+    .then(ohneGeloeschte).catch(() => []);
+  const taetById = {};
+  for (const a of asg) taetById[a.projekt_id] = a.taetigkeit || null;
+  return { projekte: rows.map((p) => ({ ...techSafeProjekt(p), taetigkeit: taetById[p.id] || null })) };
+}
+
+// Detail eines zugewiesenen Projekts + die EIGENEN Rapporte des Technikers darauf.
+async function getTechProjekt(id, scope) {
+  await requireAssignedProjekt(id, scope);
+  const pid = uuid(id);
+  const pr = await sbGet(`gs_projekte?id=eq.${pid}&select=*&limit=1`).catch(() => []);
+  const projekt = pr && pr[0];
+  if (!projekt || projekt.geloescht_at) return { error: 'Projekt nicht gefunden' };
+  let rapporte = [];
+  try {
+    rapporte = await sbGet(
+      `gs_tagesrapporte?projekt_id=eq.${pid}&techniker_user_id=eq.${scope.technikerUserId}` +
+      `&select=id,datum,gesamtstunden,material,arbeiten,besonderheiten,status&order=datum.desc`,
+    );
+  } catch (_) { rapporte = []; }
+  return { projekt: techSafeProjekt(projekt), rapporte };
+}
+
+// Alle eigenen Rapporte des Technikers (über alle Projekte).
+async function getTechRapporte(scope) {
+  if (!scope.technikerUserId) return { rapporte: [] };
+  let rows = [];
+  try {
+    rows = await sbGet(
+      `gs_tagesrapporte?techniker_user_id=eq.${scope.technikerUserId}&select=*&order=datum.desc&limit=200`,
+    );
+  } catch (_) { rows = []; }
+  return { rapporte: rows };
+}
+
+// Rapport buchen: Ziel gs_tagesrapporte (die Master-sichtbare Tabelle). Datum ist
+// FREI setzbar (Backdating), niemals auto-now. Zuweisung wird serverseitig geprüft;
+// techniker_user_id/erfasst_von werden serverseitig gesetzt (nie vom Client).
+async function addTechRapport(b, scope) {
+  await requireAssignedProjekt(b.projekt_id, scope);
+  const datum = String(b.datum || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new Error('datum (YYYY-MM-DD) nötig');
+  const { woche, jahr } = isoWeekJahr(datum);
+  const heute = new Date().toISOString().slice(0, 10);
+  const row = {
+    projekt_id: uuid(b.projekt_id),
+    techniker_user_id: scope.technikerUserId,          // serverseitig, nie vom Client
+    datum,                                             // frei/rückwirkend
+    gesamtstunden: (b.stunden != null && b.stunden !== '') ? num(b.stunden) : 0,
+    material: toStrArr(b.material),
+    arbeiten: toStrArr(b.arbeiten),
+    besonderheiten: b.notiz ? String(b.notiz).slice(0, 2000) : null,
+    status: b.status === 'entwurf' ? 'entwurf' : 'eingereicht',
+    woche, jahr,
+    // additive Provenienz (brauchen scripts/schema_rollen_foto_service.sql):
+    erfasst_von: scope.technikerUserId,
+    rueckwirkend: datum < heute,
+  };
+  const post = async (r) => {
+    try { const res = await sbWrite('POST', 'gs_tagesrapporte', r); return { ok: true, row: Array.isArray(res) ? res[0] : res }; }
+    catch (e) {
+      // Doppelter Rapport (UNIQUE projekt+techniker+datum) → freundlich statt 500.
+      if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
+        return { error: 'Für diesen Tag existiert bereits ein Rapport auf diesem Projekt.' };
+      }
+      throw e;
+    }
+  };
+  try { return await post(row); }
+  catch (e) {
+    // Provenienz-Spalten noch nicht migriert → droppen und erneut versuchen (kein 500).
+    if (/column|does not exist|PGRST204/i.test((e && e.message) || '')) {
+      const { erfasst_von, rueckwirkend, ...base } = row;
+      return await post(base);
+    }
+    throw e;
+  }
 }
 
 async function addTaetigkeit(b, scope) {

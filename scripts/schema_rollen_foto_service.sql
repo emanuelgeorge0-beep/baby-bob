@@ -38,22 +38,28 @@ ALTER TABLE user_roles
   ADD CONSTRAINT user_roles_role_check
   CHECK (role IN ('bob_user','gs_partner','techniker','gs_admin','master'));
 
--- A.2 — Projekt↔Techniker-Zuordnung absichern (mehrere Techniker je Projekt).
---       ACHTUNG (siehe DIAGNOSE.md, offene Frage 1): Im Code existieren ZWEI
---       Spaltennamen — cockpit.js nutzt techniker_id, projekte.js/gewerke-RLS
---       nutzen techniker_user_id. Wir legen die Tabelle NUR an, falls sie fehlt,
---       und fassen eine bestehende Live-Tabelle NICHT an (kein Rename/Drop).
+-- A.2 — Projekt↔Techniker-Zuordnung (mehrere Techniker je Projekt).
+--       MASSGABE (in Live-DB verifiziert): KANONISCH ist techniker_id → gs_techniker(id),
+--       die Pool-PK (cockpit.js:1754-1758 joint so). Die ebenfalls vorhandene Spalte
+--       techniker_user_id ist VERWAIST (Rest aus gewerke-RLS) → NICHT verwenden,
+--       NICHT droppen (Cleanup später separat). Bestehende Live-Tabelle bleibt unberührt.
 CREATE TABLE IF NOT EXISTS gs_projekt_techniker (
-  id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  projekt_id        UUID NOT NULL REFERENCES gs_projekte(id) ON DELETE CASCADE,
-  techniker_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  taetigkeit        TEXT,
-  seit              DATE,
-  created_at        TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (projekt_id, techniker_user_id)
+  id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  projekt_id   UUID NOT NULL REFERENCES gs_projekte(id)  ON DELETE CASCADE,
+  techniker_id UUID NOT NULL REFERENCES gs_techniker(id) ON DELETE CASCADE,  -- = gs_techniker.id
+  taetigkeit   TEXT,
+  seit         DATE,
+  stundensatz  NUMERIC(7,2),
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (projekt_id, techniker_id)
 );
+-- Falls die Tabelle bereits existiert (Live), fehlende Spalten additiv ergänzen.
+ALTER TABLE gs_projekt_techniker
+  ADD COLUMN IF NOT EXISTS taetigkeit  TEXT,
+  ADD COLUMN IF NOT EXISTS seit        DATE,
+  ADD COLUMN IF NOT EXISTS stundensatz NUMERIC(7,2);
 CREATE INDEX IF NOT EXISTS idx_gs_projekt_techniker_projekt ON gs_projekt_techniker(projekt_id);
-CREATE INDEX IF NOT EXISTS idx_gs_projekt_techniker_user    ON gs_projekt_techniker(techniker_user_id);
+CREATE INDEX IF NOT EXISTS idx_gs_projekt_techniker_tech    ON gs_projekt_techniker(techniker_id);
 
 -- A.3 — Rapport: bestehende gs_tagesrapporte WIEDERVERWENDEN.
 --       Datum ist bereits FREI setzbar (DATE, kein auto-now) → Backdating OK.
@@ -106,15 +112,16 @@ CREATE INDEX IF NOT EXISTS idx_gs_service_auftrag_status  ON gs_service_auftrag(
 
 -- C.2 — Master weist Techniker zu (mehrere Techniker je Auftrag möglich; spiegelt
 --        das Muster von gs_projekt_techniker aus Feature A).
+-- Konsistent mit Feature A: techniker_id → gs_techniker(id) (NICHT auth.users).
 CREATE TABLE IF NOT EXISTS gs_service_techniker (
   id                 UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   service_auftrag_id UUID NOT NULL REFERENCES gs_service_auftrag(id) ON DELETE CASCADE,
-  techniker_user_id  UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  techniker_id       UUID NOT NULL REFERENCES gs_techniker(id)       ON DELETE CASCADE,  -- = gs_techniker.id
   zugewiesen_am      TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (service_auftrag_id, techniker_user_id)
+  UNIQUE (service_auftrag_id, techniker_id)
 );
 CREATE INDEX IF NOT EXISTS idx_gs_service_techniker_auftrag ON gs_service_techniker(service_auftrag_id);
-CREATE INDEX IF NOT EXISTS idx_gs_service_techniker_user    ON gs_service_techniker(techniker_user_id);
+CREATE INDEX IF NOT EXISTS idx_gs_service_techniker_tech    ON gs_service_techniker(techniker_id);
 
 -- C.3 — Jetzt den FK von gs_tagesrapporte.service_auftrag_id auf gs_service_auftrag
 --        setzen (die Zieltabelle existiert ab hier). Guarded, damit idempotent.
@@ -240,11 +247,13 @@ BEGIN
 END $$;
 
 -- Techniker: Lese-/Schreibzugriff auf Medien/Rapport seiner zugewiesenen Projekte …
+-- Kette: auth.uid() → gs_techniker.user_id → gs_techniker.id = *.techniker_id.
 DROP POLICY IF EXISTS tech_medien_projekt ON gs_projekt_medien;
 CREATE POLICY tech_medien_projekt ON gs_projekt_medien FOR ALL USING (
   projekt_id IS NOT NULL AND EXISTS (
     SELECT 1 FROM gs_projekt_techniker pt
-    WHERE pt.projekt_id = gs_projekt_medien.projekt_id AND pt.techniker_user_id = auth.uid()
+    JOIN gs_techniker gt ON gt.id = pt.techniker_id
+    WHERE pt.projekt_id = gs_projekt_medien.projekt_id AND gt.user_id = auth.uid()
   )
 );
 -- … und seiner zugewiesenen Service-Aufträge.
@@ -252,18 +261,21 @@ DROP POLICY IF EXISTS tech_medien_service ON gs_projekt_medien;
 CREATE POLICY tech_medien_service ON gs_projekt_medien FOR ALL USING (
   service_auftrag_id IS NOT NULL AND EXISTS (
     SELECT 1 FROM gs_service_techniker st
-    WHERE st.service_auftrag_id = gs_projekt_medien.service_auftrag_id AND st.techniker_user_id = auth.uid()
+    JOIN gs_techniker gt ON gt.id = st.techniker_id
+    WHERE st.service_auftrag_id = gs_projekt_medien.service_auftrag_id AND gt.user_id = auth.uid()
   )
 );
 DROP POLICY IF EXISTS tech_service_auftrag ON gs_service_auftrag;
 CREATE POLICY tech_service_auftrag ON gs_service_auftrag FOR SELECT USING (
   EXISTS (SELECT 1 FROM gs_service_techniker st
-          WHERE st.service_auftrag_id = gs_service_auftrag.id AND st.techniker_user_id = auth.uid())
+          JOIN gs_techniker gt ON gt.id = st.techniker_id
+          WHERE st.service_auftrag_id = gs_service_auftrag.id AND gt.user_id = auth.uid())
 );
 DROP POLICY IF EXISTS tech_stockwerk ON gs_projekt_stockwerk;
 CREATE POLICY tech_stockwerk ON gs_projekt_stockwerk FOR ALL USING (
   EXISTS (SELECT 1 FROM gs_projekt_techniker pt
-          WHERE pt.projekt_id = gs_projekt_stockwerk.projekt_id AND pt.techniker_user_id = auth.uid())
+          JOIN gs_techniker gt ON gt.id = pt.techniker_id
+          WHERE pt.projekt_id = gs_projekt_stockwerk.projekt_id AND gt.user_id = auth.uid())
 );
 
 -- Partner: NUR Lesezugriff auf Eigenes (Projekte via partner_user_id, Service via Ersteller).

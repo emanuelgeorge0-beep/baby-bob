@@ -72,14 +72,44 @@ Server-Filter je Rolle (Muster wie heute): `&partner_user_id=eq.<self>` (Partner
 
 ---
 
-## 5. Offene Fragen (für Freigabe / BLOCK 2)
+## 5. Geklärte Fragen & offene Punkte
 
-1. **Spaltenname `gs_projekt_techniker` — echte Inkonsistenz im Live-Code:** `cockpit.js` liest/schreibt `techniker_id`, `projekte.js` und die gewerke-RLS nutzen `techniker_user_id`. Das Skript legt die Tabelle nur an, falls sie fehlt (mit `techniker_user_id`), und fasst eine bestehende Live-Tabelle **nicht** an. **Frage:** Welche Spalte trägt die Live-Tabelle wirklich? Davon hängt der Techniker-Enforcement-Filter ab. → Bitte in Supabase kurz prüfen (`\d gs_projekt_techniker`).
-2. **Rapport-Konsolidierung:** Soll `techniker_rapporte` (alt) langfristig auf `gs_tagesrapporte` migriert/abgeschaltet werden, oder bleiben beide? (Diese Runde: beide bleiben.)
-3. **Composite-UNIQUE bei Backdating:** Zwei Rapporte am **selben** Tag/Projekt/Techniker sind heute blockiert (dafür gibt es `gs_rapport_positionen`). Reicht das für die rückwirkende Wochen-Erfassung, oder braucht Techniker mehrere Einträge pro Tag? Falls ja: UNIQUE lockern.
-4. **Service-Auftrag → Projekt-Promotion:** Soll ein Service-Auftrag später in ein volles `gs_projekte` überführbar sein, oder strikt getrennt bleiben? (Aktuell: strikt getrennt, wie gefordert.)
-5. **Medien-Migration Altbestand:** Vorhandene Dateien im Bucket `projektdateien` haben keine Metadaten. Sollen sie best-effort in `gs_projekt_medien` nachgetragen werden (Stockwerk „unbekannt"), oder nur Neu-Uploads getaggt? (Nicht Teil dieses Skripts.)
+### Geklärt (durch Emanuel in der Live-DB verifiziert)
+- **Q1 `gs_projekt_techniker`-Spalte — GELÖST.** Die Tabelle hat BEIDE Spalten, aber **kanonisch ist `techniker_id` → `gs_techniker.id`** (4/5 Zeilen gefüllt). `techniker_user_id` ist verwaist (1/5, Rest aus gewerke-RLS) → **wird nicht verwendet, nicht gedroppt** (Cleanup später). Enforcement-Kette:
+  `auth.uid() → gs_techniker.user_id → gs_techniker.id → gs_projekt_techniker.techniker_id → projekt_id`. Schema + Code referenzieren durchgängig `techniker_id`.
+- **Q2 Kanonische Rapport-Tabelle — ENTSCHIEDEN: `gs_tagesrapporte`.** Techniker-Buchungen schreiben in `gs_tagesrapporte` (die Tabelle, die das Master-PM-Detail bereits anzeigt → Stunden sofort sichtbar). `techniker_rapporte` (legacy, `api/rapport.js`) bleibt bestehen, wird für NEUE Techniker-Buchungen aber **nicht** mehr verwendet. Datum bleibt frei setzbar (Backdating).
+
+### Offen
+1. **Composite-UNIQUE bei Backdating:** `gs_tagesrapporte` hat `UNIQUE(projekt_id, techniker_user_id, datum)` → zwei Rapporte am **selben** Tag/Projekt/Techniker kollidieren (der Code fängt das ab und meldet freundlich). Reicht „ein Rapport pro Tag/Projekt", oder braucht ein Techniker mehrere Einträge pro Tag? Falls ja: UNIQUE lockern.
+2. **Service-Auftrag → Projekt-Promotion:** Soll ein Service-Auftrag später in ein volles `gs_projekte` überführbar sein, oder strikt getrennt bleiben? (Aktuell: strikt getrennt, wie gefordert.)
+3. **Medien-Migration Altbestand:** Vorhandene Dateien im Bucket `projektdateien` haben keine Metadaten. Best-effort in `gs_projekt_medien` nachtragen (Stockwerk „unbekannt"), oder nur Neu-Uploads taggen?
 
 ---
 
-**STATUS:** BLOCK 1 (Diagnose) abgeschlossen. Keine UI/API geändert, keine SQL ausgeführt. Warte auf Freigabe.
+## 6. Roadmap-Notizen (Datenmodell-Vorbereitung, NICHT jetzt gebaut)
+
+- **Techniker-Ansicht bekommt später das schwarz-gold Command-Center-Design** (eigene Runde nach Feature A); Onboarding-Flow der Landing-Page wird gleichzeitig neu designt. Feature A liefert nur Backend-Enforcement + Rapport, kein Design.
+- **`gs_techniker` für die spätere Onboarding-/Profil-Maske:** Vorhanden sind bereits `name`, `telefon`, `email`, `qualification/qualifikation`, `specialization`, `rating`, `years_experience`, `photo_url`, `availability_status/verfuegbar`, `user_id`, `typ`, `herkunft`, `region` (+ JSON-Sidecar in `notizen`). **Möglicherweise fehlend** für ein vollständiges Onboarding (in der Design-Runde bestätigen, dann additiv ergänzen):
+  - Adresse / PLZ / Ort des Technikers (heute nur `partner_location`/`region` grob),
+  - Sprachen, Zertifikate + Ablaufdaten (Sicherheits-/Schweiß-/Kälte-Scheine),
+  - interner Kostensatz (CHF/h) — **intern**, nie in techniker-/partner-sichtbaren Payloads.
+  Kein Handlungsbedarf jetzt; nur als Merkposten notiert.
+
+---
+
+## 7. BLOCK 2 — Feature A umgesetzt (Code)
+
+**Nur Feature A (Enforcement + Rapport-Anbindung), Design separat.** Geänderte Dateien:
+- `api/cockpit.js`:
+  - `TECHNIKER_ACTIONS` = { `tech_projekte`, `tech_projekt`, `tech_rapporte`, `tech_rapport_add` }.
+  - `resolveAccess`: neuer Techniker-Zweig — löst `auth.uid()` über `gs_techniker.user_id` zur `gs_techniker.id` auf; `scope` trägt `technikerId` (Pool-PK) + `technikerUserId` (auth).
+  - `requireAssignedProjekt(projektId, scope)`: filtert `gs_projekt_techniker.techniker_id = scope.technikerId` — Fremdprojekt → 403.
+  - `getTechProjekte` / `getTechProjekt`: nur zugewiesene Projekte; `techSafeProjekt` whitelistet Felder (kein `stundensatz`/Kosten/Kunden-Kontakt).
+  - `addTechRapport`: schreibt in `gs_tagesrapporte`, **Datum frei/rückwirkend**, `techniker_user_id`/`erfasst_von` serverseitig gesetzt, tolerant gegenüber noch fehlenden Provenienz-Spalten.
+- `scripts/schema_rollen_foto_service.sql`: `gs_projekt_techniker` auf kanonisches `techniker_id → gs_techniker(id)` umgestellt; RLS-Joins gehen über `gs_techniker` (siehe unten).
+
+**Test-Voraussetzung:** braucht ein `techniker`-Login (in `user_roles` + verknüpfte `gs_techniker.user_id`) und eine Projekt-Zuweisung; die Provenienz-Spalten kommen erst mit dem manuell einzuspielenden Schema-Skript (Code läuft aber auch vorher, dank Spalten-Toleranz).
+
+---
+
+**STATUS:** BLOCK 2 = Feature A (Backend) umgesetzt. Keine SQL ausgeführt. Warte auf Freigabe für Feature B/C.
