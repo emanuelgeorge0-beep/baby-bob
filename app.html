@@ -1360,6 +1360,16 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #login .login-skip{color:#8a97a8;}
 #login .login-msg{color:#C9A961;}
 #login .login-msg.err{color:#ff5d5d;}
+/* Ziel 4: „Ohne Anmeldung weiter" als grosser, klarer Ghost-Gold-Button (statt Mini-Link) */
+#login .lg-guest{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;margin-top:2px;background:#0f1116;border:1px solid rgba(201,169,97,.22);border-radius:14px;padding:14px 12px;color:#e8edf5;cursor:pointer;transition:border-color .15s,transform .12s;-webkit-tap-highlight-color:transparent;}
+#login .lg-guest:hover{border-color:rgba(201,169,97,.45);}
+#login .lg-guest:active{transform:translateY(1px);}
+#login .lg-guest .lbl{font-size:15px;font-weight:800;}
+#login .lg-guest .sub{font-size:11.5px;font-weight:600;color:#8a97a8;}
+/* Ziel 3: Direkt-Login-Button auf der Landing-GS-Hälfte (schwarz-gold Ghost) */
+.landing-login-gs{margin-top:10px;background:rgba(201,169,97,.10);border:1px solid rgba(201,169,97,.4);color:#C9A961;font-weight:800;font-size:14px;border-radius:12px;padding:11px 18px;cursor:pointer;transition:background .15s,transform .12s;-webkit-tap-highlight-color:transparent;}
+.landing-login-gs:hover{background:rgba(201,169,97,.18);}
+.landing-login-gs:active{transform:translateY(1px);}
 </style>
 </head>
 <body>
@@ -1382,6 +1392,8 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
         <h2 class="landing-tit" data-i18n="gs_title">Profi-Team auf Abruf</h2>
         <p class="landing-sub" data-i18n="gs_sub">Heizung, Sanitär, Lüftung &amp; Klima – buchen Sie ein voll ausgestattetes HKLS-Profi-Team mit fairen Stundensätzen und 24h-Antwort.</p>
         <span class="landing-cta landing-cta-gs" data-i18n="gs_cta">HKLS-Dienstleistung buchen →</span>
+        <!-- Direkter Login (Partner/Techniker) — überspringt die Onboarding-Seite. -->
+        <button class="landing-login-gs" onclick="event.stopPropagation();showScreen('login');">🔑 Anmelden (Partner / Techniker)</button>
         <div class="lang-switch lang-switch-gs" role="radiogroup" aria-label="Sprache wählen / Choose language / Elegir idioma"></div>
       </div>
     </div>
@@ -2243,7 +2255,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
         <button class="lg-tile" onclick="loginSelectRole('gs_partner')"><span class="ic">🏢</span><span class="t">Partner</span><span class="s">Projekte &amp; Cockpit</span></button>
         <button class="lg-tile" onclick="loginSelectRole('techniker')"><span class="ic">🔧</span><span class="t">Techniker</span><span class="s">Rapport &amp; Einsätze</span></button>
       </div>
-      <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner – nur Endkunden)</div>
+      <button class="lg-guest" onclick="skipLogin()"><span class="lbl">👋 Ohne Anmeldung weiter</span><span class="sub">BOB Scanner – nur Endkunden</span></button>
     </div>
 
     <!-- STUFE 2 — Login-Formular (nach Rollenwahl). Identisch für beide Rollen; nur die
