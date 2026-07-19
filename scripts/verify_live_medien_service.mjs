@@ -118,6 +118,18 @@ try {
   check('Partner liest eigene Galerie (ProjA) → ok', isOk(await call(partTok, 'medien_list', { projekt_id: projA.id })));
   check('Partner liest Fremd-Galerie (ProjB) → 403', is403(await call(partTok, 'medien_list', { projekt_id: projB.id })));
 
+  console.log('\n── Feature B: Video-Direktupload (sign → PUT → register) ──');
+  const sg = await call(techTok, 'medien_sign_upload', { projekt_id: projA.id, filename: 'zzbig.mp4' });
+  check('sign_upload liefert uploadUrl', isOk(sg) && !!sg.json.uploadUrl, sg.json);
+  if (sg.json?.uploadUrl) {
+    created.storage.push(sg.json.path);
+    const put = await fetch(sg.json.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'video/mp4', 'x-upsert': 'true' }, body: Buffer.from('ZZVERIFY-video-bytes') });
+    check('Direkt-PUT in Storage → ok', put.ok, { status: put.status });
+    const reg = await call(techTok, 'medien_register', { projekt_id: projA.id, path: sg.json.path, contentType: 'video/mp4', medientyp: 'video', dauer_sekunden: 33, stockwerk: '2.OG', filename: 'zzbig.mp4' });
+    check('register → ok, medientyp=video, dauer=33', isOk(reg) && reg.json.medien?.medientyp === 'video' && reg.json.medien?.dauer_sekunden === 33, reg.json);
+    check('register FREMD-path → 403', is403(await call(techTok, 'medien_register', { projekt_id: projA.id, path: projB.id + '/medien/x.mp4', contentType: 'video/mp4', stockwerk: 'EG' })));
+  }
+
   // ── FEATURE C: Service-Auftrag-Flow ──
   console.log('\n── Feature C: Service-Auftrag-Flow ──');
   const svcC = await call(partTok, 'svc_create', { objekt: 'ZZVERIFY Objekt', beschreibung: 'Heizung tropft', quelle: 'sprache' });

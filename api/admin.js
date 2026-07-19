@@ -6,11 +6,14 @@
 //   • Temp password is returned ONCE in the create/reset response (admin shows
 //     it to the user, then sends manually). Never logged, never stored as text.
 
-import { sendResendEmail, materialEmailHtml, rapportEmailHtml, MATERIAL_FROM, GS_OFFICE_EMAIL } from '../lib/mail.js';
+import { sendResendEmail, materialEmailHtml, rapportEmailHtml, technikerInviteHtml, MATERIAL_FROM, GS_OFFICE_EMAIL } from '../lib/mail.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const SB = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
+// Öffentliche App-Basis-URL (für Einladungs-/Zugangslink). Muss in Supabase Auth →
+// Redirect URLs allowlisted sein. Überschreibbar via Env GS_APP_URL.
+const APP_URL = (process.env.GS_APP_URL || 'https://baby-bob.vercel.app').replace(/\/$/, '');
 
 const ROLES = ['gs_partner', 'techniker', 'gs_admin', 'bob_user'];
 
@@ -34,7 +37,7 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
     switch (action) {
       case 'list_users':     return await listUsers(res);
-      case 'create_user':    return await createUser(res, req.body);
+      case 'create_user':    return await createUser(res, req.body, me.id);
       case 'reset_password': return await resetPassword(res, req.body);
       case 'set_active':     return await setActive(res, req.body);
       case 'archive':        return await listArchive(res);
@@ -81,8 +84,9 @@ async function listUsers(res) {
   return res.status(200).json({ users: out });
 }
 
-async function createUser(res, body) {
+async function createUser(res, body, creatorId) {
   const { name, email, firma, role } = body || {};
+  const qualifikation = body?.qualifikation ? String(body.qualifikation).slice(0, 200) : null;
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Gültige E-Mail erforderlich' });
   if (!name) return res.status(400).json({ error: 'Name erforderlich' });
   if (role !== 'gs_partner' && role !== 'techniker') return res.status(400).json({ error: 'Rolle muss gs_partner oder techniker sein' });
@@ -123,11 +127,67 @@ async function createUser(res, body) {
     return res.status(500).json({ error: "Rolle konnte nicht gesetzt werden – bitte scripts/setup_auth.sql (Tabelle user_roles) in Supabase ausführen und erneut versuchen." });
   }
 
+  // Techniker: gs_techniker-Profil anlegen/verknüpfen (sonst nicht im Pool zuweisbar).
+  let technikerLinked = false;
+  if (role === 'techniker') {
+    technikerLinked = await linkTechnikerProfile(created.id, { name, email, qualifikation, creatorId });
+  }
+
+  // Einladung: branded Magic-/Recovery-Link zum Passwort-Setzen (Fallback: Temp-Passwort).
+  let mailSent = false;
+  const setLink = await generateInviteLink(email);
+  try {
+    const html = technikerInviteHtml({ name, setLink, tempPassword, loginUrl: `${APP_URL}/login` });
+    const subject = role === 'techniker' ? '👷 Dein George Solutions Techniker-Zugang' : '🔑 Dein George Solutions Zugang';
+    const mr = await sendResendEmail({ to: email, subject, html });
+    mailSent = !!(mr && mr.ok);
+  } catch (e) { console.error('invite mail fail', e.message); }
+
   return res.status(200).json({
     ok: true,
     user: { id: created.id, email, name, firma: firma || null, role },
-    temp_password: tempPassword, // shown ONCE
+    temp_password: tempPassword, // Fallback, einmalig angezeigt
+    mail_sent: mailSent,
+    techniker_linked: technikerLinked,
   });
+}
+
+// gs_techniker-Zeile für den neuen Auth-User anlegen ODER eine bestehende (per E-Mail)
+// mit user_id verknüpfen. Tolerant gegenüber noch fehlender erstellt_von_user_id-Spalte
+// (scripts/techniker_erstellt_von.sql) → Feld wird dann weggelassen, kein 500.
+async function linkTechnikerProfile(userId, { name, email, qualifikation, creatorId }) {
+  const base = { user_id: userId, name, email, qualifikation: qualifikation || null };
+  const withCreator = { ...base, erstellt_von_user_id: creatorId || null };
+  try {
+    const existing = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?email=eq.${encodeURIComponent(email)}&select=id,user_id&limit=1`, { headers: SB }));
+    const row = Array.isArray(existing) ? existing[0] : null;
+    const write = async (payload, method, path) => {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers: { ...SB, Prefer: 'return=minimal' }, body: JSON.stringify(payload) });
+      if (!r.ok && /column|erstellt_von|PGRST204|does not exist/i.test(await r.text().catch(() => ''))) {
+        const noCreator = method === 'PATCH' ? base : { ...base };
+        const r2 = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method, headers: { ...SB, Prefer: 'return=minimal' }, body: JSON.stringify(noCreator) });
+        return r2.ok;
+      }
+      return r.ok;
+    };
+    if (row) return await write({ ...withCreator, id: undefined }, 'PATCH', `gs_techniker?id=eq.${row.id}`);
+    return await write(withCreator, 'POST', 'gs_techniker');
+  } catch (e) { console.error('linkTechnikerProfile fail', e.message); return false; }
+}
+
+// Supabase-Aktionslink erzeugen (Recovery = Passwort setzen). Landet nach Klick auf
+// APP_URL/login mit Session im Hash → app.html-Onboarding (must_change_password).
+// Gibt null zurück, wenn der Endpoint nicht verfügbar ist (dann greift der Temp-PW-Fallback).
+async function generateInviteLink(email) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+      method: 'POST', headers: SB,
+      body: JSON.stringify({ type: 'recovery', email, redirect_to: `${APP_URL}/login` }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json().catch(() => ({}));
+    return d.action_link || d.properties?.action_link || null;
+  } catch { return null; }
 }
 
 // Schreibt die Rolle robust und bestätigt sie durch Rücklesen.

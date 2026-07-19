@@ -93,6 +93,7 @@ global.fetch = async (url, opts = {}) => {
   if (url.includes('gs_service_techniker?') && url.includes('service_auftrag_id=eq.')) return ok([]);
   if (url.includes('gs_projekt_medien?') && method === 'GET') return ok([]);
   if (url.includes('gs_projekt_stockwerk?') && method === 'GET') return ok([]);
+  if (url.includes('/storage/v1/object/upload/sign/')) return ok({ url: '/object/upload/sign/projektdateien/x?token=abc' });
   if (url.includes('/storage/v1/object/sign/')) return ok({ signedURL: '/signed/x' });
   if (url.includes('/storage/v1/object/')) return ok({ Key: 'x' });
   if (method === 'POST' || method === 'PATCH') {
@@ -130,6 +131,13 @@ async function suite() {
   check('techniker Upload zugew. + Stockwerk → ok', isOk(await call('tok-tech1', 'medien_upload', { projekt_id: U.projA, data: 'QUJD', filename: 'a.jpg', stockwerk: 'EG' })));
   check('techniker Upload OHNE Stockwerk → Fehler', isErr(await call('tok-tech1', 'medien_upload', { projekt_id: U.projA, data: 'QUJD', filename: 'a.jpg' }), 'Stockwerk'));
   check('techniker Upload FREMD → 403',             is403(await call('tok-tech1', 'medien_upload', { projekt_id: U.projB, data: 'QUJD', filename: 'a.jpg', stockwerk: 'EG' })));
+  // Video-Direktupload (sign + register)
+  const sign = await call('tok-tech1', 'medien_sign_upload', { projekt_id: U.projA, filename: 'v.mp4' });
+  check('techniker sign_upload (zugew.) → uploadUrl', isOk(sign) && !!sign.json.uploadUrl, sign.json);
+  check('techniker sign_upload FREMD → 403',        is403(await call('tok-tech1', 'medien_sign_upload', { projekt_id: U.projB, filename: 'v.mp4' })));
+  check('partner sign_upload → 403 (read-only)',    is403(await call('tok-partA', 'medien_sign_upload', { projekt_id: U.projA, filename: 'v.mp4' })));
+  check('techniker register (korrekter path) → ok', isOk(await call('tok-tech1', 'medien_register', { projekt_id: U.projA, path: `${U.projA}/medien/1-v.mp4`, contentType: 'video/mp4', stockwerk: 'EG', dauer_sekunden: 20 })));
+  check('techniker register FREMD-path → 403',      is403(await call('tok-tech1', 'medien_register', { projekt_id: U.projA, path: `${U.projB}/medien/1-v.mp4`, contentType: 'video/mp4', stockwerk: 'EG' })));
   check('techniker Video-Upload (Service, ohne SW) → ok', isOk(await call('tok-tech1', 'medien_upload', { service_auftrag_id: U.svcA, data: 'QUJD', filename: 'v.mp4', contentType: 'video/mp4', medientyp: 'video' })));
   check('stockwerk_del nur Master (techniker→403)', is403(await call('tok-tech1', 'stockwerk_del', { id: U.sw1 })));
 

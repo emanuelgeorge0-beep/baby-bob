@@ -73,6 +73,7 @@ const PM_ACTIONS = new Set([
   // Feature B (Medien/Stockwerk) + C (Service) — Multi-Rollen (Master + Partner);
   // Partner-Schreibrechte werden IN den Handlern per scope.role verweigert (read-only).
   'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
+  'medien_sign_upload', 'medien_register',   // Video-Direktupload (umgeht Body-Limit)
   'svc_liste', 'svc_detail', 'svc_status',
   // PM-only (Master + Partner-Ersteller / Master-only intern):
   'svc_create', 'stockwerk_del', 'svc_assign', 'svc_unassign',
@@ -98,6 +99,7 @@ const TECHNIKER_ACTIONS = new Set([
   // Feature B/C: Techniker lädt getaggte Medien hoch, sieht Galerie, bucht auf
   // zugewiesene Service-Aufträge, markiert erledigt. Zugriff über die verifizierte Kette.
   'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
+  'medien_sign_upload', 'medien_register',
   'svc_liste', 'svc_detail', 'svc_status',
 ]);
 
@@ -277,6 +279,8 @@ export default async function handler(req, res) {
       // ── Feature B: Medien (Foto/Video) mit Standort-Tags + Stockwerk-Katalog ──
       case 'medien_list':      return res.status(200).json(await medienList(req.body, scope));
       case 'medien_upload':    return res.status(200).json(await medienUpload(req.body, scope));
+      case 'medien_sign_upload': return res.status(200).json(await medienSignUpload(req.body, scope));
+      case 'medien_register':  return res.status(200).json(await medienRegister(req.body, scope));
       case 'medien_del':       return res.status(200).json(await medienDel(req.body, scope));
       case 'stockwerk_list':   return res.status(200).json(await stockwerkList(req.body, scope));
       case 'stockwerk_add':    return res.status(200).json(await stockwerkAdd(req.body, scope));
@@ -2538,6 +2542,59 @@ async function medienDel(b, scope) {
   }
   await sbWrite('DELETE', `gs_projekt_medien?id=eq.${id}`, {}, 'return=minimal');
   return { ok: true };
+}
+
+// Video-Direktupload: signierte Storage-Upload-URL erzeugen (Client lädt die (grosse)
+// Datei DIREKT in den Bucket → umgeht das ~4,5 MB Serverless-Body-Limit). Danach ruft
+// der Client medien_register mit dem zurückgegebenen path. Zugriff = Schreibrecht am Ziel.
+async function medienSignUpload(b, scope) {
+  const tgt = await resolveMedienTarget(b, scope, true);
+  const safe = sbSafeName(b.filename || 'video');
+  const scopeKey = tgt.isService ? `service/${tgt.service_auftrag_id}` : tgt.projekt_id;
+  const path = `${scopeKey}/medien/${nowStamp()}-${safe}`;
+  // Body {} nötig: der Endpoint lehnt leeren Body bei Content-Type json ab.
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${PM_DATEI_BUCKET}/${path}`, { method: 'POST', headers: SB, body: '{}' });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    if (/bucket not found/i.test(t)) return { error: `Bucket '${PM_DATEI_BUCKET}' fehlt.`, notMigrated: true };
+    console.error('sign upload fail', r.status, t);
+    return { error: 'Signierte Upload-URL fehlgeschlagen' };
+  }
+  const d = await r.json().catch(() => ({}));
+  const rel = d.url || d.signedURL || '';
+  if (!rel) return { error: 'Keine Upload-URL erhalten' };
+  return { ok: true, path, uploadUrl: SUPABASE_URL + '/storage/v1' + (rel.startsWith('/') ? rel : '/' + rel) };
+}
+
+// Nach erfolgreichem Direktupload: Medien-Zeile registrieren. Der path MUSS zum
+// (zugriffsgeprüften) Ziel gehören — sonst Forbidden (kein Fremd-Pfad einschleusen).
+async function medienRegister(b, scope) {
+  const tgt = await resolveMedienTarget(b, scope, true);
+  const path = String(b.path || '');
+  const prefix = tgt.isService ? `service/${tgt.service_auftrag_id}/` : `${tgt.projekt_id}/`;
+  if (!path.startsWith(prefix)) throw new Forbidden();
+  const contentType = b.contentType || sbGuessType(path);
+  const medientyp = (/^video\//.test(contentType) || b.medientyp === 'video') ? 'video' : 'foto';
+  const stockwerk = b.stockwerk ? String(b.stockwerk).slice(0, 80) : null;
+  if (!tgt.isService && !stockwerk) return { error: 'Stockwerk ist bei Projekt-Medien erforderlich' };
+  const row = {
+    projekt_id: tgt.projekt_id, service_auftrag_id: tgt.service_auftrag_id,
+    medientyp, bucket: PM_DATEI_BUCKET, path,
+    dateiname: b.filename ? sbDisplayName(sbSafeName(b.filename)) : sbDisplayName(path.split('/').pop()),
+    mime: contentType, groesse: (b.groesse != null && b.groesse !== '') ? Math.round(num(b.groesse)) : null,
+    dauer_sekunden: (b.dauer_sekunden != null && b.dauer_sekunden !== '') ? Math.round(num(b.dauer_sekunden)) : null,
+    thumbnail_path: b.thumbnail_path ? String(b.thumbnail_path).slice(0, 300) : null,
+    stockwerk, stockwerk_id: b.stockwerk_id ? uuid(b.stockwerk_id) : null,
+    wohnung: b.wohnung ? String(b.wohnung).slice(0, 80) : null,
+    raum: b.raum ? String(b.raum).slice(0, 80) : null,
+    bauabschnitt: b.bauabschnitt ? String(b.bauabschnitt).slice(0, 120) : null,
+    notiz: b.notiz ? String(b.notiz).slice(0, 1000) : null,
+    hochgeladen_von: scope.userId || null,
+  };
+  try {
+    const r = await sbWrite('POST', 'gs_projekt_medien', row);
+    return { ok: true, medien: await signMedien(Array.isArray(r) ? r[0] : r) };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
 // ── Stockwerk-Katalog (Preset UG/EG/1.OG… + frei) ──
