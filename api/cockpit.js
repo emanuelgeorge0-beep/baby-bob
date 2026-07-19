@@ -103,12 +103,14 @@ const TECHNIKER_ACTIONS = new Set([
   'svc_liste', 'svc_detail', 'svc_status',
 ]);
 
-// Zugriffskontext bestimmen:
-//   • Master/Admin  → { isMaster:true,  partnerId:null }  (sieht ALLE Projekte)
-//   • Partner + PM  → { isMaster:false, partnerId:uid  }  (nur EIGENE Projekte,
-//                       nur wenn Feature 'projektmanagement' freigeschaltet ist)
-//   • sonst         → null  (→ 403)
-async function resolveAccess(token, action) {
+// Zugriffskontext bestimmen (MEHRFACHROLLEN-fähig):
+//   • Effektive Rollen = user_roles (Primär) ∪ user_extra_roles (Extra).
+//   • 'mode' (aktive Sicht aus dem Client) wird NUR honoriert, wenn der User die
+//     Rolle wirklich hält; Master-Modus nur für die echte MASTER_UID.
+//   • Jede Action wird gegen die AKTIVE Rolle geprüft — Umschalten ändert die
+//     Sicht, NIE die Rechte. Master-Lock + Techniker-Kette unverändert.
+//   • Rückgabe: { isMaster, partnerId, role, technikerId?, technikerUserId?, userId } | null(→403)
+async function resolveAccess(token, action, mode) {
   if (!token) return null;
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
@@ -116,40 +118,53 @@ async function resolveAccess(token, action) {
   if (!r.ok) return null;
   const user = await r.json().catch(() => null);
   if (!user || !user.id) return null;
-  let role = null;
+
+  // Primärrolle (Pflicht) + Extra-Rollen (optional, tolerant falls Tabelle fehlt).
+  let primary = null;
   try {
     const rows = await sbGet(`user_roles?user_id=eq.${user.id}&select=role&limit=1`);
-    role = rows?.[0]?.role || null;
+    primary = rows?.[0]?.role || null;
   } catch (_) { return null; }
-  // Master: exakt die Master-UUID mit Master/Admin-Rolle (unverändert streng).
-  if (user.id === MASTER_UID && (role === 'master' || role === 'gs_admin')) {
-    return { isMaster: true, partnerId: null, userId: user.id };
+  const roles = new Set(); if (primary) roles.add(primary);
+  try {
+    const ex = await sbGet(`user_extra_roles?user_id=eq.${user.id}&select=role`);
+    for (const x of Array.isArray(ex) ? ex : []) if (x.role) roles.add(x.role);
+  } catch (_) { /* Tabelle noch nicht migriert → nur Primärrolle */ }
+
+  const canMaster  = user.id === MASTER_UID && (roles.has('master') || roles.has('gs_admin'));
+  const hasTech    = roles.has('techniker');
+  const hasPartner = roles.has('gs_partner');
+
+  // Aktive Rolle wählen: expliziter mode (nur wenn gehalten), sonst sinnvoller Default.
+  let acting;
+  if (mode === 'master' && canMaster) acting = 'master';
+  else if (mode === 'techniker' && hasTech) acting = 'techniker';
+  else if (mode === 'partner' && hasPartner) acting = 'gs_partner';
+  else acting = canMaster ? 'master' : (hasPartner ? 'gs_partner' : (hasTech ? 'techniker' : null));
+
+  // Master: Vollzugriff (jede Action). MASTER_UID-Lock unverändert.
+  if (acting === 'master') {
+    return { isMaster: true, partnerId: null, role: 'master', userId: user.id };
   }
-  // Partner: PM-Actions mit Entitlement 'projektmanagement', ODER eine der weiteren
-  // Feature-Actions (Sub-Modus/Branding) mit dem jeweils eigenen Entitlement.
-  if (role === 'gs_partner') {
-    if (PM_ACTIONS.has(action) && await isEntitled(user.id, 'projektmanagement')) {
-      return { isMaster: false, partnerId: user.id, userId: user.id };
-    }
-    const feat = PARTNER_FEATURE_ACTIONS[action];
-    if (feat && await isEntitled(user.id, feat)) {
-      return { isMaster: false, partnerId: user.id, userId: user.id };
-    }
-  }
-  // Techniker: nur für die TECHNIKER_ACTIONS. Auth-User → gs_techniker-Profil über
-  // user_id auflösen; dessen id (= gs_techniker.id) ist der Join-Schlüssel für die
-  // Projekt-Zuweisung. Ohne verknüpftes Profil bleibt technikerId null (fail-safe:
-  // die Handler liefern dann leere Listen / verweigern Schreibzugriff).
-  if (role === 'techniker' && TECHNIKER_ACTIONS.has(action)) {
+  // Techniker: NUR Techniker-Actions. Kette: auth.uid → gs_techniker.user_id → id.
+  if (acting === 'techniker') {
+    if (!TECHNIKER_ACTIONS.has(action)) return null;
     let technikerId = null;
     try {
       const rows = await sbGet(`gs_techniker?user_id=eq.${user.id}&select=id&limit=1`);
       technikerId = rows?.[0]?.id || null;
     } catch (_) { technikerId = null; }
-    return {
-      isMaster: false, partnerId: null, role: 'techniker',
-      technikerId, technikerUserId: user.id, userId: user.id,
-    };
+    return { isMaster: false, partnerId: null, role: 'techniker', technikerId, technikerUserId: user.id, userId: user.id };
+  }
+  // Partner: PM-Actions (Entitlement 'projektmanagement') ODER Feature-Actions (eigenes Entitlement).
+  if (acting === 'gs_partner') {
+    if (PM_ACTIONS.has(action) && await isEntitled(user.id, 'projektmanagement')) {
+      return { isMaster: false, partnerId: user.id, role: 'partner', userId: user.id };
+    }
+    const feat = PARTNER_FEATURE_ACTIONS[action];
+    if (feat && await isEntitled(user.id, feat)) {
+      return { isMaster: false, partnerId: user.id, role: 'partner', userId: user.id };
+    }
   }
   return null;
 }
@@ -186,8 +201,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
 
-  const { token, action } = req.body || {};
-  const access = await resolveAccess(token, action);
+  const { token, action, mode } = req.body || {};
+  const access = await resolveAccess(token, action, mode); // mode = aktive Sicht (nur wenn gehalten)
   if (!access) return res.status(403).json({ error: 'Kein Zugriff' }); // generisch, kein Leak
   // Master: partnerId null → sieht alles. Partner: partnerId=uid. Techniker: partnerId
   // null ABER technikerId gesetzt (Techniker erreichen nur tech_*-Handler, nie Master-Handler,

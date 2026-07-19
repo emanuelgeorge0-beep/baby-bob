@@ -117,13 +117,15 @@ async function loginWithPassword(res, email, password) {
   }
   const data = await r.json();
   const role = await getUserRole(data.user?.id);
-  const techName = role === 'techniker' ? await getTechName(data.user?.id) : null;
+  const roles = await getEffectiveRoles(data.user?.id, role);
+  const techName = roles.includes('techniker') ? await getTechName(data.user?.id) : null;
   const m = data.user?.user_metadata || {};
   return res.status(200).json({
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     user: { id: data.user?.id, email: data.user?.email },
-    role,
+    role,          // Primärrolle (Default-Ansicht)
+    roles,         // alle gehaltenen Rollen (für Rollen-Umschalter)
     tech_name: techName,
     must_change_password: !!m.must_change_password,
     profile_complete: !!m.profile_complete,
@@ -150,11 +152,13 @@ async function verifyToken(res, token) {
   if (!r.ok) return res.status(401).json({ error: 'Ungültiger oder abgelaufener Token' });
   const user = await r.json();
   const role = await getUserRole(user.id);
-  const techName = role === 'techniker' ? await getTechName(user.id) : null;
+  const roles = await getEffectiveRoles(user.id, role);
+  const techName = roles.includes('techniker') ? await getTechName(user.id) : null;
   const m = user.user_metadata || {};
   return res.status(200).json({
     user: { id: user.id, email: user.email },
-    role,
+    role,          // Primärrolle (Default-Ansicht)
+    roles,         // alle gehaltenen Rollen (für Rollen-Umschalter)
     tech_name: techName,
     must_change_password: !!m.must_change_password,
     profile_complete: !!m.profile_complete,
@@ -170,6 +174,22 @@ async function getUserRole(userId) {
   if (!r.ok) return 'bob_user';
   const rows = await r.json();
   return rows[0]?.role || 'bob_user';
+}
+
+// Effektive Rollen = Primärrolle (user_roles) ∪ Extra-Rollen (user_extra_roles).
+// Primärrolle steht IMMER an erster Stelle (= Default-Ansicht nach Login).
+// Tolerant, falls user_extra_roles noch nicht migriert ist.
+async function getEffectiveRoles(userId, primary) {
+  const roles = [];
+  const prim = primary || (await getUserRole(userId));
+  if (prim) roles.push(prim);
+  if (userId) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/user_extra_roles?user_id=eq.${userId}&select=role`, { headers: SB_HEADERS });
+      if (r.ok) { const rows = await r.json(); for (const x of Array.isArray(rows) ? rows : []) if (x.role && !roles.includes(x.role)) roles.push(x.role); }
+    } catch (_) {}
+  }
+  return roles;
 }
 
 async function getTechName(userId) {

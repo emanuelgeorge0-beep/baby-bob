@@ -19,17 +19,19 @@ const U = {
   svcA:      '77777777-7777-4777-8777-777777777777',
   svcB:      '88888888-8888-4888-8888-888888888888',
   sw1:       '99999999-9999-4999-8999-999999999999',
+  mastertech:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',   // gs_techniker.id des Master (Multirole)
 };
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
+// Master ist ZUSÄTZLICH Techniker (Multirole) → user_extra_roles + gs_techniker-Zeile.
 const USERS = {
-  'tok-master': { id: MASTER_UID, role: 'master' },
+  'tok-master': { id: MASTER_UID, role: 'master', technikerRow: U.mastertech, extra: ['techniker'] },
   'tok-partA':  { id: U.partA,    role: 'gs_partner' },
   'tok-tech1':  { id: U.tech1auth,role: 'techniker', technikerRow: U.tech1row },
 };
 const PROJ = {
-  [U.projA]: { partner_user_id: U.partA, techs: [U.tech1row] },  // partA, tech1 zugewiesen
-  [U.projB]: { partner_user_id: U.partB, techs: [] },            // fremd, tech1 NICHT zugewiesen
+  [U.projA]: { partner_user_id: U.partA, techs: [U.tech1row, U.mastertech] }, // tech1 + Master-als-Techniker
+  [U.projB]: { partner_user_id: U.partB, techs: [] },                          // fremd, niemand zugewiesen
 };
 const SVC = {
   [U.svcA]: { id: U.svcA, partner_user_id: U.partA, status: 'angenommen', techs: [U.tech1row], objekt: 'Haus A', quelle: 'manuell' },
@@ -52,6 +54,11 @@ global.fetch = async (url, opts = {}) => {
     const uid = qparam(url, 'user_id');
     const u = Object.values(USERS).find((x) => x.id === uid);
     return ok(u ? [{ role: u.role }] : []);
+  }
+  if (url.includes('user_extra_roles?') && url.includes('user_id=eq.')) {
+    const uid = qparam(url, 'user_id');
+    const u = Object.values(USERS).find((x) => x.id === uid);
+    return ok((u && u.extra) ? u.extra.map((role) => ({ role })) : []);
   }
   if (url.includes('gs_techniker?') && url.includes('user_id=eq.')) {
     const uid = qparam(url, 'user_id');
@@ -153,6 +160,20 @@ async function suite() {
   check('svc_assign Master → ok',                   isOk(await call('tok-master', 'svc_assign', { service_auftrag_id: U.svcA, techniker_id: U.tech1row })));
   check('techniker listet zugew. Aufträge → ok',    isOk(await call('tok-tech1', 'svc_liste')));
   check('partner sieht eigene Aufträge → ok',       isOk(await call('tok-partA', 'svc_liste')));
+
+  // ── MULTIROLE (Master = auch Techniker) ──
+  // Master in TECHNIKER-Modus: wird als Techniker gescoped (nur zugewiesene Projekte).
+  check('master mode=techniker: tech_projekte → ok',        isOk(await call('tok-master', 'tech_projekte', { mode: 'techniker' })));
+  check('master mode=techniker: fremdes Projekt → 403',     is403(await call('tok-master', 'tech_projekt', { id: U.projB, mode: 'techniker' })));
+  check('master mode=techniker: Master-Action svc_assign → 403', is403(await call('tok-master', 'svc_assign', { service_auftrag_id: U.svcA, techniker_id: U.tech1row, mode: 'techniker' })));
+  // Master in MASTER-Modus (und ohne mode): voller Zugriff.
+  check('master mode=master: svc_assign → ok',              isOk(await call('tok-master', 'svc_assign', { service_auftrag_id: U.svcA, techniker_id: U.tech1row, mode: 'master' })));
+  check('master OHNE mode: svc_assign → ok (Default Master)', isOk(await call('tok-master', 'svc_assign', { service_auftrag_id: U.svcA, techniker_id: U.tech1row })));
+  // SICHERHEIT: Techniker behauptet mode=master → NICHT honoriert, keine Eskalation.
+  check('techniker mode=master: svc_assign → 403 (keine Eskalation)', is403(await call('tok-tech1', 'svc_assign', { service_auftrag_id: U.svcA, techniker_id: U.tech1row, mode: 'master' })));
+  check('techniker mode=master: tech_projekte bleibt Techniker-Scope → ok', isOk(await call('tok-tech1', 'tech_projekte', { mode: 'master' })));
+  // Partner behauptet mode=techniker → nicht gehalten → Partner-Default, Upload bleibt 403.
+  check('partner mode=techniker: Upload → 403 (read-only bleibt)', is403(await call('tok-partA', 'medien_upload', { projekt_id: U.projA, data: 'QUJD', filename: 'a.jpg', stockwerk: 'EG', mode: 'techniker' })));
 }
 
 for (let i = 1; i <= 5; i++) {
