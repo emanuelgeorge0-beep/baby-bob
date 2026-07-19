@@ -129,4 +129,26 @@ Beide Features liegen als DDL im SELBEN Skript `scripts/schema_rollen_foto_servi
 
 ---
 
-**STATUS:** BLOCK 3 = Feature B & C im Schema finalisiert (ein Skript). Feature A (Backend) steht. Keine SQL ausgeführt — Emanuel spielt `scripts/schema_rollen_foto_service.sql` einmal ein.
+**STATUS BLOCK 3:** Feature B & C im Schema finalisiert (ein Skript). Feature A (Backend) steht.
+
+---
+
+## 9. BLOCK 4 — API für Feature B & C (Code, cockpit.js)
+
+Rollenbewusst über `scope.role` (master/partner/techniker); Enforcement über die verifizierte Kette (Feature A). `scope` trägt zusätzlich `userId`.
+
+**Neue Actions** (Multi-Rollen = in PM_ACTIONS **und** TECHNIKER_ACTIONS registriert; Schreibrechte je Rolle IM Handler erzwungen):
+- **Medien:** `medien_list` (Galerie, **gruppiert nach Stockwerk**), `medien_upload` (Foto/Video → Bucket `projektdateien` + `gs_projekt_medien`-Zeile; Video optional mit `thumbnail`+`dauer_sekunden`), `medien_del` (Techniker nur eigene Uploads).
+- **Stockwerk:** `stockwerk_list` (+Presets UG/EG/1.OG…), `stockwerk_add` (Master+Techniker), `stockwerk_del` (Master-only).
+- **Service:** `svc_liste` / `svc_detail` (rollen-gescoped), `svc_create` (Master+Partner-Ersteller, `quelle` sprache/mail/manuell), `svc_status` (Automat: Master alle erlaubten Übergänge, Techniker nur zugewiesen `angenommen→erledigt`, Partner keine), `svc_assign`/`svc_unassign` (Master-only).
+- **Rapport:** `tech_rapport_add` erweitert → Projekt **XOR** `service_auftrag_id`.
+
+**Zentrale Enforcement-Helfer:** `assertProjektAccess` / `assertServiceAccess` (write-Flag; Partner=read-only, Techniker=Kette), `resolveMedienTarget` (Projekt XOR Service). Interne Marge-Felder erscheinen in keinem B/C-Payload.
+
+**Verifikation:** `scripts/test_medien_service.mjs` — Mock-basiert (echter Handler, kein Live-DB), **22 Enforcement-Checks × 5 Durchläufe = grün** (master/partner/techniker × list/upload/del/status/assign, inkl. Fremdzugriff→403, Partner-Upload→403, Stockwerk-Pflicht bei Projekt-Fotos). `node --check` grün.
+
+**Noch offen (nach SQL-Einspielen):** UI (Galerie/Upload-Maske, Service-Cockpit) und ggf. Voice→svc_create; sind separate Design-Runden.
+
+---
+
+**STATUS:** BLOCK 4 = API für B & C gebaut + getestet. Kein SQL ausgeführt — Emanuel spielt `scripts/schema_rollen_foto_service.sql` EINMAL ein, dann ist die B/C-API sofort aktiv (Code ist spalten-tolerant, bricht auch vorher nicht).

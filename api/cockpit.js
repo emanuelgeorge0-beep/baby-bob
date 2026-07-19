@@ -70,6 +70,12 @@ const PM_ACTIONS = new Set([
   'pm_datei_upload', 'pm_datei_list', 'pm_datei_del',
   'pm_export_material', 'pm_export_rapporte', 'pm_export_rechnungen',
   'pm_datenblatt_save',
+  // Feature B (Medien/Stockwerk) + C (Service) — Multi-Rollen (Master + Partner);
+  // Partner-Schreibrechte werden IN den Handlern per scope.role verweigert (read-only).
+  'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
+  'svc_liste', 'svc_detail', 'svc_status',
+  // PM-only (Master + Partner-Ersteller / Master-only intern):
+  'svc_create', 'stockwerk_del', 'svc_assign', 'svc_unassign',
 ]);
 
 // ── Weitere Partner-Actions, je eigenem Entitlement (nicht 'projektmanagement') ──
@@ -89,6 +95,10 @@ const PARTNER_FEATURE_ACTIONS = {
 //   auth.uid() → gs_techniker.user_id → gs_techniker.id → gs_projekt_techniker.techniker_id → projekt_id
 const TECHNIKER_ACTIONS = new Set([
   'tech_projekte', 'tech_projekt', 'tech_rapporte', 'tech_rapport_add',
+  // Feature B/C: Techniker lädt getaggte Medien hoch, sieht Galerie, bucht auf
+  // zugewiesene Service-Aufträge, markiert erledigt. Zugriff über die verifizierte Kette.
+  'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
+  'svc_liste', 'svc_detail', 'svc_status',
 ]);
 
 // Zugriffskontext bestimmen:
@@ -184,6 +194,7 @@ export default async function handler(req, res) {
     partnerId: access.partnerId,
     technikerId: access.technikerId ?? null,
     technikerUserId: access.technikerUserId ?? null,
+    userId: access.userId ?? null,
     role: access.role || (access.isMaster ? 'master' : 'partner'),
   };
 
@@ -263,6 +274,20 @@ export default async function handler(req, res) {
       case 'tech_projekt':     return res.status(200).json(await getTechProjekt(req.body.id, scope));
       case 'tech_rapporte':    return res.status(200).json(await getTechRapporte(scope));
       case 'tech_rapport_add': return res.status(200).json(await addTechRapport(req.body, scope));
+      // ── Feature B: Medien (Foto/Video) mit Standort-Tags + Stockwerk-Katalog ──
+      case 'medien_list':      return res.status(200).json(await medienList(req.body, scope));
+      case 'medien_upload':    return res.status(200).json(await medienUpload(req.body, scope));
+      case 'medien_del':       return res.status(200).json(await medienDel(req.body, scope));
+      case 'stockwerk_list':   return res.status(200).json(await stockwerkList(req.body, scope));
+      case 'stockwerk_add':    return res.status(200).json(await stockwerkAdd(req.body, scope));
+      case 'stockwerk_del':    return res.status(200).json(await stockwerkDel(req.body, scope));
+      // ── Feature C: Service-Auftrag (neu→angenommen/abgelehnt→erledigt) ──
+      case 'svc_liste':        return res.status(200).json(await svcListe(scope));
+      case 'svc_detail':       return res.status(200).json(await svcDetail(req.body, scope));
+      case 'svc_create':       return res.status(200).json(await svcCreate(req.body, scope));
+      case 'svc_status':       return res.status(200).json(await svcStatus(req.body, scope));
+      case 'svc_assign':       return res.status(200).json(await svcAssign(req.body, scope));
+      case 'svc_unassign':     return res.status(200).json(await svcUnassign(req.body, scope));
       // ── Partner-Branding (Firmenprofil + Logo) — Feature 'partner_branding' ──
       case 'pm_profil_get':    return res.status(200).json(await partnerProfilGet(scope));
       case 'pm_profil_save':   return res.status(200).json(await partnerProfilSave(req.body, scope));
@@ -2142,15 +2167,24 @@ async function getTechRapporte(scope) {
 // Rapport buchen: Ziel gs_tagesrapporte (die Master-sichtbare Tabelle). Datum ist
 // FREI setzbar (Backdating), niemals auto-now. Zuweisung wird serverseitig geprüft;
 // techniker_user_id/erfasst_von werden serverseitig gesetzt (nie vom Client).
+// Ziel ist ein PROJEKT (b.projekt_id) ODER ein SERVICE-AUFTRAG (b.service_auftrag_id).
 async function addTechRapport(b, scope) {
-  await requireAssignedProjekt(b.projekt_id, scope);
+  let serviceId = null;
+  const row = {
+    techniker_user_id: scope.technikerUserId,          // serverseitig, nie vom Client
+  };
+  if (b.service_auftrag_id) {
+    serviceId = await assertServiceAccess(b.service_auftrag_id, scope, true);
+    row.service_auftrag_id = serviceId;                // nur bei Service (Spalte kommt mit Schema)
+  } else {
+    await requireAssignedProjekt(b.projekt_id, scope);
+    row.projekt_id = uuid(b.projekt_id);               // Projekt-Rapport funktioniert auch vor Migration
+  }
   const datum = String(b.datum || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new Error('datum (YYYY-MM-DD) nötig');
   const { woche, jahr } = isoWeekJahr(datum);
   const heute = new Date().toISOString().slice(0, 10);
-  const row = {
-    projekt_id: uuid(b.projekt_id),
-    techniker_user_id: scope.technikerUserId,          // serverseitig, nie vom Client
+  Object.assign(row, {
     datum,                                             // frei/rückwirkend
     gesamtstunden: (b.stunden != null && b.stunden !== '') ? num(b.stunden) : 0,
     material: toStrArr(b.material),
@@ -2161,13 +2195,13 @@ async function addTechRapport(b, scope) {
     // additive Provenienz (brauchen scripts/schema_rollen_foto_service.sql):
     erfasst_von: scope.technikerUserId,
     rueckwirkend: datum < heute,
-  };
+  });
   const post = async (r) => {
     try { const res = await sbWrite('POST', 'gs_tagesrapporte', r); return { ok: true, row: Array.isArray(res) ? res[0] : res }; }
     catch (e) {
       // Doppelter Rapport (UNIQUE projekt+techniker+datum) → freundlich statt 500.
       if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
-        return { error: 'Für diesen Tag existiert bereits ein Rapport auf diesem Projekt.' };
+        return { error: 'Für diesen Tag existiert bereits ein Rapport.' };
       }
       throw e;
     }
@@ -2345,6 +2379,285 @@ async function pmDateiDel(b, scope) {
   const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
   if (!r.ok) return { error: 'Löschen fehlgeschlagen' };
   return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FEATURE B — MEDIEN (Foto/Video) mit Standort-Tags + Stockwerk-Katalog
+//  FEATURE C — SERVICE-AUFTRAG (neu→angenommen/abgelehnt→erledigt)
+//  Rollenbewusst über scope.role. Enforcement je Rolle:
+//    • master     → Vollzugriff
+//    • partner    → read-only auf Eigenes (Projekt via partner_user_id, Service als Ersteller)
+//    • techniker  → nur Zugewiesenes (Kette gs_techniker.user_id→id→*.techniker_id); schreibt Medien/Rapport
+//  Interne Marge-Felder erscheinen hier nirgends (Medien/Service tragen keine).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Projekt-Zugriff je Rolle. write=true verlangt Schreibrecht (Partner=read-only → Forbidden).
+async function assertProjektAccess(projektId, scope, write) {
+  const pid = uuid(projektId);
+  if (scope.role === 'master') return pid;
+  if (scope.role === 'partner') { if (write) throw new Forbidden(); await requireOwnedProjekt(pid, scope); return pid; }
+  if (scope.role === 'techniker') { await requireAssignedProjekt(pid, scope); return pid; }
+  throw new Forbidden();
+}
+// Service-Auftrag-Zugriff je Rolle.
+async function assertServiceAccess(serviceId, scope, write) {
+  const sid = uuid(serviceId);
+  if (scope.role === 'master') return sid;
+  if (scope.role === 'partner') {
+    if (write) throw new Forbidden();                          // Partner ist read-only (erstellt via svc_create)
+    const rows = await sbGet(`gs_service_auftrag?id=eq.${sid}&select=partner_user_id&limit=1`).catch(() => []);
+    if (!rows[0] || rows[0].partner_user_id !== scope.partnerId) throw new Forbidden();
+    return sid;
+  }
+  if (scope.role === 'techniker') {
+    if (!scope.technikerId) throw new Forbidden();
+    const rows = await sbGet(`gs_service_techniker?service_auftrag_id=eq.${sid}&techniker_id=eq.${scope.technikerId}&select=service_auftrag_id&limit=1`).catch(() => []);
+    if (!rows[0]) throw new Forbidden();
+    return sid;
+  }
+  throw new Forbidden();
+}
+// Aus dem Body das Ziel (Projekt ODER Service) auflösen + Zugriff prüfen.
+async function resolveMedienTarget(b, scope, write) {
+  if (b.projekt_id) { const pid = await assertProjektAccess(b.projekt_id, scope, write); return { projekt_id: pid, service_auftrag_id: null, isService: false }; }
+  if (b.service_auftrag_id) { const sid = await assertServiceAccess(b.service_auftrag_id, scope, write); return { projekt_id: null, service_auftrag_id: sid, isService: true }; }
+  throw new Error('projekt_id oder service_auftrag_id nötig');
+}
+
+// Signierte URLs (Datei + optionaler Video-Thumbnail) an eine Medien-Zeile hängen.
+async function signMedien(m) {
+  if (!m) return m;
+  const bucket = m.bucket || PM_DATEI_BUCKET;
+  const url = m.path ? await sbSignUrl(bucket, m.path).catch(() => null) : null;
+  const thumbnail_url = m.thumbnail_path ? await sbSignUrl(bucket, m.thumbnail_path).catch(() => null) : null;
+  return { ...m, url, thumbnail_url };
+}
+
+// Medien-Upload (Foto ODER Video) mit Standort-Tags in Bucket 'projektdateien' + DB-Zeile.
+async function medienUpload(b, scope) {
+  const tgt = await resolveMedienTarget(b, scope, true);        // Schreibrecht nötig (Partner → Forbidden)
+  const buf = sbDecodeB64(b.data);
+  if (!buf) return { error: 'Datei (base64) erforderlich' };
+  if (buf.length > 200 * 1024 * 1024) return { error: 'Datei zu gross (max. 200 MB)' };  // Videos → grösseres Limit
+  const safe = sbSafeName(b.filename || 'medien');
+  const contentType = b.contentType || sbGuessType(safe);
+  const medientyp = (/^video\//.test(contentType) || b.medientyp === 'video') ? 'video' : 'foto';
+  // Stockwerk: Pflicht wird APP-SEITIG nur bei PROJEKT-Fotos erzwungen; Service darf leer.
+  const stockwerk = b.stockwerk ? String(b.stockwerk).slice(0, 80) : null;
+  if (!tgt.isService && !stockwerk) return { error: 'Stockwerk ist bei Projekt-Medien erforderlich' };
+  const scopeKey = tgt.isService ? `service/${tgt.service_auftrag_id}` : tgt.projekt_id;
+  const path = `${scopeKey}/medien/${nowStamp()}-${safe}`;
+  const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': contentType, 'x-upsert': 'true' },
+    body: buf,
+  });
+  if (!up.ok) {
+    const t = await up.text().catch(() => '');
+    if (/bucket not found/i.test(t)) return { error: `Bucket '${PM_DATEI_BUCKET}' fehlt.`, notMigrated: true };
+    console.error('medien upload fail', up.status, t);
+    return { error: 'Upload fehlgeschlagen' };
+  }
+  // Optionaler Video-Thumbnail (Client liefert base64-Poster) → für Vorschau.
+  let thumbnail_path = null;
+  if (medientyp === 'video' && b.thumbnail) {
+    const tbuf = sbDecodeB64(b.thumbnail);
+    if (tbuf && tbuf.length <= 4 * 1024 * 1024) {
+      const tpath = `${scopeKey}/medien/thumbs/${nowStamp()}-${safe}.jpg`;
+      const tup = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${tpath}`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+        body: tbuf,
+      });
+      if (tup.ok) thumbnail_path = tpath;
+    }
+  }
+  const row = {
+    projekt_id: tgt.projekt_id, service_auftrag_id: tgt.service_auftrag_id,
+    medientyp, bucket: PM_DATEI_BUCKET, path, dateiname: sbDisplayName(safe),
+    mime: contentType, groesse: buf.length,
+    dauer_sekunden: (b.dauer_sekunden != null && b.dauer_sekunden !== '') ? Math.round(num(b.dauer_sekunden)) : null,
+    thumbnail_path,
+    stockwerk, stockwerk_id: b.stockwerk_id ? uuid(b.stockwerk_id) : null,
+    wohnung: b.wohnung ? String(b.wohnung).slice(0, 80) : null,
+    raum: b.raum ? String(b.raum).slice(0, 80) : null,
+    bauabschnitt: b.bauabschnitt ? String(b.bauabschnitt).slice(0, 120) : null,
+    notiz: b.notiz ? String(b.notiz).slice(0, 1000) : null,
+    hochgeladen_von: scope.userId || null,
+  };
+  try {
+    const r = await sbWrite('POST', 'gs_projekt_medien', row);
+    return { ok: true, medien: await signMedien(Array.isArray(r) ? r[0] : r) };
+  } catch (e) {
+    if (isNoTable(e)) return { notMigrated: true };
+    throw e;
+  }
+}
+
+// Medien-Liste + Galerie-Gruppierung nach Stockwerk (Sortierung aus Katalog-Reihenfolge).
+async function medienList(b, scope) {
+  const tgt = await resolveMedienTarget(b, scope, false);       // Lesen reicht
+  const filter = tgt.isService ? `service_auftrag_id=eq.${tgt.service_auftrag_id}` : `projekt_id=eq.${tgt.projekt_id}`;
+  let rows = [];
+  try { rows = await sbGet(`gs_projekt_medien?${filter}&select=*&order=created_at.desc`); }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true, medien: [], gruppen: [] }; throw e; }
+  const signed = await Promise.all(rows.map(signMedien));
+  const order = {};
+  if (!tgt.isService) {
+    try {
+      const sw = await sbGet(`gs_projekt_stockwerk?projekt_id=eq.${tgt.projekt_id}&select=name,reihenfolge`);
+      for (const s of sw) order[s.name] = s.reihenfolge ?? 0;
+    } catch (_) {}
+  }
+  const byFloor = new Map();
+  for (const m of signed) {
+    const key = m.stockwerk || 'Ohne Stockwerk';
+    if (!byFloor.has(key)) byFloor.set(key, []);
+    byFloor.get(key).push(m);
+  }
+  const gruppen = [...byFloor.entries()]
+    .map(([stockwerk, medien]) => ({ stockwerk, reihenfolge: order[stockwerk] ?? 999, medien }))
+    .sort((a, c) => (a.reihenfolge - c.reihenfolge) || a.stockwerk.localeCompare(c.stockwerk));
+  return { medien: signed, gruppen };
+}
+
+// Medien löschen: über die DB-Zeile (Zugriff via Ziel prüfen). Techniker nur EIGENE Uploads.
+async function medienDel(b, scope) {
+  const id = uuid(b.id);
+  let rows = [];
+  try { rows = await sbGet(`gs_projekt_medien?id=eq.${id}&select=*&limit=1`); }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+  const m = rows[0];
+  if (!m) throw new Forbidden();
+  if (m.projekt_id) await assertProjektAccess(m.projekt_id, scope, true);
+  else if (m.service_auftrag_id) await assertServiceAccess(m.service_auftrag_id, scope, true);
+  else throw new Forbidden();
+  if (scope.role === 'techniker' && m.hochgeladen_von !== scope.technikerUserId) throw new Forbidden();
+  for (const p of [m.path, m.thumbnail_path].filter(Boolean)) {
+    await fetch(`${SUPABASE_URL}/storage/v1/object/${m.bucket || PM_DATEI_BUCKET}/${p}`, { method: 'DELETE', headers: SB }).catch(() => {});
+  }
+  await sbWrite('DELETE', `gs_projekt_medien?id=eq.${id}`, {}, 'return=minimal');
+  return { ok: true };
+}
+
+// ── Stockwerk-Katalog (Preset UG/EG/1.OG… + frei) ──
+const STOCKWERK_PRESETS = ['UG', 'EG', '1.OG', '2.OG', '3.OG', '4.OG', '5.OG', 'DG'];
+async function stockwerkList(b, scope) {
+  const pid = await assertProjektAccess(b.projekt_id, scope, false);
+  try {
+    const rows = await sbGet(`gs_projekt_stockwerk?projekt_id=eq.${pid}&select=*&order=reihenfolge.asc,name.asc`);
+    return { stockwerke: rows, presets: STOCKWERK_PRESETS };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true, stockwerke: [], presets: STOCKWERK_PRESETS }; throw e; }
+}
+async function stockwerkAdd(b, scope) {
+  const pid = await assertProjektAccess(b.projekt_id, scope, true);   // Master + Techniker (Partner read-only)
+  const name = String(b.name || '').trim().slice(0, 80);
+  if (!name) throw new Error('name nötig');
+  const row = {
+    projekt_id: pid, name,
+    quelle: b.quelle === 'preset' ? 'preset' : 'frei',
+    reihenfolge: (b.reihenfolge != null && b.reihenfolge !== '') ? Math.round(num(b.reihenfolge)) : 0,
+  };
+  try {
+    const r = await sbWrite('POST', 'gs_projekt_stockwerk?on_conflict=projekt_id,name', row, 'resolution=merge-duplicates,return=representation');
+    return { ok: true, stockwerk: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+async function stockwerkDel(b, scope) {
+  if (scope.role !== 'master') throw new Forbidden();                // Struktur nur Master löscht
+  try { await sbWrite('DELETE', `gs_projekt_stockwerk?id=eq.${uuid(b.id)}`, {}, 'return=minimal'); return { ok: true }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+// ── Service-Auftrag ──
+async function svcListe(scope) {
+  let filter = '';
+  if (scope.role === 'partner') filter = `&partner_user_id=eq.${scope.partnerId}`;
+  else if (scope.role === 'techniker') {
+    if (!scope.technikerId) return { auftraege: [] };
+    const asg = await sbGet(`gs_service_techniker?techniker_id=eq.${scope.technikerId}&select=service_auftrag_id`).catch(() => []);
+    const ids = [...new Set((asg || []).map((a) => a.service_auftrag_id).filter(Boolean))];
+    if (!ids.length) return { auftraege: [] };
+    filter = `&id=in.(${ids.join(',')})`;
+  }
+  try { return { auftraege: await sbGet(`gs_service_auftrag?select=*&order=created_at.desc${filter}`) }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true, auftraege: [] }; throw e; }
+}
+async function svcDetail(b, scope) {
+  const sid = await assertServiceAccess(b.id, scope, false);
+  const rows = await sbGet(`gs_service_auftrag?id=eq.${sid}&select=*&limit=1`).catch(() => []);
+  const auftrag = rows[0];
+  if (!auftrag) return { error: 'Auftrag nicht gefunden' };
+  let techniker = [], rapporte = [], medien = [];
+  try {
+    const asg = await sbGet(`gs_service_techniker?service_auftrag_id=eq.${sid}&select=techniker_id`).catch(() => []);
+    const ids = [...new Set((asg || []).map((a) => a.techniker_id).filter(Boolean))];
+    if (ids.length) {
+      const ts = await sbGet(`gs_techniker?id=in.(${ids.join(',')})&select=*`).catch(() => []);
+      techniker = ts.map((t) => ({ id: t.id, ...pmTechCard(t) }));
+    }
+  } catch (_) {}
+  try { rapporte = await sbGet(`gs_tagesrapporte?service_auftrag_id=eq.${sid}&select=*&order=datum.desc`).catch(() => []); } catch (_) {}
+  try {
+    const mr = await sbGet(`gs_projekt_medien?service_auftrag_id=eq.${sid}&select=*&order=created_at.desc`).catch(() => []);
+    medien = await Promise.all((mr || []).map(signMedien));
+  } catch (_) {}
+  return { auftrag, techniker, rapporte, medien };
+}
+async function svcCreate(b, scope) {
+  if (scope.role === 'techniker') throw new Forbidden();             // Techniker erstellt keine Aufträge
+  const objekt = String(b.objekt || '').trim().slice(0, 200);
+  if (!objekt) throw new Error('objekt nötig');
+  const row = {
+    objekt,
+    beschreibung: b.beschreibung ? String(b.beschreibung).slice(0, 4000) : null,
+    quelle: ['sprache', 'mail', 'manuell'].includes(b.quelle) ? b.quelle : 'manuell',
+    status: 'neu',
+    // Partner = Ersteller (serverseitig gesetzt). Master darf optional einem Partner zuordnen.
+    partner_user_id: scope.role === 'partner' ? scope.partnerId : (b.partner_user_id ? uuid(b.partner_user_id) : null),
+  };
+  try { const r = await sbWrite('POST', 'gs_service_auftrag', row); return { ok: true, auftrag: Array.isArray(r) ? r[0] : r }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+// Status-Automat: neu→angenommen/abgelehnt, angenommen→erledigt/abgelehnt.
+// master: alle erlaubten Übergänge. techniker(zugewiesen): nur angenommen→erledigt. partner: keine.
+const SVC_UEBERGAENGE = { neu: ['angenommen', 'abgelehnt'], angenommen: ['erledigt', 'abgelehnt'], abgelehnt: [], erledigt: [] };
+async function svcStatus(b, scope) {
+  if (scope.role === 'partner') throw new Forbidden();
+  const sid = uuid(b.id);
+  const rows = await sbGet(`gs_service_auftrag?id=eq.${sid}&select=*&limit=1`).catch(() => []);
+  const a = rows[0];
+  if (!a) throw new Forbidden();
+  const ziel = String(b.status || '');
+  if (scope.role === 'techniker') {
+    await assertServiceAccess(sid, scope, false);                   // muss zugewiesen sein
+    if (!(a.status === 'angenommen' && ziel === 'erledigt')) throw new Forbidden();
+  } else if (scope.role !== 'master') {
+    throw new Forbidden();
+  } else if (!(SVC_UEBERGAENGE[a.status] || []).includes(ziel)) {
+    return { error: `Übergang ${a.status} → ${ziel} nicht erlaubt` };
+  }
+  const now = new Date().toISOString();
+  const patch = { status: ziel, updated_at: now };
+  if (ziel === 'angenommen') patch.angenommen_am = now;
+  if (ziel === 'erledigt') patch.erledigt_am = now;
+  if (ziel === 'abgelehnt') patch.ablehn_grund = b.grund ? String(b.grund).slice(0, 500) : (a.ablehn_grund || null);
+  try { const r = await sbWrite('PATCH', `gs_service_auftrag?id=eq.${sid}`, patch); return { ok: true, auftrag: Array.isArray(r) ? r[0] : r }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+// Techniker-Zuweisung — Master-only.
+async function svcAssign(b, scope) {
+  if (scope.role !== 'master') throw new Forbidden();
+  const row = { service_auftrag_id: uuid(b.service_auftrag_id), techniker_id: uuid(b.techniker_id) };
+  try {
+    const r = await sbWrite('POST', 'gs_service_techniker?on_conflict=service_auftrag_id,techniker_id', row, 'resolution=merge-duplicates,return=representation');
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+async function svcUnassign(b, scope) {
+  if (scope.role !== 'master') throw new Forbidden();
+  try { await sbWrite('DELETE', `gs_service_techniker?id=eq.${uuid(b.id)}`, {}, 'return=minimal'); return { ok: true }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
 // ═══ Partner-Branding: Firmenprofil + Logo (gs_partner_profil) ══════════════
