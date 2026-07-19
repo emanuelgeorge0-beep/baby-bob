@@ -151,4 +151,24 @@ Rollenbewusst über `scope.role` (master/partner/techniker); Enforcement über d
 
 ---
 
-**STATUS:** BLOCK 4 = API für B & C gebaut + getestet. Kein SQL ausgeführt — Emanuel spielt `scripts/schema_rollen_foto_service.sql` EINMAL ein, dann ist die B/C-API sofort aktiv (Code ist spalten-tolerant, bricht auch vorher nicht).
+**STATUS BLOCK 4:** API für B & C gebaut + getestet (Mock, 22×5).
+
+---
+
+## 10. BLOCK 5 — Live-Verifikation gegen echte Supabase (Schema eingespielt)
+
+Schema von Emanuel eingespielt („Success, no rows"). Zwei Skripte:
+- `scripts/verify_live_schema.mjs` — read-only: alle 6 Tabellen + neue Spalten live vorhanden ✅
+- `scripts/verify_live_medien_service.mjs` — voller E2E gegen Live-DB: legt Testdaten an (Präfix `ZZVERIFY`), erzeugt **echte** Techniker-/Partner-JWTs (auth-admin + Passwort-Login), treibt den **echten** cockpit.js-Handler, räumt danach alles weg.
+
+**Ergebnis: 29/29 Checks grün**, Prod-DB danach nachweislich sauber (0 Residuen). Belegt LIVE:
+- **Enforcement-Kette greift:** Techniker sieht nur zugewiesenes ProjA, Fremd-ProjB fehlt in `tech_projekte`; `tech_projekt(ProjB)` → **403**; `medien_upload(ProjB)` → **403**.
+- **Keine internen Felder** in der Techniker-Projektsicht (kein `stundensatz`/`kosten`).
+- **Medien:** Foto-Upload (Stockwerk EG) + Video-Upload (1.OG, `dauer_sekunden`, **Thumbnail-Vorschau-URL**) landen in Bucket + `gs_projekt_medien`; Galerie **gruppiert nach Stockwerk** (EG + 1.OG); Stockwerk-Pflicht bei Projekt-Fotos greift; Partner-Upload → **403** (read-only), Partner-Fremdgalerie → **403**.
+- **Service:** Partner erstellt Auftrag (`quelle=sprache`, `status=neu`); Techniker `svc_create` → **403**; zugewiesener Techniker `angenommen→erledigt` (setzt `erledigt_am`); Partner-Statuswechsel → **403**; Techniker auf fremden Auftrag (`svc_detail`/`medien_upload`) → **403**.
+
+*(Master-only-Übergänge/`svc_assign` sind durch den Mock-Suite abgedeckt; live nicht getrieben, weil dafür ein JWT der echten MASTER_UID nötig wäre — bewusst nicht impersoniert.)*
+
+---
+
+**STATUS:** BLOCK 5 = Live verifiziert (29/29), Prod-DB sauber. Feature A/B/C Backend + Schema fertig & scharf. Offen für Freigabe: **UI** (Galerie/Upload-Maske, Service-Cockpit, schwarz-gold Techniker-Ansicht), Mail-Ingest, Voice→`svc_create`.
