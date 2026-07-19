@@ -1312,6 +1312,54 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 .landing-gs .landing-sub{color:rgba(232,237,245,0.62)!important;}
 .landing-cta-gs{background:linear-gradient(135deg,#d8b96e,#b8954d)!important;color:#0a0e14!important;box-shadow:0 8px 26px rgba(201,169,97,.4)!important;}
 .landing-cta-gs:hover{box-shadow:0 10px 32px rgba(201,169,97,.6)!important;}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOGIN-SCREEN = COMMAND CENTER — 1:1 aus dem MASTER-Cockpit (/gs-intern-7k2x).
+   Werte exakt aus gs-intern.html .cc-hero/.cc-orb/.cc-title/.cc-tile übernommen.
+   Tokens: BG #0A0A0B · Gold #C9A961 · Karte #131519 · Card2 #181b21 · Muted #8a97a8
+   · Line rgba(255,255,255,.07) · Gold-Line rgba(201,169,97,.28). Animationen via
+   pdspin/pdpulse/pdsweep (in app.html identisch zu ccspin/ccpulse/ccsweep).
+   Nur #login gescopt; Onboarding-Screens behalten den bestehenden Gold-Override.
+   ═══════════════════════════════════════════════════════════════════════════ */
+#login.login-screen{background:radial-gradient(900px 500px at 80% -10%,rgba(201,169,97,.08),transparent 60%),radial-gradient(700px 500px at -10% 12%,rgba(90,167,255,.04),transparent 55%),#0A0A0B;padding:24px 18px;justify-content:center;}
+#login .lg-shell{width:100%;max-width:400px;margin:auto 0;display:flex;flex-direction:column;gap:16px;}
+/* Hero = Master .cc-hero (1:1) */
+#login .lg-hero{position:relative;text-align:center;padding:30px 18px 24px;border-radius:24px;overflow:hidden;background:radial-gradient(130% 90% at 50% -10%,rgba(201,169,97,.16),transparent 62%),linear-gradient(165deg,#181b21,#131519);border:1px solid rgba(201,169,97,.28);box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);}
+#login .lg-hero::before{content:'';position:absolute;left:-40%;top:0;width:50%;height:100%;background:linear-gradient(100deg,transparent,rgba(201,169,97,.10),transparent);transform:skewX(-18deg);animation:pdsweep 5.5s ease-in-out infinite;}
+#login .lg-hero>*{position:relative;z-index:1;}
+/* Orb = Master .cc-orb (1:1: 96px, ring inset 11px, core inset 24px) */
+#login .lg-orb{position:relative;width:96px;height:96px;margin:0 auto 16px;}
+#login .lg-orb .ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(201,169,97,.28);animation:pdspin 9s linear infinite;}
+#login .lg-orb .ring::after{content:'';position:absolute;top:-3px;left:calc(50% - 4px);width:8px;height:8px;border-radius:50%;background:#C9A961;box-shadow:0 0 12px 2px #C9A961;}
+#login .lg-orb .ring.r2{inset:11px;border-style:dashed;border-color:rgba(201,169,97,.4);animation:pdspin 6s linear infinite reverse;}
+#login .lg-orb .core{position:absolute;inset:24px;border-radius:50%;background:radial-gradient(circle at 34% 28%,#f6dca0,#c9a961 55%,#9a7a3c 100%);box-shadow:0 0 34px 4px rgba(201,169,97,.55);animation:pdpulse 2.6s ease-in-out infinite;display:flex;align-items:center;justify-content:center;font-size:26px;color:#0a0e14;}
+/* Titel/Subline = Master .cc-title/.cc-subt */
+#login .lg-title{position:relative;display:block;width:min(100%,300px);height:auto;margin:0 auto;filter:drop-shadow(0 0 18px rgba(201,169,97,.4));}
+#login .lg-title text{fill:#C9A961;}
+#login .lg-subt{position:relative;font-size:11px;letter-spacing:clamp(2px,1.2vw,5px);color:#8a97a8;margin-top:5px;}
+/* Rollen-Wegweiser = Master .cc-tile-Optik (card, gold Topline, radius 16) */
+#login .lg-pick{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+#login .lg-tile{position:relative;overflow:hidden;background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:20px 12px 17px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;transition:transform .14s,border-color .16s,box-shadow .2s;box-shadow:0 8px 22px rgba(0,0,0,.34);}
+#login .lg-tile::after{content:'';position:absolute;left:0;top:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,rgba(201,169,97,.28),transparent);}
+#login .lg-tile:hover{transform:translateY(-2px);border-color:rgba(201,169,97,.28);box-shadow:0 14px 32px rgba(0,0,0,.5);}
+#login .lg-tile:active{transform:translateY(0);}
+#login .lg-tile .ic{font-size:29px;line-height:1;}
+#login .lg-tile .t{font-size:15.5px;font-weight:800;color:#e8edf5;letter-spacing:.2px;}
+#login .lg-tile .s{font-size:11px;color:#8a97a8;text-align:center;}
+/* Formular-Karte = Master .cc-hero/.tile-Optik; Buttons = Master .cc-cta-Gold */
+#login .lg-form{display:flex;flex-direction:column;gap:12px;background:#131519;border:1px solid rgba(201,169,97,.28);border-radius:16px;padding:20px 18px;box-shadow:0 18px 50px rgba(0,0,0,.45);}
+#login .lg-back{background:transparent;border:none;color:#C9A961;font-size:13px;font-weight:800;cursor:pointer;padding:0;align-self:flex-start;}
+#login .lg-formhead{font-size:15.5px;font-weight:800;color:#e8edf5;text-align:center;margin:-2px 0 2px;}
+#login .login-inp{background:#0f1116;border:1px solid rgba(255,255,255,.07);color:#e8edf5;border-radius:13px;}
+#login .login-inp:focus{border-color:rgba(201,169,97,.55);}
+#login .login-inp::placeholder{color:#5c6878;}
+#login .login-btn-magic{background:linear-gradient(135deg,#d8b96e,#b8954d)!important;color:#0a0e14!important;border:none!important;border-radius:14px;font-weight:800;box-shadow:0 8px 22px rgba(201,169,97,.3);}
+#login .login-btn-pw{background:#0f1116!important;border:1px solid rgba(201,169,97,.28)!important;color:#C9A961!important;border-radius:14px;font-weight:800;}
+#login .login-sep{color:#5c6878;}
+#login .login-sep::before,#login .login-sep::after{background:rgba(255,255,255,.07);}
+#login .login-skip{color:#8a97a8;}
+#login .login-msg{color:#C9A961;}
+#login .login-msg.err{color:#ff5d5d;}
 </style>
 </head>
 <body>
@@ -2181,24 +2229,41 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 
 <!-- ═══ LOGIN SCREEN ═══ -->
 <div id="login" class="login-screen">
-  <div class="login-card">
-    <div class="login-logo">
-      <img class="login-logo-img" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
-      <div class="login-logo-sub">Anmelden · Partner · Techniker · Kunde</div>
+  <div class="lg-shell">
+    <!-- Command-Center-Hero (1:1 Cockpit-Sprache: Orb + Gold-Titel + Subline) -->
+    <div class="lg-hero">
+      <div class="lg-orb"><span class="ring"></span><span class="ring r2"></span><span class="core">⌬</span></div>
+      <svg class="lg-title" width="260" height="34" viewBox="0 0 560 70" preserveAspectRatio="xMidYMid meet" role="img" aria-label="ANMELDEN"><text x="280" y="53" text-anchor="middle" textLength="524" lengthAdjust="spacingAndGlyphs" font-family="Georgia,serif" font-weight="800" font-size="52">ANMELDEN</text></svg>
+      <div class="lg-subt">GEORGE SOLUTIONS · COMMAND CENTER</div>
     </div>
-    <!-- EIN Login für ALLE Rollen. Nach Anmeldung entscheidet der SERVER anhand der
-         echten Rolle, wohin (Master/Partner/Techniker). Kein Login-freier Rollen-Zugang. -->
-    <input class="login-inp" id="login-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" data-i18n-ph="gsf_ph_email" inputmode="email"/>
-    <button class="login-btn-magic" id="login-magic-btn" onclick="loginMagicLink()">✨ Magic Link senden</button>
-    <div class="login-sep">oder</div>
-    <button class="login-btn-pw" onclick="togglePwForm()">🔐 Mit Passwort anmelden</button>
-    <div class="login-pw-wrap" id="login-pw-wrap">
-      <input class="login-inp" id="login-pw" type="password" placeholder="Passwort" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginPassword()"/>
-      <button class="login-btn-magic" onclick="loginPassword()">Anmelden</button>
-      <div class="login-skip" style="margin-top:4px;" onclick="loginResetPassword()">Passwort vergessen / neu setzen</div>
+
+    <!-- STUFE 1 — Rollen-Wegweiser. WICHTIG (Sicherheit): reine WEGWEISER zum passenden
+         Login-Formular. Sie setzen KEINE Rolle und geben KEINEN Zugang — man muss sich
+         trotzdem mit echtem Passwort/Magic-Link anmelden; der Server routet nach echter Rolle. -->
+    <div id="lg-choose">
+      <div class="lg-pick">
+        <button class="lg-tile" onclick="loginSelectRole('gs_partner')"><span class="ic">🏢</span><span class="t">Partner</span><span class="s">Projekte &amp; Cockpit</span></button>
+        <button class="lg-tile" onclick="loginSelectRole('techniker')"><span class="ic">🔧</span><span class="t">Techniker</span><span class="s">Rapport &amp; Einsätze</span></button>
+      </div>
+      <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner – nur Endkunden)</div>
     </div>
-    <div class="login-msg" id="login-msg"></div>
-    <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner – nur Endkunden)</div>
+
+    <!-- STUFE 2 — Login-Formular (nach Rollenwahl). Identisch für beide Rollen; nur die
+         Überschrift ist kosmetisch. Login-Funktionen unverändert (posten nur E-Mail/Passwort). -->
+    <div id="lg-form" class="lg-form" style="display:none;">
+      <button class="lg-back" onclick="loginBackToRoles()">‹ Andere Rolle</button>
+      <div class="lg-formhead" id="lg-formhead">Anmeldung</div>
+      <input class="login-inp" id="login-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" data-i18n-ph="gsf_ph_email" inputmode="email"/>
+      <button class="login-btn-magic" id="login-magic-btn" onclick="loginMagicLink()">✨ Magic Link senden</button>
+      <div class="login-sep">oder</div>
+      <button class="login-btn-pw" onclick="togglePwForm()">🔐 Mit Passwort anmelden</button>
+      <div class="login-pw-wrap" id="login-pw-wrap">
+        <input class="login-inp" id="login-pw" type="password" placeholder="Passwort" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginPassword()"/>
+        <button class="login-btn-magic" onclick="loginPassword()">Anmelden</button>
+        <div class="login-skip" style="margin-top:4px;" onclick="loginResetPassword()">Passwort vergessen / neu setzen</div>
+      </div>
+      <div class="login-msg" id="login-msg"></div>
+    </div>
   </div>
 </div>
 
@@ -5043,6 +5108,8 @@ function showScreen(id){
   });
   var el=document.getElementById(id);
   if(el){el.classList.add('active');el.scrollTop=0;}
+  // Login-Screen immer mit der Rollen-Auswahl starten (Stufe 1), kein Rest-Formular.
+  if(id==='login' && typeof loginResetView==='function') loginResetView();
   if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
 }
 
@@ -5186,6 +5253,29 @@ function togglePwForm(){
   if(w) w.classList.toggle('open');
 }
 function openPwForm(){ var w=document.getElementById('login-pw-wrap'); if(w) w.classList.add('open'); }
+// ── Rollen-Wegweiser (Stufe 1 → Stufe 2) ──
+// SICHERHEIT: loginRole ist NUR ein UI-Hinweis für die Überschrift. Er wird NIE an
+// /api/auth gesendet, setzt NIE authRole/demoMode und gibt KEINEN Zugang. Man muss sich
+// trotzdem mit echtem Passwort/Magic-Link anmelden; der Server routet nach echter Rolle.
+var loginRole=null;
+function loginSelectRole(role){
+  loginRole = (role==='techniker') ? 'techniker' : 'gs_partner';
+  var head=document.getElementById('lg-formhead');
+  if(head) head.textContent = (loginRole==='techniker') ? 'Anmeldung als 🔧 Techniker' : 'Anmeldung als 🏢 Partner';
+  var ch=document.getElementById('lg-choose'), fm=document.getElementById('lg-form');
+  if(ch) ch.style.display='none'; if(fm) fm.style.display='flex';
+  setLoginMsg('','');
+  var em=document.getElementById('login-email'); if(em){ try{ em.focus(); }catch(e){} }
+}
+function loginBackToRoles(){
+  loginRole=null;
+  var ch=document.getElementById('lg-choose'), fm=document.getElementById('lg-form');
+  if(fm) fm.style.display='none'; if(ch) ch.style.display='';
+  var pw=document.getElementById('login-pw-wrap'); if(pw) pw.classList.remove('open');
+  setLoginMsg('','');
+}
+// Beim Öffnen des Login-Screens immer mit der Rollen-Auswahl starten (kein Rest-Zustand).
+function loginResetView(){ loginBackToRoles(); }
 // Passwort vergessen / neu setzen: schickt eine Recovery-Mail; danach kann der Nutzer
 // über den Link ein Passwort setzen (siehe Recovery-Callback in initAuth).
 function loginResetPassword(){
