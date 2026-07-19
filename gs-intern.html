@@ -1291,6 +1291,8 @@ function openCreateUser(){
     '<input class="field" id="cu-name" placeholder="Name *"/>'+
     '<input class="field" id="cu-email" placeholder="E-Mail *" style="margin-top:8px" type="email"/>'+
     '<input class="field" id="cu-firma" placeholder="Firma (optional)" style="margin-top:8px"/>'+
+    '<input class="field" id="cu-qual" placeholder="Qualifikation (z. B. Monteur HKLS) — für Techniker" style="margin-top:8px"/>'+
+    '<div style="color:var(--muted);font-size:12px;margin-top:8px">Einladung wird automatisch per Mail (Zugangslink) versendet.</div>'+
     '<div class="login-msg" id="cu-msg" style="margin-top:8px"></div>'+
     '<button class="btn btn-gold" id="cu-btn" style="margin-top:12px">Account erstellen</button>'+
     '<button class="btn ghost" id="cu-cancel">Abbrechen</button>');
@@ -1304,17 +1306,17 @@ function openCreateUser(){
 }
 function cuMsg(t,cls){ var m=$('cu-msg'); if(m){ m.textContent=t; m.className='login-msg '+(cls||''); } }
 function submitCockpitUser(){
-  var name=($('cu-name')||{}).value, email=($('cu-email')||{}).value, firma=($('cu-firma')||{}).value;
-  name=(name||'').trim(); email=(email||'').trim(); firma=(firma||'').trim();
+  var name=($('cu-name')||{}).value, email=($('cu-email')||{}).value, firma=($('cu-firma')||{}).value, qual=($('cu-qual')||{}).value;
+  name=(name||'').trim(); email=(email||'').trim(); firma=(firma||'').trim(); qual=(qual||'').trim();
   if(!name){ cuMsg('Name erforderlich','err'); return; }
   if(!email){ cuMsg('E-Mail erforderlich','err'); return; }
   if(!_cuRole){ cuMsg('Bitte Rolle wählen','err'); return; }
   var btn=$('cu-btn'); if(btn){ btn.disabled=true; btn.textContent='Erstellt…'; }
-  adminApi({action:'create_user',name:name,email:email,firma:firma,role:_cuRole}).then(function(d){
+  adminApi({action:'create_user',name:name,email:email,firma:firma,qualifikation:qual,role:_cuRole}).then(function(d){
     if(btn){ btn.disabled=false; btn.textContent='Account erstellen'; }
     if(d.error){ cuMsg(d.error,'err'); return; }
     closeSheet();
-    showCockpitTempPw(email,d.temp_password);
+    showCockpitTempPw(email,d.temp_password,d.mail_sent);
     loadCockpitUsers();
   }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Account erstellen'; } cuMsg('Verbindungsfehler','err'); });
 }
@@ -1337,12 +1339,16 @@ function setCockpitActive(id,active){
     toast(active?'Aktiviert':'Deaktiviert'); loadCockpitUsers();
   }).catch(function(){ toast('Verbindungsfehler'); });
 }
-function showCockpitTempPw(email,pw){
+function showCockpitTempPw(email,pw,mailSent){
+  var mailLine = mailSent
+    ? '<div style="margin-top:6px;padding:9px 12px;background:var(--gold-soft);border:1px solid var(--gold-line);border-radius:9px;color:var(--gold);font-size:13px">✉️ Einladung mit Zugangslink an '+esc(email)+' gesendet.</div>'
+    : '<div style="margin-top:6px;padding:9px 12px;background:rgba(245,185,66,.12);border:1px solid rgba(245,185,66,.3);border-radius:9px;color:var(--warn);font-size:13px">⚠️ Mailversand nicht bestätigt — bitte Zugangsdaten unten manuell weitergeben.</div>';
   openSheet('<h3>✓ Account bereit</h3>'+
     '<div class="h-sub">'+esc(email)+'</div>'+
-    '<div class="sec-t">Temporäres Passwort (einmalig sichtbar)</div>'+
+    mailLine+
+    '<div class="sec-t">Start-Passwort (Fallback, einmalig sichtbar)</div>'+
     '<div class="field mono" style="font-size:18px;letter-spacing:1px;user-select:all;text-align:center">'+esc(pw||'––––––––')+'</div>'+
-    '<div style="color:var(--muted);font-size:12px;margin-top:8px">Bitte dem Benutzer sicher mitteilen. Er wird beim ersten Login zum Ändern aufgefordert.</div>'+
+    '<div style="color:var(--muted);font-size:12px;margin-top:8px">Nur nötig, falls die Mail nicht ankommt. Beim ersten Login wird ein eigenes Passwort gesetzt.</div>'+
     '<button class="btn btn-gold" id="tp-copy" style="margin-top:12px">Passwort kopieren</button>'+
     '<button class="btn ghost" id="tp-close">Schliessen</button>');
   $('tp-close').onclick=closeSheet;
