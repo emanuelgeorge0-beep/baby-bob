@@ -925,6 +925,64 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #partner-dash .bob-chat{background:#131519;border:1px solid rgba(201,169,97,.20);}
 #partner-dash .bob-msg.user{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#e8edf5;}
 #partner-dash .bob-msg.bob{background:#0f1116;border-color:rgba(255,255,255,.07);color:#e8edf5;}
+
+/* ══ TECHNIKER-COCKPIT – schwarz/gold Command Center (Palette 1:1 Master/Partner) ══
+   Alles unter #tech-cockpit gescopt; nutzt .admin-screen als Shell (Flex-Column/Scroll). */
+#tech-cockpit{background:radial-gradient(900px 500px at 80% -10%,rgba(201,169,97,.06),transparent 60%),radial-gradient(700px 500px at -10% 10%,rgba(90,167,255,.05),transparent 55%),#0A0A0B;color:#e8edf5;}
+#tech-cockpit .tc-hero{position:relative;overflow:hidden;padding:calc(46px + var(--safe-top,0px)) 20px 20px;border-bottom:1px solid rgba(201,169,97,.20);text-align:center;background:radial-gradient(130% 90% at 50% 8%,rgba(201,169,97,.15),transparent 55%),linear-gradient(168deg,#101c33 0%,#0c1320 46%,#0A0A0B 100%);}
+#tech-cockpit .tc-logout{position:absolute;top:calc(12px + var(--safe-top,0px));right:16px;background:transparent;border:1px solid rgba(255,255,255,.09);color:#8a97a8;border-radius:9px;padding:6px 12px;font-size:12px;cursor:pointer;}
+#tech-cockpit .tc-orb{width:44px;height:44px;margin:2px auto 8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f0d089,#b8954d 70%);box-shadow:0 0 20px rgba(201,169,97,.5);display:flex;align-items:center;justify-content:center;font-size:22px;color:#0a0e14;}
+#tech-cockpit .tc-title{display:block;margin:0 auto;fill:#e8edf5;}
+#tech-cockpit .tc-subt{font-size:10.5px;letter-spacing:3px;color:#C9A961;font-weight:700;margin-top:2px;}
+#tech-cockpit .tc-meta{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:9px;font-size:11.5px;color:#8a97a8;font-variant-numeric:tabular-nums;}
+#tech-cockpit .tc-meta .live{color:#3ecf8e;font-weight:800;letter-spacing:.5px;}
+#tech-cockpit #tc-content{padding:16px 18px 6px;}
+#tech-cockpit .tc-sec{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#C9A961;font-weight:700;margin:6px 0 12px;display:flex;align-items:center;gap:8px;}
+#tech-cockpit .tc-sec::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.07);}
+#tech-cockpit .tc-empty{color:#5c6878;text-align:center;padding:34px 10px;font-size:13.5px;}
+#tech-cockpit .tc-list{display:flex;flex-direction:column;gap:11px;}
+#tech-cockpit .tc-item{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px;box-shadow:0 6px 16px rgba(0,0,0,.26);cursor:pointer;transition:transform .15s,border-color .18s;}
+#tech-cockpit .tc-item:active{transform:translateY(1px);border-color:rgba(201,169,97,.28);}
+#tech-cockpit .tc-item .ti-t{font-weight:800;font-size:15px;color:#e8edf5;}
+#tech-cockpit .tc-item .ti-m{font-size:12.5px;color:#8a97a8;margin-top:3px;}
+#tech-cockpit .tc-st{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:3px 9px;border-radius:50px;white-space:nowrap;}
+#tech-cockpit .tc-st.aktiv,#tech-cockpit .tc-st.angenommen{background:rgba(62,207,142,.16);color:#3ecf8e;}
+#tech-cockpit .tc-st.neu{background:rgba(90,167,255,.14);color:#5aa7ff;}
+#tech-cockpit .tc-st.erledigt,#tech-cockpit .tc-st.abgeschlossen{background:rgba(255,255,255,.06);color:#8a97a8;}
+#tech-cockpit .tc-st.abgelehnt,#tech-cockpit .tc-st.pausiert{background:rgba(245,185,66,.16);color:#f5b942;}
+#tech-cockpit .tc-btnrow{display:flex;gap:9px;margin:14px 0;flex-wrap:wrap;}
+#tech-cockpit .tc-btn{flex:1;min-width:130px;border:none;border-radius:12px;padding:13px 16px;font-weight:800;font-size:14px;cursor:pointer;text-align:center;}
+#tech-cockpit .tc-btn.gold{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
+#tech-cockpit .tc-btn.ghost{background:#131519;border:1px solid rgba(255,255,255,.09);color:#e8edf5;}
+#tech-cockpit .tc-back{background:transparent;border:none;color:#C9A961;font-size:13px;font-weight:700;cursor:pointer;padding:2px 0 12px;}
+#tech-cockpit .tc-lbl{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#8a97a8;font-weight:700;margin:14px 0 6px;}
+#tech-cockpit .tc-field{width:100%;background:#0f1116;border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:12px 13px;color:#e8edf5;font-size:14.5px;font-family:inherit;box-sizing:border-box;}
+#tech-cockpit textarea.tc-field{min-height:74px;resize:vertical;}
+#tech-cockpit .tc-chips{display:flex;flex-wrap:wrap;gap:7px;}
+#tech-cockpit .tc-chip{background:#131519;border:1px solid rgba(255,255,255,.09);color:#8a97a8;border-radius:50px;padding:8px 14px;font-size:13px;cursor:pointer;}
+#tech-cockpit .tc-chip.sel{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#C9A961;font-weight:700;}
+#tech-cockpit .tc-galfloor{font-size:12px;font-weight:800;color:#C9A961;margin:16px 0 8px;letter-spacing:.5px;}
+#tech-cockpit .tc-gal{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+#tech-cockpit .tc-galcell{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#0f1116;border:1px solid rgba(255,255,255,.07);}
+#tech-cockpit .tc-galcell img,#tech-cockpit .tc-galcell video{width:100%;height:100%;object-fit:cover;display:block;}
+#tech-cockpit .tc-galcell .tc-vbadge{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;font-weight:800;}
+#tech-cockpit .tc-hint{font-size:12px;color:#5c6878;margin-top:6px;}
+#tech-cockpit .tc-nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;align-items:center;gap:2px;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));background:rgba(10,10,11,.92);backdrop-filter:blur(14px);border-top:1px solid rgba(201,169,97,.18);z-index:40;}
+#tech-cockpit .tc-nav button{flex:1;background:none;border:none;color:#5c6878;font-size:10.5px;font-weight:700;letter-spacing:.3px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px;cursor:pointer;}
+#tech-cockpit .tc-nav button .ic{font-size:19px;line-height:1;}
+#tech-cockpit .tc-nav button.on{color:#C9A961;}
+.tc-tour{position:fixed;inset:0;z-index:120;background:rgba(6,10,16,.86);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;}
+.tc-tour .tcard{max-width:340px;background:#131519;border:1px solid rgba(201,169,97,.28);border-radius:18px;padding:24px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.6);}
+.tc-tour .tcard .ic{font-size:38px;}
+.tc-tour .tcard h3{color:#e8edf5;margin:12px 0 6px;font-size:19px;}
+.tc-tour .tcard p{color:#8a97a8;font-size:14px;line-height:1.5;margin:0 0 18px;}
+.tc-tour .tdots{display:flex;gap:6px;justify-content:center;margin-bottom:16px;}
+.tc-tour .tdots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.18);}
+.tc-tour .tdots i.on{background:#C9A961;}
+.tc-tour .trow{display:flex;gap:9px;}
+.tc-tour .trow button{flex:1;border-radius:11px;padding:12px;font-weight:800;font-size:14px;cursor:pointer;border:none;}
+.tc-tour .trow .skip{background:transparent;color:#8a97a8;border:1px solid rgba(255,255,255,.09);}
+.tc-tour .trow .next{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
 #partner-dash .bob-chat-input{background:#0f1116;border-color:rgba(255,255,255,.07);color:#e8edf5;}
 #partner-dash .bob-chat-mic{background:#0f1116;border-color:rgba(201,169,97,.28);color:#C9A961;}
 #partner-dash .bob-chat-send{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
@@ -2661,6 +2719,19 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div id="pd-content" class="admin-section" style="display:none;"><div class="admin-empty">Lädt…</div></div>
   <!-- Bottom-Navigation wie Master Cockpit (Cockpit / … / Mehr) – dynamisch je Freischaltung -->
   <nav class="pd-nav" id="pd-nav"></nav>
+</div>
+
+<!-- ═══ TECHNIKER COCKPIT (schwarz/gold) ═══ -->
+<div id="tech-cockpit" class="admin-screen">
+  <div class="tc-hero">
+    <button class="tc-logout" onclick="logout()">Abmelden</button>
+    <div class="tc-orb">🔧</div>
+    <svg class="tc-title" width="300" height="34" viewBox="0 0 600 68" preserveAspectRatio="xMidYMid meet" role="img" aria-label="TECHNIKER"><text x="300" y="52" text-anchor="middle" textLength="560" lengthAdjust="spacingAndGlyphs" font-family="Georgia,serif" font-weight="800" font-size="50">TECHNIKER</text></svg>
+    <div class="tc-subt">COMMAND CENTER</div>
+    <div class="tc-meta"><span class="live">Live</span><span id="tc-clock"></span><span id="tc-who"></span></div>
+  </div>
+  <div id="tc-content"><div class="tc-empty">Lädt…</div></div>
+  <nav class="tc-nav" id="tc-nav"></nav>
 </div>
 
 <script>
@@ -5050,9 +5121,9 @@ function applyRole(token,user,role,techName){
       initPartnerDash();
       break;
     case 'techniker':
-      // Techniker: Tagesrapport capture
+      // Techniker: schwarz-gold Command-Center-Cockpit (löst die alte blaue Rapport-Maske ab)
       if(modeWrap) modeWrap.style.display='none';
-      initTechRapport();
+      initTechCockpit();
       break;
     default:
       // bob_user or anonymous: BOB scanner + visible GS Login button.
@@ -9090,6 +9161,236 @@ function setTechStatus(msg,type){
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',run,{once:true});
   else run();
 })();
+</script>
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   TECHNIKER-COCKPIT (schwarz/gold). Nutzt die neuen cockpit.js-Actions
+   (tech_*, medien_*, stockwerk_*, svc_*). Enforcement greift server-seitig.
+   ══════════════════════════════════════════════════════════════════════════ */
+var TC_SW_PRESETS=['UG','EG','1.OG','2.OG','3.OG','4.OG','5.OG','DG'];
+var TC_RAEUME=['Bad','Dusche','Küche','WC','Technikraum','Steigzone'];
+var tcState={view:'projekte',ctx:null};
+var tcClockTmr=null;
+
+function techApi(action,params){ return gsAuthApi('cockpit',Object.assign({action:action},params||{})); }
+function tcH(html){ var c=document.getElementById('tc-content'); if(c) c.innerHTML=html; var s=document.getElementById('tech-cockpit'); if(s) s.scrollTop=0; }
+function tcEsc(s){ return (typeof gsEsc==='function')?gsEsc(s):String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function tcToast(m){ if(typeof toast==='function') toast(m); }
+function tcStBadge(st){ st=String(st||'').toLowerCase(); return '<span class="tc-st '+tcEsc(st)+'">'+tcEsc(st||'—')+'</span>'; }
+
+function initTechCockpit(){
+  showScreen('tech-cockpit');
+  var who=document.getElementById('tc-who'); if(who) who.textContent=(authTechName||(authUser&&authUser.email)||'Techniker');
+  tcClock(); tcBuildNav(); tcMaybeTour(); tcGo('projekte');
+}
+function tcClock(){
+  function tick(){ var el=document.getElementById('tc-clock'); if(el){ var d=new Date(); el.textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); } }
+  tick(); if(tcClockTmr) clearInterval(tcClockTmr); tcClockTmr=setInterval(tick,30000);
+}
+var TC_NAV=[{v:'projekte',ic:'🏗️',t:'Projekte'},{v:'service',ic:'🛠️',t:'Service'},{v:'rapporte',ic:'📋',t:'Rapport'},{v:'profil',ic:'👤',t:'Profil'}];
+function tcBuildNav(){
+  var n=document.getElementById('tc-nav'); if(!n) return;
+  n.innerHTML=TC_NAV.map(function(x){ return '<button data-v="'+x.v+'" onclick="tcGo(\''+x.v+'\')"><span class="ic">'+x.ic+'</span>'+tcEsc(x.t)+'</button>'; }).join('');
+}
+function tcNavActive(v){ var n=document.getElementById('tc-nav'); if(!n) return; Array.prototype.forEach.call(n.querySelectorAll('button'),function(b){ b.classList.toggle('on',b.getAttribute('data-v')===v); }); }
+function tcGo(view){
+  tcState.view=view; tcNavActive(view);
+  if(view==='projekte') return tcRenderProjekte();
+  if(view==='service')  return tcRenderService();
+  if(view==='rapporte') return tcRenderRapporte();
+  if(view==='profil')   return tcRenderProfil();
+}
+
+/* ── Meine Projekte ── */
+function tcRenderProjekte(){
+  tcH('<div class="tc-sec">Meine Projekte</div><div class="tc-empty">Lädt…</div>');
+  techApi('tech_projekte').then(function(d){
+    var ps=(d&&d.projekte)||[];
+    if(!ps.length){ tcH('<div class="tc-sec">Meine Projekte</div><div class="tc-empty">Dir sind aktuell keine Projekte zugewiesen.</div>'); return; }
+    var rows=ps.map(function(p){
+      return '<div class="tc-item" onclick="tcOpenProjekt(\''+tcEsc(p.id)+'\')"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div class="ti-t">'+tcEsc(p.name||'Projekt')+'</div><div class="ti-m">'+tcEsc([p.projektnummer,p.standort].filter(Boolean).join(' · ')||'—')+(p.taetigkeit?(' · '+tcEsc(p.taetigkeit)):'')+'</div></div>'+tcStBadge(p.status)+'</div></div>';
+    }).join('');
+    tcH('<div class="tc-sec">Meine Projekte ('+ps.length+')</div><div class="tc-list">'+rows+'</div>');
+  }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
+}
+function tcOpenProjekt(id){
+  tcState.ctx={kind:'projekt',id:id};
+  tcH('<div class="tc-empty">Lädt…</div>');
+  techApi('tech_projekt',{id:id}).then(function(d){
+    if(!d||d.error||!d.projekt){ tcH('<button class="tc-back" onclick="tcGo(\'projekte\')">‹ Zurück</button><div class="tc-empty">'+tcEsc((d&&d.error)||'Nicht gefunden')+'</div>'); return; }
+    var p=d.projekt, rap=d.rapporte||[];
+    var head='<button class="tc-back" onclick="tcGo(\'projekte\')">‹ Meine Projekte</button>'+
+      '<div class="tc-sec">'+tcEsc(p.name||'Projekt')+'</div>'+
+      '<div class="ti-m" style="color:#8a97a8;margin-bottom:2px">'+tcEsc([p.projektnummer,p.standort,p.bereich].filter(Boolean).join(' · ')||'—')+'</div>'+
+      (p.umfang&&p.umfang.length?('<div class="tc-hint">Umfang: '+tcEsc(p.umfang.join(', '))+'</div>'):'')+
+      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcRapportForm(\'projekt\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'projekt\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>';
+    var rlist=rap.length?('<div class="tc-list">'+rap.map(function(r){ return '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(r.datum||'')+' · '+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('')+'</div>'):'<div class="tc-empty">Noch keine Rapporte.</div>';
+    tcH(head+'<div class="tc-sec">Meine Rapporte</div>'+rlist+'<div id="tc-gal-slot"></div>');
+    tcLoadGallery('projekt',id);
+  }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
+}
+
+/* ── Service-Aufträge ── */
+function tcRenderService(){
+  tcH('<div class="tc-sec">Service-Aufträge</div><div class="tc-empty">Lädt…</div>');
+  techApi('svc_liste').then(function(d){
+    var ss=(d&&d.auftraege)||[];
+    if(!ss.length){ tcH('<div class="tc-sec">Service-Aufträge</div><div class="tc-empty">Keine zugewiesenen Service-Aufträge.</div>'); return; }
+    var rows=ss.map(function(s){ return '<div class="tc-item" onclick="tcOpenService(\''+tcEsc(s.id)+'\')"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div class="ti-t">'+tcEsc(s.objekt||'Service')+'</div><div class="ti-m">'+tcEsc((s.beschreibung||'').slice(0,80)||'—')+'</div></div>'+tcStBadge(s.status)+'</div></div>'; }).join('');
+    tcH('<div class="tc-sec">Service-Aufträge ('+ss.length+')</div><div class="tc-list">'+rows+'</div>');
+  }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
+}
+function tcOpenService(id){
+  tcState.ctx={kind:'service',id:id};
+  tcH('<div class="tc-empty">Lädt…</div>');
+  techApi('svc_detail',{id:id}).then(function(d){
+    if(!d||d.error||!d.auftrag){ tcH('<button class="tc-back" onclick="tcGo(\'service\')">‹ Zurück</button><div class="tc-empty">'+tcEsc((d&&d.error)||'Nicht gefunden')+'</div>'); return; }
+    var s=d.auftrag, rap=d.rapporte||[];
+    var doneBtn=(s.status==='angenommen')?'<button class="tc-btn gold" onclick="tcSvcDone(\''+tcEsc(id)+'\')">✓ Als erledigt markieren</button>':'';
+    var head='<button class="tc-back" onclick="tcGo(\'service\')">‹ Service-Aufträge</button>'+
+      '<div class="tc-sec">'+tcEsc(s.objekt||'Service')+' '+tcStBadge(s.status)+'</div>'+
+      (s.beschreibung?('<div class="ti-m" style="color:#8a97a8">'+tcEsc(s.beschreibung)+'</div>'):'')+
+      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcRapportForm(\'service\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'service\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>'+
+      (doneBtn?('<div class="tc-btnrow">'+doneBtn+'</div>'):'');
+    var rlist=rap.length?('<div class="tc-list">'+rap.map(function(r){ return '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(r.datum||'')+' · '+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('')+'</div>'):'<div class="tc-empty">Noch keine Rapporte.</div>';
+    tcH(head+'<div class="tc-sec">Rapporte</div>'+rlist+'<div id="tc-gal-slot"></div>');
+    tcLoadGallery('service',id);
+  }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
+}
+function tcSvcDone(id){
+  techApi('svc_status',{id:id,status:'erledigt'}).then(function(d){ if(d&&d.error){ tcToast(d.error); return; } tcToast('Als erledigt markiert'); tcOpenService(id); });
+}
+
+/* ── Rapport-Formular (Datum FREI rückdatierbar) ── */
+function tcRapportForm(kind,id){
+  var today=new Date().toISOString().slice(0,10);
+  var back=(kind==='service')?('tcOpenService(\''+tcEsc(id)+'\')'):('tcOpenProjekt(\''+tcEsc(id)+'\')');
+  tcH('<button class="tc-back" onclick="'+back+'">‹ Zurück</button>'+
+    '<div class="tc-sec">Rapport buchen</div>'+
+    '<div class="tc-lbl">Datum (frei wählbar — auch rückwirkend)</div><input type="date" class="tc-field" id="tc-r-datum" value="'+today+'" max="'+today+'"/>'+
+    '<div class="tc-lbl">Stunden</div><input type="number" step="0.5" min="0" max="24" class="tc-field" id="tc-r-std" placeholder="z. B. 8"/>'+
+    '<div class="tc-lbl">Ausgeführte Arbeiten (eine pro Zeile)</div><textarea class="tc-field" id="tc-r-arb" placeholder="Steigzone montiert&#10;Radiatoren angeschlossen"></textarea>'+
+    '<div class="tc-lbl">Material (eine Position pro Zeile)</div><textarea class="tc-field" id="tc-r-mat" placeholder="4× Ventil DN15&#10;Dämmung 10m"></textarea>'+
+    '<div class="tc-lbl">Notiz / Wochenreport</div><textarea class="tc-field" id="tc-r-notiz" placeholder="Besonderheiten…"></textarea>'+
+    '<div class="tc-btnrow"><button class="tc-btn gold" id="tc-r-save" onclick="tcRapportSave(\''+tcEsc(kind)+'\',\''+tcEsc(id)+'\')">Rapport speichern</button></div>');
+}
+function tcLines(v){ return String(v||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); }
+function tcRapportSave(kind,id){
+  var datum=(document.getElementById('tc-r-datum')||{}).value;
+  if(!datum){ tcToast('Datum wählen'); return; }
+  var body={datum:datum,stunden:(document.getElementById('tc-r-std')||{}).value||0,arbeiten:tcLines((document.getElementById('tc-r-arb')||{}).value),material:tcLines((document.getElementById('tc-r-mat')||{}).value),notiz:(document.getElementById('tc-r-notiz')||{}).value||''};
+  if(kind==='service') body.service_auftrag_id=id; else body.projekt_id=id;
+  var b=document.getElementById('tc-r-save'); if(b){ b.disabled=true; b.textContent='Speichert…'; }
+  techApi('tech_rapport_add',body).then(function(d){
+    if(d&&d.error){ if(b){b.disabled=false;b.textContent='Rapport speichern';} tcToast(d.error); return; }
+    tcToast('Rapport gespeichert'); if(kind==='service') tcOpenService(id); else tcOpenProjekt(id);
+  }).catch(function(){ if(b){b.disabled=false;b.textContent='Rapport speichern';} tcToast('Verbindungsfehler'); });
+}
+
+/* ── Medien: Foto + Video mit Stockwerk-Tagging ── */
+function tcMediaForm(kind,id){
+  var back=(kind==='service')?('tcOpenService(\''+tcEsc(id)+'\')'):('tcOpenProjekt(\''+tcEsc(id)+'\')');
+  var swChips=TC_SW_PRESETS.map(function(s){ return '<div class="tc-chip" data-val="'+tcEsc(s)+'" onclick="tcPickChip(this,\'sw\')">'+tcEsc(s)+'</div>'; }).join('');
+  var raumChips=TC_RAEUME.map(function(r){ return '<div class="tc-chip" data-val="'+tcEsc(r)+'" onclick="tcPickChip(this,\'raum\')">'+tcEsc(r)+'</div>'; }).join('');
+  var swReq=(kind==='projekt')?' *':' (optional)';
+  tcH('<button class="tc-back" onclick="'+back+'">‹ Zurück</button>'+
+    '<div class="tc-sec">Foto / Video hochladen</div>'+
+    '<div class="tc-lbl">Stockwerk'+swReq+'</div><div class="tc-chips" data-g="sw">'+swChips+'</div>'+
+    '<input class="tc-field" id="tc-m-swfree" placeholder="… oder frei eintippen (z. B. Attika)" style="margin-top:7px"/>'+
+    '<div class="tc-lbl">Raum (optional)</div><div class="tc-chips" data-g="raum">'+raumChips+'</div>'+
+    '<input class="tc-field" id="tc-m-raumfree" placeholder="… oder frei" style="margin-top:7px"/>'+
+    '<div class="tc-lbl">Bauabschnitt (optional)</div><input class="tc-field" id="tc-m-ba" placeholder="z. B. Rohinstallation"/>'+
+    '<input type="hidden" id="tc-m-sw-val"/><input type="hidden" id="tc-m-raum-val"/>'+
+    '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcMediaPick(\''+tcEsc(kind)+'\',\''+tcEsc(id)+'\')">📷 Aufnehmen / Auswählen</button></div>'+
+    '<div class="tc-hint">Fotos werden komprimiert hochgeladen, Videos direkt in den Speicher (auch grosse Clips).</div>'+
+    '<div id="tc-gal-slot" style="margin-top:8px"></div>');
+  tcLoadGallery(kind,id);
+}
+function tcPickChip(el,group){
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel'); var v=document.getElementById('tc-m-'+group+'-val'); if(v) v.value=el.getAttribute('data-val');
+}
+function tcSelVal(group,freeId){ var f=(document.getElementById(freeId)||{}).value; f=(f||'').trim(); if(f) return f; var v=(document.getElementById('tc-m-'+group+'-val')||{}).value; return (v||'').trim(); }
+function tcMediaPick(kind,id){
+  var stockwerk=tcSelVal('sw','tc-m-swfree');
+  if(kind==='projekt' && !stockwerk){ tcToast('Bitte Stockwerk wählen'); return; }
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,video/*'; inp.capture='environment';
+  inp.onchange=function(){ var f=(inp.files||[])[0]; if(f) tcMediaUpload(kind,id,f); };
+  inp.click();
+}
+function tcVideoDuration(file){ return new Promise(function(res){ try{ var v=document.createElement('video'); v.preload='metadata'; v.onloadedmetadata=function(){ try{URL.revokeObjectURL(v.src);}catch(e){} res(isFinite(v.duration)?Math.round(v.duration):null); }; v.onerror=function(){ res(null); }; v.src=URL.createObjectURL(file); }catch(e){ res(null); } }); }
+function tcMediaUpload(kind,id,file){
+  var tgt=(kind==='service')?{service_auftrag_id:id}:{projekt_id:id};
+  var tags={stockwerk:tcSelVal('sw','tc-m-swfree'),raum:tcSelVal('raum','tc-m-raumfree'),bauabschnitt:(document.getElementById('tc-m-ba')||{}).value||''};
+  var isVideo=/^video\//.test(file.type||'');
+  tcToast((isVideo?'Video':'Foto')+' wird hochgeladen…');
+  if(isVideo){
+    tcVideoDuration(file).then(function(dur){
+      return techApi('medien_sign_upload',Object.assign({filename:file.name},tgt)).then(function(sg){
+        if(!sg||sg.error||!sg.uploadUrl){ tcToast((sg&&sg.error)||'Upload-URL fehlgeschlagen'); return; }
+        return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':file.type||'video/mp4','x-upsert':'true'},body:file}).then(function(r){
+          if(!r.ok){ tcToast('Video-Upload fehlgeschlagen'); return; }
+          return techApi('medien_register',Object.assign({path:sg.path,filename:file.name,contentType:file.type||'video/mp4',medientyp:'video',groesse:file.size,dauer_sekunden:dur},tags,tgt)).then(function(d){
+            if(d&&d.error){ tcToast(d.error); return; } tcToast('Video gespeichert'); tcLoadGallery(kind,id);
+          });
+        });
+      });
+    }).catch(function(){ tcToast('Video-Upload fehlgeschlagen'); });
+  } else {
+    fileToUploadData(file).then(function(data){
+      var isImg=/^data:image\//.test(data);
+      return techApi('medien_upload',Object.assign({data:data,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
+        if(d&&d.error){ tcToast(d.error); return; } tcToast('Foto gespeichert'); tcLoadGallery(kind,id);
+      });
+    }).catch(function(){ tcToast('Lesefehler'); });
+  }
+}
+function tcLoadGallery(kind,id){
+  var slot=document.getElementById('tc-gal-slot'); if(!slot) return;
+  var tgt=(kind==='service')?{service_auftrag_id:id}:{projekt_id:id};
+  techApi('medien_list',tgt).then(function(d){
+    var gr=(d&&d.gruppen)||[];
+    if(!gr.length){ slot.innerHTML='<div class="tc-sec">Galerie</div><div class="tc-empty">Noch keine Medien.</div>'; return; }
+    var html='<div class="tc-sec">Galerie</div>'+gr.map(function(g){
+      var cells=(g.medien||[]).map(function(m){
+        if(m.medientyp==='video') return '<div class="tc-galcell"><video src="'+tcEsc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+tcEsc(m.thumbnail_url)+'"'):'')+' controls preload="metadata"></video><span class="tc-vbadge">▶ VIDEO</span></div>';
+        return '<div class="tc-galcell"><img src="'+tcEsc(m.url||'')+'" loading="lazy"/></div>';
+      }).join('');
+      return '<div class="tc-galfloor">'+tcEsc(g.stockwerk||'Ohne Stockwerk')+' ('+(g.medien||[]).length+')</div><div class="tc-gal">'+cells+'</div>';
+    }).join('');
+    slot.innerHTML=html;
+  }).catch(function(){ slot.innerHTML=''; });
+}
+
+/* ── Rapport-Übersicht (alle eigenen) ── */
+function tcRenderRapporte(){
+  tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Lädt…</div>');
+  techApi('tech_rapporte').then(function(d){
+    var rs=(d&&d.rapporte)||[];
+    if(!rs.length){ tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Noch keine Rapporte gebucht. Öffne ein Projekt, um zu rapportieren.</div>'); return; }
+    var rows=rs.map(function(r){ return '<div class="tc-item" style="cursor:default"><div style="display:flex;justify-content:space-between;gap:10px"><div class="ti-t">'+tcEsc(r.datum||'')+'</div><div class="ti-t" style="color:#C9A961">'+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div></div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('');
+    tcH('<div class="tc-sec">Meine Rapporte ('+rs.length+')</div><div class="tc-list">'+rows+'</div>');
+  }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
+}
+function tcRenderProfil(){
+  tcH('<div class="tc-sec">Profil</div>'+
+    '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(authTechName||'Techniker')+'</div><div class="ti-m">'+tcEsc((authUser&&authUser.email)||'')+'</div></div>'+
+    '<div class="tc-btnrow" style="margin-top:16px"><button class="tc-btn ghost" onclick="logout()">Abmelden</button></div>');
+}
+
+/* ── Kurze Onboarding-Tour (einmalig, dezent) ── */
+var TC_TOUR=[{ic:'🏗️',h:'Deine Projekte',p:'Hier siehst du nur die Baustellen, die dir zugewiesen sind — nichts anderes.'},{ic:'📋',h:'Rapport & Fotos',p:'Buche Stunden und Material, tagge Fotos/Videos nach Stockwerk. Das Datum ist frei wählbar — auch rückwirkend für die letzte Arbeitswoche.'},{ic:'🛠️',h:'Service-Aufträge',p:'Zugewiesene Service-Einsätze findest du im Tab „Service" — annehmen, dokumentieren, erledigen.'}];
+function tcMaybeTour(){ try{ if(localStorage.getItem('tc_tour_v1')==='1') return; }catch(e){} tcTourStep(0); }
+function tcTourStep(i){
+  var ex=document.querySelector('.tc-tour'); if(ex) ex.parentNode.removeChild(ex);
+  if(i>=TC_TOUR.length){ try{ localStorage.setItem('tc_tour_v1','1'); }catch(e){} return; }
+  var s=TC_TOUR[i];
+  var dots=TC_TOUR.map(function(_,k){ return '<i class="'+(k===i?'on':'')+'"></i>'; }).join('');
+  var last=(i===TC_TOUR.length-1);
+  var ov=document.createElement('div'); ov.className='tc-tour';
+  ov.innerHTML='<div class="tcard"><div class="ic">'+s.ic+'</div><h3>'+tcEsc(s.h)+'</h3><p>'+tcEsc(s.p)+'</p><div class="tdots">'+dots+'</div><div class="trow"><button class="skip" onclick="tcTourStep('+TC_TOUR.length+')">Überspringen</button><button class="next" onclick="tcTourStep('+(i+1)+')">'+(last?'Los geht’s':'Weiter')+'</button></div></div>';
+  document.body.appendChild(ov);
+}
 </script>
 </body>
 </html>
