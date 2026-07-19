@@ -5186,8 +5186,23 @@ function routeAfterAuth(token,d){
   if((d.role==='gs_partner'||d.role==='techniker')&&!d.profile_complete){
     showProfileSetup(d.role);return;
   }
-  // Erzwungene Techniker-Sicht (Rollen-Umschalter) — nur wenn die Rolle gehalten wird.
-  if(tcForcedRole==='techniker' && authRoles.indexOf('techniker')>-1){ initTechCockpit(); return; }
+  // Ziel-Cockpit nach GEKLICKTER Rollen-Kachel (loginRole) ODER #as=-Hash (Umschalter).
+  // SICHERHEIT (Regel 3): die Kachel ist nur ein WUNSCH — das Ziel-Cockpit öffnet NUR,
+  // wenn der User die Rolle laut Server (roles[]) WIRKLICH hält. Sonst → echte Rolle.
+  var want = loginRole;
+  if(!want){ try{ want = localStorage.getItem('bob_login_role') || null; }catch(e){} }
+  if(!want && tcForcedRole==='techniker') want='techniker';
+  if(want){
+    loginRole=null; try{ localStorage.removeItem('bob_login_role'); }catch(e){}
+    if(authRoles.indexOf(want) > -1){
+      if(want==='techniker'){ initTechCockpit(); return; }
+      if(want==='gs_partner'){ showScreen('partner-dash'); if(typeof initPartnerDash==='function') initPartnerDash(); return; }
+    } else {
+      // Rolle NICHT gehalten → Wunsch verwerfen, in die ECHTE Rolle anmelden + Hinweis.
+      var lbl=(want==='techniker')?'Techniker':'Partner';
+      if(typeof toast==='function') toast('Dieser Account hat keine '+lbl+'-Rolle – Anmeldung mit deiner Rolle.');
+    }
+  }
   applyRole(token,d.user,d.role,d.tech_name);
 }
 
@@ -5215,11 +5230,10 @@ function applyRole(token,user,role,techName){
   switch(role){
     case 'master':
     case 'gs_admin':
-      // Master/Admin cockpit. Mode toggle hidden; picks from hub. (Master = secret only.)
+      // Altes blaues Admin-Cockpit ENTFERNT. Master-Zugang läuft ausschliesslich über den
+      // privaten Eingang /gs-intern-7k2x (schwarz-gold Master-Cockpit, eigenes File).
       if(modeWrap) modeWrap.style.display='none';
-      var aw=document.getElementById('admin-welcome');
-      if(aw) aw.textContent=(user&&user.email)||'George Solutions';
-      showScreen('admin-home');
+      location.href='/gs-intern-7k2x';
       break;
     case 'gs_partner':
       // Partner portal: own projects, rapporte, invoices
@@ -5260,6 +5274,8 @@ function openPwForm(){ var w=document.getElementById('login-pw-wrap'); if(w) w.c
 var loginRole=null;
 function loginSelectRole(role){
   loginRole = (role==='techniker') ? 'techniker' : 'gs_partner';
+  // Persistieren, damit die Kachelwahl den Magic-Link-Rücksprung (frische Seite) übersteht.
+  try{ localStorage.setItem('bob_login_role', loginRole); }catch(e){}
   var head=document.getElementById('lg-formhead');
   if(head) head.textContent = (loginRole==='techniker') ? 'Anmeldung als 🔧 Techniker' : 'Anmeldung als 🏢 Partner';
   var ch=document.getElementById('lg-choose'), fm=document.getElementById('lg-form');
@@ -5269,6 +5285,7 @@ function loginSelectRole(role){
 }
 function loginBackToRoles(){
   loginRole=null;
+  try{ localStorage.removeItem('bob_login_role'); }catch(e){}
   var ch=document.getElementById('lg-choose'), fm=document.getElementById('lg-form');
   if(fm) fm.style.display='none'; if(ch) ch.style.display='';
   var pw=document.getElementById('login-pw-wrap'); if(pw) pw.classList.remove('open');
@@ -5373,9 +5390,9 @@ function demoEnter(role){
   var b=document.getElementById('demo-banner');if(b)b.style.display='flex';
   try{ document.body.classList.add('demo-on'); }catch(e){}
   var mw=document.querySelector('.mode-toggle-wrap');if(mw)mw.style.display='none';
-  if(role==='techniker'){ initTechRapport(); }
+  if(role==='techniker'){ initTechCockpit(); }
   else if(role==='gs_partner'){ showScreen('partner-dash'); initPartnerDash(); }
-  else { var aw=document.getElementById('admin-welcome');if(aw)aw.textContent='Demo Admin';showScreen('admin-home'); }
+  else { location.href='/gs-intern-7k2x'; }
 }
 // SICHERHEIT: „Techniker ohne Login" wurde ENTFERNT — ein Techniker muss sich
 // einloggen (Enforcement-Kette darf nicht umgangen werden). Kein Login-freier
