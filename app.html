@@ -2144,11 +2144,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   <div class="login-card">
     <div class="login-logo">
       <img class="login-logo-img" src="/lib/logo-gs.png" alt="George Solutions" width="723" height="395"/>
-      <div class="login-logo-sub">Partner &amp; Techniker</div>
+      <div class="login-logo-sub">Anmelden · Partner · Techniker · Kunde</div>
     </div>
-    <!-- Einstieg: Techniker (freier Zugang) ODER Partner (Login). Nur der Auswahl-Einstieg. -->
-    <button class="login-btn-pw" onclick="enterTechnikerFrei()" style="border-color:rgba(201,169,97,0.5);color:#FFD700;font-weight:800;">🔧 Techniker – ohne Login starten</button>
-    <div class="login-sep">oder als Partner anmelden</div>
+    <!-- EIN Login für ALLE Rollen. Nach Anmeldung entscheidet der SERVER anhand der
+         echten Rolle, wohin (Master/Partner/Techniker). Kein Login-freier Rollen-Zugang. -->
     <input class="login-inp" id="login-email" type="email" placeholder="E-Mail-Adresse" autocomplete="email" data-i18n-ph="gsf_ph_email" inputmode="email"/>
     <button class="login-btn-magic" id="login-magic-btn" onclick="loginMagicLink()">✨ Magic Link senden</button>
     <div class="login-sep">oder</div>
@@ -2159,15 +2158,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
       <div class="login-skip" style="margin-top:4px;" onclick="loginResetPassword()">Passwort vergessen / neu setzen</div>
     </div>
     <div class="login-msg" id="login-msg"></div>
-    <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner)</div>
-    <!-- Demo-Direkteinstieg – standardmässig AUS (DEMO_ACCESS_ENABLED). Partner-/Techniker-Ansicht nur mit echtem Login. -->
-    <div id="demo-access-block" style="display:none;">
-      <div class="login-sep">🧪 Demo-Modus (ohne Login)</div>
-      <div class="demo-row">
-        <button class="demo-btn" onclick="demoEnter('techniker')">👷 Techniker</button>
-        <button class="demo-btn" onclick="demoEnter('gs_partner')">🏢 Partner</button>
-      </div>
-    </div>
+    <div class="login-skip" onclick="skipLogin()">Ohne Anmeldung weiter (BOB Scanner – nur Endkunden)</div>
   </div>
 </div>
 
@@ -5012,8 +5003,6 @@ function showScreen(id){
   });
   var el=document.getElementById(id);
   if(el){el.classList.add('active');el.scrollTop=0;}
-  // Demo-Direkteinstieg nur zeigen, wenn ausdrücklich aktiviert (Standard AUS).
-  if(id==='login'){ var dab=document.getElementById('demo-access-block'); if(dab) dab.style.display=DEMO_ACCESS_ENABLED?'block':'none'; }
   if(typeof updateAdminReturnBtn==='function') updateAdminReturnBtn();
 }
 
@@ -5258,16 +5247,9 @@ function demoEnter(role){
   else if(role==='gs_partner'){ showScreen('partner-dash'); initPartnerDash(); }
   else { var aw=document.getElementById('admin-welcome');if(aw)aw.textContent='Demo Admin';showScreen('admin-home'); }
 }
-// Techniker: FREIER Zugang ohne Login → direkt in die bestehenden Techniker-Ansichten.
-// Wiederverwendung: initTechRapport() (Rapport/Stunden/Material/Blockade/Profil).
-// token-frei über demoMode (gsAuthApi→demoApi), damit die Screens ohne 401 laden.
-// Zurück/Beenden über den bestehenden „Abmelden"-Button (logout) im Techniker-Header.
-function enterTechnikerFrei(){
-  demoMode=true; authToken=null; authRole='techniker';
-  authUser={ email:'techniker@george-solutions.ch' }; authTechName='Techniker';
-  var mw=document.querySelector('.mode-toggle-wrap'); if(mw) mw.style.display='none';
-  initTechRapport();
-}
+// SICHERHEIT: „Techniker ohne Login" wurde ENTFERNT — ein Techniker muss sich
+// einloggen (Enforcement-Kette darf nicht umgangen werden). Kein Login-freier
+// Rollen-Zugang mehr; Endkunden nutzen weiterhin den anonymen BOB-Scanner.
 function demoExit(){
   demoMode=false;authRole=null;authToken=null;authUser=null;authTechName=null;
   var b=document.getElementById('demo-banner');if(b)b.style.display='none';
