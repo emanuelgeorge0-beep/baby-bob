@@ -931,6 +931,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit{background:radial-gradient(900px 500px at 80% -10%,rgba(201,169,97,.06),transparent 60%),radial-gradient(700px 500px at -10% 10%,rgba(90,167,255,.05),transparent 55%),#0A0A0B;color:#e8edf5;}
 #tech-cockpit .tc-hero{position:relative;overflow:hidden;padding:calc(46px + var(--safe-top,0px)) 20px 20px;border-bottom:1px solid rgba(201,169,97,.20);text-align:center;background:radial-gradient(130% 90% at 50% 8%,rgba(201,169,97,.15),transparent 55%),linear-gradient(168deg,#101c33 0%,#0c1320 46%,#0A0A0B 100%);}
 #tech-cockpit .tc-logout{position:absolute;top:calc(12px + var(--safe-top,0px));right:16px;background:transparent;border:1px solid rgba(255,255,255,.09);color:#8a97a8;border-radius:9px;padding:6px 12px;font-size:12px;cursor:pointer;}
+#tech-cockpit #tc-switch{position:absolute;top:calc(10px + var(--safe-top,0px));left:16px;}
+#tech-cockpit .tc-rolepill{display:flex;background:#131519;border:1px solid rgba(201,169,97,.28);border-radius:50px;padding:3px;gap:2px;}
+#tech-cockpit .tc-rolepill .rp{background:none;border:none;color:#8a97a8;font-size:11.5px;font-weight:800;padding:5px 11px;border-radius:50px;cursor:pointer;}
+#tech-cockpit .tc-rolepill .rp.on{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
 #tech-cockpit .tc-orb{width:44px;height:44px;margin:2px auto 8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f0d089,#b8954d 70%);box-shadow:0 0 20px rgba(201,169,97,.5);display:flex;align-items:center;justify-content:center;font-size:22px;color:#0a0e14;}
 #tech-cockpit .tc-title{display:block;margin:0 auto;fill:#e8edf5;}
 #tech-cockpit .tc-subt{font-size:10.5px;letter-spacing:3px;color:#C9A961;font-weight:700;margin-top:2px;}
@@ -2725,6 +2729,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 <div id="tech-cockpit" class="admin-screen">
   <div class="tc-hero">
     <button class="tc-logout" onclick="logout()">Abmelden</button>
+    <div id="tc-switch"></div>
     <div class="tc-orb">🔧</div>
     <svg class="tc-title" width="300" height="34" viewBox="0 0 600 68" preserveAspectRatio="xMidYMid meet" role="img" aria-label="TECHNIKER"><text x="300" y="52" text-anchor="middle" textLength="560" lengthAdjust="spacingAndGlyphs" font-family="Georgia,serif" font-weight="800" font-size="50">TECHNIKER</text></svg>
     <div class="tc-subt">COMMAND CENTER</div>
@@ -5014,6 +5019,9 @@ function showScreen(id){
 
 // ── Init on page load ──
 var pendingRecovery=false;  // true nach Klick auf Passwort-Recovery-Link (vor IIFE deklariert!)
+var authRoles=[];           // alle gehaltenen Rollen (Mehrfachrollen) für den Rollen-Umschalter
+// Erzwungene Sicht via URL-Hash (#as=techniker) — vom Rollen-Umschalter aus gesetzt.
+var tcForcedRole=(function(){try{var m=(location.hash||'').match(/as=(techniker|master)/);return m?m[1]:null;}catch(e){return null;}})();
 (function initAuth(){
   // 1. Check for magic link callback (#access_token=...)
   var hash=window.location.hash;
@@ -5076,11 +5084,14 @@ function verifyAndRoute(token){
 // ── Onboarding gate: forced password change → mandatory profile → dashboard ──
 function routeAfterAuth(token,d){
   authToken=token;authUser=d.user;authRole=d.role;authTechName=d.tech_name;
+  authRoles=(d.roles&&d.roles.length)?d.roles:(d.role?[d.role]:[]);
   if(pendingRecovery){pendingRecovery=false;showPwChange('recovery');return;}
   if(d.must_change_password){showPwChange('first');return;}
   if((d.role==='gs_partner'||d.role==='techniker')&&!d.profile_complete){
     showProfileSetup(d.role);return;
   }
+  // Erzwungene Techniker-Sicht (Rollen-Umschalter) — nur wenn die Rolle gehalten wird.
+  if(tcForcedRole==='techniker' && authRoles.indexOf('techniker')>-1){ initTechCockpit(); return; }
   applyRole(token,d.user,d.role,d.tech_name);
 }
 
@@ -9172,7 +9183,17 @@ var TC_RAEUME=['Bad','Dusche','Küche','WC','Technikraum','Steigzone'];
 var tcState={view:'projekte',ctx:null};
 var tcClockTmr=null;
 
-function techApi(action,params){ return gsAuthApi('cockpit',Object.assign({action:action},params||{})); }
+// mode:'techniker' MUSS mit — sonst würde ein Multirole-User (Master+Techniker)
+// serverseitig als Master (Default) aufgelöst; so wird er korrekt als Techniker gescoped.
+function techApi(action,params){ return gsAuthApi('cockpit',Object.assign({action:action,mode:'techniker'},params||{})); }
+function tcRenderSwitch(){
+  var el=document.getElementById('tc-switch'); if(!el) return;
+  var isMaster=(authRoles.indexOf('master')>-1||authRoles.indexOf('gs_admin')>-1);
+  el.innerHTML = isMaster
+    ? '<div class="tc-rolepill"><button class="rp" onclick="tcSwitchToMaster()">👑 Master</button><button class="rp on">🔧 Techniker</button></div>'
+    : '';
+}
+function tcSwitchToMaster(){ location.href='/gs-intern-7k2x'; }
 function tcH(html){ var c=document.getElementById('tc-content'); if(c) c.innerHTML=html; var s=document.getElementById('tech-cockpit'); if(s) s.scrollTop=0; }
 function tcEsc(s){ return (typeof gsEsc==='function')?gsEsc(s):String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 function tcToast(m){ if(typeof toast==='function') toast(m); }
@@ -9181,7 +9202,7 @@ function tcStBadge(st){ st=String(st||'').toLowerCase(); return '<span class="tc
 function initTechCockpit(){
   showScreen('tech-cockpit');
   var who=document.getElementById('tc-who'); if(who) who.textContent=(authTechName||(authUser&&authUser.email)||'Techniker');
-  tcClock(); tcBuildNav(); tcMaybeTour(); tcGo('projekte');
+  tcRenderSwitch(); tcClock(); tcBuildNav(); tcMaybeTour(); tcGo('projekte');
 }
 function tcClock(){
   function tick(){ var el=document.getElementById('tc-clock'); if(el){ var d=new Date(); el.textContent=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); } }

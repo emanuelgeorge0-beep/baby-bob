@@ -542,6 +542,7 @@
     <div class="tt">Cockpit<small id="tb-sub">Master</small></div>
     <div class="sp"></div>
     <div class="who" id="tb-who"></div>
+    <button class="btn-sm" id="tb-tech" style="display:none;margin-right:6px" onclick="location.href='/app#as=techniker'">🔧 Techniker-Ansicht</button>
     <button class="logout" id="tb-logout">Logout</button>
   </div>
   <div id="view" class="view"></div>
@@ -553,7 +554,7 @@
 <script>
 "use strict";
 // ── State ──
-var TOKEN = null, USER = null, ROLE = null;
+var TOKEN = null, USER = null, ROLE = null, ROLES = [];
 var dash = null, leadsCache = [], custCache = [];
 var leadFilter = { stufe:'', quelle:'' };
 var STUFEN = ['neu','kontaktiert','angebot','gewonnen','verloren'];
@@ -640,6 +641,7 @@ function verifyAndEnter(token, refresh){
       $('li-msg').textContent='Dieser Account hat keinen Zugriff auf das Cockpit.';
       return;
     }
+    ROLES=(d.roles&&d.roles.length)?d.roles:(d.role?[d.role]:[]);
     setSession(token, refresh, d.user, d.role);
     enterApp();
   }).catch(function(){ logout(); });
@@ -650,6 +652,8 @@ function enterApp(){
   $('app').classList.remove('hidden');
   $('tb-who').textContent = (USER&&USER.email)||'';
   $('tb-sub').textContent = ROLE==='master'?'Master':'Admin';
+  // Rollen-Umschalter: Master, der ZUSÄTZLICH Techniker ist, kann zur Techniker-Ansicht wechseln.
+  var tbt=$('tb-tech'); if(tbt) tbt.style.display=(ROLES.indexOf('techniker')>-1)?'':'none';
   buildNav();
   go('dashboard');
   maybeShowInstall();
