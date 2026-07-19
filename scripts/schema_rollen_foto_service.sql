@@ -182,7 +182,8 @@ CREATE INDEX IF NOT EXISTS idx_gs_projekt_stockwerk_projekt ON gs_projekt_stockw
 
 -- B.2 — Medien-Tabelle (Fotos UND Videos) mit Standort-Tags.
 --        medientyp trägt beide Typen von Anfang an. Standort-Tags gelten für beide.
---        stockwerk ist Pflicht (denormalisiert als TEXT für robuste Galerie-Gruppierung),
+--        stockwerk (denormalisiert als TEXT für robuste Galerie-Gruppierung) ist NULLBAR;
+--        Pflicht wird app-seitig nur bei Projekt-Fotos erzwungen (Service-Fotos dürfen leer).
 --        zusätzlich optionaler FK auf den Katalog. wohnung/raum/bauabschnitt optional.
 --        raum aus fester Liste (Bad, Dusche, Küche, WC, Technikraum, Steigzone) + frei
 --        → app-seitige Liste, hier freies TEXT.
