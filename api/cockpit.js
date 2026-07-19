@@ -2127,14 +2127,24 @@ async function requireAssignedProjekt(projektId, scope) {
 }
 
 // Techniker-sichere Projektsicht: NUR Whitelist, keine internen Felder/Preise/Kunde.
+// Kontakt/Adresse additiv (Ansprechpartner vor Ort) — kommt entweder aus den
+// "scharf"-Spalten (Formular „Projekt bearbeiten") oder aus dem Datenblatt
+// (datenblatt.kunde), je nachdem was der Master befüllt hat. Weiterhin KEINE
+// Marge-Felder (kosten/rohgewinn/ampel/ansatz_chf_h/stundensatz).
 function techSafeProjekt(p) {
   if (!p) return null;
   const db = p.datenblatt || {};
+  const kunde = db.kunde || {};
   return {
     id: p.id, name: p.name, projektnummer: p.projektnummer || null,
     standort: p.standort || null, bereich: p.bereich || null, status: p.status || null,
+    adresse: p.projektadresse || kunde.objekt || null,
+    ansprechperson: p.ansprechperson || kunde.ansprechperson || null,
+    ansprech_telefon: p.ansprech_telefon || kunde.telefon || null,
+    ansprech_email: p.ansprech_email || kunde.email || null,
     umfang: Array.isArray(db.umfang) ? db.umfang : [],
     anlagenart: Array.isArray(db.anlagenart) ? db.anlagenart : [],
+    notiz: db.notiz || null,
     start: db.start || null,
   };
 }

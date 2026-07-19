@@ -965,6 +965,15 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-chips{display:flex;flex-wrap:wrap;gap:7px;}
 #tech-cockpit .tc-chip{background:#131519;border:1px solid rgba(255,255,255,.09);color:#8a97a8;border-radius:50px;padding:8px 14px;font-size:13px;cursor:pointer;}
 #tech-cockpit .tc-chip.sel{background:rgba(201,169,97,.14);border-color:rgba(201,169,97,.28);color:#C9A961;font-weight:700;}
+/* Karten/Zeilen im Zahlungsplan-Stil (Runde Techniker-Rapport): saubere Card statt rohes Formular. */
+#tech-cockpit .tc-card{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 15px;margin-top:12px;box-shadow:0 6px 16px rgba(0,0,0,.22);}
+#tech-cockpit .tc-card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+#tech-cockpit .tc-card-tit{font-weight:800;font-size:13.5px;color:#e8edf5;}
+#tech-cockpit .tc-card-val{font-weight:800;font-size:14px;color:#C9A961;white-space:nowrap;}
+#tech-cockpit .tc-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06);}
+#tech-cockpit .tc-row:first-of-type{border-top:none;}
+#tech-cockpit .tc-row-del{background:none;border:none;color:#ff8d8d;font-size:15px;cursor:pointer;padding:2px 6px;flex:0 0 auto;}
+#tech-cockpit .tc-add{background:transparent;border:1px dashed rgba(201,169,97,.35);color:#C9A961;border-radius:10px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer;width:100%;margin-top:8px;font-family:inherit;}
 #tech-cockpit .tc-galfloor{font-size:12px;font-weight:800;color:#C9A961;margin:16px 0 8px;letter-spacing:.5px;}
 #tech-cockpit .tc-gal{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
 #tech-cockpit .tc-galcell{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#0f1116;border:1px solid rgba(255,255,255,.07);}
@@ -9219,10 +9228,21 @@ function tcOpenProjekt(id){
   techApi('tech_projekt',{id:id}).then(function(d){
     if(!d||d.error||!d.projekt){ tcH('<button class="tc-back" onclick="tcGo(\'projekte\')">‹ Zurück</button><div class="tc-empty">'+tcEsc((d&&d.error)||'Nicht gefunden')+'</div>'); return; }
     var p=d.projekt, rap=d.rapporte||[];
+    var kontaktRows='';
+    if(p.adresse) kontaktRows+='<div class="tc-row"><span class="ti-m">📍 Adresse</span><span class="ti-t" style="font-size:13px;text-align:right;font-weight:700">'+tcEsc(p.adresse)+'</span></div>';
+    if(p.ansprechperson) kontaktRows+='<div class="tc-row"><span class="ti-m">👤 Ansprechpartner</span><span class="ti-t" style="font-size:13px;text-align:right;font-weight:700">'+tcEsc(p.ansprechperson)+'</span></div>';
+    if(p.ansprech_telefon) kontaktRows+='<div class="tc-row"><span class="ti-m">📞 Telefon</span><a style="font-size:13px;text-align:right;font-weight:700;color:#5aa7ff;text-decoration:none" href="tel:'+tcEsc(p.ansprech_telefon)+'">'+tcEsc(p.ansprech_telefon)+'</a></div>';
+    if(p.ansprech_email) kontaktRows+='<div class="tc-row"><span class="ti-m">✉️ E-Mail</span><a style="font-size:13px;text-align:right;font-weight:700;color:#5aa7ff;text-decoration:none" href="mailto:'+tcEsc(p.ansprech_email)+'">'+tcEsc(p.ansprech_email)+'</a></div>';
+    var kontaktCard=kontaktRows?('<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📇 Kontakt & Adresse</span></div>'+kontaktRows+'</div>'):'';
+    var leistungRows='';
+    if(p.anlagenart&&p.anlagenart.length) leistungRows+='<div class="tc-row"><span class="ti-m">🔧 Anlagenart</span><span class="ti-t" style="font-size:13px;text-align:right;font-weight:700">'+tcEsc(p.anlagenart.join(', '))+'</span></div>';
+    if(p.umfang&&p.umfang.length) leistungRows+='<div class="tc-row"><span class="ti-m">📋 Umfang</span><span class="ti-t" style="font-size:13px;text-align:right;font-weight:700">'+tcEsc(p.umfang.join(', '))+'</span></div>';
+    var leistungCard=leistungRows?('<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🛠️ Leistungen</span></div>'+leistungRows+'</div>'):'';
+    var notizCard=p.notiz?('<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div><div class="ti-m" style="margin-top:6px;line-height:1.5;white-space:pre-wrap">'+tcEsc(p.notiz)+'</div></div>'):'';
     var head='<button class="tc-back" onclick="tcGo(\'projekte\')">‹ Meine Projekte</button>'+
       '<div class="tc-sec">'+tcEsc(p.name||'Projekt')+'</div>'+
       '<div class="ti-m" style="color:#8a97a8;margin-bottom:2px">'+tcEsc([p.projektnummer,p.standort,p.bereich].filter(Boolean).join(' · ')||'—')+'</div>'+
-      (p.umfang&&p.umfang.length?('<div class="tc-hint">Umfang: '+tcEsc(p.umfang.join(', '))+'</div>'):'')+
+      kontaktCard+leistungCard+notizCard+
       '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcRapportForm(\'projekt\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'projekt\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>';
     var rlist=rap.length?('<div class="tc-list">'+rap.map(function(r){ return '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(r.datum||'')+' · '+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('')+'</div>'):'<div class="tc-empty">Noch keine Rapporte.</div>';
     tcH(head+'<div class="tc-sec">Meine Rapporte</div>'+rlist+'<div id="tc-gal-slot"></div>');
@@ -9262,23 +9282,63 @@ function tcSvcDone(id){
 }
 
 /* ── Rapport-Formular (Datum FREI rückdatierbar) ── */
+/* Häufige Material-Positionen (SHK/HKLS) als Chips — tippen fügt eine Zeile ein. */
+var TC_MAT_PRESETS=['Ventil DN15','Ventil DN20','Dämmung 10m','Rohr Kupfer 18mm','Klemmringverschraubung','Dichtungen','Übergangsstück','Schelle/Halterung'];
 function tcRapportForm(kind,id){
   var today=new Date().toISOString().slice(0,10);
   var back=(kind==='service')?('tcOpenService(\''+tcEsc(id)+'\')'):('tcOpenProjekt(\''+tcEsc(id)+'\')');
+  var matChips=TC_MAT_PRESETS.map(function(m){ return '<div class="tc-chip" onclick="tcMatAddRow(\''+tcEsc(m).replace(/'/g,"\\'")+'\',1)">'+tcEsc(m)+'</div>'; }).join('');
   tcH('<button class="tc-back" onclick="'+back+'">‹ Zurück</button>'+
     '<div class="tc-sec">Rapport buchen</div>'+
-    '<div class="tc-lbl">Datum (frei wählbar — auch rückwirkend)</div><input type="date" class="tc-field" id="tc-r-datum" value="'+today+'" max="'+today+'"/>'+
-    '<div class="tc-lbl">Stunden</div><input type="number" step="0.5" min="0" max="24" class="tc-field" id="tc-r-std" placeholder="z. B. 8"/>'+
-    '<div class="tc-lbl">Ausgeführte Arbeiten (eine pro Zeile)</div><textarea class="tc-field" id="tc-r-arb" placeholder="Steigzone montiert&#10;Radiatoren angeschlossen"></textarea>'+
-    '<div class="tc-lbl">Material (eine Position pro Zeile)</div><textarea class="tc-field" id="tc-r-mat" placeholder="4× Ventil DN15&#10;Dämmung 10m"></textarea>'+
-    '<div class="tc-lbl">Notiz / Wochenreport</div><textarea class="tc-field" id="tc-r-notiz" placeholder="Besonderheiten…"></textarea>'+
+    '<div class="tc-card">'+
+      '<div class="tc-card-head"><span class="tc-card-tit">📅 Datum &amp; Stunden</span></div>'+
+      '<div style="display:flex;gap:10px;margin-top:8px">'+
+        '<div style="flex:1"><div class="tc-lbl" style="margin-top:0">Datum</div><input type="date" class="tc-field" id="tc-r-datum" value="'+today+'" max="'+today+'"/></div>'+
+        '<div style="width:100px"><div class="tc-lbl" style="margin-top:0">Stunden</div><input type="number" step="0.5" min="0" max="24" class="tc-field" id="tc-r-std" placeholder="8"/></div>'+
+      '</div>'+
+      '<div class="tc-hint" style="margin-top:8px">Datum frei wählbar — auch rückwirkend für die letzte Arbeitswoche.</div>'+
+    '</div>'+
+    '<div class="tc-card">'+
+      '<div class="tc-card-head"><span class="tc-card-tit">🛠️ Ausgeführte Arbeiten</span></div>'+
+      '<textarea class="tc-field" style="margin-top:8px" id="tc-r-arb" placeholder="Steigzone montiert&#10;Radiatoren angeschlossen"></textarea>'+
+    '</div>'+
+    '<div class="tc-card">'+
+      '<div class="tc-card-head"><span class="tc-card-tit">📦 Material</span></div>'+
+      '<div class="tc-chips" style="margin-top:8px">'+matChips+'</div>'+
+      '<div id="tc-mat-list" style="margin-top:2px"></div>'+
+      '<button type="button" class="tc-add" onclick="tcMatAddRow(\'\',1)">＋ Position</button>'+
+    '</div>'+
+    '<div class="tc-card">'+
+      '<div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div>'+
+      '<textarea class="tc-field" style="margin-top:8px" id="tc-r-notiz" placeholder="Besonderheiten…"></textarea>'+
+    '</div>'+
     '<div class="tc-btnrow"><button class="tc-btn gold" id="tc-r-save" onclick="tcRapportSave(\''+tcEsc(kind)+'\',\''+tcEsc(id)+'\')">Rapport speichern</button></div>');
+}
+function tcMatAddRow(bez,menge){
+  var list=document.getElementById('tc-mat-list'); if(!list) return;
+  var row=document.createElement('div'); row.className='tc-row tc-mat-row';
+  row.innerHTML='<input class="tc-field" style="flex:1" placeholder="Bezeichnung" value="'+tcEsc(bez||'')+'"/>'+
+    '<input class="tc-field" style="width:58px;flex:0 0 auto" type="number" min="0" step="1" placeholder="Menge" value="'+(menge!=null?menge:'')+'"/>'+
+    '<button type="button" class="tc-row-del" onclick="tcMatDel(this)">✕</button>';
+  list.appendChild(row);
+  var first=row.querySelector('input'); if(first&&!bez) first.focus();
+}
+function tcMatDel(btn){ var row=btn&&btn.closest?btn.closest('.tc-mat-row'):null; if(row&&row.parentNode) row.parentNode.removeChild(row); }
+function tcMatCollect(){
+  var rows=document.querySelectorAll('#tc-mat-list .tc-mat-row');
+  var out=[];
+  Array.prototype.forEach.call(rows,function(r){
+    var ins=r.querySelectorAll('input'); var bez=(ins[0]&&ins[0].value||'').trim(); var menge=(ins[1]&&ins[1].value||'').trim();
+    if(!bez) return;
+    out.push(menge?(menge+'× '+bez):bez);
+  });
+  return out;
 }
 function tcLines(v){ return String(v||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); }
 function tcRapportSave(kind,id){
   var datum=(document.getElementById('tc-r-datum')||{}).value;
   if(!datum){ tcToast('Datum wählen'); return; }
-  var body={datum:datum,stunden:(document.getElementById('tc-r-std')||{}).value||0,arbeiten:tcLines((document.getElementById('tc-r-arb')||{}).value),material:tcLines((document.getElementById('tc-r-mat')||{}).value),notiz:(document.getElementById('tc-r-notiz')||{}).value||''};
+  var body={datum:datum,stunden:(document.getElementById('tc-r-std')||{}).value||0,arbeiten:tcLines((document.getElementById('tc-r-arb')||{}).value),material:tcMatCollect(),notiz:(document.getElementById('tc-r-notiz')||{}).value||''};
   if(kind==='service') body.service_auftrag_id=id; else body.projekt_id=id;
   var b=document.getElementById('tc-r-save'); if(b){ b.disabled=true; b.textContent='Speichert…'; }
   techApi('tech_rapport_add',body).then(function(d){
