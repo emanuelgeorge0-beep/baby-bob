@@ -118,14 +118,14 @@ Beide Features liegen als DDL im SELBEN Skript `scripts/schema_rollen_foto_servi
 
 **Feature B — Foto/Video-Standort-Tagging:**
 - `gs_projekt_stockwerk` (Katalog je Projekt): `name` (UG/EG/1.OG… preset ODER frei), `reihenfolge`, `quelle` (`preset`/`frei`), `UNIQUE(projekt_id,name)`.
-- `gs_projekt_medien` (Fotos UND Videos): `medientyp` (`foto`/`video`), `bucket` (Default `projektdateien`), `path`, `dateiname`, `mime`, `groesse`, `dauer_sekunden` (Video), `thumbnail_path` (Video-Vorschau); **Achse 1 (Ort):** `stockwerk` (Pflicht) + `stockwerk_id` (FK-Katalog) + `wohnung` + `raum` (feste Liste + frei, app-seitig); **Achse 2:** `bauabschnitt` (optional, getrennt); `notiz`, `hochgeladen_von`, `created_at`. Bindung `projekt_id` XOR `service_auftrag_id` (CHECK).
+- `gs_projekt_medien` (Fotos UND Videos): `medientyp` (`foto`/`video`), `bucket` (Default `projektdateien`), `path`, `dateiname`, `mime`, `groesse`, `dauer_sekunden` (Video), `thumbnail_path` (Video-Vorschau); **Achse 1 (Ort):** `stockwerk` (**nullbar**; Pflicht app-seitig NUR bei Projekt-Fotos, Service-Fotos dürfen leer) + `stockwerk_id` (FK-Katalog) + `wohnung` + `raum` (feste Liste + frei, app-seitig); **Achse 2:** `bauabschnitt` (optional, getrennt); `notiz`, `hochgeladen_von`, `created_at`. Bindung `projekt_id` XOR `service_auftrag_id` (CHECK).
 
 **Feature C — Service-Auftrag:**
-- `gs_service_auftrag`: `auftragsnummer`, `partner_user_id` (Ersteller), `objekt`, `beschreibung` (Sprache→Text), `status` (`neu`→`angenommen`/`abgelehnt`→`erledigt`), `ablehn_grund`, `angenommen_am`, `erledigt_am`, Timestamps.
+- `gs_service_auftrag`: `auftragsnummer`, `partner_user_id` (Ersteller), `objekt`, `beschreibung` (Sprache→Text), `quelle` (`sprache`/`mail`/`manuell`, Default `manuell` — Herkunft für künftigen Mail-Ingest; Ingest selbst spätere Runde), `status` (`neu`→`angenommen`/`abgelehnt`→`erledigt`), `ablehn_grund`, `angenommen_am`, `erledigt_am`, Timestamps.
 - `gs_service_techniker`: `service_auftrag_id` + `techniker_id` (→ `gs_techniker.id`), `UNIQUE`.
 - Rapport & Medien hängen per `service_auftrag_id` dran (gleiche Polymorphie wie Projekt): `gs_tagesrapporte.service_auftrag_id` (+ `projekt_id` nullbar + XOR-CHECK, FK), `gs_projekt_medien.service_auftrag_id`.
 
-**Offen (in §5):** stockwerk-Pflicht auch für Service-Medien (Annahme: ja), Composite-UNIQUE bei Backdating, Service→Projekt-Promotion, Medien-Altbestand-Migration. **API für B/C** ist noch nicht gebaut (separater Build-Block nach dem SQL-Einspielen).
+**Entschieden:** `stockwerk` nullbar (Pflicht app-seitig nur bei Projekt-Fotos); `quelle` auf `gs_service_auftrag` für spätere Mail-Ingest-Herkunft. **Offen (§5):** Composite-UNIQUE bei Backdating, Service→Projekt-Promotion, Medien-Altbestand-Migration.
 
 ---
 

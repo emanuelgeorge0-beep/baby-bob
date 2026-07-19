@@ -99,6 +99,11 @@ CREATE TABLE IF NOT EXISTS gs_service_auftrag (
   partner_user_id  UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- Ersteller/Besitzer (Mandant)
   objekt           TEXT NOT NULL,                                      -- Adresse/Objektbezeichnung
   beschreibung     TEXT,                                               -- aus Sprache→Text
+  -- Herkunft des Auftrags. 'manuell' = im Cockpit erfasst, 'sprache' = Sprach→Text,
+  -- 'mail' = künftiger Mail-Ingest (Hausverwaltungen/Alt-Software mailen → Felix extrahiert).
+  -- NUR das Feld; der Mail-Ingest selbst ist eine spätere eigene Runde.
+  quelle           TEXT NOT NULL DEFAULT 'manuell'
+                     CHECK (quelle IN ('sprache','mail','manuell')),
   status           TEXT NOT NULL DEFAULT 'neu'
                      CHECK (status IN ('neu','angenommen','abgelehnt','erledigt')),
   ablehn_grund     TEXT,
@@ -199,7 +204,10 @@ CREATE TABLE IF NOT EXISTS gs_projekt_medien (
 
   -- ACHSE 1 — ORT
   stockwerk_id       UUID REFERENCES gs_projekt_stockwerk(id) ON DELETE SET NULL,
-  stockwerk          TEXT NOT NULL,                    -- Pflicht, denormalisiert (Gruppierung)
+  stockwerk          TEXT,                             -- denormalisiert (Gruppierung); NULLBAR:
+                                                       -- Pflicht wird APP-SEITIG nur bei Projekt-Fotos
+                                                       -- erzwungen. Service-Auftrag-Fotos (z.T. per Mail
+                                                       -- ohne Etage) dürfen stockwerk leer haben.
   wohnung            TEXT,                             -- optional
   raum               TEXT,                             -- optional (feste Liste + frei)
 
@@ -222,11 +230,11 @@ CREATE INDEX IF NOT EXISTS idx_gs_medien_service   ON gs_projekt_medien(service_
 CREATE INDEX IF NOT EXISTS idx_gs_medien_stockwerk ON gs_projekt_medien(projekt_id, stockwerk);
 
 -- Zwei-Achsen-Intent in der DB festschreiben (Ort ≠ Arbeitsphase):
-COMMENT ON COLUMN gs_projekt_medien.stockwerk    IS 'ACHSE 1 (Ort): Stockwerk — Pflicht, Galerie-Gruppierung. Werte aus gs_projekt_stockwerk (preset+frei).';
+COMMENT ON COLUMN gs_projekt_medien.stockwerk    IS 'ACHSE 1 (Ort): Stockwerk — Galerie-Gruppierung. NULLBAR; Pflicht app-seitig nur bei Projekt-Fotos. Werte aus gs_projekt_stockwerk (preset+frei).';
 COMMENT ON COLUMN gs_projekt_medien.bauabschnitt IS 'ACHSE 2 (Arbeitsphase): bewusst getrennt vom Ort. Optional.';
 COMMENT ON COLUMN gs_projekt_medien.medientyp    IS 'foto | video. Video zusätzlich mit thumbnail_path (Vorschau) + dauer_sekunden.';
--- ANNAHME: stockwerk ist auch für Service-Auftrag-Medien Pflicht (App liefert z. B. "EG"/"Objekt").
--- Falls Service-Fotos ohne Stockwerk erlaubt sein sollen → stockwerk nullbar + App-seitige Pflicht.
+-- stockwerk: Pflicht wird APP-SEITIG bei Projekt-Fotos erzwungen (medienUpload in api/cockpit.js).
+-- Service-Auftrag-Fotos dürfen ohne Stockwerk hochgeladen werden (Mail-Ingest ohne Etage).
 
 
 -- ╔═════════════════════════════════════════════════════════════════════════╗
