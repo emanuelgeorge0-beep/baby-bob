@@ -221,6 +221,13 @@ CREATE INDEX IF NOT EXISTS idx_gs_medien_service   ON gs_projekt_medien(service_
 -- Galerie-Gruppierung nach Stockwerk (Sortierung via JOIN auf gs_projekt_stockwerk.reihenfolge):
 CREATE INDEX IF NOT EXISTS idx_gs_medien_stockwerk ON gs_projekt_medien(projekt_id, stockwerk);
 
+-- Zwei-Achsen-Intent in der DB festschreiben (Ort ≠ Arbeitsphase):
+COMMENT ON COLUMN gs_projekt_medien.stockwerk    IS 'ACHSE 1 (Ort): Stockwerk — Pflicht, Galerie-Gruppierung. Werte aus gs_projekt_stockwerk (preset+frei).';
+COMMENT ON COLUMN gs_projekt_medien.bauabschnitt IS 'ACHSE 2 (Arbeitsphase): bewusst getrennt vom Ort. Optional.';
+COMMENT ON COLUMN gs_projekt_medien.medientyp    IS 'foto | video. Video zusätzlich mit thumbnail_path (Vorschau) + dauer_sekunden.';
+-- ANNAHME: stockwerk ist auch für Service-Auftrag-Medien Pflicht (App liefert z. B. "EG"/"Objekt").
+-- Falls Service-Fotos ohne Stockwerk erlaubt sein sollen → stockwerk nullbar + App-seitige Pflicht.
+
 
 -- ╔═════════════════════════════════════════════════════════════════════════╗
 -- ║ RLS — zweite Verteidigungslinie (Service-Key umgeht sie; Live = api/cockpit)║
