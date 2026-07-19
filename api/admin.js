@@ -163,7 +163,9 @@ async function createUser(res, body, creatorId) {
 // mit user_id verknüpfen. Tolerant gegenüber noch fehlender erstellt_von_user_id-Spalte
 // (scripts/techniker_erstellt_von.sql) → Feld wird dann weggelassen, kein 500.
 async function linkTechnikerProfile(userId, { name, email, qualifikation, creatorId }) {
-  const base = { user_id: userId, name, email, qualifikation: qualifikation || null };
+  // gs_techniker.qualifikation ist im Live-Schema TEXT[] → als Array schreiben (String → 400).
+  const qual = qualifikation ? (Array.isArray(qualifikation) ? qualifikation : [String(qualifikation)]) : null;
+  const base = { user_id: userId, name, email, qualifikation: qual };
   const withCreator = { ...base, erstellt_von_user_id: creatorId || null };
   try {
     const existing = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?email=eq.${encodeURIComponent(email)}&select=id,user_id&limit=1`, { headers: SB }));
