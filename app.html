@@ -1272,6 +1272,46 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   .landing-cta-gs:hover{box-shadow:0 10px 32px rgba(30,74,138,0.7);}
   .landing-cta-bob:hover{box-shadow:0 10px 32px rgba(255,170,40,0.6);}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SCHWARZ-GOLD ANGLEICHUNG — Login + GS-Onboarding-Flow + Landing-GS-Hälfte.
+   NUR Optik; Inhalt/Funktion unverändert. BOB-Scanner (B2C, Neon) BLEIBT unberührt.
+   Palette: BG #0A0A0B · Gold #C9A961 · Karte #131519 (1:1 Cockpits).
+   Scoped auf .login-*/.gs-*/.landing-gs → betrifft NIE die BOB-Screens.
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* — Login-Screen — */
+.login-screen{background:radial-gradient(900px 500px at 80% -10%,rgba(201,169,97,.07),transparent 60%),radial-gradient(700px 500px at -10% 10%,rgba(90,167,255,.04),transparent 55%),#0A0A0B;}
+.login-card{background:#131519;border:1px solid rgba(201,169,97,.22);box-shadow:0 20px 60px rgba(0,0,0,.5);}
+.login-logo-sub{color:#8a97a8;}
+.login-inp{background:#0f1116;border:1px solid rgba(255,255,255,0.09);}
+.login-inp:focus{border-color:rgba(201,169,97,.5);}
+.login-btn-magic{background:linear-gradient(135deg,#d8b96e,#b8954d)!important;color:#0a0e14!important;}
+.login-btn-pw{border:1px solid rgba(201,169,97,.4)!important;color:#C9A961!important;background:#0f1116!important;}
+.login-sep{color:#5c6878;}
+.login-skip{color:#8a97a8;}
+/* — GS-Onboarding-Flow (alle .gs-screen: gs-home … gs-buchung) — */
+.gs-screen{background:radial-gradient(900px 520px at 80% -8%,rgba(201,169,97,.07),transparent 58%),linear-gradient(168deg,#101c33 0%,#0c1320 42%,#0A0A0B 100%)!important;}
+.gs-cta-fixed{background:linear-gradient(to top,#0A0A0B 62%,rgba(10,10,11,0))!important;}
+.gs-hero-tit span{color:#C9A961!important;}
+.gs-badge-hdr{background:rgba(201,169,97,.12)!important;border-color:rgba(201,169,97,.3)!important;color:#C9A961!important;}
+.gs-cta,.gs-btn-primary{background:linear-gradient(135deg,#d8b96e,#b8954d)!important;color:#0a0e14!important;}
+.gs-tarif-card.recommended{border-color:rgba(201,169,97,.35)!important;}
+.gs-tarif-card.sel-tarif{border-color:#C9A961!important;background:rgba(201,169,97,.10)!important;}
+.gs-tech-rating{color:#C9A961!important;}
+.gs-team-pricing strong,.gs-tpb-left strong,.gs-tpb-total strong,.gs-team-card-hd{color:#C9A961!important;}
+.gs-team-opt.sel{border-color:#C9A961!important;background:rgba(201,169,97,.10)!important;box-shadow:inset 0 0 0 1px rgba(201,169,97,.35)!important;}
+.gs-team-opt.sel .gs-team-opt-tit,.gs-team-opt.sel .gs-team-opt-price{color:#C9A961!important;}
+.gs-team-card.sel{border-color:#C9A961!important;background:rgba(201,169,97,.08)!important;box-shadow:0 2px 12px rgba(201,169,97,.18)!important;}
+.gs-acct-offer{background:rgba(201,169,97,.06)!important;border-color:rgba(201,169,97,.22)!important;}
+.gs-login-link{color:#C9A961!important;}
+.gs-erst-cta{background:linear-gradient(135deg,#d8b96e,#b8954d)!important;color:#0a0e14!important;border:none!important;}
+/* — Landing: NUR GS-Hälfte (BOB-Hälfte bleibt Neon) — */
+.landing-gs{background:radial-gradient(120% 90% at 50% 30%,#1a1710 0%,#12100b 55%,#0A0A0B 100%)!important;color:#e8edf5!important;}
+.landing-gs .landing-glow{background:radial-gradient(circle,#C9A961,transparent 70%)!important;}
+.landing-gs .landing-icon{filter:drop-shadow(0 6px 22px rgba(201,169,97,.5))!important;}
+.landing-gs .landing-sub{color:rgba(232,237,245,0.62)!important;}
+.landing-cta-gs{background:linear-gradient(135deg,#d8b96e,#b8954d)!important;color:#0a0e14!important;box-shadow:0 8px 26px rgba(201,169,97,.4)!important;}
+.landing-cta-gs:hover{box-shadow:0 10px 32px rgba(201,169,97,.6)!important;}
 </style>
 </head>
 <body>
@@ -1818,11 +1858,11 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   </div>
   <div style="margin:14px 18px 0;display:grid;grid-template-columns:1fr 1fr;gap:9px;">
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">CHF 60/h</div>
-      <div style="font-size:10px;color:rgba(232,237,245,0.55);margin-top:2px;">Einzel 65/h · <span style="color:#FFD24A;font-weight:800;" data-i18n="gsf_home_pilotnow">Pilot-Aktion, nur jetzt</span></div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#C9A961;">CHF 60/h</div>
+      <div style="font-size:10px;color:rgba(232,237,245,0.55);margin-top:2px;">Einzel 65/h · <span style="color:#C9A961;font-weight:800;" data-i18n="gsf_home_pilotnow">Pilot-Aktion, nur jetzt</span></div>
     </div>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:14px;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#FFD700;">4 Bereiche</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#C9A961;">4 Bereiche</div>
       <div style="font-size:10px;color:rgba(232,237,245,0.4);margin-top:2px;">HKLS Vollservice</div>
     </div>
   </div>
