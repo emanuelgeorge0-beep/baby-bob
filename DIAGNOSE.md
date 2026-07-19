@@ -171,4 +171,22 @@ Schema von Emanuel eingespielt („Success, no rows"). Zwei Skripte:
 
 ---
 
-**STATUS:** BLOCK 5 = Live verifiziert (29/29), Prod-DB sauber. Feature A/B/C Backend + Schema fertig & scharf. Offen für Freigabe: **UI** (Galerie/Upload-Maske, Service-Cockpit, schwarz-gold Techniker-Ansicht), Mail-Ingest, Voice→`svc_create`.
+**STATUS BLOCK 5:** Live verifiziert (33/33 inkl. Video-Direktupload), Prod-DB sauber. Backend A/B/C scharf.
+
+---
+
+## 11. BLOCK 6 — Techniker-UI (schwarz-gold), schließt das System
+
+Drei Teile, alle committet:
+- **Teil 1 (Master):** `api/admin.js createUser(role=techniker)` legt `gs_techniker`-Profil an (+ `erstellt_von_user_id`, Vorbereitung „Partner legt eigene Techniker an") und verschickt branded **Magic-/Recovery-Einladung** (`generate_link` + `lib/mail.js technikerInviteHtml`), Temp-PW als Fallback. Maske in `gs-intern.html` (Qualifikation-Feld, Mail-Status). SW `cockpit-sw.js` v12→**v13**. SQL: `scripts/techniker_erstellt_von.sql` (additiv).
+- **Teil 2 (Login/Onboarding):** bestehender Login/PW-Change/Profil-Setup wiederverwendet; `applyRole` techniker → `initTechCockpit()`; dezente 3-Karten-Tour (einmalig).
+- **Teil 3 (Cockpit):** neues `#tech-cockpit` in `app.html` (Palette #0A0A0B/#C9A961, Vorlage Partner-Shell). Nav Projekte/Service/Rapport/Profil; nur zugewiesene Projekte; Rapport **frei rückdatierbar**; **Foto** (komprimiert) + **Video** (Direktupload sign→PUT→register) mit **Stockwerk-Tagging**; **Galerie gruppiert nach Stockwerk**; Service-Flow (erledigt). Keine Marge-Felder.
+- **Backend-Zusatz:** `cockpit.js` `medien_sign_upload` + `medien_register` (Video umgeht 4,5-MB-Body-Limit).
+
+**Tests:** Mock-Enforcement 27×5 grün; Live 33/33 grün (inkl. Video-Direktupload), Prod sauber; app.html-JS `node --check` grün. **Manueller Durchlauf:** `scripts/TESTLEITFADEN_TECHNIKER.md`.
+
+**Vor dem manuellen Test nötig:** Branch→main (Deploy), `scripts/techniker_erstellt_von.sql` einspielen, Redirect-URL `…/login` in Supabase allowlisten.
+
+---
+
+**STATUS:** Techniker-UI fertig (Teil 1–3). Damit ist die letzte Nicht-GS-Ansicht im schwarz-gold Look — System geschlossen. Offen (spätere Runden): Mail-Ingest für Service-Aufträge, Voice→`svc_create`, „Partnerfirma legt eigene Techniker an" (Berechtigungslogik).
