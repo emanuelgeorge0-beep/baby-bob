@@ -1315,10 +1315,33 @@ function submitCockpitUser(){
   adminApi({action:'create_user',name:name,email:email,firma:firma,qualifikation:qual,role:_cuRole}).then(function(d){
     if(btn){ btn.disabled=false; btn.textContent='Account erstellen'; }
     if(d.error){ cuMsg(d.error,'err'); return; }
+    // Mail existiert schon → nicht blocken, sondern zusätzliche Rolle anbieten (Mehrfachrollen).
+    if(d.exists){ closeSheet(); showAddRoleSheet(d.user,d.current_roles||[],_cuRole,qual); return; }
     closeSheet();
     showCockpitTempPw(email,d.temp_password,d.mail_sent);
     loadCockpitUsers();
   }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Account erstellen'; } cuMsg('Verbindungsfehler','err'); });
+}
+function roleLabelDe(r){ return r==='techniker'?'🔧 Techniker':(r==='gs_partner'?'🏢 Partner':(r==='gs_admin'?'👑 Admin':(r==='master'?'👑 Master':r))); }
+function showAddRoleSheet(user,currentRoles,role,qual){
+  var lbl=roleLabelDe(role), has=(currentRoles||[]).indexOf(role)>-1;
+  openSheet('<h3>E-Mail existiert bereits</h3>'+
+    '<div class="h-sub">'+esc(user.email)+'</div>'+
+    '<div style="color:var(--muted);font-size:13px;margin:8px 0">Aktuelle Rollen: '+esc((currentRoles||[]).map(roleLabelDe).join(', ')||'—')+'</div>'+
+    (has
+      ? '<div class="login-msg">Dieser Account hat die Rolle '+esc(lbl)+' bereits.</div><button class="btn ghost" id="ar-close">Schliessen</button>'
+      : '<div class="sec-t">Zusätzliche Rolle</div>'+
+        '<div style="margin-bottom:10px;color:var(--txt)">Dem bestehenden Account die Rolle <b style="color:var(--gold)">'+esc(lbl)+'</b> <b>zusätzlich</b> geben? Der bestehende Login bleibt; im Cockpit kann dann zwischen den Rollen umgeschaltet werden.</div>'+
+        '<button class="btn btn-gold" id="ar-ok">Rolle hinzufügen</button><button class="btn ghost" id="ar-no">Abbrechen</button>'));
+  var c=$('ar-close'); if(c) c.onclick=closeSheet;
+  var no=$('ar-no'); if(no) no.onclick=closeSheet;
+  var ok=$('ar-ok'); if(ok) ok.onclick=function(){
+    ok.disabled=true; ok.textContent='…';
+    adminApi({action:'add_role',user_id:user.id,role:role,qualifikation:qual}).then(function(d){
+      if(d.error){ ok.disabled=false; ok.textContent='Rolle hinzufügen'; toast(d.error); return; }
+      closeSheet(); toast('Rolle '+lbl+' hinzugefügt'); loadCockpitUsers();
+    }).catch(function(){ ok.disabled=false; ok.textContent='Rolle hinzufügen'; toast('Verbindungsfehler'); });
+  };
 }
 function resetCockpitPw(id,email){
   openSheet('<h3>Passwort zurücksetzen?</h3><div class="h-sub">'+esc(email)+'</div>'+

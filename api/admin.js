@@ -38,6 +38,7 @@ export default async function handler(req, res) {
     switch (action) {
       case 'list_users':     return await listUsers(res);
       case 'create_user':    return await createUser(res, req.body, me.id);
+      case 'add_role':       return await addRole(res, req.body, me.id);
       case 'reset_password': return await resetPassword(res, req.body);
       case 'set_active':     return await setActive(res, req.body);
       case 'archive':        return await listArchive(res);
@@ -112,9 +113,15 @@ async function createUser(res, body, creatorId) {
   });
   const created = await sbJson(createRes);
   if (!createRes.ok || !created.id) {
+    // Mail existiert schon → NICHT hart blocken: bestehenden Account melden, damit
+    // die UI anbietet, ihm eine ZUSÄTZLICHE Rolle zu geben (Mehrfachrollen).
+    if (/registered|exists|already/i.test(JSON.stringify(created))) {
+      const ex = await findUserByEmail(email);
+      if (ex) return res.status(200).json({ exists: true, user: { id: ex.id, email: ex.email }, current_roles: await getUserRoles(ex.id), role_requested: role });
+      return res.status(409).json({ error: 'E-Mail ist bereits registriert' });
+    }
     const msg = created?.msg || created?.message || created?.error_description || 'Benutzer konnte nicht erstellt werden';
-    const code = /registered|exists|already/i.test(JSON.stringify(created)) ? 409 : 400;
-    return res.status(code).json({ error: code === 409 ? 'E-Mail ist bereits registriert' : msg });
+    return res.status(400).json({ error: msg });
   }
 
   // Role mapping – KRITISCH: ohne diese Zeile liest der Login role='bob_user'
@@ -173,6 +180,50 @@ async function linkTechnikerProfile(userId, { name, email, qualifikation, creato
     if (row) return await write({ ...withCreator, id: undefined }, 'PATCH', `gs_techniker?id=eq.${row.id}`);
     return await write(withCreator, 'POST', 'gs_techniker');
   } catch (e) { console.error('linkTechnikerProfile fail', e.message); return false; }
+}
+
+// Auth-User anhand E-Mail finden (case-insensitiv). Kleiner Bestand → Liste reicht.
+async function findUserByEmail(email) {
+  const list = await sbJson(await fetch(`${SUPABASE_URL}/auth/v1/admin/users?per_page=200`, { headers: SB }));
+  const users = Array.isArray(list) ? list : (list.users || []);
+  const lc = String(email || '').toLowerCase();
+  return users.find((u) => String(u.email || '').toLowerCase() === lc) || null;
+}
+
+// Effektive Rollen (Primär + Extra), tolerant falls user_extra_roles fehlt.
+async function getUserRoles(userId) {
+  const roles = [];
+  const prim = await getRole(userId); if (prim) roles.push(prim);
+  const ex = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/user_extra_roles?user_id=eq.${userId}&select=role`, { headers: SB }));
+  for (const x of Array.isArray(ex) ? ex : []) if (x.role && !roles.includes(x.role)) roles.push(x.role);
+  return roles;
+}
+
+// Zusätzliche Rolle an einen bestehenden Account geben (Mehrfachrollen). Kein neuer
+// Login/Passwort — der Account existiert. Bei 'techniker' zusätzlich gs_techniker-Profil.
+async function addRole(res, body, creatorId) {
+  let { user_id, email, role } = body || {};
+  if (!['gs_partner', 'techniker', 'gs_admin'].includes(role)) return res.status(400).json({ error: 'Ungültige Rolle' });
+  if (!user_id && email) { const u = await findUserByEmail(email); user_id = u && u.id; }
+  if (!user_id) return res.status(404).json({ error: 'Kein Account mit dieser E-Mail' });
+
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/user_extra_roles?on_conflict=user_id,role`, {
+    method: 'POST', headers: { ...SB, Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ user_id, role }),
+  });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    if (/does not exist|42P01|PGRST20|schema cache/i.test(t)) return res.status(500).json({ error: 'Bitte scripts/user_extra_roles.sql in Supabase ausführen.', notMigrated: true });
+    return res.status(500).json({ error: 'Rolle konnte nicht hinzugefügt werden' });
+  }
+
+  let technikerLinked = false;
+  if (role === 'techniker') {
+    const u = await sbJson(await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user_id}`, { headers: SB }));
+    const nm = (u.user_metadata && u.user_metadata.name) || u.email || 'Techniker';
+    technikerLinked = await linkTechnikerProfile(user_id, { name: nm, email: u.email, qualifikation: body.qualifikation || null, creatorId });
+  }
+  return res.status(200).json({ ok: true, user_id, role_added: role, roles: await getUserRoles(user_id), techniker_linked: technikerLinked });
 }
 
 // Supabase-Aktionslink erzeugen (Recovery = Passwort setzen). Landet nach Klick auf
