@@ -16,6 +16,9 @@ const SB = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Con
 const APP_URL = (process.env.GS_APP_URL || 'https://baby-bob.vercel.app').replace(/\/$/, '');
 
 const ROLES = ['gs_partner', 'techniker', 'gs_admin', 'bob_user'];
+// Einzige Master-UUID (wie api/cockpit.js) — 'master' zieht das Admin-Gate NUR für
+// exakt diesen Account, nicht für irgendein user_roles-'master'-Insert.
+const MASTER_UID = 'ee46a716-7017-4045-9f67-fe06d05171e7';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,7 +34,12 @@ export default async function handler(req, res) {
   if (!token) return res.status(401).json({ error: 'Nicht authentifiziert' });
   const me = await getUser(token);
   if (!me) return res.status(401).json({ error: 'Ungültiger Token' });
-  if ((await getRole(me.id)) !== 'gs_admin') return res.status(403).json({ error: 'Nur für Administratoren' });
+  // Vorher: nur Primärrolle 'gs_admin' geprüft — Master (Primärrolle 'master', Techniker
+  // per user_extra_roles) fiel dadurch selbst mit gültigem Token auf 403. Jetzt: effektive
+  // Rollen (Primär+Extra), 'master' zusätzlich UID-gepinnt (wie resolveAccess in cockpit.js).
+  const myRoles = await getUserRoles(me.id);
+  const isAdmin = myRoles.includes('gs_admin') || (me.id === MASTER_UID && myRoles.includes('master'));
+  if (!isAdmin) return res.status(403).json({ error: 'Nur für Administratoren' });
 
   try {
     const { action } = req.body || {};

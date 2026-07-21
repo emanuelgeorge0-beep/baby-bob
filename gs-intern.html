@@ -1226,9 +1226,14 @@ function wireBackTo(){ Array.prototype.forEach.call($('view').querySelectorAll('
 // Ein Login: derselbe Cockpit-Token (gs_admin) steuert /api/admin. Kein separater Admin-Bereich.
 var _cockUsers=[];
 function adminApi(body){
+  // Wie api() für /api/cockpit: bei 401/403 (abgelaufenes Token) einmal per
+  // handleForbidden() refreshen statt rohes "Ungültiger Token" anzuzeigen.
   return fetch('/api/admin',{method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
-    body:JSON.stringify(body||{})}).then(function(r){ return r.json().catch(function(){return {};}); });
+    body:JSON.stringify(body||{})}).then(function(r){
+      if(r.status===401||r.status===403){ handleForbidden(); throw new Error('forbidden'); }
+      return r.json().catch(function(){return {};});
+    });
 }
 function renderUsers(){
   $('view').innerHTML='<h2><span class="acc">👥</span> Userverwaltung</h2>'+backRow()+
@@ -1573,9 +1578,11 @@ function paintProjektDetail(d){
           : '<span class="chip" data-verr="'+esc(allIds.join(','))+'" data-vs="offen" style="font-size:11px">↺ offen</span>';
         var items=rows.map(function(r){
           var arb=(Array.isArray(r.arbeiten)?r.arbeiten.join(' · '):(r.arbeiten||''));
+          var mat=(Array.isArray(r.material)&&r.material.length)?r.material.join(', '):'';
           return '<div class="lcard"><div class="top"><div class="nm" style="font-size:13.5px">'+deDate(r.datum)+
             (r.techniker_name?' · '+esc(r.techniker_name):'')+'</div><span class="dot">'+esc(Number(r.gesamtstunden||0))+' h</span></div>'+
-            (arb?'<div class="meta"><span>'+esc(arb.slice(0,140))+'</span></div>':'')+'</div>';
+            (arb?'<div class="meta"><span>'+esc(arb.slice(0,140))+'</span></div>':'')+
+            (mat?'<div class="meta" style="margin-top:2px"><span style="color:var(--gold)">📦 '+esc(mat.slice(0,140))+'</span></div>':'')+'</div>';
         }).join('');
         return '<div class="kw-row"><span class="kw-t">'+pmKW(wk.jahr,wk.woche)+' · '+sumH.toFixed(1)+' h '+badge+'</span>'+toggle+'</div>'+
           '<div class="list">'+items+'</div>';
@@ -1682,12 +1689,17 @@ function paintProjektDetail(d){
     ' <button class="chip" id="pm-db-edit" style="font-size:11px;margin-left:6px">'+(dbTouched(db)?'✏️ bearbeiten':'＋ ausfüllen')+'</button>';
   var dbSec=pmSec('📋 Projektdatenblatt',dbInner,dbAction);
 
-  $('view').innerHTML=head+kundeSec+apSec+dbSec+techSec+dateiSec+rapSec+matSec+rechSec+taetSec+blSec+zsSec;
+  // Fotos & Videos von der Baustelle (Techniker-Uploads, gs_projekt_medien) — read-only,
+  // lazy nachgeladen wie Zahlungssystem (zsLoad), damit die Detail-Seite sofort steht.
+  var medienSec=pmSec('📷 Fotos & Videos','<div id="medien-box"><div class="empty" style="padding:12px">Lädt…</div></div>','');
+
+  $('view').innerHTML=head+kundeSec+apSec+dbSec+techSec+dateiSec+rapSec+matSec+medienSec+rechSec+taetSec+blSec+zsSec;
 
   var back=$('pm-back'); if(back) back.onclick=(_pmBackFn||renderProjektListe);
   if(d.sub_bundle) wireMsubLifecycle(d.sub_bundle);
   var za=$('zs-add'); if(za) za.onclick=function(){ zsAbschnittForm(null); };
   zsLoad(_pmProjektId);
+  medienLoad(_pmProjektId);
   $('pm-edit').onclick=function(){ openProjektEdit(p); };
   var dbe=$('pm-db-edit'); if(dbe) dbe.onclick=openDatenblatt;
   $('pm-kunde-set').onclick=openKundeZuordnen;
@@ -2044,6 +2056,26 @@ function zsAbStatusColor(s){ return ({geplant:'var(--muted)',angezahlt:'var(--go
 function zsStepStatusLabel(s){ return ({wartend:'wartend',aktiv:'aktiv',hinterlegt:'im Escrow',gs_fertig:'in Bestätigung',freigegeben:'freigegeben',offen:'offen',geklaert:'geklärt'})[s]||s; }
 function zsStepStatusColor(s){ return ({wartend:'var(--muted2)',aktiv:'var(--gold)',hinterlegt:'#4aa8ff',gs_fertig:'#e0a341',freigegeben:'#3dd68c',offen:'var(--gold)',geklaert:'#3dd68c'})[s]||'var(--muted)'; }
 
+// ── Fotos & Videos (Techniker-Uploads, nach Stockwerk gruppiert) — read-only ──
+function medienLoad(pid){
+  api('medien_list',{projekt_id:pid}).then(function(d){
+    var box=$('medien-box'); if(!box) return;
+    if(d && d.notMigrated){ box.innerHTML=migRow('Medien-Tabellen noch nicht migriert.'); return; }
+    if(!d || d.error){ box.innerHTML='<div class="empty" style="padding:12px">'+esc((d&&d.error)||'Ladefehler')+'</div>'; return; }
+    var gr=(d.gruppen)||[];
+    if(!gr.length){ box.innerHTML='<div class="empty" style="padding:12px">Noch keine Fotos/Videos hochgeladen.</div>'; return; }
+    box.innerHTML=gr.map(function(g){
+      var cells=(g.medien||[]).map(function(m){
+        var cell=(m.medientyp==='video')
+          ? '<video src="'+esc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+esc(m.thumbnail_url)+'"'):'')+' controls preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>'
+          : '<img src="'+esc(m.url||'')+'" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>';
+        return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.04)">'+cell+'</div>';
+      }).join('');
+      return '<div style="font-size:12px;color:var(--muted);margin:10px 2px 6px;font-weight:700">'+esc(g.stockwerk||'Ohne Stockwerk')+' ('+(g.medien||[]).length+')</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px">'+cells+'</div>';
+    }).join('');
+  }).catch(function(){ var box=$('medien-box'); if(box) box.innerHTML='<div class="empty" style="padding:12px">Ladefehler Fotos/Videos</div>'; });
+}
 function zsLoad(pid){
   api('zs_projekt',{projekt_id:pid}).then(function(d){
     var box=$('zs-box'); if(!box) return;

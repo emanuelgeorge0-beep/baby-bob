@@ -5522,10 +5522,20 @@ function archiveResend(btn,kind,id){
 }
 
 function adminApi(body){
+  // Wie gsAuthApi(): bei abgelaufenem Token einmal still refreshen statt rohes
+  // "Ungültiger Token" anzuzeigen.
   return fetch('/api/admin',{method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
     body:JSON.stringify(body)
-  }).then(function(r){return r.json();});
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d&&d.error&&/Ungültiger Token|Nicht authentifiziert|Sitzung/i.test(d.error)&&authRefresh){
+      return refreshToken().then(function(ok){
+        if(!ok)return{error:'Sitzung abgelaufen – bitte neu anmelden'};
+        return fetch('/api/admin',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},body:JSON.stringify(body)}).then(function(r){return r.json();});
+      });
+    }
+    return d;
+  });
 }
 
 function loadAdminUsers(){
