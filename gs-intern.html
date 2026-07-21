@@ -707,7 +707,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -728,6 +728,7 @@ function go(v){
   else if(v==='projekte') renderProjekte();
   else if(v==='lizenz') renderLizenz();
   else if(v==='subanfragen') renderSubAnfragen();
+  else if(v==='wochenrapporte') renderWochenrapporte();
 }
 function router(){ go(curView); }
 
@@ -1191,6 +1192,7 @@ var KANAL_LABEL={meta:'Meta',google:'Google',app:'App / BOB',linkedin:'LinkedIn'
 function renderMehr(){
   var mods=[
     {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
+    {v:'wochenrapporte',ic:'📆',t:'Wochenrapporte',d:'Alle Techniker, alle Projekte – Stunden, Spesen, Material, Fotos pro KW'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
     {v:'lizenz',ic:'🔑',t:'Kunden & Lizenzen',d:'Pro Partner-Account Features freischalten – serverseitig durchgesetzt'},
     {v:'subanfragen',ic:'📐',t:'Sub-Anfragen',d:'Sub-/Akkord-Anfragen der Partner: kalkulieren & Angebot erstellen'},
@@ -2075,6 +2077,67 @@ function medienLoad(pid){
         '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px">'+cells+'</div>';
     }).join('');
   }).catch(function(){ var box=$('medien-box'); if(box) box.innerHTML='<div class="empty" style="padding:12px">Ladefehler Fotos/Videos</div>'; });
+}
+// ════ WOCHENRAPPORTE — alle Techniker, projektübergreifend (Master-only) ════
+var WR_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'Unfall',A:'Absenzen (Grund/Dauer)'};
+function renderWochenrapporte(){
+  $('view').innerHTML='<h2><span class="acc">📆</span> Wochenrapporte</h2>'+backRow()+
+    '<div class="usub" id="wr-count" style="color:var(--muted);font-size:13px;margin-bottom:10px">Lädt…</div>'+
+    '<div class="list" id="wr-list">'+skeletonCards(4)+'</div>';
+  wireBack();
+  api('pm_wochenrapporte_liste',{}).then(function(d){
+    if(d&&d.notMigrated){ $('wr-list').innerHTML=migRow('scripts/wochenrapport_migration.sql im Supabase SQL Editor ausführen.'); $('wr-count').textContent=''; return; }
+    var ws=(d&&d.wochen)||[];
+    $('wr-count').textContent=ws.length+' Wochenrapport'+(ws.length===1?'':'e');
+    if(!ws.length){ $('wr-list').innerHTML='<div class="empty">Noch keine Wochenrapporte erfasst.</div>'; return; }
+    $('wr-list').innerHTML=ws.map(function(w){
+      var stPill=pmPill(w.status==='eingereicht'?'eingereicht':'entwurf', w.status==='eingereicht'?'#3dd68c':'var(--gold)');
+      return '<div class="lcard" data-openwr="'+esc(w.id)+'"><div class="top"><div class="nm">'+esc(w.techniker_name||'Techniker')+' · KW '+esc(w.woche)+' · '+esc(w.jahr)+'</div>'+stPill+'</div>'+
+        '<div class="meta"><span>'+esc(w.rapport_nr||'—')+'</span><span class="dot">'+Number(w.total_stunden||0).toFixed(1)+' h</span>'+
+        (w.total_spesen?('<span class="dot">CHF '+Number(w.total_spesen).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</span>'):'')+'</div></div>';
+    }).join('');
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
+  }).catch(function(){ $('wr-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+function openWochenrapport(id){
+  $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="wr-back">‹ Wochenrapporte</span></div><div class="empty">Lädt…</div>';
+  var bb=$('wr-back'); if(bb) bb.onclick=function(){ go('wochenrapporte'); };
+  api('pm_wochenrapport',{id:id}).then(function(d){
+    if(d&&d.notMigrated){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="wr-back2">‹ Wochenrapporte</span></div>'+migRow('scripts/wochenrapport_migration.sql ausführen.'); var b2=$('wr-back2'); if(b2) b2.onclick=function(){go('wochenrapporte');}; return; }
+    if(!d||d.error||!d.kopf){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="wr-back3">‹ Wochenrapporte</span></div><div class="empty">'+esc((d&&d.error)||'Nicht gefunden')+'</div>'; var b3=$('wr-back3'); if(b3) b3.onclick=function(){go('wochenrapporte');}; return; }
+    var k=d.kopf, zeilen=d.zeilen||[], medien=d.medien||[];
+    var head='<div style="margin-bottom:14px"><span class="chip" id="wr-back4">‹ Wochenrapporte</span></div>'+
+      '<h2 style="margin-bottom:2px">'+esc(k.techniker_name||'Techniker')+' · KW '+esc(k.woche)+' · '+esc(k.jahr)+'</h2>'+
+      '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(k.rapport_nr||'—')+
+        (k.hauptprojekt_name?(' · Hauptprojekt: '+esc(k.hauptprojekt_name)):'')+'</div>';
+    var totals='<div class="cc-sec">Total</div><div class="lcard"><div class="top"><div class="nm">'+Number(d.total_stunden||0).toFixed(1)+' h</div>'+
+      '<div class="nm">CHF '+Number(d.total_spesen||0).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</div></div></div>';
+    var zeilenHtml=zeilen.length?zeilen.map(function(z){
+      var isAbw=!!z.abwesenheit;
+      var titel=isAbw?(WR_ABW_LABEL[z.abwesenheit]||z.abwesenheit):esc(z.projekt_name||z.projektnummer||'Projekt');
+      var meta=isAbw?(z.abwesenheit_grund||''):[z.taetigkeit,(z.start_zeit&&z.end_zeit?(z.start_zeit+'–'+z.end_zeit):null),(z.gesamtstunden!=null?Number(z.gesamtstunden).toFixed(2)+' h':null),(z.spesen?('CHF '+Number(z.spesen).toFixed(2)+' Spesen'):null)].filter(Boolean).join(' · ');
+      var mat=(Array.isArray(z.material_positionen)&&z.material_positionen.length)
+        ? z.material_positionen.map(function(p){return (p.menge!=null?p.menge+'× ':'')+p.bezeichnung;}).join(', ')
+        : ((Array.isArray(z.material)&&z.material.length)?z.material.join(', '):'');
+      var arb=Array.isArray(z.arbeiten)?z.arbeiten.join(' · '):'';
+      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:13.5px">'+deDate(z.datum)+' · '+titel+'</div>'+
+        (isAbw?pmPill(z.abwesenheit,'var(--gold)'):'')+'</div>'+
+        (meta?'<div class="meta"><span>'+esc(meta)+'</span></div>':'')+
+        (arb?'<div class="meta" style="margin-top:2px"><span>'+esc(arb.slice(0,160))+'</span></div>':'')+
+        (mat?'<div class="meta" style="margin-top:2px"><span style="color:var(--gold)">📦 '+esc(mat.slice(0,160))+'</span></div>':'')+
+        '</div>';
+    }).join(''):'<div class="empty">Keine Tageszeilen.</div>';
+    var zeilenSec='<div class="cc-sec">Tageszeilen ('+zeilen.length+')</div><div class="list">'+zeilenHtml+'</div>';
+    var medienHtml=medien.length?('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px">'+medien.map(function(m){
+      var cell=(m.medientyp==='video')
+        ? '<video src="'+esc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+esc(m.thumbnail_url)+'"'):'')+' controls preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>'
+        : '<img src="'+esc(m.url||'')+'" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>';
+      return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.04)" title="'+esc(m.stockwerk||'')+'">'+cell+'</div>';
+    }).join('')+'</div>'):'<div class="empty">Noch keine Fotos/Videos.</div>';
+    var medienSec='<div class="cc-sec">📷 Fotos &amp; Videos ('+medien.length+')</div>'+medienHtml;
+    $('view').innerHTML=head+totals+zeilenSec+medienSec;
+    var bb4=$('wr-back4'); if(bb4) bb4.onclick=function(){ go('wochenrapporte'); };
+  }).catch(function(){ $('view').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
 }
 function zsLoad(pid){
   api('zs_projekt',{projekt_id:pid}).then(function(d){
