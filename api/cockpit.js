@@ -2840,7 +2840,10 @@ async function medienUpload(b, scope) {
 // Medien-Liste + Galerie-Gruppierung nach Stockwerk (Sortierung aus Katalog-Reihenfolge).
 async function medienList(b, scope) {
   const tgt = await resolveMedienTarget(b, scope, false);       // Lesen reicht
-  const filter = tgt.isService ? `service_auftrag_id=eq.${tgt.service_auftrag_id}` : `projekt_id=eq.${tgt.projekt_id}`;
+  let filter = tgt.isService ? `service_auftrag_id=eq.${tgt.service_auftrag_id}` : `projekt_id=eq.${tgt.projekt_id}`;
+  // Optional auf eine einzelne Tageszeile eingrenzen (Wochenrapport-Formular zeigt
+  // nur die Fotos DIESES Tages statt der ganzen Projekt-Galerie).
+  if (b.tagesrapport_id) filter += `&tagesrapport_id=eq.${uuid(b.tagesrapport_id)}`;
   let rows = [];
   try { rows = await sbGet(`gs_projekt_medien?${filter}&select=*&order=created_at.desc`); }
   catch (e) { if (isNoTable(e)) return { notMigrated: true, medien: [], gruppen: [] }; throw e; }

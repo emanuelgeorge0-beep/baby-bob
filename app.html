@@ -9239,11 +9239,16 @@ function tcOpenProjekt(id){
     if(p.umfang&&p.umfang.length) leistungRows+='<div class="tc-row"><span class="ti-m">📋 Umfang</span><span class="ti-t" style="font-size:13px;text-align:right;font-weight:700">'+tcEsc(p.umfang.join(', '))+'</span></div>';
     var leistungCard=leistungRows?('<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🛠️ Leistungen</span></div>'+leistungRows+'</div>'):'';
     var notizCard=p.notiz?('<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div><div class="ti-m" style="margin-top:6px;line-height:1.5;white-space:pre-wrap">'+tcEsc(p.notiz)+'</div></div>'):'';
+    var bl=d.blockaden||[];
+    var blOpen=bl.filter(function(b){ return ['offen','in_bearbeitung','eskaliert'].indexOf(String(b.status||'').toLowerCase())>-1; });
+    var blCard=bl.length?('<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🚧 Blockaden ('+blOpen.length+' offen)</span></div>'+
+      (blOpen.length?blOpen.slice(0,5).map(function(b){ var loc=[b.haus,b.einheit,b.zone].filter(Boolean).join(' · '); return '<div class="tc-row"><span class="ti-m">'+tcEsc(b.beschreibung||'—')+(loc?(' · '+tcEsc(loc)):'')+'</span></div>'; }).join('') : '<div class="ti-m" style="margin-top:6px">Keine offenen Blockaden. 👍</div>')+
+      '</div>'):'';
     var head='<button class="tc-back" onclick="tcGo(\'projekte\')">‹ Meine Projekte</button>'+
       '<div class="tc-sec">'+tcEsc(p.name||'Projekt')+'</div>'+
-      '<div class="ti-m" style="color:#8a97a8;margin-bottom:2px">'+tcEsc([p.projektnummer,p.standort,p.bereich].filter(Boolean).join(' · ')||'—')+'</div>'+
-      kontaktCard+leistungCard+notizCard+
-      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcRapportForm(\'projekt\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'projekt\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>';
+      '<div class="ti-m" style="color:#8a97a8;margin-bottom:2px">'+tcEsc([p.projektnummer,p.standort,p.bereich].filter(Boolean).join(' · ')||'—')+(p.status?(' · '+tcEsc(p.status)):'')+'</div>'+
+      kontaktCard+leistungCard+blCard+notizCard+
+      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcZeileForm(null,\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'projekt\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>';
     var rlist=rap.length?('<div class="tc-list">'+rap.map(function(r){ return '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(r.datum||'')+' · '+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('')+'</div>'):'<div class="tc-empty">Noch keine Rapporte.</div>';
     tcH(head+'<div class="tc-sec">Meine Rapporte</div>'+rlist+'<div id="tc-gal-slot"></div>');
     tcLoadGallery('projekt',id);
@@ -9324,21 +9329,26 @@ function tcMatAddRow(bez,menge){
   var first=row.querySelector('input'); if(first&&!bez) first.focus();
 }
 function tcMatDel(btn){ var row=btn&&btn.closest?btn.closest('.tc-mat-row'):null; if(row&&row.parentNode) row.parentNode.removeChild(row); }
+// Liefert BEIDES: lesbare Zeilen ("3× Ventil DN15", fürs alte Service-Rapport-
+// Feld + Anzeige) UND strukturiert ({bezeichnung,menge}, fürs Wochenrapport).
 function tcMatCollect(){
   var rows=document.querySelectorAll('#tc-mat-list .tc-mat-row');
-  var out=[];
+  var strings=[], positionen=[];
   Array.prototype.forEach.call(rows,function(r){
     var ins=r.querySelectorAll('input'); var bez=(ins[0]&&ins[0].value||'').trim(); var menge=(ins[1]&&ins[1].value||'').trim();
     if(!bez) return;
-    out.push(menge?(menge+'× '+bez):bez);
+    strings.push(menge?(menge+'× '+bez):bez);
+    positionen.push({bezeichnung:bez,menge:menge?Number(menge):null});
   });
-  return out;
+  return {strings:strings,positionen:positionen};
 }
 function tcLines(v){ return String(v||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); }
+// Rapport-Formular bleibt für SERVICE-Aufträge (eigener, einfacherer Pfad — nicht
+// Teil des Wochenrapports). Projekt-Rapporte laufen über tcZeileForm().
 function tcRapportSave(kind,id){
   var datum=(document.getElementById('tc-r-datum')||{}).value;
   if(!datum){ tcToast('Datum wählen'); return; }
-  var body={datum:datum,stunden:(document.getElementById('tc-r-std')||{}).value||0,arbeiten:tcLines((document.getElementById('tc-r-arb')||{}).value),material:tcMatCollect(),notiz:(document.getElementById('tc-r-notiz')||{}).value||''};
+  var body={datum:datum,stunden:(document.getElementById('tc-r-std')||{}).value||0,arbeiten:tcLines((document.getElementById('tc-r-arb')||{}).value),material:tcMatCollect().strings,notiz:(document.getElementById('tc-r-notiz')||{}).value||''};
   if(kind==='service') body.service_auftrag_id=id; else body.projekt_id=id;
   var b=document.getElementById('tc-r-save'); if(b){ b.disabled=true; b.textContent='Speichert…'; }
   techApi('tech_rapport_add',body).then(function(d){
@@ -9371,16 +9381,19 @@ function tcPickChip(el,group){
   el.classList.add('sel'); var v=document.getElementById('tc-m-'+group+'-val'); if(v) v.value=el.getAttribute('data-val');
 }
 function tcSelVal(group,freeId){ var f=(document.getElementById(freeId)||{}).value; f=(f||'').trim(); if(f) return f; var v=(document.getElementById('tc-m-'+group+'-val')||{}).value; return (v||'').trim(); }
-function tcMediaPick(kind,id){
+function tcMediaPick(kind,id,tagesrapportId){
   var stockwerk=tcSelVal('sw','tc-m-swfree');
   if(kind==='projekt' && !stockwerk){ tcToast('Bitte Stockwerk wählen'); return; }
   var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,video/*'; inp.capture='environment';
-  inp.onchange=function(){ var f=(inp.files||[])[0]; if(f) tcMediaUpload(kind,id,f); };
+  inp.onchange=function(){ var f=(inp.files||[])[0]; if(f) tcMediaUpload(kind,id,f,tagesrapportId); };
   inp.click();
 }
 function tcVideoDuration(file){ return new Promise(function(res){ try{ var v=document.createElement('video'); v.preload='metadata'; v.onloadedmetadata=function(){ try{URL.revokeObjectURL(v.src);}catch(e){} res(isFinite(v.duration)?Math.round(v.duration):null); }; v.onerror=function(){ res(null); }; v.src=URL.createObjectURL(file); }catch(e){ res(null); } }); }
-function tcMediaUpload(kind,id,file){
+// tagesrapportId optional: aus dem Wochenrapport-Formular gesetzt, damit das Foto
+// direkt an diese Tageszeile hängt (fürs künftige Foto-Wochenbericht).
+function tcMediaUpload(kind,id,file,tagesrapportId){
   var tgt=(kind==='service')?{service_auftrag_id:id}:{projekt_id:id};
+  if(tagesrapportId) tgt.tagesrapport_id=tagesrapportId;
   var tags={stockwerk:tcSelVal('sw','tc-m-swfree'),raum:tcSelVal('raum','tc-m-raumfree'),bauabschnitt:(document.getElementById('tc-m-ba')||{}).value||''};
   var isVideo=/^video\//.test(file.type||'');
   tcToast((isVideo?'Video':'Foto')+' wird hochgeladen…');
@@ -9391,7 +9404,7 @@ function tcMediaUpload(kind,id,file){
         return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':file.type||'video/mp4','x-upsert':'true'},body:file}).then(function(r){
           if(!r.ok){ tcToast('Video-Upload fehlgeschlagen'); return; }
           return techApi('medien_register',Object.assign({path:sg.path,filename:file.name,contentType:file.type||'video/mp4',medientyp:'video',groesse:file.size,dauer_sekunden:dur},tags,tgt)).then(function(d){
-            if(d&&d.error){ tcToast(d.error); return; } tcToast('Video gespeichert'); tcLoadGallery(kind,id);
+            if(d&&d.error){ tcToast(d.error); return; } tcToast('Video gespeichert'); tcLoadGallery(kind,id,tagesrapportId);
           });
         });
       });
@@ -9400,14 +9413,15 @@ function tcMediaUpload(kind,id,file){
     fileToUploadData(file).then(function(data){
       var isImg=/^data:image\//.test(data);
       return techApi('medien_upload',Object.assign({data:data,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
-        if(d&&d.error){ tcToast(d.error); return; } tcToast('Foto gespeichert'); tcLoadGallery(kind,id);
+        if(d&&d.error){ tcToast(d.error); return; } tcToast('Foto gespeichert'); tcLoadGallery(kind,id,tagesrapportId);
       });
     }).catch(function(){ tcToast('Lesefehler'); });
   }
 }
-function tcLoadGallery(kind,id){
+function tcLoadGallery(kind,id,tagesrapportId){
   var slot=document.getElementById('tc-gal-slot'); if(!slot) return;
   var tgt=(kind==='service')?{service_auftrag_id:id}:{projekt_id:id};
+  if(tagesrapportId) tgt.tagesrapport_id=tagesrapportId;
   techApi('medien_list',tgt).then(function(d){
     var gr=(d&&d.gruppen)||[];
     if(!gr.length){ slot.innerHTML='<div class="tc-sec">Galerie</div><div class="tc-empty">Noch keine Medien.</div>'; return; }
@@ -9422,15 +9436,230 @@ function tcLoadGallery(kind,id){
   }).catch(function(){ slot.innerHTML=''; });
 }
 
-/* ── Rapport-Übersicht (alle eigenen) ── */
+/* ══════════════════════════════════════════════════════════════════════════
+   WOCHENRAPPORT — ein Rapport = eine KW, mehrere Tageszeilen (Papierformular).
+   Kopf wird server-seitig get-or-create angelegt; hier nur Anzeige + Editor.
+   ══════════════════════════════════════════════════════════════════════════ */
+var tcWocheState={jahr:null,woche:null};
+var tcWocheZeilen=[];
+var tcWocheProjekte=[];
+var TC_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'Unfall',A:'Absenzen (Grund/Dauer)'};
+
+// ISO-Kalenderwoche aus einem Date-Objekt (spiegelt api/cockpit.js isoWeekJahr).
+function tcISOWeekOfDate(d){
+  d=new Date(Date.UTC(d.getUTCFullYear?d.getUTCFullYear():d.getFullYear(),d.getUTCMonth?d.getUTCMonth():d.getMonth(),d.getUTCDate?d.getUTCDate():d.getDate()));
+  var day=d.getUTCDay()||7;
+  d.setUTCDate(d.getUTCDate()+4-day);
+  var yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  var woche=Math.ceil((((d-yearStart)/86400000)+1)/7);
+  return {jahr:d.getUTCFullYear(),woche:woche};
+}
+function tcISOWeekMonday(jahr,woche){
+  var simple=new Date(Date.UTC(jahr,0,1+(woche-1)*7));
+  var dow=simple.getUTCDay()||7;
+  simple.setUTCDate(simple.getUTCDate()+1-dow);
+  return simple;
+}
 function tcRenderRapporte(){
-  tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Lädt…</div>');
-  techApi('tech_rapporte').then(function(d){
-    var rs=(d&&d.rapporte)||[];
-    if(!rs.length){ tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Noch keine Rapporte gebucht. Öffne ein Projekt, um zu rapportieren.</div>'); return; }
-    var rows=rs.map(function(r){ return '<div class="tc-item" style="cursor:default"><div style="display:flex;justify-content:space-between;gap:10px"><div class="ti-t">'+tcEsc(r.datum||'')+'</div><div class="ti-t" style="color:#C9A961">'+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div></div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('');
-    tcH('<div class="tc-sec">Meine Rapporte ('+rs.length+')</div><div class="tc-list">'+rows+'</div>');
+  if(!tcWocheState.jahr){ var now=tcISOWeekOfDate(new Date()); tcWocheState.jahr=now.jahr; tcWocheState.woche=now.woche; }
+  tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+}
+function tcWocheNav(delta){
+  var mon=tcISOWeekMonday(tcWocheState.jahr,tcWocheState.woche);
+  mon.setUTCDate(mon.getUTCDate()+delta*7);
+  var wk=tcISOWeekOfDate(mon);
+  tcLoadWoche(wk.jahr,wk.woche);
+}
+function tcLoadWoche(jahr,woche){
+  tcWocheState.jahr=jahr; tcWocheState.woche=woche;
+  tcH('<div class="tc-sec">Wochenrapport</div><div class="tc-empty">Lädt…</div>');
+  techApi('tech_wochen_rapport',{jahr:jahr,woche:woche}).then(function(d){
+    if(d&&d.notMigrated){ tcH('<div class="tc-sec">Wochenrapport</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
+    var kopf=(d&&d.kopf)||{jahr:jahr,woche:woche};
+    tcWocheZeilen=(d&&d.zeilen)||[];
+    var mon=tcISOWeekMonday(jahr,woche);
+    var nav='<div class="tc-wknav" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'+
+      '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(-1)">‹</button>'+
+      '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+'</div>'+
+      '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(1)">›</button></div>';
+    var rows=tcWocheZeilen.length?tcWocheZeilen.map(tcZeileItemHtml).join(''):'<div class="tc-empty">Noch keine Tageszeilen in dieser Woche.</div>';
+    var fuss='<div class="tc-card" style="margin-top:10px"><div class="tc-row"><span class="ti-m">Total Stunden</span><span class="ti-t" style="color:#C9A961">'+tcEsc(d.total_stunden||0)+' h</span></div>'+
+      '<div class="tc-row"><span class="ti-m">Total Spesen</span><span class="ti-t" style="color:#C9A961">CHF '+tcEsc((d.total_spesen||0).toFixed?d.total_spesen.toFixed(2):d.total_spesen)+'</span></div></div>';
+    tcH(nav+'<div class="tc-list">'+rows+'</div>'+fuss+'<div class="tc-btnrow" style="margin-top:10px"><button class="tc-btn gold" onclick="tcZeileForm(null)">＋ Zeile</button></div>');
   }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
+}
+function tcZeileItemHtml(z){
+  var isAbw=!!z.abwesenheit;
+  var titel=isAbw?(TC_ABW_LABEL[z.abwesenheit]||z.abwesenheit):tcEsc(z.projekt_name||z.projektnummer||'Projekt');
+  var meta=isAbw?(z.abwesenheit_grund||'—'):[z.taetigkeit,(z.gesamtstunden!=null?z.gesamtstunden+' h':null),(z.spesen?('CHF '+z.spesen+' Spesen'):null)].filter(Boolean).join(' · ');
+  return '<div class="tc-item" onclick="tcZeileForm(\''+tcEsc(z.id)+'\')"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">'+
+    '<div><div class="ti-t">'+tcEsc(z.datum||'')+' · '+titel+'</div><div class="ti-m">'+tcEsc(meta||'—')+'</div></div>'+
+    (isAbw?'<span class="tc-st" style="background:rgba(255,210,74,0.18);color:#FFD24A">'+tcEsc(z.abwesenheit)+'</span>':'<span class="ti-t" style="color:#C9A961">'+tcEsc(z.gesamtstunden||0)+' h</span>')+
+    '</div></div>';
+}
+
+/* ── Tageszeilen-Editor: Arbeitstag (Projekt+Stunden+Material) ODER Abwesenheit ── */
+function tcZeileForm(id,prefillProjektId){
+  if(!tcWocheState.jahr){ var now=tcISOWeekOfDate(new Date()); tcWocheState.jahr=now.jahr; tcWocheState.woche=now.woche; }
+  var z=id?(tcWocheZeilen.filter(function(x){return x.id===id;})[0]||null):null;
+  if(!z&&prefillProjektId) z={projekt_id:prefillProjektId,datum:new Date().toISOString().slice(0,10)};
+  tcH('<div class="tc-empty">Lädt…</div>');
+  techApi('tech_projekte').then(function(d){
+    tcWocheProjekte=(d&&d.projekte)||[];
+    tcZeileRenderForm(z);
+  }).catch(function(){ tcWocheProjekte=[]; tcZeileRenderForm(z); });
+}
+function tcMatPrefillRows(z){
+  if(z&&Array.isArray(z.material_positionen)&&z.material_positionen.length) return z.material_positionen;
+  if(z&&Array.isArray(z.material)&&z.material.length){
+    return z.material.map(function(s){
+      var m=String(s).match(/^(\d+(?:[.,]\d+)?)\s*×\s*(.+)$/);
+      return m?{bezeichnung:m[2],menge:m[1]}:{bezeichnung:s,menge:null};
+    });
+  }
+  return [];
+}
+function tcZeileRenderForm(z){
+  var today=new Date().toISOString().slice(0,10);
+  var isEdit=!!(z&&z.id);
+  var isAbw=!!(z&&z.abwesenheit);
+  var projOpts=tcWocheProjekte.map(function(p){ return '<option value="'+tcEsc(p.id)+'"'+((z&&z.projekt_id===p.id)?' selected':'')+'>'+tcEsc(p.name||'Projekt')+(p.projektnummer?(' · '+tcEsc(p.projektnummer)):'')+'</option>'; }).join('');
+  var abwChips=Object.keys(TC_ABW_LABEL).map(function(k){ return '<div class="tc-chip'+((z&&z.abwesenheit===k)?' sel':'')+'" data-abw="'+k+'" onclick="tcZeileAbwPick(this)">'+k+' · '+tcEsc(TC_ABW_LABEL[k])+'</div>'; }).join('');
+  var matRows=tcMatPrefillRows(z).map(function(p){ return '<div class="tc-row tc-mat-row-html" data-bez="'+tcEsc(p.bezeichnung)+'" data-menge="'+(p.menge!=null?tcEsc(p.menge):'')+'"></div>'; }).join('');
+  var matChips=TC_MAT_PRESETS.map(function(m){ return '<div class="tc-chip" onclick="tcMatAddRow(\''+tcEsc(m).replace(/'/g,"\\'")+'\',1)">'+tcEsc(m)+'</div>'; }).join('');
+  var photoSection=isEdit&&!isAbw?(
+    '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📷 Fotos zu diesem Tag</span></div>'+
+    '<div class="tc-lbl">Stockwerk *</div><div class="tc-chips" data-g="sw">'+TC_SW_PRESETS.map(function(s){ return '<div class="tc-chip" data-val="'+tcEsc(s)+'" onclick="tcPickChip(this,\'sw\')">'+tcEsc(s)+'</div>'; }).join('')+'</div>'+
+    '<input class="tc-field" id="tc-m-swfree" placeholder="… oder frei eintippen" style="margin-top:7px"/>'+
+    '<input type="hidden" id="tc-m-sw-val"/><input type="hidden" id="tc-m-raum-val"/>'+
+    '<div class="tc-btnrow" style="margin-top:8px"><button type="button" class="tc-btn gold" onclick="tcMediaPick(\'projekt\',\''+tcEsc(z.projekt_id)+'\',\''+tcEsc(z.id)+'\')">📷 Foto/Video aufnehmen</button></div>'+
+    '<div id="tc-gal-slot" style="margin-top:8px"></div></div>'
+  ):(isAbw?'':'<div class="tc-hint">Fotos: nach dem Speichern hier verfügbar.</div>');
+  tcH('<button class="tc-back" onclick="tcLoadWoche(tcWocheState.jahr,tcWocheState.woche)">‹ Woche</button>'+
+    '<div class="tc-sec">'+(isEdit?'Zeile bearbeiten':'Neue Zeile')+'</div>'+
+    '<div class="tc-card">'+
+      '<div class="tc-card-head"><span class="tc-card-tit">📅 Datum</span></div>'+
+      '<input type="date" class="tc-field" style="margin-top:8px" id="tc-z-datum" value="'+tcEsc((z&&z.datum)||today)+'" max="'+today+'"/>'+
+      '<div class="tc-hint" style="margin-top:6px">Datum frei wählbar — auch rückwirkend (z. B. KW29 nachtragen).</div>'+
+    '</div>'+
+    '<div class="tc-card">'+
+      '<div class="tc-card-head"><span class="tc-card-tit">Art des Tages</span></div>'+
+      '<div class="tc-chips" style="margin-top:8px">'+
+        '<div class="tc-chip tc-zmode'+(isAbw?'':' sel')+'" data-mode="arbeit" onclick="tcZeileModePick(this)">🛠️ Arbeitstag</div>'+
+        '<div class="tc-chip tc-zmode'+(isAbw?' sel':'')+'" data-mode="abwesenheit" onclick="tcZeileModePick(this)">📅 Abwesenheit</div>'+
+      '</div><input type="hidden" id="tc-z-mode" value="'+(isAbw?'abwesenheit':'arbeit')+'"/>'+
+    '</div>'+
+    '<div id="tc-z-arbeit-block" style="display:'+(isAbw?'none':'block')+'">'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🏗️ Projekt &amp; Tätigkeit</span></div>'+
+        '<select class="tc-field" style="margin-top:8px" id="tc-z-projekt">'+(tcWocheProjekte.length?projOpts:'<option value="">Keine Projekte zugewiesen</option>')+'</select>'+
+        '<input class="tc-field" style="margin-top:8px" id="tc-z-taet" placeholder="Tätigkeit / Gewerk (z. B. Sanitär)" value="'+tcEsc((z&&z.taetigkeit)||'')+'"/>'+
+      '</div>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">⏱️ Zeit</span></div>'+
+        '<div style="display:flex;gap:10px;margin-top:8px">'+
+          '<div style="flex:1"><div class="tc-lbl" style="margin-top:0">Start</div><input type="time" class="tc-field" id="tc-z-start" value="'+tcEsc((z&&z.start_zeit)||'')+'" oninput="tcZeileRecalcStunden()"/></div>'+
+          '<div style="flex:1"><div class="tc-lbl" style="margin-top:0">Ende</div><input type="time" class="tc-field" id="tc-z-end" value="'+tcEsc((z&&z.end_zeit)||'')+'" oninput="tcZeileRecalcStunden()"/></div>'+
+          '<div style="width:90px"><div class="tc-lbl" style="margin-top:0">Stunden</div><input type="number" step="0.25" min="0" max="24" class="tc-field" id="tc-z-std" value="'+tcEsc((z&&z.gesamtstunden)||'')+'" placeholder="8"/></div>'+
+        '</div><div class="tc-hint" style="margin-top:6px">Start+Ende ODER Stunden direkt — eines reicht.</div>'+
+      '</div>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">💰 Verpflegung/Spesen CHF</span></div>'+
+        '<input type="number" step="0.05" min="0" class="tc-field" style="margin-top:8px" id="tc-z-spesen" value="'+tcEsc((z&&z.spesen)||'')+'" placeholder="0.00"/>'+
+      '</div>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📦 Material</span></div>'+
+        '<div class="tc-chips" style="margin-top:8px">'+matChips+'</div>'+
+        '<div id="tc-mat-list" style="margin-top:2px">'+matRows+'</div>'+
+        '<button type="button" class="tc-add" onclick="tcMatAddRow(\'\',1)">＋ Position</button>'+
+      '</div>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🛠️ Ausgeführte Arbeiten</span></div>'+
+        '<textarea class="tc-field" style="margin-top:8px" id="tc-z-arb" placeholder="Steigzone montiert&#10;Radiatoren angeschlossen">'+tcEsc((z&&(z.arbeiten||[]).join('\n'))||'')+'</textarea>'+
+      '</div>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div>'+
+        '<textarea class="tc-field" style="margin-top:8px" id="tc-z-notiz" placeholder="Besonderheiten…">'+tcEsc((z&&z.besonderheiten)||'')+'</textarea>'+
+      '</div>'+
+      photoSection+
+    '</div>'+
+    '<div id="tc-z-abw-block" style="display:'+(isAbw?'block':'none')+'">'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">Abwesenheits-Kennung</span></div>'+
+        '<div class="tc-chips" style="margin-top:8px" id="tc-z-abw-chips">'+abwChips+'</div>'+
+        '<input type="hidden" id="tc-z-abw" value="'+tcEsc((z&&z.abwesenheit)||'')+'"/>'+
+      '</div>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">Grund / Dauer (bei A: inkl. Krankheit)</span></div>'+
+        '<textarea class="tc-field" style="margin-top:8px" id="tc-z-abwgrund" placeholder="z. B. Krankheit, 2 Tage">'+tcEsc((z&&z.abwesenheit_grund)||'')+'</textarea>'+
+      '</div>'+
+    '</div>'+
+    '<div class="tc-btnrow"><button class="tc-btn gold" id="tc-z-save" onclick="tcZeileSave('+(isEdit?('\''+tcEsc(z.id)+'\''):'null')+')">Speichern</button></div>'+
+    (isEdit?'<div class="tc-btnrow"><button class="tc-btn ghost" onclick="tcZeileDel(\''+tcEsc(z.id)+'\')">🗑️ Zeile löschen</button></div>':''));
+  // Material-Zeilen, die als Platzhalter-Divs gerendert wurden, jetzt als echte Reihen einfügen
+  // (tcMatAddRow baut DOM direkt, daher erst NACH tcH() aufrufen statt in den String zu weben).
+  var placeholders=document.querySelectorAll('#tc-mat-list .tc-mat-row-html');
+  Array.prototype.forEach.call(placeholders,function(ph){ tcMatAddRow(ph.getAttribute('data-bez'),ph.getAttribute('data-menge')||null); ph.parentNode.removeChild(ph); });
+  if(isEdit&&!isAbw) tcLoadGallery('projekt',z.projekt_id,z.id);
+}
+function tcZeileModePick(el){
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-zmode'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var mode=el.getAttribute('data-mode');
+  var mh=document.getElementById('tc-z-mode'); if(mh) mh.value=mode;
+  var ab=document.getElementById('tc-z-arbeit-block'); if(ab) ab.style.display=(mode==='arbeit')?'block':'none';
+  var aw=document.getElementById('tc-z-abw-block'); if(aw) aw.style.display=(mode==='abwesenheit')?'block':'none';
+}
+function tcZeileAbwPick(el){
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var h=document.getElementById('tc-z-abw'); if(h) h.value=el.getAttribute('data-abw');
+}
+function tcZeileRecalcStunden(){
+  var s=(document.getElementById('tc-z-start')||{}).value;
+  var e=(document.getElementById('tc-z-end')||{}).value;
+  var std=document.getElementById('tc-z-std');
+  if(s&&e&&std){
+    var sp=s.split(':').map(Number), ep=e.split(':').map(Number);
+    var diff=(ep[0]*60+ep[1])-(sp[0]*60+sp[1]);
+    if(diff>0) std.value=Math.round((diff/60)*100)/100;
+  }
+}
+function tcZeileSave(existingId){
+  var datum=(document.getElementById('tc-z-datum')||{}).value;
+  if(!datum){ tcToast('Datum wählen'); return; }
+  var mode=(document.getElementById('tc-z-mode')||{}).value||'arbeit';
+  var body={datum:datum};
+  if(existingId) body.id=existingId;
+  if(mode==='abwesenheit'){
+    var abw=(document.getElementById('tc-z-abw')||{}).value;
+    if(!abw){ tcToast('Bitte Abwesenheits-Kennung wählen'); return; }
+    body.abwesenheit=abw;
+    body.abwesenheit_grund=(document.getElementById('tc-z-abwgrund')||{}).value||'';
+  } else {
+    var projId=(document.getElementById('tc-z-projekt')||{}).value;
+    if(!projId){ tcToast('Bitte Projekt wählen'); return; }
+    body.projekt_id=projId;
+    body.taetigkeit=(document.getElementById('tc-z-taet')||{}).value||'';
+    body.start_zeit=(document.getElementById('tc-z-start')||{}).value||'';
+    body.end_zeit=(document.getElementById('tc-z-end')||{}).value||'';
+    body.stunden=(document.getElementById('tc-z-std')||{}).value||'';
+    body.spesen=(document.getElementById('tc-z-spesen')||{}).value||0;
+    var mat=tcMatCollect(); body.material=mat.strings; body.material_positionen=mat.positionen;
+    body.arbeiten=tcLines((document.getElementById('tc-z-arb')||{}).value);
+    body.notiz=(document.getElementById('tc-z-notiz')||{}).value||'';
+  }
+  var b=document.getElementById('tc-z-save'); if(b){ b.disabled=true; b.textContent='Speichert…'; }
+  techApi('tech_tag_save',body).then(function(d){
+    if(b){ b.disabled=false; b.textContent='Speichern'; }
+    if(d&&d.error){ tcToast(d.error); return; }
+    tcToast('Gespeichert');
+    var savedId=d.row&&d.row.id;
+    var wk=tcISOWeekOfDate(new Date(datum+'T00:00:00Z'));
+    techApi('tech_wochen_rapport',{jahr:wk.jahr,woche:wk.woche}).then(function(dd){
+      tcWocheZeilen=(dd&&dd.zeilen)||[]; tcWocheState.jahr=wk.jahr; tcWocheState.woche=wk.woche;
+      if(savedId) tcZeileForm(savedId); else tcLoadWoche(wk.jahr,wk.woche);
+    });
+  }).catch(function(){ if(b){b.disabled=false;b.textContent='Speichern';} tcToast('Verbindungsfehler'); });
+}
+function tcZeileDel(id){
+  if(!confirm('Diese Zeile wirklich löschen?')) return;
+  techApi('tech_tag_del',{id:id}).then(function(d){
+    if(d&&d.error){ tcToast(d.error); return; }
+    tcToast('Zeile gelöscht'); tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+  }).catch(function(){ tcToast('Verbindungsfehler'); });
 }
 function tcRenderProfil(){
   tcH('<div class="tc-sec">Profil</div>'+
