@@ -5707,13 +5707,15 @@ function demoApi(ep,body){
 }
 function gsAuthApi(ep,body){
   if(demoMode) return demoApi(ep,body);
+  // Token im BODY (wie Master-Cockpit/pmApi) UND im Header — /api/cockpit liest
+  // req.body.token, andere Endpunkte lesen den Authorization-Header.
   return fetch('/api/'+ep,{method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},
-    body:JSON.stringify(body)}).then(function(r){return r.json();}).then(function(d){
+    body:JSON.stringify(Object.assign({token:authToken},body))}).then(function(r){return r.json();}).then(function(d){
       if(d&&d.error&&/Ungültiger Token|Nicht authentifiziert|Sitzung/i.test(d.error)&&authRefresh){
         return refreshToken().then(function(ok){
           if(!ok)return{error:'Sitzung abgelaufen – bitte neu anmelden'};
-          return fetch('/api/'+ep,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},body:JSON.stringify(body)}).then(function(r){return r.json();});
+          return fetch('/api/'+ep,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+authToken},body:JSON.stringify(Object.assign({token:authToken},body))}).then(function(r){return r.json();});
         });
       }
       return d;
