@@ -2518,8 +2518,17 @@ async function pmWochenrapport(b) {
   const projektIds = [...new Set([...zeilen.map((z) => z.projekt_id), kopf.hauptprojekt_id].filter(Boolean))];
   let projMap = {};
   if (projektIds.length) {
-    const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer,standort`).catch(() => []);
+    const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer,standort,kunde_id`).catch(() => []);
     for (const p of pr) projMap[p.id] = p;
+  }
+  // Kunde/Firma fürs Kopf-Anzeige-Feld (Hauptprojekt → gs_kunden.firma).
+  let hauptKundeName = null;
+  const hauptKundeId = kopf.hauptprojekt_id && (projMap[kopf.hauptprojekt_id] || {}).kunde_id;
+  if (hauptKundeId) {
+    try {
+      const kd = await sbGet(`gs_kunden?id=eq.${hauptKundeId}&select=firma&limit=1`);
+      if (kd && kd[0]) hauptKundeName = kd[0].firma;
+    } catch (_) { /* egal */ }
   }
   let technikerName = 'Techniker';
   try {
@@ -2540,7 +2549,7 @@ async function pmWochenrapport(b) {
   const total_stunden = zeilen.reduce((s, z) => s + Number(z.gesamtstunden || 0), 0);
   const total_spesen = zeilen.reduce((s, z) => s + Number(z.spesen || 0), 0);
   return {
-    kopf: { ...kopf, techniker_name: technikerName, hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null },
+    kopf: { ...kopf, techniker_name: technikerName, hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null, hauptkunde_name: hauptKundeName },
     zeilen: zeilenOut,
     medien,
     total_stunden: Math.round(total_stunden * 100) / 100,

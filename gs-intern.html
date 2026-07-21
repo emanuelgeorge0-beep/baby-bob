@@ -2109,6 +2109,7 @@ function openWochenrapport(id){
     var head='<div style="margin-bottom:14px"><span class="chip" id="wr-back4">‹ Wochenrapporte</span></div>'+
       '<h2 style="margin-bottom:2px">'+esc(k.techniker_name||'Techniker')+' · KW '+esc(k.woche)+' · '+esc(k.jahr)+'</h2>'+
       '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(k.rapport_nr||'—')+
+        (k.hauptkunde_name?(' · '+esc(k.hauptkunde_name)):'')+
         (k.hauptprojekt_name?(' · Hauptprojekt: '+esc(k.hauptprojekt_name)):'')+'</div>';
     var totals='<div class="cc-sec">Total</div><div class="lcard"><div class="top"><div class="nm">'+Number(d.total_stunden||0).toFixed(1)+' h</div>'+
       '<div class="nm">CHF '+Number(d.total_spesen||0).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</div></div></div>';
