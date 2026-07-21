@@ -41,6 +41,11 @@ CREATE INDEX IF NOT EXISTS idx_gs_tagesrapporte_wochenrapport ON gs_tagesrapport
 
 -- Bindung lockern: ein Abwesenheits-Tag (G/F/M/U/A) hat KEIN Projekt/Service-
 -- Auftrag. Ein Arbeits-Tag hat weiterhin GENAU eines von beiden (unverändert).
+-- NOT VALID: bestehende Zeilen werden NICHT rückwirkend geprüft (falls doch
+-- irgendwo eine Alt-Zeile ohne projekt_id/service_auftrag_id existiert, blockiert
+-- das die Migration nicht) — ab jetzt gilt die Regel nur für neue INSERT/UPDATE.
+-- Optional danach (nur falls die Prüf-Query unten 0 Zeilen liefert):
+--   ALTER TABLE gs_tagesrapporte VALIDATE CONSTRAINT gs_tagesrapporte_bindung_chk;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'gs_tagesrapporte_bindung_chk') THEN
@@ -52,7 +57,7 @@ BEGIN
       (abwesenheit IS NOT NULL AND projekt_id IS NULL AND service_auftrag_id IS NULL)
       OR (abwesenheit IS NULL AND projekt_id IS NOT NULL AND service_auftrag_id IS NULL)
       OR (abwesenheit IS NULL AND projekt_id IS NULL AND service_auftrag_id IS NOT NULL)
-    );
+    ) NOT VALID;
 END $$;
 
 -- ── 3. Fotos an eine konkrete Tageszeile hängen (fürs künftige Foto-Wochenbericht) ──
