@@ -96,6 +96,8 @@ const PARTNER_FEATURE_ACTIONS = {
 //   auth.uid() → gs_techniker.user_id → gs_techniker.id → gs_projekt_techniker.techniker_id → projekt_id
 const TECHNIKER_ACTIONS = new Set([
   'tech_projekte', 'tech_projekt', 'tech_rapporte', 'tech_rapport_add',
+  // Wochenrapport (Kopf + strukturierte Tageszeilen, siehe unten).
+  'tech_tag_save', 'tech_tag_del', 'tech_wochen_rapport', 'tech_wochen_liste',
   // Feature B/C: Techniker lädt getaggte Medien hoch, sieht Galerie, bucht auf
   // zugewiesene Service-Aufträge, markiert erledigt. Zugriff über die verifizierte Kette.
   'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
@@ -291,6 +293,13 @@ export default async function handler(req, res) {
       case 'tech_projekt':     return res.status(200).json(await getTechProjekt(req.body.id, scope));
       case 'tech_rapporte':    return res.status(200).json(await getTechRapporte(scope));
       case 'tech_rapport_add': return res.status(200).json(await addTechRapport(req.body, scope));
+      // ── Wochenrapport: Kopf (KW) + strukturierte Tageszeilen ──
+      case 'tech_tag_save':      return res.status(200).json(await saveTechTag(req.body, scope));
+      case 'tech_tag_del':       return res.status(200).json(await delTechTag(req.body, scope));
+      case 'tech_wochen_rapport': return res.status(200).json(await getTechWochenRapport(req.body, scope));
+      case 'tech_wochen_liste':  return res.status(200).json(await getTechWochenListe(scope));
+      case 'pm_wochenrapporte_liste': return res.status(200).json(await pmWochenrapporteListe());
+      case 'pm_wochenrapport':   return res.status(200).json(await pmWochenrapport(req.body));
       // ── Feature B: Medien (Foto/Video) mit Standort-Tags + Stockwerk-Katalog ──
       case 'medien_list':      return res.status(200).json(await medienList(req.body, scope));
       case 'medien_upload':    return res.status(200).json(await medienUpload(req.body, scope));
@@ -2178,7 +2187,15 @@ async function getTechProjekt(id, scope) {
       `&select=id,datum,gesamtstunden,material,arbeiten,besonderheiten,status&order=datum.desc`,
     );
   } catch (_) { rapporte = []; }
-  return { projekt: techSafeProjekt(projekt), rapporte };
+  // Blockaden read-only mitgeben (operative Sicht) — keine Kosten-/Marge-Felder in
+  // gs_blockaden vorhanden, daher unbedenklich mit select=* vergleichbarer Whitelist.
+  let blockaden = [];
+  try {
+    blockaden = await sbGet(
+      `gs_blockaden?projekt_id=eq.${pid}&select=id,beschreibung,status,urgency,blockiert_von_rolle,step_ref,haus,einheit,zone,created_at&order=created_at.desc`,
+    );
+  } catch (_) { blockaden = []; }
+  return { projekt: techSafeProjekt(projekt), rapporte, blockaden };
 }
 
 // Alle eigenen Rapporte des Technikers (über alle Projekte).
@@ -2244,6 +2261,291 @@ async function addTechRapport(b, scope) {
     }
     throw e;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WOCHENRAPPORT — Kopf (KW, get-or-create) + strukturierte Tageszeile.
+// scripts/wochenrapport_migration.sql muss zuerst gelaufen sein (sonst
+// {notMigrated:true} statt 500 — gleiches Muster wie überall sonst hier).
+// KEINE Marge-/Kosten-/Ansatz-Felder — Stundensatz bleibt in
+// gs_projekt_techniker, wird hier nie gelesen/geschrieben/zurückgegeben.
+// ═══════════════════════════════════════════════════════════════════════════
+const ABWESENHEIT_CODES = new Set(['G', 'F', 'M', 'U', 'A']);
+
+function rapportNr(jahr, woche, name) {
+  const slug = String(name || 'Techniker').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9äöüÄÖÜ-]/g, '') || 'Techniker';
+  return `WR-${jahr}-${woche}-${slug}`;
+}
+// Strukturierte Material-Zeilen sanitisieren (Bezeichnung Pflicht, Menge optional).
+function matPositionen(v) {
+  if (!Array.isArray(v)) return [];
+  return v.map((x) => ({
+    bezeichnung: String((x && x.bezeichnung) || '').slice(0, 200),
+    menge: (x && x.menge != null && x.menge !== '') ? num(x.menge) : null,
+  })).filter((x) => x.bezeichnung).slice(0, 100);
+}
+// Wochenkopf holen oder anlegen (UNIQUE techniker+jahr+woche). hauptprojekt_id
+// nur beim ERSTEN Anlegen gesetzt (erstes bebuchtes Projekt der Woche).
+async function getOrCreateWochenrapport(scope, jahr, woche, projektIdHint) {
+  const find = () => sbGet(
+    `gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=*&limit=1`,
+  );
+  const existing = await find().catch(() => []);
+  if (existing && existing[0]) return existing[0];
+  let name = 'Techniker';
+  try {
+    const t = await sbGet(`gs_techniker?id=eq.${scope.technikerId}&select=name&limit=1`);
+    if (t && t[0] && t[0].name) name = t[0].name;
+  } catch (_) { /* egal, Fallback-Name */ }
+  const row = {
+    techniker_user_id: scope.technikerUserId, jahr, woche,
+    hauptprojekt_id: projektIdHint || null,
+    rapport_nr: rapportNr(jahr, woche, name),
+  };
+  try {
+    const r = await sbWrite('POST', 'gs_wochenrapporte', row);
+    return Array.isArray(r) ? r[0] : r;
+  } catch (e) {
+    if (/duplicate key|23505/i.test((e && e.message) || '')) {
+      // Race (zwei Zeilen derselben Woche parallel gespeichert) → nochmal lesen.
+      const again = await find().catch(() => []);
+      if (again && again[0]) return again[0];
+    }
+    if (isNoTable(e)) return null; // Migration fehlt noch — Tageszeile speichert trotzdem, nur ohne Kopf.
+    throw e;
+  }
+}
+
+// Eine Tageszeile speichern: Arbeitstag (Projekt/Service + Stunden) ODER
+// Abwesenheit (G/F/M/U/A, kein Projekt). KW/Jahr kommen aus dem GEBUCHTEN
+// Datum, nicht "heute" → Rückdatierung landet im richtigen Wochenkopf.
+async function saveTechTag(b, scope) {
+  const datum = String(b.datum || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new Error('datum (YYYY-MM-DD) nötig');
+  const abwesenheit = b.abwesenheit ? String(b.abwesenheit).toUpperCase() : null;
+  if (abwesenheit && !ABWESENHEIT_CODES.has(abwesenheit)) throw new Error('ungültige Abwesenheits-Kennung');
+
+  const row = { techniker_user_id: scope.technikerUserId };
+  let projektIdForHeader = null;
+
+  if (abwesenheit) {
+    row.abwesenheit = abwesenheit;
+    row.abwesenheit_grund = b.abwesenheit_grund ? String(b.abwesenheit_grund).slice(0, 500) : null;
+    row.projekt_id = null;
+    row.service_auftrag_id = null;
+  } else {
+    row.abwesenheit = null;
+    row.abwesenheit_grund = null;
+    if (b.service_auftrag_id) {
+      row.service_auftrag_id = await assertServiceAccess(b.service_auftrag_id, scope, true);
+      row.projekt_id = null;
+    } else {
+      await requireAssignedProjekt(b.projekt_id, scope);
+      row.projekt_id = uuid(b.projekt_id);
+      row.service_auftrag_id = null;
+      projektIdForHeader = row.projekt_id;
+    }
+  }
+
+  // Stunden: direkt ODER aus Start/Ende gerechnet (Client rechnet meist schon vor,
+  // Server rechnet nach falls nur Start/Ende ankommen).
+  let stunden = (b.stunden != null && b.stunden !== '') ? num(b.stunden) : null;
+  const start_zeit = /^\d{2}:\d{2}/.test(b.start_zeit || '') ? String(b.start_zeit).slice(0, 5) : null;
+  const end_zeit = /^\d{2}:\d{2}/.test(b.end_zeit || '') ? String(b.end_zeit).slice(0, 5) : null;
+  if (stunden == null && start_zeit && end_zeit) {
+    const [sh, sm] = start_zeit.split(':').map(Number);
+    const [eh, em] = end_zeit.split(':').map(Number);
+    const diff = (eh * 60 + em) - (sh * 60 + sm);
+    stunden = diff > 0 ? Math.round((diff / 60) * 100) / 100 : 0;
+  }
+
+  const { woche, jahr } = isoWeekJahr(datum);
+  const heute = new Date().toISOString().slice(0, 10);
+  const wr = await getOrCreateWochenrapport(scope, jahr, woche, projektIdForHeader);
+
+  Object.assign(row, {
+    datum,
+    wochenrapport_id: wr ? wr.id : null,
+    gesamtstunden: stunden != null ? stunden : 0,
+    start_zeit, end_zeit,
+    taetigkeit: b.taetigkeit ? String(b.taetigkeit).slice(0, 120) : null,
+    spesen: (b.spesen != null && b.spesen !== '') ? num(b.spesen) : 0,
+    material: toStrArr(b.material),
+    material_positionen: matPositionen(b.material_positionen),
+    arbeiten: toStrArr(b.arbeiten),
+    besonderheiten: b.notiz ? String(b.notiz).slice(0, 2000) : null,
+    status: b.status === 'entwurf' ? 'entwurf' : 'eingereicht',
+    woche, jahr,
+    erfasst_von: scope.technikerUserId,
+    rueckwirkend: datum < heute,
+  });
+
+  const notMigratedErr = (e) => /column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '');
+
+  // Bestehende Zeile bearbeiten (id mitgeschickt, Eigentum geprüft).
+  if (b.id) {
+    const own = await sbGet(`gs_tagesrapporte?id=eq.${uuid(b.id)}&select=id,techniker_user_id&limit=1`).catch(() => []);
+    if (!own[0] || own[0].techniker_user_id !== scope.technikerUserId) throw new Forbidden();
+    try {
+      const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${uuid(b.id)}`, row);
+      return { ok: true, row: Array.isArray(r) ? r[0] : r };
+    } catch (e) {
+      if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht migriert – scripts/wochenrapport_migration.sql ausführen.' };
+      throw e;
+    }
+  }
+
+  // Neue Zeile. UNIQUE(projekt/service, techniker, datum) kann kollidieren, wenn
+  // für diesen Tag/Projekt schon eine Zeile existiert → dann in-place aktualisieren
+  // statt Fehler (matcht "Zeile antippen = bearbeiten" ohne dass der Client die id kennt).
+  try {
+    const r = await sbWrite('POST', 'gs_tagesrapporte', row);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) {
+    if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
+      const filter = row.service_auftrag_id
+        ? `service_auftrag_id=eq.${row.service_auftrag_id}&techniker_user_id=eq.${scope.technikerUserId}&datum=eq.${datum}`
+        : `projekt_id=eq.${row.projekt_id}&techniker_user_id=eq.${scope.technikerUserId}&datum=eq.${datum}`;
+      const existing = await sbGet(`gs_tagesrapporte?${filter}&select=id`).catch(() => []);
+      if (existing && existing[0]) {
+        const r2 = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${existing[0].id}`, row);
+        return { ok: true, row: Array.isArray(r2) ? r2[0] : r2 };
+      }
+      return { error: 'Für diesen Tag existiert bereits ein Rapport.' };
+    }
+    if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht migriert – scripts/wochenrapport_migration.sql ausführen.' };
+    throw e;
+  }
+}
+
+async function delTechTag(b, scope) {
+  const id = uuid(b.id);
+  const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=id,techniker_user_id&limit=1`).catch(() => []);
+  if (!rows[0] || rows[0].techniker_user_id !== scope.technikerUserId) throw new Forbidden();
+  await sbWrite('DELETE', `gs_tagesrapporte?id=eq.${id}`, {}, 'return=minimal');
+  return { ok: true };
+}
+
+// Ein Wochenrapport (Kopf + Zeilen + Summen) für eine konkrete KW des eingeloggten
+// Technikers. Projekt-Namen werden für die Zeilen nachgeladen (Baustelle/Kunde-Anzeige).
+async function getTechWochenRapport(b, scope) {
+  const jahr = parseInt(b.jahr, 10);
+  const woche = parseInt(b.woche, 10);
+  if (!jahr || !woche) throw new Error('jahr/woche nötig');
+  const wrRows = await sbGet(
+    `gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=*&limit=1`,
+  ).catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (wrRows === null) return { notMigrated: true, kopf: { jahr, woche }, zeilen: [], total_stunden: 0, total_spesen: 0 };
+  const kopf = (wrRows && wrRows[0]) || null;
+  let zeilen = [];
+  if (kopf) {
+    zeilen = await sbGet(
+      `gs_tagesrapporte?wochenrapport_id=eq.${kopf.id}&techniker_user_id=eq.${scope.technikerUserId}` +
+      `&select=id,datum,projekt_id,service_auftrag_id,taetigkeit,start_zeit,end_zeit,gesamtstunden,spesen,` +
+      `abwesenheit,abwesenheit_grund,material,material_positionen,arbeiten,besonderheiten,status&order=datum.asc`,
+    ).catch(() => []);
+  }
+  const projektIds = [...new Set([...zeilen.map((z) => z.projekt_id), kopf && kopf.hauptprojekt_id].filter(Boolean))];
+  let projMap = {};
+  if (projektIds.length) {
+    const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer,standort`).catch(() => []);
+    for (const p of pr) projMap[p.id] = p;
+  }
+  const zeilenOut = zeilen.map((z) => ({
+    ...z,
+    projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
+    projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
+  }));
+  const total_stunden = zeilen.reduce((s, z) => s + Number(z.gesamtstunden || 0), 0);
+  const total_spesen = zeilen.reduce((s, z) => s + Number(z.spesen || 0), 0);
+  return {
+    kopf: kopf ? { ...kopf, hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null } : { jahr, woche },
+    zeilen: zeilenOut,
+    total_stunden: Math.round(total_stunden * 100) / 100,
+    total_spesen: Math.round(total_spesen * 100) / 100,
+  };
+}
+
+// Liste der eigenen Wochenrapporte (Navigation "meine Wochen").
+async function getTechWochenListe(scope) {
+  const rows = await sbGet(
+    `gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&select=id,jahr,woche,rapport_nr,status,hauptprojekt_id&order=jahr.desc,woche.desc&limit=52`,
+  ).catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (rows === null) return { notMigrated: true, wochen: [] };
+  return { wochen: rows };
+}
+
+// ── Master: Wochenrapporte ALLER Techniker, projektübergreifend ────────────
+async function pmWochenrapporteListe() {
+  const rows = await sbGet(`gs_wochenrapporte?select=*&order=jahr.desc,woche.desc&limit=200`)
+    .catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (rows === null) return { notMigrated: true, wochen: [] };
+  const uids = [...new Set(rows.map((r) => r.techniker_user_id).filter(Boolean))];
+  let nameMap = {};
+  if (uids.length) {
+    const ts = await sbGet(`gs_techniker?user_id=in.(${uids.join(',')})&select=user_id,name`).catch(() => []);
+    for (const t of ts) nameMap[t.user_id] = t.name;
+  }
+  const wrIds = rows.map((r) => r.id);
+  let sums = {};
+  if (wrIds.length) {
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,gesamtstunden,spesen`).catch(() => []);
+    for (const z of zeilen) {
+      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, spesen: 0 });
+      s.stunden += Number(z.gesamtstunden || 0); s.spesen += Number(z.spesen || 0);
+    }
+  }
+  return {
+    wochen: rows.map((r) => ({
+      ...r,
+      techniker_name: nameMap[r.techniker_user_id] || 'Techniker',
+      total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
+      total_spesen: Math.round(((sums[r.id] || {}).spesen || 0) * 100) / 100,
+    })),
+  };
+}
+
+// Ein Wochenrapport im Detail für Master — alle Zeilen (projektübergreifend) +
+// Fotos aller Zeilen dieser Woche. KEINE Marge-/Kosten-/Ansatz-Felder.
+async function pmWochenrapport(b) {
+  const id = uuid(b.id);
+  const kopfRows = await sbGet(`gs_wochenrapporte?id=eq.${id}&select=*&limit=1`)
+    .catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (kopfRows === null) return { notMigrated: true };
+  const kopf = kopfRows && kopfRows[0];
+  if (!kopf) return { error: 'Wochenrapport nicht gefunden' };
+  const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=eq.${id}&select=*&order=datum.asc`).catch(() => []);
+  const projektIds = [...new Set([...zeilen.map((z) => z.projekt_id), kopf.hauptprojekt_id].filter(Boolean))];
+  let projMap = {};
+  if (projektIds.length) {
+    const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer,standort`).catch(() => []);
+    for (const p of pr) projMap[p.id] = p;
+  }
+  let technikerName = 'Techniker';
+  try {
+    const t = await sbGet(`gs_techniker?user_id=eq.${kopf.techniker_user_id}&select=name&limit=1`);
+    if (t && t[0]) technikerName = t[0].name;
+  } catch (_) { /* Fallback-Name */ }
+  const rapportIds = zeilen.map((z) => z.id);
+  let medien = [];
+  if (rapportIds.length) {
+    const m = await sbGet(`gs_projekt_medien?tagesrapport_id=in.(${rapportIds.join(',')})&select=*&order=created_at.desc`).catch(() => []);
+    medien = await Promise.all(m.map(signMedien));
+  }
+  const zeilenOut = zeilen.map((z) => ({
+    ...z,
+    projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
+    projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
+  }));
+  const total_stunden = zeilen.reduce((s, z) => s + Number(z.gesamtstunden || 0), 0);
+  const total_spesen = zeilen.reduce((s, z) => s + Number(z.spesen || 0), 0);
+  return {
+    kopf: { ...kopf, techniker_name: technikerName, hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null },
+    zeilen: zeilenOut,
+    medien,
+    total_stunden: Math.round(total_stunden * 100) / 100,
+    total_spesen: Math.round(total_spesen * 100) / 100,
+  };
 }
 
 async function addTaetigkeit(b, scope) {
@@ -2452,6 +2754,16 @@ async function resolveMedienTarget(b, scope, write) {
   if (b.service_auftrag_id) { const sid = await assertServiceAccess(b.service_auftrag_id, scope, write); return { projekt_id: null, service_auftrag_id: sid, isService: true }; }
   throw new Error('projekt_id oder service_auftrag_id nötig');
 }
+// Optionale Verknüpfung Foto→Tageszeile (fürs künftige Foto-Wochenbericht). Techniker
+// dürfen nur an EIGENE Tageszeilen hängen — sonst könnte fremdes Material getaggt werden.
+async function resolveTagesrapportId(b, scope) {
+  if (!b.tagesrapport_id) return null;
+  const rid = uuid(b.tagesrapport_id);
+  const rows = await sbGet(`gs_tagesrapporte?id=eq.${rid}&select=id,techniker_user_id&limit=1`).catch(() => []);
+  if (!rows[0]) throw new Forbidden();
+  if (scope.role === 'techniker' && rows[0].techniker_user_id !== scope.technikerUserId) throw new Forbidden();
+  return rid;
+}
 
 // Signierte URLs (Datei + optionaler Video-Thumbnail) an eine Medien-Zeile hängen.
 async function signMedien(m) {
@@ -2465,6 +2777,7 @@ async function signMedien(m) {
 // Medien-Upload (Foto ODER Video) mit Standort-Tags in Bucket 'projektdateien' + DB-Zeile.
 async function medienUpload(b, scope) {
   const tgt = await resolveMedienTarget(b, scope, true);        // Schreibrecht nötig (Partner → Forbidden)
+  const tagesrapport_id = await resolveTagesrapportId(b, scope);
   const buf = sbDecodeB64(b.data);
   if (!buf) return { error: 'Datei (base64) erforderlich' };
   if (buf.length > 200 * 1024 * 1024) return { error: 'Datei zu gross (max. 200 MB)' };  // Videos → grösseres Limit
@@ -2503,6 +2816,7 @@ async function medienUpload(b, scope) {
   }
   const row = {
     projekt_id: tgt.projekt_id, service_auftrag_id: tgt.service_auftrag_id,
+    tagesrapport_id,
     medientyp, bucket: PM_DATEI_BUCKET, path, dateiname: sbDisplayName(safe),
     mime: contentType, groesse: buf.length,
     dauer_sekunden: (b.dauer_sekunden != null && b.dauer_sekunden !== '') ? Math.round(num(b.dauer_sekunden)) : null,
@@ -2595,6 +2909,7 @@ async function medienSignUpload(b, scope) {
 // (zugriffsgeprüften) Ziel gehören — sonst Forbidden (kein Fremd-Pfad einschleusen).
 async function medienRegister(b, scope) {
   const tgt = await resolveMedienTarget(b, scope, true);
+  const tagesrapport_id = await resolveTagesrapportId(b, scope);
   const path = String(b.path || '');
   const prefix = tgt.isService ? `service/${tgt.service_auftrag_id}/` : `${tgt.projekt_id}/`;
   if (!path.startsWith(prefix)) throw new Forbidden();
@@ -2604,6 +2919,7 @@ async function medienRegister(b, scope) {
   if (!tgt.isService && !stockwerk) return { error: 'Stockwerk ist bei Projekt-Medien erforderlich' };
   const row = {
     projekt_id: tgt.projekt_id, service_auftrag_id: tgt.service_auftrag_id,
+    tagesrapport_id,
     medientyp, bucket: PM_DATEI_BUCKET, path,
     dateiname: b.filename ? sbDisplayName(sbSafeName(b.filename)) : sbDisplayName(path.split('/').pop()),
     mime: contentType, groesse: (b.groesse != null && b.groesse !== '') ? Math.round(num(b.groesse)) : null,
