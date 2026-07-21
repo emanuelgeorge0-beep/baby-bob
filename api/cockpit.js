@@ -2390,6 +2390,9 @@ async function saveTechTag(b, scope) {
       const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${uuid(b.id)}`, row);
       return { ok: true, row: Array.isArray(r) ? r[0] : r };
     } catch (e) {
+      if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
+        return { error: 'Für diesen Tag/Projekt existiert bereits eine andere Zeile.' };
+      }
       if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht migriert – scripts/wochenrapport_migration.sql ausführen.' };
       throw e;
     }
