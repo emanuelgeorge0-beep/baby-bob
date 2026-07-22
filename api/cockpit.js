@@ -2170,7 +2170,20 @@ async function getTechProjekte(scope) {
     .then(ohneGeloeschte).catch(() => []);
   const taetById = {};
   for (const a of asg) taetById[a.projekt_id] = a.taetigkeit || null;
-  return { projekte: rows.map((p) => ({ ...techSafeProjekt(p), taetigkeit: taetById[p.id] || null })) };
+  // Spesenreglement des Kunden (falls hinterlegt) je Projekt mitgeben — Wochenrapport-
+  // Editor zeigt dann dessen Sätze statt der Standard-Chips 15/30/35/45.
+  const kundeIds = [...new Set(rows.map((p) => p.kunde_id).filter(Boolean))];
+  let spesenByKunde = {};
+  if (kundeIds.length) {
+    const kd = await sbGet(`gs_kunden?id=in.(${kundeIds.join(',')})&select=id,spesenreglement`).catch(() => []);
+    for (const k of kd) if (k.spesenreglement) spesenByKunde[k.id] = k.spesenreglement;
+  }
+  return {
+    projekte: rows.map((p) => ({
+      ...techSafeProjekt(p), taetigkeit: taetById[p.id] || null,
+      spesenreglement: spesenByKunde[p.kunde_id] || null,
+    })),
+  };
 }
 
 // Detail eines zugewiesenen Projekts + die EIGENEN Rapporte des Technikers darauf.
@@ -2271,6 +2284,9 @@ async function addTechRapport(b, scope) {
 // gs_projekt_techniker, wird hier nie gelesen/geschrieben/zurückgegeben.
 // ═══════════════════════════════════════════════════════════════════════════
 const ABWESENHEIT_CODES = new Set(['G', 'F', 'M', 'U', 'A']);
+// Gewerk: feste Schnellwahl (Chips im Wochenrapport-Editor) statt Freitext — strukturiert
+// für spätere Auswertung/Rechnung/Filter. Server validiert gegen dieselbe Liste.
+const GEWERK_OPTIONS = new Set(['Sanitär', 'Heizung', 'Klima', 'Lüftung', 'Divers']);
 
 function rapportNr(jahr, woche, name) {
   const slug = String(name || 'Techniker').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9äöüÄÖÜ-]/g, '') || 'Techniker';
@@ -2368,7 +2384,7 @@ async function saveTechTag(b, scope) {
     wochenrapport_id: wr ? wr.id : null,
     gesamtstunden: stunden != null ? stunden : 0,
     start_zeit, end_zeit,
-    taetigkeit: b.taetigkeit ? String(b.taetigkeit).slice(0, 120) : null,
+    taetigkeit: GEWERK_OPTIONS.has(b.taetigkeit) ? b.taetigkeit : null,
     spesen: (b.spesen != null && b.spesen !== '') ? num(b.spesen) : 0,
     material: toStrArr(b.material),
     material_positionen: matPositionen(b.material_positionen),
@@ -2454,10 +2470,17 @@ async function getTechWochenRapport(b, scope) {
     const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer,standort`).catch(() => []);
     for (const p of pr) projMap[p.id] = p;
   }
+  const serviceIds = [...new Set(zeilen.map((z) => z.service_auftrag_id).filter(Boolean))];
+  let svcMap = {};
+  if (serviceIds.length) {
+    const sv = await sbGet(`gs_service_auftrag?id=in.(${serviceIds.join(',')})&select=id,objekt,auftragsnummer`).catch(() => []);
+    for (const s of sv) svcMap[s.id] = s;
+  }
   const zeilenOut = zeilen.map((z) => ({
     ...z,
     projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
+    service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
   }));
   const total_stunden = zeilen.reduce((s, z) => s + Number(z.gesamtstunden || 0), 0);
   const total_spesen = zeilen.reduce((s, z) => s + Number(z.spesen || 0), 0);
@@ -2544,10 +2567,17 @@ async function pmWochenrapport(b) {
     const m = await sbGet(`gs_projekt_medien?tagesrapport_id=in.(${rapportIds.join(',')})&select=*&order=created_at.desc`).catch(() => []);
     medien = await Promise.all(m.map(signMedien));
   }
+  const serviceIds = [...new Set(zeilen.map((z) => z.service_auftrag_id).filter(Boolean))];
+  let svcMap = {};
+  if (serviceIds.length) {
+    const sv = await sbGet(`gs_service_auftrag?id=in.(${serviceIds.join(',')})&select=id,objekt,auftragsnummer`).catch(() => []);
+    for (const s of sv) svcMap[s.id] = s;
+  }
   const zeilenOut = zeilen.map((z) => ({
     ...z,
     projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
+    service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
   }));
   const total_stunden = zeilen.reduce((s, z) => s + Number(z.gesamtstunden || 0), 0);
   const total_spesen = zeilen.reduce((s, z) => s + Number(z.spesen || 0), 0);

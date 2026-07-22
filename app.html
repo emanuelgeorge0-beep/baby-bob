@@ -980,6 +980,43 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-galcell img,#tech-cockpit .tc-galcell video{width:100%;height:100%;object-fit:cover;display:block;}
 #tech-cockpit .tc-galcell .tc-vbadge{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:2px 6px;border-radius:6px;font-weight:800;}
 #tech-cockpit .tc-hint{font-size:12px;color:#5c6878;margin-top:6px;}
+/* ── Wochentabelle (Wochenrapport): Kartenliste mobil, echte Tabellen-Optik ab Tablet/Desktop ──
+   Jede Zeile = Grid mit benannten Areas. Antippen klappt darunter das Edit-Panel auf (kein
+   Screen-Wechsel). Mobil = 3 gestapelte Zeilen, ab 860px = 1 Zeile mit 8 Spalten. */
+#tech-cockpit .tc-wk{border:1px solid rgba(255,255,255,.07);border-radius:14px;overflow:hidden;background:#131519;box-shadow:0 6px 16px rgba(0,0,0,.22);}
+#tech-cockpit .tc-wk-head{display:none;}
+#tech-cockpit .tc-wk-row{border-top:1px solid rgba(255,255,255,.06);}
+#tech-cockpit .tc-wk-row:first-child{border-top:none;}
+#tech-cockpit .tc-wk-sum{display:grid;cursor:pointer;padding:12px 14px;gap:3px 10px;
+  grid-template-columns:auto 1fr auto auto;
+  grid-template-areas:"datum ziel ziel car" "taet taet taet taet" "zeit std spesen abw";}
+#tech-cockpit .tc-wk-sum:active{background:rgba(255,255,255,.03);}
+#tech-cockpit .tc-wk-sum>*{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;}
+#tech-cockpit .wc-datum{grid-area:datum;font-weight:800;font-size:12.5px;color:#C9A961;}
+#tech-cockpit .wc-ziel{grid-area:ziel;font-weight:800;font-size:14.5px;color:#e8edf5;}
+#tech-cockpit .wc-car{grid-area:car;color:#5c6878;transition:transform .18s;font-size:13px;}
+#tech-cockpit .tc-wk-row.open .wc-car{transform:rotate(180deg);}
+#tech-cockpit .wc-taet{grid-area:taet;font-size:12.5px;color:#8a97a8;}
+#tech-cockpit .wc-zeit{grid-area:zeit;font-size:12px;color:#8a97a8;}
+#tech-cockpit .wc-std{grid-area:std;font-size:12.5px;font-weight:800;color:#C9A961;}
+#tech-cockpit .wc-spesen{grid-area:spesen;font-size:12px;color:#8a97a8;}
+#tech-cockpit .wc-abw{grid-area:abw;font-size:11px;font-weight:800;color:#FFD24A;text-align:right;}
+#tech-cockpit .tc-wk-edit{padding:4px 14px 16px;border-top:1px dashed rgba(255,255,255,.08);}
+#tech-cockpit .tc-wk-new{padding:12px;}
+#tech-cockpit .tc-mic{background:#131519;border:1px solid rgba(201,169,97,.28);color:#C9A961;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;flex:0 0 auto;font-family:inherit;}
+#tech-cockpit .tc-mic.rec{background:rgba(255,90,90,.16);border-color:rgba(255,90,90,.4);color:#ff8d8d;}
+#tech-cockpit .tc-dictrow{display:flex;gap:8px;align-items:flex-start;margin-top:8px;}
+#tech-cockpit .tc-dictrow .tc-field{flex:1;}
+#tech-cockpit .tc-chip.tc-chip-sm{padding:7px 12px;font-size:12.5px;}
+#tech-cockpit .tc-foottotal{display:flex;justify-content:space-between;align-items:center;padding:13px 14px;background:rgba(201,169,97,.06);border-top:1px solid rgba(255,255,255,.07);font-weight:800;}
+#tech-cockpit .tc-foottotal .lbl{font-size:12px;color:#8a97a8;font-weight:700;}
+#tech-cockpit .tc-foottotal .val{color:#C9A961;font-size:14.5px;}
+@media (min-width:860px){
+  #tech-cockpit .tc-wk-head{display:grid;grid-template-columns:64px 1.7fr 1.3fr 96px 62px 84px 60px 24px;gap:8px;padding:9px 14px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#8a97a8;font-weight:800;background:rgba(255,255,255,.03);}
+  #tech-cockpit .tc-wk-sum{grid-template-columns:64px 1.7fr 1.3fr 96px 62px 84px 60px 24px;
+    grid-template-areas:"datum ziel taet zeit std spesen abw car";gap:8px;padding:11px 14px;}
+  #tech-cockpit .wc-abw{text-align:left;}
+}
 #tech-cockpit .tc-nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;align-items:center;gap:2px;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));background:rgba(10,10,11,.92);backdrop-filter:blur(14px);border-top:1px solid rgba(201,169,97,.18);z-index:40;}
 #tech-cockpit .tc-nav button{flex:1;background:none;border:none;color:#5c6878;font-size:10.5px;font-weight:700;letter-spacing:.3px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px;cursor:pointer;}
 #tech-cockpit .tc-nav button .ic{font-size:19px;line-height:1;}
@@ -9248,7 +9285,7 @@ function tcOpenProjekt(id){
       '<div class="tc-sec">'+tcEsc(p.name||'Projekt')+'</div>'+
       '<div class="ti-m" style="color:#8a97a8;margin-bottom:2px">'+tcEsc([p.projektnummer,p.standort,p.bereich].filter(Boolean).join(' · ')||'—')+(p.status?(' · '+tcEsc(p.status)):'')+'</div>'+
       kontaktCard+leistungCard+blCard+notizCard+
-      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcZeileForm(null,\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'projekt\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>';
+      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcGoWocheNeueZeile(\'projekt\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'projekt\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>';
     var rlist=rap.length?('<div class="tc-list">'+rap.map(function(r){ return '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(r.datum||'')+' · '+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('')+'</div>'):'<div class="tc-empty">Noch keine Rapporte.</div>';
     tcH(head+'<div class="tc-sec">Meine Rapporte</div>'+rlist+'<div id="tc-gal-slot"></div>');
     tcLoadGallery('projekt',id);
@@ -9275,7 +9312,7 @@ function tcOpenService(id){
     var head='<button class="tc-back" onclick="tcGo(\'service\')">‹ Service-Aufträge</button>'+
       '<div class="tc-sec">'+tcEsc(s.objekt||'Service')+' '+tcStBadge(s.status)+'</div>'+
       (s.beschreibung?('<div class="ti-m" style="color:#8a97a8">'+tcEsc(s.beschreibung)+'</div>'):'')+
-      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcRapportForm(\'service\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'service\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>'+
+      '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcGoWocheNeueZeile(\'service\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'service\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>'+
       (doneBtn?('<div class="tc-btnrow">'+doneBtn+'</div>'):'');
     var rlist=rap.length?('<div class="tc-list">'+rap.map(function(r){ return '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(r.datum||'')+' · '+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('')+'</div>'):'<div class="tc-empty">Noch keine Rapporte.</div>';
     tcH(head+'<div class="tc-sec">Rapporte</div>'+rlist+'<div id="tc-gal-slot"></div>');
@@ -9286,76 +9323,7 @@ function tcSvcDone(id){
   techApi('svc_status',{id:id,status:'erledigt'}).then(function(d){ if(d&&d.error){ tcToast(d.error); return; } tcToast('Als erledigt markiert'); tcOpenService(id); });
 }
 
-/* ── Rapport-Formular (Datum FREI rückdatierbar) ── */
-/* Häufige Material-Positionen (SHK/HKLS) als Chips — tippen fügt eine Zeile ein. */
-var TC_MAT_PRESETS=['Ventil DN15','Ventil DN20','Dämmung 10m','Rohr Kupfer 18mm','Klemmringverschraubung','Dichtungen','Übergangsstück','Schelle/Halterung'];
-function tcRapportForm(kind,id){
-  var today=new Date().toISOString().slice(0,10);
-  var back=(kind==='service')?('tcOpenService(\''+tcEsc(id)+'\')'):('tcOpenProjekt(\''+tcEsc(id)+'\')');
-  var matChips=TC_MAT_PRESETS.map(function(m){ return '<div class="tc-chip" onclick="tcMatAddRow(\''+tcEsc(m).replace(/'/g,"\\'")+'\',1)">'+tcEsc(m)+'</div>'; }).join('');
-  tcH('<button class="tc-back" onclick="'+back+'">‹ Zurück</button>'+
-    '<div class="tc-sec">Rapport buchen</div>'+
-    '<div class="tc-card">'+
-      '<div class="tc-card-head"><span class="tc-card-tit">📅 Datum &amp; Stunden</span></div>'+
-      '<div style="display:flex;gap:10px;margin-top:8px">'+
-        '<div style="flex:1"><div class="tc-lbl" style="margin-top:0">Datum</div><input type="date" class="tc-field" id="tc-r-datum" value="'+today+'" max="'+today+'"/></div>'+
-        '<div style="width:100px"><div class="tc-lbl" style="margin-top:0">Stunden</div><input type="number" step="0.5" min="0" max="24" class="tc-field" id="tc-r-std" placeholder="8"/></div>'+
-      '</div>'+
-      '<div class="tc-hint" style="margin-top:8px">Datum frei wählbar — auch rückwirkend für die letzte Arbeitswoche.</div>'+
-    '</div>'+
-    '<div class="tc-card">'+
-      '<div class="tc-card-head"><span class="tc-card-tit">🛠️ Ausgeführte Arbeiten</span></div>'+
-      '<textarea class="tc-field" style="margin-top:8px" id="tc-r-arb" placeholder="Steigzone montiert&#10;Radiatoren angeschlossen"></textarea>'+
-    '</div>'+
-    '<div class="tc-card">'+
-      '<div class="tc-card-head"><span class="tc-card-tit">📦 Material</span></div>'+
-      '<div class="tc-chips" style="margin-top:8px">'+matChips+'</div>'+
-      '<div id="tc-mat-list" style="margin-top:2px"></div>'+
-      '<button type="button" class="tc-add" onclick="tcMatAddRow(\'\',1)">＋ Position</button>'+
-    '</div>'+
-    '<div class="tc-card">'+
-      '<div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div>'+
-      '<textarea class="tc-field" style="margin-top:8px" id="tc-r-notiz" placeholder="Besonderheiten…"></textarea>'+
-    '</div>'+
-    '<div class="tc-btnrow"><button class="tc-btn gold" id="tc-r-save" onclick="tcRapportSave(\''+tcEsc(kind)+'\',\''+tcEsc(id)+'\')">Rapport speichern</button></div>');
-}
-function tcMatAddRow(bez,menge){
-  var list=document.getElementById('tc-mat-list'); if(!list) return;
-  var row=document.createElement('div'); row.className='tc-row tc-mat-row';
-  row.innerHTML='<input class="tc-field" style="flex:1" placeholder="Bezeichnung" value="'+tcEsc(bez||'')+'"/>'+
-    '<input class="tc-field" style="width:58px;flex:0 0 auto" type="number" min="0" step="1" placeholder="Menge" value="'+(menge!=null?menge:'')+'"/>'+
-    '<button type="button" class="tc-row-del" onclick="tcMatDel(this)">✕</button>';
-  list.appendChild(row);
-  var first=row.querySelector('input'); if(first&&!bez) first.focus();
-}
-function tcMatDel(btn){ var row=btn&&btn.closest?btn.closest('.tc-mat-row'):null; if(row&&row.parentNode) row.parentNode.removeChild(row); }
-// Liefert BEIDES: lesbare Zeilen ("3× Ventil DN15", fürs alte Service-Rapport-
-// Feld + Anzeige) UND strukturiert ({bezeichnung,menge}, fürs Wochenrapport).
-function tcMatCollect(){
-  var rows=document.querySelectorAll('#tc-mat-list .tc-mat-row');
-  var strings=[], positionen=[];
-  Array.prototype.forEach.call(rows,function(r){
-    var ins=r.querySelectorAll('input'); var bez=(ins[0]&&ins[0].value||'').trim(); var menge=(ins[1]&&ins[1].value||'').trim();
-    if(!bez) return;
-    strings.push(menge?(menge+'× '+bez):bez);
-    positionen.push({bezeichnung:bez,menge:menge?Number(menge):null});
-  });
-  return {strings:strings,positionen:positionen};
-}
 function tcLines(v){ return String(v||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); }
-// Rapport-Formular bleibt für SERVICE-Aufträge (eigener, einfacherer Pfad — nicht
-// Teil des Wochenrapports). Projekt-Rapporte laufen über tcZeileForm().
-function tcRapportSave(kind,id){
-  var datum=(document.getElementById('tc-r-datum')||{}).value;
-  if(!datum){ tcToast('Datum wählen'); return; }
-  var body={datum:datum,stunden:(document.getElementById('tc-r-std')||{}).value||0,arbeiten:tcLines((document.getElementById('tc-r-arb')||{}).value),material:tcMatCollect().strings,notiz:(document.getElementById('tc-r-notiz')||{}).value||''};
-  if(kind==='service') body.service_auftrag_id=id; else body.projekt_id=id;
-  var b=document.getElementById('tc-r-save'); if(b){ b.disabled=true; b.textContent='Speichert…'; }
-  techApi('tech_rapport_add',body).then(function(d){
-    if(d&&d.error){ if(b){b.disabled=false;b.textContent='Rapport speichern';} tcToast(d.error); return; }
-    tcToast('Rapport gespeichert'); if(kind==='service') tcOpenService(id); else tcOpenProjekt(id);
-  }).catch(function(){ if(b){b.disabled=false;b.textContent='Rapport speichern';} tcToast('Verbindungsfehler'); });
-}
 
 /* ── Medien: Foto + Video mit Stockwerk-Tagging ── */
 function tcMediaForm(kind,id){
@@ -9437,13 +9405,23 @@ function tcLoadGallery(kind,id,tagesrapportId){
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   WOCHENRAPPORT — ein Rapport = eine KW, mehrere Tageszeilen (Papierformular).
+   WOCHENRAPPORT — eine echte Wochentabelle (Papierformular-Struktur). Zeilen
+   werden per Akkordeon DIREKT in der Wochenansicht bearbeitet (antippen klappt
+   den Editor an Ort und Stelle auf) — kein Screen-Wechsel pro Tag mehr.
    Kopf wird server-seitig get-or-create angelegt; hier nur Anzeige + Editor.
    ══════════════════════════════════════════════════════════════════════════ */
 var tcWocheState={jahr:null,woche:null};
+var tcWocheKopf=null;
 var tcWocheZeilen=[];
+var tcWocheTotals={stunden:0,spesen:0};
 var tcWocheProjekte=[];
+var tcWocheServices=[];
+var tcOpenId=null;     // id der aufgeklappten Zeile, 'new' für eine frische Zeile, oder null
+var tcNewDraft=null;   // Vorbelegung für eine neue Zeile ({datum, zielKind, zielId})
 var TC_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'Unfall',A:'Absenzen (Grund/Dauer)'};
+var TC_GEWERK=['Sanitär','Heizung','Klima','Lüftung','Divers'];
+var TC_SPESEN_DEFAULT=[15,30,35,45];
+var TC_WD=['So','Mo','Di','Mi','Do','Fr','Sa'];
 
 // ISO-Kalenderwoche aus einem Date-Objekt (spiegelt api/cockpit.js isoWeekJahr).
 function tcISOWeekOfDate(d){
@@ -9460,6 +9438,11 @@ function tcISOWeekMonday(jahr,woche){
   simple.setUTCDate(simple.getUTCDate()+1-dow);
   return simple;
 }
+function tcWkDatumShort(iso){
+  if(!iso) return '';
+  var d=new Date(iso+'T00:00:00Z');
+  return TC_WD[d.getUTCDay()]+' '+('0'+d.getUTCDate()).slice(-2)+'.'+('0'+(d.getUTCMonth()+1)).slice(-2)+'.';
+}
 function tcRenderRapporte(){
   if(!tcWocheState.jahr){ var now=tcISOWeekOfDate(new Date()); tcWocheState.jahr=now.jahr; tcWocheState.woche=now.woche; }
   tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
@@ -9468,79 +9451,201 @@ function tcWocheNav(delta){
   var mon=tcISOWeekMonday(tcWocheState.jahr,tcWocheState.woche);
   mon.setUTCDate(mon.getUTCDate()+delta*7);
   var wk=tcISOWeekOfDate(mon);
+  tcOpenId=null; tcNewDraft=null;
   tcLoadWoche(wk.jahr,wk.woche);
+}
+// Von "＋ Rapport buchen" auf einem Projekt/Service-Auftrag: springt in die aktuelle
+// Wochenansicht und öffnet dort direkt eine neue, vorbelegte Zeile.
+function tcGoWocheNeueZeile(kind,id){
+  tcState.view='rapporte'; tcNavActive('rapporte');
+  var now=tcISOWeekOfDate(new Date());
+  tcNewDraft={zielKind:kind,zielId:id};
+  tcOpenId='new';
+  tcLoadWoche(now.jahr,now.woche);
 }
 function tcLoadWoche(jahr,woche){
   tcWocheState.jahr=jahr; tcWocheState.woche=woche;
   tcH('<div class="tc-sec">Wochenrapport</div><div class="tc-empty">Lädt…</div>');
-  techApi('tech_wochen_rapport',{jahr:jahr,woche:woche}).then(function(d){
-    if(d&&d.notMigrated){ tcH('<div class="tc-sec">Wochenrapport</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
-    var kopf=(d&&d.kopf)||{jahr:jahr,woche:woche};
-    tcWocheZeilen=(d&&d.zeilen)||[];
-    var mon=tcISOWeekMonday(jahr,woche);
-    var nav='<div class="tc-wknav" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'+
-      '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(-1)">‹</button>'+
-      '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+'</div>'+
-      '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(1)">›</button></div>';
-    var rows=tcWocheZeilen.length?tcWocheZeilen.map(tcZeileItemHtml).join(''):'<div class="tc-empty">Noch keine Tageszeilen in dieser Woche.</div>';
-    var fuss='<div class="tc-card" style="margin-top:10px"><div class="tc-row"><span class="ti-m">Total Stunden</span><span class="ti-t" style="color:#C9A961">'+tcEsc(d.total_stunden||0)+' h</span></div>'+
-      '<div class="tc-row"><span class="ti-m">Total Spesen</span><span class="ti-t" style="color:#C9A961">CHF '+tcEsc((d.total_spesen||0).toFixed?d.total_spesen.toFixed(2):d.total_spesen)+'</span></div></div>';
-    tcH(nav+'<div class="tc-list">'+rows+'</div>'+fuss+'<div class="tc-btnrow" style="margin-top:10px"><button class="tc-btn gold" onclick="tcZeileForm(null)">＋ Zeile</button></div>');
+  Promise.all([
+    techApi('tech_wochen_rapport',{jahr:jahr,woche:woche}),
+    techApi('tech_projekte'),
+    techApi('svc_liste'),
+  ]).then(function(res){
+    var d=res[0]||{}, dp=res[1]||{}, ds=res[2]||{};
+    if(d.notMigrated){ tcH('<div class="tc-sec">Wochenrapport</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
+    tcWocheKopf=d.kopf||{jahr:jahr,woche:woche};
+    tcWocheZeilen=d.zeilen||[];
+    tcWocheTotals={stunden:d.total_stunden||0,spesen:d.total_spesen||0};
+    tcWocheProjekte=dp.projekte||[];
+    tcWocheServices=(ds.auftraege||[]).filter(function(s){return s.status==='angenommen';});
+    tcRenderWoche();
   }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
 }
-function tcZeileItemHtml(z){
-  var isAbw=!!z.abwesenheit;
-  var titel=isAbw?(TC_ABW_LABEL[z.abwesenheit]||z.abwesenheit):tcEsc(z.projekt_name||z.projektnummer||'Projekt');
-  var meta=isAbw?(z.abwesenheit_grund||'—'):[z.taetigkeit,(z.gesamtstunden!=null?z.gesamtstunden+' h':null),(z.spesen?('CHF '+z.spesen+' Spesen'):null)].filter(Boolean).join(' · ');
-  return '<div class="tc-item" onclick="tcZeileForm(\''+tcEsc(z.id)+'\')"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">'+
-    '<div><div class="ti-t">'+tcEsc(z.datum||'')+' · '+titel+'</div><div class="ti-m">'+tcEsc(meta||'—')+'</div></div>'+
-    (isAbw?'<span class="tc-st" style="background:rgba(255,210,74,0.18);color:#FFD24A">'+tcEsc(z.abwesenheit)+'</span>':'<span class="ti-t" style="color:#C9A961">'+tcEsc(z.gesamtstunden||0)+' h</span>')+
-    '</div></div>';
-}
-
-/* ── Tageszeilen-Editor: Arbeitstag (Projekt+Stunden+Material) ODER Abwesenheit ── */
-function tcZeileForm(id,prefillProjektId){
-  if(!tcWocheState.jahr){ var now=tcISOWeekOfDate(new Date()); tcWocheState.jahr=now.jahr; tcWocheState.woche=now.woche; }
-  var z=id?(tcWocheZeilen.filter(function(x){return x.id===id;})[0]||null):null;
-  if(!z&&prefillProjektId) z={projekt_id:prefillProjektId,datum:new Date().toISOString().slice(0,10)};
-  tcH('<div class="tc-empty">Lädt…</div>');
-  techApi('tech_projekte').then(function(d){
-    tcWocheProjekte=(d&&d.projekte)||[];
-    tcZeileRenderForm(z);
-  }).catch(function(){ tcWocheProjekte=[]; tcZeileRenderForm(z); });
-}
-function tcMatPrefillRows(z){
-  if(z&&Array.isArray(z.material_positionen)&&z.material_positionen.length) return z.material_positionen;
-  if(z&&Array.isArray(z.material)&&z.material.length){
-    return z.material.map(function(s){
-      var m=String(s).match(/^(\d+(?:[.,]\d+)?)\s*×\s*(.+)$/);
-      return m?{bezeichnung:m[2],menge:m[1]}:{bezeichnung:s,menge:null};
-    });
+function tcRenderWoche(){
+  var jahr=tcWocheState.jahr, woche=tcWocheState.woche, kopf=tcWocheKopf||{};
+  var nav='<div class="tc-wknav" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">'+
+    '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(-1)">‹</button>'+
+    '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+'</div>'+
+    '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(1)">›</button></div>';
+  var head='<div class="tc-wk-head"><span>Datum</span><span>Projekt/Auftrag</span><span>Gewerk</span><span>Zeit</span><span>Std</span><span>Spesen</span><span>Abw.</span><span></span></div>';
+  var rowsHtml=tcWocheZeilen.map(tcZeileRowHtml).join('');
+  var newRowHtml=(tcOpenId==='new')?tcZeileNewRowHtml():'';
+  var body=(tcWocheZeilen.length||newRowHtml)?('<div class="tc-wk">'+head+rowsHtml+newRowHtml+'</div>'):'<div class="tc-empty">Noch keine Tageszeilen in dieser Woche.</div>';
+  var fuss='<div class="tc-wk" style="margin-top:10px">'+
+    '<div class="tc-foottotal"><span class="lbl">Total Stunden</span><span class="val">'+tcEsc(tcWocheTotals.stunden||0)+' h</span></div>'+
+    '<div class="tc-foottotal"><span class="lbl">Total Spesen</span><span class="val">CHF '+tcEsc(Number(tcWocheTotals.spesen||0).toFixed(2))+'</span></div></div>';
+  var addBtn=(tcOpenId==='new')?'':'<div class="tc-btnrow" style="margin-top:10px"><button class="tc-btn gold" onclick="tcNeueZeile()">＋ Zeile</button></div>';
+  tcH(nav+body+fuss+addBtn);
+  if(tcOpenId && tcOpenId!=='new'){
+    var z=tcWocheZeilen.filter(function(x){return x.id===tcOpenId;})[0];
+    if(z&&!z.abwesenheit) tcLoadGallery(z.projekt_id?'projekt':'service', z.projekt_id||z.service_auftrag_id, z.id);
   }
-  return [];
 }
-function tcZeileRenderForm(z){
+function tcZeileRowHtml(z){
+  var isAbw=!!z.abwesenheit;
+  var isOpen=(tcOpenId===z.id);
+  var zielName=isAbw?(TC_ABW_LABEL[z.abwesenheit]||z.abwesenheit):(z.projekt_name||z.service_objekt||z.projektnummer||'—');
+  var zeit=(!isAbw&&z.start_zeit&&z.end_zeit)?(z.start_zeit+'–'+z.end_zeit):'';
+  var spesenTxt=(!isAbw&&z.spesen)?('CHF '+Number(z.spesen).toFixed(2)):'–';
+  var sum='<div class="tc-wk-sum" onclick="tcZeileToggle(\''+tcEsc(z.id)+'\')">'+
+    '<span class="wc-datum">'+tcEsc(tcWkDatumShort(z.datum))+'</span>'+
+    '<span class="wc-ziel">'+tcEsc(zielName)+'</span>'+
+    '<span class="wc-car">'+(isOpen?'▲':'▾')+'</span>'+
+    '<span class="wc-taet">'+tcEsc(isAbw?(z.abwesenheit_grund||''):(z.taetigkeit||'—'))+'</span>'+
+    '<span class="wc-zeit">'+tcEsc(zeit)+'</span>'+
+    '<span class="wc-std">'+(isAbw?'–':(tcEsc(z.gesamtstunden||0)+' h'))+'</span>'+
+    '<span class="wc-spesen">'+tcEsc(spesenTxt)+'</span>'+
+    '<span class="wc-abw">'+(isAbw?tcEsc(z.abwesenheit):'–')+'</span>'+
+  '</div>';
+  var edit=isOpen?('<div class="tc-wk-edit">'+tcZeileEditHtml(z)+'</div>'):'';
+  return '<div class="tc-wk-row'+(isOpen?' open':'')+'">'+sum+edit+'</div>';
+}
+function tcZeileNewRowHtml(){
+  if(!tcNewDraft) tcNewDraft={};
+  if(!tcNewDraft.datum) tcNewDraft.datum=tcDefaultNeueZeileDatum();
+  return '<div class="tc-wk-row open"><div class="tc-wk-edit tc-wk-new">'+tcZeileEditHtml(null)+'</div></div>';
+}
+function tcDefaultNeueZeileDatum(){
+  var today=new Date().toISOString().slice(0,10);
+  var wk=tcISOWeekOfDate(new Date());
+  if(wk.jahr===tcWocheState.jahr&&wk.woche===tcWocheState.woche) return today;
+  return tcISOWeekMonday(tcWocheState.jahr,tcWocheState.woche).toISOString().slice(0,10);
+}
+function tcZeileToggle(id){
+  tcOpenId=(tcOpenId===id)?null:id;
+  tcRenderWoche();
+}
+function tcNeueZeile(){
+  tcNewDraft={datum:tcDefaultNeueZeileDatum()};
+  tcOpenId='new';
+  tcRenderWoche();
+}
+function tcZeileCancel(){
+  if(tcOpenId==='new') tcNewDraft=null;
+  tcOpenId=null;
+  tcRenderWoche();
+}
+function tcZielOptions(z){
+  var curKind=z?(z.projekt_id?'p':(z.service_auftrag_id?'s':null)):((tcNewDraft&&tcNewDraft.zielKind==='service')?'s':((tcNewDraft&&tcNewDraft.zielKind==='projekt')?'p':null));
+  var curId=z?(z.projekt_id||z.service_auftrag_id):(tcNewDraft&&tcNewDraft.zielId);
+  var pOpts=tcWocheProjekte.map(function(p){
+    var sel=(curKind==='p'&&curId===p.id)?' selected':'';
+    return '<option value="p:'+tcEsc(p.id)+'"'+sel+'>'+tcEsc(p.name||'Projekt')+(p.projektnummer?(' · '+tcEsc(p.projektnummer)):'')+'</option>';
+  }).join('');
+  var sOpts=tcWocheServices.map(function(s){
+    var sel=(curKind==='s'&&curId===s.id)?' selected':'';
+    return '<option value="s:'+tcEsc(s.id)+'"'+sel+'>'+tcEsc(s.objekt||'Service-Auftrag')+'</option>';
+  }).join('');
+  var html='<option value="">– auswählen –</option>';
+  if(pOpts) html+='<optgroup label="Projekte">'+pOpts+'</optgroup>';
+  if(sOpts) html+='<optgroup label="Service-Aufträge">'+sOpts+'</optgroup>';
+  return html;
+}
+function tcGewerkChipsHtml(z){
+  var cur=z?z.taetigkeit:null;
+  return TC_GEWERK.map(function(g){
+    return '<div class="tc-chip'+(cur===g?' sel':'')+'" data-gewerk="'+tcEsc(g)+'" onclick="tcGewerkPick(this)">'+tcEsc(g)+'</div>';
+  }).join('');
+}
+function tcGewerkPick(el){
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var h=document.getElementById('tc-z-gewerk'); if(h) h.value=el.getAttribute('data-gewerk');
+}
+function tcSpesenSaetzeFor(zielVal){
+  if(zielVal&&zielVal.indexOf('p:')===0){
+    var pid=zielVal.slice(2);
+    var p=tcWocheProjekte.filter(function(x){return x.id===pid;})[0];
+    if(p&&p.spesenreglement&&Array.isArray(p.spesenreglement.saetze)&&p.spesenreglement.saetze.length) return p.spesenreglement.saetze;
+  }
+  return TC_SPESEN_DEFAULT;
+}
+function tcSpesenChipsHtml(saetze,cur){
+  return saetze.map(function(v){
+    return '<div class="tc-chip tc-chip-sm'+(cur!==''&&Number(cur)===Number(v)?' sel':'')+'" data-v="'+v+'" onclick="tcSpesenPick(this)">CHF '+v+'</div>';
+  }).join('');
+}
+function tcSpesenPick(el){
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var inp=document.getElementById('tc-z-spesen'); if(inp) inp.value=el.getAttribute('data-v');
+}
+function tcZielChange(){
+  var sel=document.getElementById('tc-z-ziel'); if(!sel) return;
+  var saetze=tcSpesenSaetzeFor(sel.value);
+  var box=document.getElementById('tc-z-spesen-chips'); if(box) box.innerHTML=tcSpesenChipsHtml(saetze,(document.getElementById('tc-z-spesen')||{}).value||'');
+}
+/* ── Diktieren "Ausgeführte Arbeiten": gleicher Web-Speech-Stack wie die Material-
+   Diktierfunktion (tmVoiceDictate), aber ohne BOB-Zwischenschritt — Text landet
+   direkt im Feld, fürs Tempo beim Wochenrapport. ── */
+var tcArbRec=null,tcArbRecOn=false,tcArbStop=false,tcArbRestartT=null;
+function tcArbDictate(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var btn=document.getElementById('tc-z-arb-mic');
+  if(!SR){ tcToast('Spracherkennung wird nicht unterstützt – bitte tippen'); return; }
+  if(tcArbRecOn){ tcArbStop=true; if(tcArbRec){ try{tcArbRec.stop();}catch(e){} } return; }
+  tcArbStop=false;
+  tcArbRec=new SR(); tcArbRec.lang='de-CH'; tcArbRec.interimResults=false; tcArbRec.continuous=true;
+  tcArbRec.onresult=function(e){
+    var t=''; for(var i=e.resultIndex;i<e.results.length;i++){ t+=e.results[i][0].transcript; }
+    t=t.trim(); if(!t) return;
+    var ta=document.getElementById('tc-z-arb'); if(ta) ta.value=(ta.value?ta.value+'\n':'')+t;
+  };
+  tcArbRec.onerror=function(ev){ if(ev&&(ev.error==='not-allowed'||ev.error==='service-not-allowed'||ev.error==='audio-capture')) tcArbStop=true; };
+  tcArbRec.onend=function(){
+    if(tcArbStop){ tcArbRecOn=false; if(tcArbRestartT){clearTimeout(tcArbRestartT);tcArbRestartT=null;} if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';} return; }
+    tcArbRestartT=setTimeout(function(){
+      if(tcArbStop) return;
+      try{ tcArbRec.start(); }catch(e){ tcArbRestartT=setTimeout(function(){ if(tcArbStop) return; try{tcArbRec.start();}catch(_){ tcArbRecOn=false; if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';} } },300); }
+    },120);
+  };
+  try{ tcArbRec.start(); tcArbRecOn=true; if(btn){btn.classList.add('rec');btn.textContent='⏺️ Stop';} }
+  catch(e){ tcArbRecOn=false; if(btn){btn.classList.remove('rec');btn.textContent='🎙️ Diktieren';} }
+}
+/* ── Zeilen-Editor: Arbeitstag (Projekt ODER Service-Auftrag + Gewerk + Zeit +
+   Spesen + Arbeiten + Fotos) ODER Abwesenheit. z===null → neue Zeile. ── */
+function tcZeileEditHtml(z){
   var today=new Date().toISOString().slice(0,10);
   var isEdit=!!(z&&z.id);
   var isAbw=!!(z&&z.abwesenheit);
-  var projOpts=tcWocheProjekte.map(function(p){ return '<option value="'+tcEsc(p.id)+'"'+((z&&z.projekt_id===p.id)?' selected':'')+'>'+tcEsc(p.name||'Projekt')+(p.projektnummer?(' · '+tcEsc(p.projektnummer)):'')+'</option>'; }).join('');
+  var datumVal=isEdit?z.datum:((tcNewDraft&&tcNewDraft.datum)||today);
   var abwChips=Object.keys(TC_ABW_LABEL).map(function(k){ return '<div class="tc-chip'+((z&&z.abwesenheit===k)?' sel':'')+'" data-abw="'+k+'" onclick="tcZeileAbwPick(this)">'+k+' · '+tcEsc(TC_ABW_LABEL[k])+'</div>'; }).join('');
-  var matRows=tcMatPrefillRows(z).map(function(p){ return '<div class="tc-row tc-mat-row-html" data-bez="'+tcEsc(p.bezeichnung)+'" data-menge="'+(p.menge!=null?tcEsc(p.menge):'')+'"></div>'; }).join('');
-  var matChips=TC_MAT_PRESETS.map(function(m){ return '<div class="tc-chip" onclick="tcMatAddRow(\''+tcEsc(m).replace(/'/g,"\\'")+'\',1)">'+tcEsc(m)+'</div>'; }).join('');
+  var curZielVal=isEdit?(z.projekt_id?('p:'+z.projekt_id):(z.service_auftrag_id?('s:'+z.service_auftrag_id):'')):(((tcNewDraft&&tcNewDraft.zielKind&&tcNewDraft.zielId))?((tcNewDraft.zielKind==='service'?'s:':'p:')+tcNewDraft.zielId):'');
+  var saetze=tcSpesenSaetzeFor(curZielVal);
+  var curSpesen=isEdit?(z.spesen||''):'';
   var photoSection=isEdit&&!isAbw?(
     '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📷 Fotos zu diesem Tag</span></div>'+
-    '<div class="tc-lbl">Stockwerk *</div><div class="tc-chips" data-g="sw">'+TC_SW_PRESETS.map(function(s){ return '<div class="tc-chip" data-val="'+tcEsc(s)+'" onclick="tcPickChip(this,\'sw\')">'+tcEsc(s)+'</div>'; }).join('')+'</div>'+
+    '<div class="tc-lbl">Stockwerk'+(z.projekt_id?' *':' (optional)')+'</div><div class="tc-chips" data-g="sw">'+TC_SW_PRESETS.map(function(s){ return '<div class="tc-chip" data-val="'+tcEsc(s)+'" onclick="tcPickChip(this,\'sw\')">'+tcEsc(s)+'</div>'; }).join('')+'</div>'+
     '<input class="tc-field" id="tc-m-swfree" placeholder="… oder frei eintippen" style="margin-top:7px"/>'+
     '<input type="hidden" id="tc-m-sw-val"/><input type="hidden" id="tc-m-raum-val"/>'+
-    '<div class="tc-btnrow" style="margin-top:8px"><button type="button" class="tc-btn gold" onclick="tcMediaPick(\'projekt\',\''+tcEsc(z.projekt_id)+'\',\''+tcEsc(z.id)+'\')">📷 Foto/Video aufnehmen</button></div>'+
+    '<div class="tc-btnrow" style="margin-top:8px"><button type="button" class="tc-btn gold" onclick="tcMediaPick(\''+(z.projekt_id?'projekt':'service')+'\',\''+tcEsc(z.projekt_id||z.service_auftrag_id)+'\',\''+tcEsc(z.id)+'\')">📷 Foto/Video aufnehmen</button></div>'+
     '<div id="tc-gal-slot" style="margin-top:8px"></div></div>'
   ):(isAbw?'':'<div class="tc-hint">Fotos: nach dem Speichern hier verfügbar.</div>');
-  tcH('<button class="tc-back" onclick="tcLoadWoche(tcWocheState.jahr,tcWocheState.woche)">‹ Woche</button>'+
-    '<div class="tc-sec">'+(isEdit?'Zeile bearbeiten':'Neue Zeile')+'</div>'+
+  return (
     '<div class="tc-card">'+
       '<div class="tc-card-head"><span class="tc-card-tit">📅 Datum</span></div>'+
-      '<input type="date" class="tc-field" style="margin-top:8px" id="tc-z-datum" value="'+tcEsc((z&&z.datum)||today)+'" max="'+today+'"/>'+
-      '<div class="tc-hint" style="margin-top:6px">Datum frei wählbar — auch rückwirkend (z. B. KW29 nachtragen).</div>'+
+      '<input type="date" class="tc-field" style="margin-top:8px" id="tc-z-datum" value="'+tcEsc(datumVal)+'" max="'+today+'"/>'+
+      '<div class="tc-hint" style="margin-top:6px">Datum frei wählbar — auch rückwirkend.</div>'+
     '</div>'+
     '<div class="tc-card">'+
       '<div class="tc-card-head"><span class="tc-card-tit">Art des Tages</span></div>'+
@@ -9550,9 +9655,13 @@ function tcZeileRenderForm(z){
       '</div><input type="hidden" id="tc-z-mode" value="'+(isAbw?'abwesenheit':'arbeit')+'"/>'+
     '</div>'+
     '<div id="tc-z-arbeit-block" style="display:'+(isAbw?'none':'block')+'">'+
-      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🏗️ Projekt &amp; Tätigkeit</span></div>'+
-        '<select class="tc-field" style="margin-top:8px" id="tc-z-projekt">'+(tcWocheProjekte.length?projOpts:'<option value="">Keine Projekte zugewiesen</option>')+'</select>'+
-        '<input class="tc-field" style="margin-top:8px" id="tc-z-taet" placeholder="Tätigkeit / Gewerk (z. B. Sanitär)" value="'+tcEsc((z&&z.taetigkeit)||'')+'"/>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🏗️ Projekt / Service-Auftrag</span></div>'+
+        '<select class="tc-field" style="margin-top:8px" id="tc-z-ziel" onchange="tcZielChange()">'+tcZielOptions(z)+'</select>'+
+        (!tcWocheProjekte.length&&!tcWocheServices.length?'<div class="tc-hint">Dir sind aktuell keine Projekte/Aufträge zugewiesen.</div>':'')+
+      '</div>'+
+      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🔧 Gewerk</span></div>'+
+        '<div class="tc-chips" style="margin-top:8px" id="tc-z-gewerk-chips">'+tcGewerkChipsHtml(z)+'</div>'+
+        '<input type="hidden" id="tc-z-gewerk" value="'+tcEsc((z&&z.taetigkeit)||'')+'"/>'+
       '</div>'+
       '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">⏱️ Zeit</span></div>'+
         '<div style="display:flex;gap:10px;margin-top:8px">'+
@@ -9562,15 +9671,12 @@ function tcZeileRenderForm(z){
         '</div><div class="tc-hint" style="margin-top:6px">Start+Ende ODER Stunden direkt — eines reicht.</div>'+
       '</div>'+
       '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">💰 Verpflegung/Spesen CHF</span></div>'+
-        '<input type="number" step="0.05" min="0" class="tc-field" style="margin-top:8px" id="tc-z-spesen" value="'+tcEsc((z&&z.spesen)||'')+'" placeholder="0.00"/>'+
-      '</div>'+
-      '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📦 Material</span></div>'+
-        '<div class="tc-chips" style="margin-top:8px">'+matChips+'</div>'+
-        '<div id="tc-mat-list" style="margin-top:2px">'+matRows+'</div>'+
-        '<button type="button" class="tc-add" onclick="tcMatAddRow(\'\',1)">＋ Position</button>'+
+        '<div class="tc-chips" style="margin-top:8px" id="tc-z-spesen-chips">'+tcSpesenChipsHtml(saetze,curSpesen)+'</div>'+
+        '<input type="number" step="0.05" min="0" class="tc-field" style="margin-top:8px" id="tc-z-spesen" value="'+tcEsc(curSpesen)+'" placeholder="Individueller Betrag"/>'+
       '</div>'+
       '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">🛠️ Ausgeführte Arbeiten</span></div>'+
-        '<textarea class="tc-field" style="margin-top:8px" id="tc-z-arb" placeholder="Steigzone montiert&#10;Radiatoren angeschlossen">'+tcEsc((z&&(z.arbeiten||[]).join('\n'))||'')+'</textarea>'+
+        '<div class="tc-dictrow"><textarea class="tc-field" id="tc-z-arb" placeholder="Steigzone montiert, Radiatoren angeschlossen…">'+tcEsc((z&&(z.arbeiten||[]).join('\n'))||'')+'</textarea>'+
+        '<button type="button" class="tc-mic" id="tc-z-arb-mic" onclick="tcArbDictate()">🎙️ Diktieren</button></div>'+
       '</div>'+
       '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div>'+
         '<textarea class="tc-field" style="margin-top:8px" id="tc-z-notiz" placeholder="Besonderheiten…">'+tcEsc((z&&z.besonderheiten)||'')+'</textarea>'+
@@ -9586,13 +9692,10 @@ function tcZeileRenderForm(z){
         '<textarea class="tc-field" style="margin-top:8px" id="tc-z-abwgrund" placeholder="z. B. Krankheit, 2 Tage">'+tcEsc((z&&z.abwesenheit_grund)||'')+'</textarea>'+
       '</div>'+
     '</div>'+
-    '<div class="tc-btnrow"><button class="tc-btn gold" id="tc-z-save" onclick="tcZeileSave('+(isEdit?('\''+tcEsc(z.id)+'\''):'null')+')">Speichern</button></div>'+
-    (isEdit?'<div class="tc-btnrow"><button class="tc-btn ghost" onclick="tcZeileDel(\''+tcEsc(z.id)+'\')">🗑️ Zeile löschen</button></div>':''));
-  // Material-Zeilen, die als Platzhalter-Divs gerendert wurden, jetzt als echte Reihen einfügen
-  // (tcMatAddRow baut DOM direkt, daher erst NACH tcH() aufrufen statt in den String zu weben).
-  var placeholders=document.querySelectorAll('#tc-mat-list .tc-mat-row-html');
-  Array.prototype.forEach.call(placeholders,function(ph){ tcMatAddRow(ph.getAttribute('data-bez'),ph.getAttribute('data-menge')||null); ph.parentNode.removeChild(ph); });
-  if(isEdit&&!isAbw) tcLoadGallery('projekt',z.projekt_id,z.id);
+    '<div class="tc-btnrow"><button class="tc-btn gold" id="tc-z-save" onclick="tcZeileSave('+(isEdit?('\''+tcEsc(z.id)+'\''):'null')+')">Speichern</button>'+
+      '<button class="tc-btn ghost" onclick="tcZeileCancel()">Abbrechen</button></div>'+
+    (isEdit?'<div class="tc-btnrow"><button class="tc-btn ghost" onclick="tcZeileDel(\''+tcEsc(z.id)+'\')">🗑️ Zeile löschen</button></div>':'')
+  );
 }
 function tcZeileModePick(el){
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-zmode'),function(x){x.classList.remove('sel');});
@@ -9629,15 +9732,15 @@ function tcZeileSave(existingId){
     body.abwesenheit=abw;
     body.abwesenheit_grund=(document.getElementById('tc-z-abwgrund')||{}).value||'';
   } else {
-    var projId=(document.getElementById('tc-z-projekt')||{}).value;
-    if(!projId){ tcToast('Bitte Projekt wählen'); return; }
-    body.projekt_id=projId;
-    body.taetigkeit=(document.getElementById('tc-z-taet')||{}).value||'';
+    var zielVal=(document.getElementById('tc-z-ziel')||{}).value||'';
+    if(!zielVal){ tcToast('Bitte Projekt oder Service-Auftrag wählen'); return; }
+    if(zielVal.indexOf('s:')===0) body.service_auftrag_id=zielVal.slice(2);
+    else body.projekt_id=zielVal.slice(2);
+    body.taetigkeit=(document.getElementById('tc-z-gewerk')||{}).value||'';
     body.start_zeit=(document.getElementById('tc-z-start')||{}).value||'';
     body.end_zeit=(document.getElementById('tc-z-end')||{}).value||'';
     body.stunden=(document.getElementById('tc-z-std')||{}).value||'';
     body.spesen=(document.getElementById('tc-z-spesen')||{}).value||0;
-    var mat=tcMatCollect(); body.material=mat.strings; body.material_positionen=mat.positionen;
     body.arbeiten=tcLines((document.getElementById('tc-z-arb')||{}).value);
     body.notiz=(document.getElementById('tc-z-notiz')||{}).value||'';
   }
@@ -9648,9 +9751,12 @@ function tcZeileSave(existingId){
     tcToast('Gespeichert');
     var savedId=d.row&&d.row.id;
     var wk=tcISOWeekOfDate(new Date(datum+'T00:00:00Z'));
+    tcNewDraft=null;
     techApi('tech_wochen_rapport',{jahr:wk.jahr,woche:wk.woche}).then(function(dd){
-      tcWocheZeilen=(dd&&dd.zeilen)||[]; tcWocheState.jahr=wk.jahr; tcWocheState.woche=wk.woche;
-      if(savedId) tcZeileForm(savedId); else tcLoadWoche(wk.jahr,wk.woche);
+      tcWocheZeilen=(dd&&dd.zeilen)||[]; tcWocheTotals={stunden:(dd&&dd.total_stunden)||0,spesen:(dd&&dd.total_spesen)||0};
+      tcWocheState.jahr=wk.jahr; tcWocheState.woche=wk.woche;
+      tcOpenId=savedId||null;
+      tcRenderWoche();
     });
   }).catch(function(){ if(b){b.disabled=false;b.textContent='Speichern';} tcToast('Verbindungsfehler'); });
 }
@@ -9658,7 +9764,8 @@ function tcZeileDel(id){
   if(!confirm('Diese Zeile wirklich löschen?')) return;
   techApi('tech_tag_del',{id:id}).then(function(d){
     if(d&&d.error){ tcToast(d.error); return; }
-    tcToast('Zeile gelöscht'); tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+    tcToast('Zeile gelöscht'); tcOpenId=null;
+    tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
   }).catch(function(){ tcToast('Verbindungsfehler'); });
 }
 function tcRenderProfil(){

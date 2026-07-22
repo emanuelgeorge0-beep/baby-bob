@@ -309,6 +309,13 @@
 
   .cc-sec{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:700;margin:6px 2px 11px;display:flex;align-items:center;gap:8px;}
   .cc-sec::after{content:'';flex:1;height:1px;background:var(--line);}
+  .wr-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:13px;background:var(--card);}
+  .wr-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+  .wr-table th{text-align:left;font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);font-weight:700;padding:9px 12px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line);}
+  .wr-table td{padding:9px 12px;border-bottom:1px solid var(--line);color:var(--txt);}
+  .wr-table tr:last-child td{border-bottom:none;}
+  .wr-table td.wr-arb{white-space:normal;max-width:260px;color:var(--muted);}
+  .wr-table td.wr-num{text-align:right;color:var(--gold);font-weight:700;}
   .cc-sys{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
   .sysrow{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:11px 14px;}
   .sysrow .sd{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
@@ -2113,22 +2120,26 @@ function openWochenrapport(id){
         (k.hauptprojekt_name?(' · Hauptprojekt: '+esc(k.hauptprojekt_name)):'')+'</div>';
     var totals='<div class="cc-sec">Total</div><div class="lcard"><div class="top"><div class="nm">'+Number(d.total_stunden||0).toFixed(1)+' h</div>'+
       '<div class="nm">CHF '+Number(d.total_spesen||0).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</div></div></div>';
-    var zeilenHtml=zeilen.length?zeilen.map(function(z){
-      var isAbw=!!z.abwesenheit;
-      var titel=isAbw?(WR_ABW_LABEL[z.abwesenheit]||z.abwesenheit):esc(z.projekt_name||z.projektnummer||'Projekt');
-      var meta=isAbw?(z.abwesenheit_grund||''):[z.taetigkeit,(z.start_zeit&&z.end_zeit?(z.start_zeit+'–'+z.end_zeit):null),(z.gesamtstunden!=null?Number(z.gesamtstunden).toFixed(2)+' h':null),(z.spesen?('CHF '+Number(z.spesen).toFixed(2)+' Spesen'):null)].filter(Boolean).join(' · ');
-      var mat=(Array.isArray(z.material_positionen)&&z.material_positionen.length)
-        ? z.material_positionen.map(function(p){return (p.menge!=null?p.menge+'× ':'')+p.bezeichnung;}).join(', ')
-        : ((Array.isArray(z.material)&&z.material.length)?z.material.join(', '):'');
-      var arb=Array.isArray(z.arbeiten)?z.arbeiten.join(' · '):'';
-      return '<div class="lcard"><div class="top"><div class="nm" style="font-size:13.5px">'+deDate(z.datum)+' · '+titel+'</div>'+
-        (isAbw?pmPill(z.abwesenheit,'var(--gold)'):'')+'</div>'+
-        (meta?'<div class="meta"><span>'+esc(meta)+'</span></div>':'')+
-        (arb?'<div class="meta" style="margin-top:2px"><span>'+esc(arb.slice(0,160))+'</span></div>':'')+
-        (mat?'<div class="meta" style="margin-top:2px"><span style="color:var(--gold)">📦 '+esc(mat.slice(0,160))+'</span></div>':'')+
-        '</div>';
-    }).join(''):'<div class="empty">Keine Tageszeilen.</div>';
-    var zeilenSec='<div class="cc-sec">Tageszeilen ('+zeilen.length+')</div><div class="list">'+zeilenHtml+'</div>';
+    var zeilenHtml=zeilen.length?(
+      '<div class="wr-table-wrap"><table class="wr-table"><thead><tr>'+
+      '<th>Datum</th><th>Projekt/Auftrag</th><th>Gewerk</th><th>Zeit</th><th>Std</th><th>Spesen</th><th>Abw.</th><th>Ausgeführte Arbeiten</th>'+
+      '</tr></thead><tbody>'+zeilen.map(function(z){
+        var isAbw=!!z.abwesenheit;
+        var ziel=isAbw?(WR_ABW_LABEL[z.abwesenheit]||z.abwesenheit):esc(z.projekt_name||z.service_objekt||z.projektnummer||'—');
+        var zeit=(!isAbw&&z.start_zeit&&z.end_zeit)?(z.start_zeit+'–'+z.end_zeit):'—';
+        var arb=isAbw?(z.abwesenheit_grund||''):(Array.isArray(z.arbeiten)?z.arbeiten.join(' · '):'');
+        return '<tr><td>'+deDate(z.datum)+'</td>'+
+          '<td>'+ziel+'</td>'+
+          '<td>'+esc(isAbw?'—':(z.taetigkeit||'—'))+'</td>'+
+          '<td>'+esc(zeit)+'</td>'+
+          '<td class="wr-num">'+(isAbw?'—':Number(z.gesamtstunden||0).toFixed(2)+' h')+'</td>'+
+          '<td class="wr-num">'+(!isAbw&&z.spesen?('CHF '+Number(z.spesen).toFixed(2)):'—')+'</td>'+
+          '<td>'+(isAbw?pmPill(z.abwesenheit,'var(--gold)'):'—')+'</td>'+
+          '<td class="wr-arb">'+esc(arb.slice(0,220))+'</td>'+
+        '</tr>';
+      }).join('')+'</tbody></table></div>'
+    ):'<div class="empty">Keine Tageszeilen.</div>';
+    var zeilenSec='<div class="cc-sec">Tageszeilen ('+zeilen.length+')</div>'+zeilenHtml;
     var medienHtml=medien.length?('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px">'+medien.map(function(m){
       var cell=(m.medientyp==='video')
         ? '<video src="'+esc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+esc(m.thumbnail_url)+'"'):'')+' controls preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>'
