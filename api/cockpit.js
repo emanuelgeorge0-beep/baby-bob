@@ -2383,6 +2383,10 @@ async function saveTechTag(b, scope) {
     datum,
     wochenrapport_id: wr ? wr.id : null,
     gesamtstunden: stunden != null ? stunden : 0,
+    // Überzeit getrennt nach Zuschlag (25/50/100%) — Normalstunden bleiben in gesamtstunden.
+    ueberzeit_25: (b.uz25 != null && b.uz25 !== '') ? num(b.uz25) : 0,
+    ueberzeit_50: (b.uz50 != null && b.uz50 !== '') ? num(b.uz50) : 0,
+    ueberzeit_100: (b.uz100 != null && b.uz100 !== '') ? num(b.uz100) : 0,
     start_zeit, end_zeit,
     taetigkeit: GEWERK_OPTIONS.has(b.taetigkeit) ? b.taetigkeit : null,
     spesen: (b.spesen != null && b.spesen !== '') ? num(b.spesen) : 0,
@@ -2409,7 +2413,7 @@ async function saveTechTag(b, scope) {
       if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
         return { error: 'Für diesen Tag/Projekt existiert bereits eine andere Zeile.' };
       }
-      if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht migriert – scripts/wochenrapport_migration.sql ausführen.' };
+      if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht vollständig migriert – scripts/wochenrapport_migration.sql und scripts/wochenrapport_ueberzeit.sql ausführen.' };
       throw e;
     }
   }
@@ -2432,7 +2436,7 @@ async function saveTechTag(b, scope) {
       }
       return { error: 'Für diesen Tag existiert bereits ein Rapport.' };
     }
-    if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht migriert – scripts/wochenrapport_migration.sql ausführen.' };
+    if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht vollständig migriert – scripts/wochenrapport_migration.sql und scripts/wochenrapport_ueberzeit.sql ausführen.' };
     throw e;
   }
 }
@@ -2454,21 +2458,36 @@ async function getTechWochenRapport(b, scope) {
   const wrRows = await sbGet(
     `gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=*&limit=1`,
   ).catch((e) => { if (isNoTable(e)) return null; throw e; });
-  if (wrRows === null) return { notMigrated: true, kopf: { jahr, woche }, zeilen: [], total_stunden: 0, total_spesen: 0 };
+  if (wrRows === null) {
+    return {
+      notMigrated: true, kopf: { jahr, woche }, zeilen: [],
+      total_stunden: 0, total_uz25: 0, total_uz50: 0, total_uz100: 0, total_spesen: 0,
+    };
+  }
   const kopf = (wrRows && wrRows[0]) || null;
   let zeilen = [];
   if (kopf) {
     zeilen = await sbGet(
       `gs_tagesrapporte?wochenrapport_id=eq.${kopf.id}&techniker_user_id=eq.${scope.technikerUserId}` +
-      `&select=id,datum,projekt_id,service_auftrag_id,taetigkeit,start_zeit,end_zeit,gesamtstunden,spesen,` +
+      `&select=id,datum,projekt_id,service_auftrag_id,taetigkeit,start_zeit,end_zeit,gesamtstunden,` +
+      `ueberzeit_25,ueberzeit_50,ueberzeit_100,spesen,` +
       `abwesenheit,abwesenheit_grund,material,material_positionen,arbeiten,besonderheiten,status&order=datum.asc`,
     ).catch(() => []);
   }
   const projektIds = [...new Set([...zeilen.map((z) => z.projekt_id), kopf && kopf.hauptprojekt_id].filter(Boolean))];
   let projMap = {};
   if (projektIds.length) {
-    const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer,standort`).catch(() => []);
+    const pr = await sbGet(`gs_projekte?id=in.(${projektIds.join(',')})&select=id,name,projektnummer,standort,kunde_id`).catch(() => []);
     for (const p of pr) projMap[p.id] = p;
+  }
+  // Kunde/Firma fürs Kopf-Anzeige-Feld (Hauptprojekt → gs_kunden.firma) — Parität mit Master-Ansicht.
+  let hauptKundeName = null;
+  const hauptKundeId = kopf && kopf.hauptprojekt_id && (projMap[kopf.hauptprojekt_id] || {}).kunde_id;
+  if (hauptKundeId) {
+    try {
+      const kd = await sbGet(`gs_kunden?id=eq.${hauptKundeId}&select=firma&limit=1`);
+      if (kd && kd[0]) hauptKundeName = kd[0].firma;
+    } catch (_) { /* egal */ }
   }
   const serviceIds = [...new Set(zeilen.map((z) => z.service_auftrag_id).filter(Boolean))];
   let svcMap = {};
@@ -2482,13 +2501,19 @@ async function getTechWochenRapport(b, scope) {
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
   }));
-  const total_stunden = zeilen.reduce((s, z) => s + Number(z.gesamtstunden || 0), 0);
-  const total_spesen = zeilen.reduce((s, z) => s + Number(z.spesen || 0), 0);
+  const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {
-    kopf: kopf ? { ...kopf, hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null } : { jahr, woche },
+    kopf: kopf ? {
+      ...kopf,
+      hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null,
+      hauptkunde_name: hauptKundeName,
+    } : { jahr, woche },
     zeilen: zeilenOut,
-    total_stunden: Math.round(total_stunden * 100) / 100,
-    total_spesen: Math.round(total_spesen * 100) / 100,
+    total_stunden: sum('gesamtstunden'),
+    total_uz25: sum('ueberzeit_25'),
+    total_uz50: sum('ueberzeit_50'),
+    total_uz100: sum('ueberzeit_100'),
+    total_spesen: sum('spesen'),
   };
 }
 
@@ -2579,14 +2604,16 @@ async function pmWochenrapport(b) {
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
   }));
-  const total_stunden = zeilen.reduce((s, z) => s + Number(z.gesamtstunden || 0), 0);
-  const total_spesen = zeilen.reduce((s, z) => s + Number(z.spesen || 0), 0);
+  const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {
     kopf: { ...kopf, techniker_name: technikerName, hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null, hauptkunde_name: hauptKundeName },
     zeilen: zeilenOut,
     medien,
-    total_stunden: Math.round(total_stunden * 100) / 100,
-    total_spesen: Math.round(total_spesen * 100) / 100,
+    total_stunden: sum('gesamtstunden'),
+    total_uz25: sum('ueberzeit_25'),
+    total_uz50: sum('ueberzeit_50'),
+    total_uz100: sum('ueberzeit_100'),
+    total_spesen: sum('spesen'),
   };
 }
 

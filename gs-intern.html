@@ -2118,21 +2118,24 @@ function openWochenrapport(id){
       '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(k.rapport_nr||'—')+
         (k.hauptkunde_name?(' · '+esc(k.hauptkunde_name)):'')+
         (k.hauptprojekt_name?(' · Hauptprojekt: '+esc(k.hauptprojekt_name)):'')+'</div>';
-    var totals='<div class="cc-sec">Total</div><div class="lcard"><div class="top"><div class="nm">'+Number(d.total_stunden||0).toFixed(1)+' h</div>'+
-      '<div class="nm">CHF '+Number(d.total_spesen||0).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</div></div></div>';
+    var totals='<div class="cc-sec">Total</div><div class="lcard"><div class="top">'+
+      '<div class="nm">'+Number(d.total_stunden||0).toFixed(2)+' h normal</div>'+
+      '<div class="nm">CHF '+Number(d.total_spesen||0).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</div></div>'+
+      '<div class="meta"><span>ÜZ 25%: '+Number(d.total_uz25||0).toFixed(2)+' h</span><span class="dot">ÜZ 50%: '+Number(d.total_uz50||0).toFixed(2)+' h</span><span class="dot">ÜZ 100%: '+Number(d.total_uz100||0).toFixed(2)+' h</span></div></div>';
     var zeilenHtml=zeilen.length?(
       '<div class="wr-table-wrap"><table class="wr-table"><thead><tr>'+
-      '<th>Datum</th><th>Projekt/Auftrag</th><th>Gewerk</th><th>Zeit</th><th>Std</th><th>Spesen</th><th>Abw.</th><th>Ausgeführte Arbeiten</th>'+
+      '<th>Datum</th><th>Projekt/Auftrag</th><th>Gewerk</th><th>Std</th><th>ÜZ25%</th><th>ÜZ50%</th><th>ÜZ100%</th><th>Spesen</th><th>Abw.</th><th>Ausgeführte Arbeiten</th>'+
       '</tr></thead><tbody>'+zeilen.map(function(z){
         var isAbw=!!z.abwesenheit;
         var ziel=isAbw?(WR_ABW_LABEL[z.abwesenheit]||z.abwesenheit):esc(z.projekt_name||z.service_objekt||z.projektnummer||'—');
-        var zeit=(!isAbw&&z.start_zeit&&z.end_zeit)?(z.start_zeit+'–'+z.end_zeit):'—';
         var arb=isAbw?(z.abwesenheit_grund||''):(Array.isArray(z.arbeiten)?z.arbeiten.join(' · '):'');
         return '<tr><td>'+deDate(z.datum)+'</td>'+
           '<td>'+ziel+'</td>'+
           '<td>'+esc(isAbw?'—':(z.taetigkeit||'—'))+'</td>'+
-          '<td>'+esc(zeit)+'</td>'+
-          '<td class="wr-num">'+(isAbw?'—':Number(z.gesamtstunden||0).toFixed(2)+' h')+'</td>'+
+          '<td class="wr-num">'+(isAbw?'—':Number(z.gesamtstunden||0).toFixed(2))+'</td>'+
+          '<td class="wr-num">'+(!isAbw&&z.ueberzeit_25?Number(z.ueberzeit_25).toFixed(2):'—')+'</td>'+
+          '<td class="wr-num">'+(!isAbw&&z.ueberzeit_50?Number(z.ueberzeit_50).toFixed(2):'—')+'</td>'+
+          '<td class="wr-num">'+(!isAbw&&z.ueberzeit_100?Number(z.ueberzeit_100).toFixed(2):'—')+'</td>'+
           '<td class="wr-num">'+(!isAbw&&z.spesen?('CHF '+Number(z.spesen).toFixed(2)):'—')+'</td>'+
           '<td>'+(isAbw?pmPill(z.abwesenheit,'var(--gold)'):'—')+'</td>'+
           '<td class="wr-arb">'+esc(arb.slice(0,220))+'</td>'+
