@@ -1044,6 +1044,18 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-prefill{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
 #tech-cockpit .tc-prefill .tc-field{flex:1 1 140px;}
 #tech-cockpit .tc-kopfmeta{font-size:12px;color:#8a97a8;margin-top:2px;line-height:1.5;}
+/* ZIEL 2 — Countdown-Chip (Kopfzeile) + Unterschriften-Karte + Signature-Pads. */
+#tech-cockpit .tc-countdown-chip{display:inline-block;margin-top:4px;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;background:rgba(201,169,97,.14);color:#C9A961;}
+#tech-cockpit .tc-countdown-chip.locked{background:rgba(255,90,90,.16);color:#ff8d8d;}
+#tech-cockpit .tc-sign-card{margin-top:16px;}
+#tech-cockpit .tc-sign-block{margin-top:14px;padding-top:14px;border-top:1px dashed rgba(255,255,255,.08);}
+#tech-cockpit .tc-sign-block:first-of-type{margin-top:8px;padding-top:0;border-top:none;}
+#tech-cockpit .tc-sign-pad{width:100%;height:120px;background:#0f1116;border:1px solid rgba(255,255,255,.14);border-radius:11px;touch-action:none;margin-top:8px;display:block;}
+#tech-cockpit .tc-sign-preview{width:100%;max-width:300px;height:120px;object-fit:contain;background:#0f1116;border:1px solid rgba(255,255,255,.14);border-radius:11px;margin-top:8px;display:block;}
+#tech-cockpit .tc-sign-meta{font-size:11.5px;color:#8a97a8;margin-top:6px;}
+#tech-cockpit .tc-link{font-size:12.5px;color:#C9A961;font-weight:700;cursor:pointer;margin-top:10px;text-decoration:underline;}
+#tech-cockpit .tc-submit-row{margin-top:16px;}
+#tech-cockpit .tc-submit-done{color:#3ecf8e;font-weight:800;font-size:13.5px;text-align:center;padding:12px;background:rgba(62,207,142,.1);border-radius:11px;}
 @media (min-width:860px){
   #tech-cockpit .tc-wk2-head{display:flex;gap:7px 8px;padding:9px 14px;font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:#8a97a8;font-weight:800;background:rgba(255,255,255,.03);align-items:center;}
   #tech-cockpit .tc-wk2-head span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -9689,9 +9701,12 @@ function tcRenderWoche(){
   var zByDate={}; dates.forEach(function(d){ zByDate[d]=[]; });
   tcWocheZeilen.forEach(function(z){ if(zByDate[z.datum]) zByDate[z.datum].push(z); });
 
+  var cd=tcCountdownInfo(kopf);
   var nav='<div class="tc-wknav" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
     '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(-1)">‹</button>'+
-    '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+'</div>'+
+    '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+
+      (cd?('<div class="tc-countdown-chip'+(cd.locked?' locked':'')+'" id="tc-countdown">'+tcEsc(cd.text)+'</div>'):'<div id="tc-countdown" style="display:none"></div>')+
+    '</div>'+
     '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(1)">›</button></div>';
   var metaParts=[kopf.hauptkunde_name,kopf.hauptprojekt_name,(authTechName||'Techniker')].filter(Boolean);
   var meta=metaParts.length?('<div class="tc-kopfmeta">'+tcEsc(metaParts.join(' · '))+'</div>'):'';
@@ -9714,9 +9729,169 @@ function tcRenderWoche(){
     '<div class="ft"><span class="lbl">Spesen</span><span class="val" id="tc-tot-spesen">CHF 0.00</span></div>'+
   '</div>';
 
-  tcH('<div class="tc-sec">Wochenblatt</div>'+nav+meta+prefill+uzToggle+'<div class="tc-wk2" id="tc-wk2">'+rowsHtml+'</div>'+fuss);
+  var einreichen=tcEinreichenHtml(kopf);
+
+  tcH('<div class="tc-sec">Wochenblatt</div>'+nav+meta+prefill+uzToggle+'<div class="tc-wk2" id="tc-wk2">'+rowsHtml+'</div>'+fuss+einreichen);
   tcRecalcTotals();
   tcApplyUZVisibility();
+  tcSignInit('tc-sign-technik');
+  tcSignInit('tc-sign-kunde');
+  if(tcCountdownTimer) clearInterval(tcCountdownTimer);
+  tcApplyLockState();
+  tcCountdownTimer=setInterval(tcApplyLockState,60000);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 2 — Einreichen + Unterschriften. "Woche einreichen" setzt
+   gs_wochenrapporte.status/eingereicht_am; danach läuft ein 24h-Fenster
+   (Countdown hier nur Anzeige — die eigentliche Sperre erzwingt der Server
+   in saveTechTag/delTechTag/tech_wochen_sign, siehe api/cockpit.js).
+   ══════════════════════════════════════════════════════════════════════════ */
+function tcFmtDT(iso){
+  if(!iso) return '';
+  var d=new Date(iso);
+  return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+}
+function tcCountdownInfo(kopf){
+  if(!kopf||kopf.status!=='eingereicht'||!kopf.eingereicht_am) return null;
+  var deadline=new Date(kopf.eingereicht_am).getTime()+24*60*60*1000;
+  var diff=deadline-Date.now();
+  if(diff<=0) return {text:'🔒 Gesperrt — Frist abgelaufen',locked:true};
+  var h=Math.floor(diff/3600000), m=Math.floor((diff%3600000)/60000);
+  return {text:'Änderbar noch '+h+' h '+m+' min',locked:false};
+}
+var tcCountdownTimer=null;
+// Serverseitige Sperre ist die Wahrheit (403 beim Speichern) — das hier ist nur
+// UX: Felder vorab sichtbar deaktivieren, damit niemand ins Leere tippt.
+function tcApplyLockState(){
+  var cd=tcCountdownInfo(tcWocheKopf);
+  var chip=document.getElementById('tc-countdown');
+  if(chip){
+    if(!cd){ chip.style.display='none'; }
+    else { chip.style.display=''; chip.textContent=cd.text; chip.className='tc-countdown-chip'+(cd.locked?' locked':''); }
+  }
+  var locked=!!(cd&&cd.locked);
+  // Details-Klapp-Button (⋯ Notiz & Fotos) bleibt bewusst bedienbar — Sperre betrifft
+  // nur SCHREIBENDE Aktionen, nicht das Ansehen bereits erfasster Notizen/Fotos.
+  Array.prototype.forEach.call(document.querySelectorAll('#tc-wk2 input,#tc-wk2 select,#tc-wk2 textarea,#tc-wk2 .rc-plus,#tc-wk2 .rc-del,#tc-wk2 .tc-mic,#tc-sign-technik-wrap input,#tc-sign-technik-wrap button,#tc-submit-btn'),function(el){
+    el.disabled=locked;
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#tc-wk2 .tc-chip'),function(el){
+    el.style.pointerEvents=locked?'none':''; el.style.opacity=locked?'.45':'';
+  });
+  var cv=document.getElementById('tc-sign-technik'); if(cv) cv.style.pointerEvents=locked?'none':'';
+  return locked;
+}
+function tcEinreichenHtml(kopf){
+  var techName=tcEsc(authTechName||'Techniker');
+  var techDone=!!(kopf&&kopf.unterschrift_technik_url);
+  var techBlock=techDone
+    ? '<img class="tc-sign-preview" src="'+tcEsc(kopf.unterschrift_technik_url)+'"/><div class="tc-sign-meta">Signiert '+tcEsc(tcFmtDT(kopf.unterschrift_technik_at))+'</div>'
+    : '<canvas id="tc-sign-technik" class="tc-sign-pad"></canvas>'+
+      '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignClear(\'tc-sign-technik\')">Löschen</button>'+
+      '<button type="button" class="tc-btn gold" onclick="tcSaveSign(\'technik\')">Unterschrift speichern</button></div>';
+  var kStatus=kopf&&kopf.unterschrift_kunde_status;
+  var kundeBlock;
+  if(kStatus==='signiert'&&kopf.unterschrift_kunde_url){
+    kundeBlock='<img class="tc-sign-preview" src="'+tcEsc(kopf.unterschrift_kunde_url)+'"/>'+
+      '<div class="tc-sign-meta">Signiert '+tcEsc(tcFmtDT(kopf.unterschrift_kunde_at))+(kopf.unterschrift_kunde_name?(' · '+tcEsc(kopf.unterschrift_kunde_name)):'')+'</div>'+
+      '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignKundeReset()">Neu erfassen</button></div>';
+  } else if(kStatus==='folgt'){
+    kundeBlock='<div class="tc-sign-meta">Unterschrift folgt'+(kopf.unterschrift_kunde_grund?(' — '+tcEsc(kopf.unterschrift_kunde_grund)):'')+'</div>'+
+      '<div class="tc-btnrow"><button type="button" class="tc-btn gold" onclick="tcSignKundeReset()">Jetzt nachtragen</button></div>';
+  } else {
+    kundeBlock='<input class="tc-field" id="tc-kunde-name" placeholder="Name und Funktion (z.B. Frau Muster, Hausverwaltung)" value="'+tcEsc((kopf&&kopf.unterschrift_kunde_name)||'')+'"/>'+
+      '<canvas id="tc-sign-kunde" class="tc-sign-pad"></canvas>'+
+      '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignClear(\'tc-sign-kunde\')">Löschen</button>'+
+      '<button type="button" class="tc-btn gold" onclick="tcSaveSign(\'kunde\')">Unterschrift speichern</button></div>'+
+      '<div class="tc-link" onclick="tcSignFolgt()">Unterschrift folgt (Grund angeben)</div>';
+  }
+  var submitted=kopf&&kopf.status==='eingereicht';
+  return '<div class="tc-card tc-sign-card">'+
+    '<div class="tc-sec" style="margin-top:0">Unterschriften</div>'+
+    '<div class="tc-sign-block" id="tc-sign-technik-wrap"><div class="tc-lbl">Monteur/Techniker — '+techName+'</div>'+techBlock+'</div>'+
+    '<div class="tc-sign-block" id="tc-kunde-sign-wrap"><div class="tc-lbl">Auftraggeber-Bestätigung</div>'+kundeBlock+'</div>'+
+    '<div class="tc-submit-row">'+
+      (submitted
+        ? '<div class="tc-submit-done">✓ Woche eingereicht am '+tcEsc(tcFmtDT(kopf.eingereicht_am))+'</div>'
+        : '<button type="button" class="tc-btn gold tc-submit-btn" id="tc-submit-btn" onclick="tcSubmitWoche()">📋 Woche einreichen</button>')+
+    '</div>'+
+  '</div>';
+}
+function tcSignFolgt(){
+  var wrap=document.getElementById('tc-kunde-sign-wrap'); if(!wrap) return;
+  wrap.innerHTML='<div class="tc-lbl">Auftraggeber-Bestätigung — Unterschrift folgt</div>'+
+    '<input class="tc-field" id="tc-kunde-name" placeholder="Name und Funktion"/>'+
+    '<textarea class="tc-field" id="tc-kunde-grund" placeholder="Grund (z.B. Auftraggeber vor Ort nicht erreichbar)"></textarea>'+
+    '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcRenderWoche()">Abbrechen</button>'+
+    '<button type="button" class="tc-btn gold" onclick="tcSaveSign(\'kunde\',\'folgt\')">Bestätigen</button></div>';
+}
+function tcSignKundeReset(){
+  var wrap=document.getElementById('tc-kunde-sign-wrap'); if(!wrap) return;
+  wrap.innerHTML='<div class="tc-lbl">Auftraggeber-Bestätigung</div>'+
+    '<input class="tc-field" id="tc-kunde-name" placeholder="Name und Funktion (z.B. Frau Muster, Hausverwaltung)"/>'+
+    '<canvas id="tc-sign-kunde" class="tc-sign-pad"></canvas>'+
+    '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignClear(\'tc-sign-kunde\')">Löschen</button>'+
+    '<button type="button" class="tc-btn gold" onclick="tcSaveSign(\'kunde\')">Unterschrift speichern</button></div>'+
+    '<div class="tc-link" onclick="tcSignFolgt()">Unterschrift folgt (Grund angeben)</div>';
+  tcSignInit('tc-sign-kunde');
+}
+// Generische Fingerzeichnung (Touch + Maus), gleiche Koordinaten-Logik wie das
+// bestehende Kunden-PDF-Unterschriftsfeld (trInitSign) — hier je Canvas-Id, weil
+// zwei unabhängige Pads (Technik + Kunde) gleichzeitig auf der Seite stehen.
+var tcSignState={};
+function tcSignInit(canvasId){
+  var cv=document.getElementById(canvasId); if(!cv||tcSignState[canvasId]) return;
+  var rect=cv.getBoundingClientRect();
+  cv.width=Math.max(260,Math.round(rect.width)||300); cv.height=120;
+  var ctx=cv.getContext('2d'); ctx.strokeStyle='#e8edf5'; ctx.lineWidth=2.4; ctx.lineCap='round';
+  var state={ctx:ctx,has:false}; tcSignState[canvasId]=state;
+  var drawing=false,last=null;
+  function pos(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;return {x:(t.clientX-r.left)*(cv.width/r.width),y:(t.clientY-r.top)*(cv.height/r.height)};}
+  function start(e){drawing=true;last=pos(e);e.preventDefault();}
+  function move(e){if(!drawing)return;var p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;state.has=true;e.preventDefault();}
+  function end(){drawing=false;}
+  cv.onmousedown=start;cv.onmousemove=move;cv.onmouseup=end;cv.onmouseleave=end;
+  cv.ontouchstart=start;cv.ontouchmove=move;cv.ontouchend=end;
+}
+function tcSignClear(canvasId){
+  var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
+  if(st&&cv){ st.ctx.clearRect(0,0,cv.width,cv.height); st.has=false; }
+}
+function tcSignDataUrl(canvasId){
+  var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
+  if(!st||!cv||!st.has) return null;
+  return cv.toDataURL('image/png');
+}
+function tcSaveSign(wer,statusOverride){
+  var body={jahr:tcWocheState.jahr,woche:tcWocheState.woche,wer:wer};
+  if(wer==='kunde'){
+    var nameInp=document.getElementById('tc-kunde-name');
+    body.name=nameInp?nameInp.value.trim():'';
+  }
+  if(statusOverride==='folgt'){
+    body.status='folgt';
+    var grundInp=document.getElementById('tc-kunde-grund');
+    body.grund=grundInp?grundInp.value.trim():'';
+  } else {
+    var canvasId=wer==='kunde'?'tc-sign-kunde':'tc-sign-technik';
+    var dataUrl=tcSignDataUrl(canvasId);
+    if(!dataUrl){ tcToast('Bitte zuerst unterschreiben.'); return; }
+    body.data=dataUrl;
+  }
+  techApi('tech_wochen_sign',body).then(function(d){
+    if(d&&d.error){ tcToast(d.error); return; }
+    tcToast('✓ Unterschrift gespeichert');
+    tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+  }).catch(function(){ tcToast('Verbindungsfehler beim Speichern'); });
+}
+function tcSubmitWoche(){
+  var btn=document.getElementById('tc-submit-btn'); if(btn){ btn.disabled=true; btn.textContent='Wird eingereicht…'; }
+  techApi('tech_wochen_einreichen',{jahr:tcWocheState.jahr,woche:tcWocheState.woche}).then(function(d){
+    if(d&&d.error){ tcToast(d.error); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } return; }
+    tcToast('✓ Woche eingereicht');
+    tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+  }).catch(function(){ tcToast('Verbindungsfehler'); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } });
 }
 function tcApplyUZVisibility(){
   Array.prototype.forEach.call(document.querySelectorAll('.rc-uzgroup'),function(el){

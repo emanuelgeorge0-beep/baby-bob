@@ -2499,6 +2499,89 @@ async function delTechTag(b, scope) {
   return { ok: true };
 }
 
+// ZIEL 2 — "Woche einreichen": setzt status/eingereicht_am auf dem EIGENEN Kopf.
+// Ab hier läuft das 24h-Fenster (assertWochenSchreibbar in saveTechTag/delTechTag/
+// Technik-Unterschrift). Erneutes Einreichen (z.B. nach einer Korrektur innerhalb
+// des Fensters) setzt den Zeitpunkt bewusst neu — verlängert das eigene Fenster.
+async function einreichenWoche(b, scope) {
+  const jahr = parseInt(b.jahr, 10);
+  const woche = parseInt(b.woche, 10);
+  if (!jahr || !woche) throw new Error('jahr/woche nötig');
+  const rows = await sbGet(`gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=id&limit=1`)
+    .catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (rows === null) return { notMigrated: true };
+  if (!rows[0]) return { error: 'Noch keine Zeile für diese Woche erfasst.' };
+  const r = await sbWrite('PATCH', `gs_wochenrapporte?id=eq.${rows[0].id}`, {
+    status: 'eingereicht', eingereicht_am: new Date().toISOString(),
+  });
+  return { ok: true, kopf: Array.isArray(r) ? r[0] : r };
+}
+
+// ZIEL 2 — Unterschrift speichern (Storage-Bucket, Pfad unterschriften/<wochenrapport_id>/).
+// Technik-Unterschrift: eigene, unterliegt der 24h-Sperre wie der Rest der Woche.
+// Kunde-Unterschrift: bewusst OHNE Sperre — "Unterschrift folgt" darf auch nach
+// Ablauf des Fensters nachgezogen werden (Papierform-Realität: Kunde unterschreibt
+// oft erst Tage später).
+async function saveWochenUnterschrift(b, scope) {
+  const jahr = parseInt(b.jahr, 10);
+  const woche = parseInt(b.woche, 10);
+  const wer = b.wer === 'kunde' ? 'kunde' : 'technik';
+  if (!jahr || !woche) throw new Error('jahr/woche nötig');
+  const rows = await sbGet(`gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=*&limit=1`)
+    .catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (rows === null) return { notMigrated: true };
+  const kopf = rows[0];
+  if (!kopf) return { error: 'Noch keine Zeile für diese Woche erfasst.' };
+  if (wer === 'technik') assertWochenSchreibbar(kopf);
+
+  const patch = {};
+  if (wer === 'kunde' && b.status === 'folgt') {
+    // Kein Bild — nur Status + Grund, später nachziehbar.
+    Object.assign(patch, {
+      unterschrift_kunde_status: 'folgt',
+      unterschrift_kunde_grund: b.grund ? String(b.grund).slice(0, 500) : null,
+      unterschrift_kunde_name: b.name ? String(b.name).slice(0, 120) : null,
+      unterschrift_kunde_funktion: b.funktion ? String(b.funktion).slice(0, 120) : null,
+    });
+  } else {
+    const buf = sbDecodeB64(b.data);
+    if (!buf) return { error: 'Unterschrift (Bild) erforderlich' };
+    if (buf.length > 2 * 1024 * 1024) return { error: 'Unterschrift zu gross' };
+    const path = `unterschriften/${kopf.id}/${wer}.png`;
+    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'image/png', 'x-upsert': 'true' },
+      body: buf,
+    });
+    if (!up.ok) {
+      const t = await up.text().catch(() => '');
+      if (/bucket not found/i.test(t)) return { error: `Bucket '${PM_DATEI_BUCKET}' fehlt.`, notMigrated: true };
+      console.error('wochen unterschrift upload fail', up.status, t);
+      return { error: 'Upload fehlgeschlagen' };
+    }
+    const nowIso = new Date().toISOString();
+    if (wer === 'technik') {
+      let name = b.name ? String(b.name).slice(0, 120) : null;
+      if (!name) {
+        try {
+          const t = await sbGet(`gs_techniker?id=eq.${scope.technikerId}&select=name&limit=1`);
+          if (t && t[0] && t[0].name) name = t[0].name;
+        } catch (_) { /* egal */ }
+      }
+      Object.assign(patch, { unterschrift_technik_path: path, unterschrift_technik_at: nowIso, unterschrift_technik_name: name });
+    } else {
+      Object.assign(patch, {
+        unterschrift_kunde_path: path, unterschrift_kunde_at: nowIso,
+        unterschrift_kunde_name: b.name ? String(b.name).slice(0, 120) : null,
+        unterschrift_kunde_funktion: b.funktion ? String(b.funktion).slice(0, 120) : null,
+        unterschrift_kunde_status: 'signiert', unterschrift_kunde_grund: null,
+      });
+    }
+  }
+  const r = await sbWrite('PATCH', `gs_wochenrapporte?id=eq.${kopf.id}`, patch);
+  return { ok: true, kopf: Array.isArray(r) ? r[0] : r };
+}
+
 // Ein Wochenrapport (Kopf + Zeilen + Summen) für eine konkrete KW des eingeloggten
 // Technikers. Projekt-Namen werden für die Zeilen nachgeladen (Baustelle/Kunde-Anzeige).
 async function getTechWochenRapport(b, scope) {
@@ -2519,7 +2602,8 @@ async function getTechWochenRapport(b, scope) {
   if (kopf) {
     zeilen = await sbGet(
       `gs_tagesrapporte?wochenrapport_id=eq.${kopf.id}&techniker_user_id=eq.${scope.technikerUserId}` +
-      `&select=id,datum,projekt_id,service_auftrag_id,taetigkeit,start_zeit,end_zeit,gesamtstunden,` +
+      `&select=id,datum,projekt_id,service_auftrag_id,taetigkeit,start_zeit,end_zeit,pause_minuten,` +
+      `stunden_manuell,projektnummer_erfasst,gesamtstunden,` +
       `ueberzeit_25,ueberzeit_50,ueberzeit_100,spesen,` +
       `abwesenheit,abwesenheit_grund,material,material_positionen,arbeiten,besonderheiten,status&order=datum.asc`,
     ).catch(() => []);
@@ -2558,6 +2642,9 @@ async function getTechWochenRapport(b, scope) {
       ...kopf,
       hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null,
       hauptkunde_name: hauptKundeName,
+      // ZIEL 2 — Unterschriftsbilder signiert ausliefern (Bucket ist nicht public).
+      unterschrift_technik_url: kopf.unterschrift_technik_path ? await sbSignUrl(PM_DATEI_BUCKET, kopf.unterschrift_technik_path).catch(() => null) : null,
+      unterschrift_kunde_url: kopf.unterschrift_kunde_path ? await sbSignUrl(PM_DATEI_BUCKET, kopf.unterschrift_kunde_path).catch(() => null) : null,
     } : { jahr, woche },
     zeilen: zeilenOut,
     total_stunden: sum('gesamtstunden'),
