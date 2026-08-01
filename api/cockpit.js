@@ -2068,7 +2068,7 @@ async function getPmTechniker() {
   const raw = await sbGet('gs_techniker?select=*&order=name.asc').catch(() => []);
   const techniker = (Array.isArray(raw) ? raw : [])
     .filter((t) => !t.typ || t.typ === 'techniker')
-    .map((t) => ({ id: t.id, ...pmTechCard(t) }));
+    .map((t) => ({ id: t.id, user_id: t.user_id || null, ...pmTechCard(t) }));
   return { techniker };
 }
 
@@ -2740,11 +2740,18 @@ async function pmWochenrapport(b) {
     ...z,
     projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
+    standort: z.projekt_id ? (projMap[z.projekt_id] || {}).standort || null : null,
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
   }));
   const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {
-    kopf: { ...kopf, techniker_name: technikerName, hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null, hauptkunde_name: hauptKundeName },
+    kopf: {
+      ...kopf, techniker_name: technikerName,
+      hauptprojekt_name: kopf.hauptprojekt_id ? (projMap[kopf.hauptprojekt_id] || {}).name || null : null,
+      hauptkunde_name: hauptKundeName,
+      unterschrift_technik_url: kopf.unterschrift_technik_path ? await sbSignUrl(PM_DATEI_BUCKET, kopf.unterschrift_technik_path).catch(() => null) : null,
+      unterschrift_kunde_url: kopf.unterschrift_kunde_path ? await sbSignUrl(PM_DATEI_BUCKET, kopf.unterschrift_kunde_path).catch(() => null) : null,
+    },
     zeilen: zeilenOut,
     medien,
     total_stunden: sum('gesamtstunden'),
@@ -2753,6 +2760,95 @@ async function pmWochenrapport(b) {
     total_uz100: sum('ueberzeit_100'),
     total_spesen: sum('spesen'),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZIEL 3 — Master-Vollrechte auf Tageszeilen (ändern/löschen/verschieben).
+// Nur über den Master-Zweig von resolveAccess erreichbar (nicht in PM_ACTIONS/
+// TECHNIKER_ACTIONS gelistet, siehe dispatcher). Jeder Eingriff schreibt VORHER
+// einen Snapshot nach gs_wochenrapport_log (wer, wann, Wert vorher) — nichts
+// wird hart überschrieben, ohne dass der alte Stand nachvollziehbar bleibt.
+// ═══════════════════════════════════════════════════════════════════════════
+// Whitelist bewusst eng: Master darf Erfassungs-/Korrekturfelder ändern, aber
+// keine Fremdschlüssel/Systemfelder direkt umbiegen (dafür ist pmWochenrapportMove da).
+const PM_TAG_UPDATE_FELDER = new Set([
+  'datum', 'gesamtstunden', 'stunden_manuell', 'pause_minuten', 'start_zeit', 'end_zeit',
+  'taetigkeit', 'projektnummer_erfasst', 'spesen', 'ueberzeit_25', 'ueberzeit_50', 'ueberzeit_100',
+  'arbeiten', 'besonderheiten', 'abwesenheit', 'abwesenheit_grund',
+]);
+async function pmWochenrapportUpdate(b, scope) {
+  const id = uuid(b.id);
+  const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=*&limit=1`).catch(() => []);
+  const before = rows && rows[0];
+  if (!before) return { error: 'Zeile nicht gefunden' };
+  const patch = b.patch && typeof b.patch === 'object' ? b.patch : {};
+  const wertVorher = {};
+  const row = {};
+  for (const k of Object.keys(patch)) {
+    if (!PM_TAG_UPDATE_FELDER.has(k)) continue;
+    wertVorher[k] = before[k];
+    if (k === 'arbeiten') row[k] = toStrArr(patch[k]);
+    else if (k === 'taetigkeit') row[k] = GEWERK_OPTIONS.has(patch[k]) ? patch[k] : null;
+    else if (['gesamtstunden', 'pause_minuten', 'spesen', 'ueberzeit_25', 'ueberzeit_50', 'ueberzeit_100'].includes(k)) row[k] = (patch[k] != null && patch[k] !== '') ? num(patch[k]) : null;
+    else if (k === 'stunden_manuell') row[k] = !!patch[k];
+    else row[k] = patch[k] != null ? String(patch[k]).slice(0, 2000) : null;
+  }
+  if (!Object.keys(row).length) return { error: 'Keine gültigen Felder zum Ändern' };
+  await logWochenAenderung(scope, {
+    wochenrapportId: before.wochenrapport_id, tagesrapportId: before.id,
+    aktion: 'geaendert', feld: Object.keys(row).join(','), wertVorher,
+  });
+  const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${id}`, row);
+  return { ok: true, row: Array.isArray(r) ? r[0] : r };
+}
+
+async function pmWochenrapportDelete(b, scope) {
+  const id = uuid(b.id);
+  const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=*&limit=1`).catch(() => []);
+  const before = rows && rows[0];
+  if (!before) return { error: 'Zeile nicht gefunden' };
+  await logWochenAenderung(scope, {
+    wochenrapportId: before.wochenrapport_id, tagesrapportId: before.id,
+    aktion: 'geloescht', wertVorher: before,
+  });
+  await sbWrite('DELETE', `gs_tagesrapporte?id=eq.${id}`, {}, 'return=minimal');
+  return { ok: true };
+}
+
+// Verschiebt eine Zeile auf einen anderen Techniker und/oder ein anderes Projekt.
+// Bei Techniker-Wechsel wird der Wochenkopf des NEUEN Technikers für dieselbe
+// KW/Jahr per getOrCreateWochenrapport geholt/angelegt (UNIQUE techniker+jahr+woche
+// erlaubt keinen gemeinsamen Kopf) — dieselbe Funktion wie im Techniker-Pfad, nur
+// mit explizit übergebener technikerUserId statt scope.
+async function pmWochenrapportMove(b, scope) {
+  const id = uuid(b.id);
+  const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=*&limit=1`).catch(() => []);
+  const before = rows && rows[0];
+  if (!before) return { error: 'Zeile nicht gefunden' };
+
+  const neuerTechnikerUserId = b.techniker_user_id ? uuid(b.techniker_user_id) : before.techniker_user_id;
+  const neuesProjektId = b.projekt_id !== undefined ? (b.projekt_id ? uuid(b.projekt_id) : null) : before.projekt_id;
+  const neuerServiceId = b.projekt_id !== undefined ? null : before.service_auftrag_id; // Zielwechsel ist immer Projekt ODER Service, nicht beides
+
+  const row = { techniker_user_id: neuerTechnikerUserId, projekt_id: neuesProjektId, service_auftrag_id: neuerServiceId };
+
+  if (neuerTechnikerUserId !== before.techniker_user_id) {
+    let technikerId = null, name = 'Techniker';
+    try {
+      const t = await sbGet(`gs_techniker?user_id=eq.${neuerTechnikerUserId}&select=id,name&limit=1`);
+      if (t && t[0]) { technikerId = t[0].id; name = t[0].name || name; }
+    } catch (_) { /* egal */ }
+    const wr = await getOrCreateWochenrapport(neuerTechnikerUserId, technikerId, before.jahr, before.woche, neuesProjektId);
+    row.wochenrapport_id = wr ? wr.id : null;
+  }
+
+  await logWochenAenderung(scope, {
+    wochenrapportId: before.wochenrapport_id, tagesrapportId: before.id,
+    aktion: 'verschoben', feld: 'techniker_user_id,projekt_id,service_auftrag_id',
+    wertVorher: { techniker_user_id: before.techniker_user_id, projekt_id: before.projekt_id, service_auftrag_id: before.service_auftrag_id, wochenrapport_id: before.wochenrapport_id },
+  });
+  const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${id}`, row);
+  return { ok: true, row: Array.isArray(r) ? r[0] : r };
 }
 
 async function addTaetigkeit(b, scope) {

@@ -316,6 +316,11 @@
   .wr-table tr:last-child td{border-bottom:none;}
   .wr-table td.wr-arb{white-space:normal;max-width:260px;color:var(--muted);}
   .wr-table td.wr-num{text-align:right;color:var(--gold);font-weight:700;}
+  .wr-table td.wr-actions{white-space:nowrap;}
+  .wr-table td.wr-actions .chip{padding:5px 8px;margin-right:4px;}
+  .wr-editgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;}
+  .wr-editgrid label,#wr-action-panel label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+  #wr-action-panel input,#wr-action-panel select,#wr-action-panel textarea{margin-top:2px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px;color:var(--txt);font-family:inherit;font-size:13px;text-transform:none;font-weight:400;}
   .cc-sys{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
   .sysrow{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:11px 14px;}
   .sysrow .sd{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
@@ -2106,43 +2111,63 @@ function renderWochenrapporte(){
     Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
   }).catch(function(){ $('wr-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
 }
+var _wrId=null, _wrZeilen=[], _wrTechCache=null, _wrProjCache=null;
+var WR_GEWERK=['Sanitär','Heizung','Klima','Lüftung','Divers'];
 function openWochenrapport(id){
+  _wrId=id;
   $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="wr-back">‹ Wochenrapporte</span></div><div class="empty">Lädt…</div>';
   var bb=$('wr-back'); if(bb) bb.onclick=function(){ go('wochenrapporte'); };
   api('pm_wochenrapport',{id:id}).then(function(d){
     if(d&&d.notMigrated){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="wr-back2">‹ Wochenrapporte</span></div>'+migRow('scripts/wochenrapport_migration.sql ausführen.'); var b2=$('wr-back2'); if(b2) b2.onclick=function(){go('wochenrapporte');}; return; }
     if(!d||d.error||!d.kopf){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="wr-back3">‹ Wochenrapporte</span></div><div class="empty">'+esc((d&&d.error)||'Nicht gefunden')+'</div>'; var b3=$('wr-back3'); if(b3) b3.onclick=function(){go('wochenrapporte');}; return; }
     var k=d.kopf, zeilen=d.zeilen||[], medien=d.medien||[];
+    _wrZeilen=zeilen;
     var head='<div style="margin-bottom:14px"><span class="chip" id="wr-back4">‹ Wochenrapporte</span></div>'+
       '<h2 style="margin-bottom:2px">'+esc(k.techniker_name||'Techniker')+' · KW '+esc(k.woche)+' · '+esc(k.jahr)+'</h2>'+
       '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+esc(k.rapport_nr||'—')+
         (k.hauptkunde_name?(' · '+esc(k.hauptkunde_name)):'')+
-        (k.hauptprojekt_name?(' · Hauptprojekt: '+esc(k.hauptprojekt_name)):'')+'</div>';
+        (k.hauptprojekt_name?(' · Hauptprojekt: '+esc(k.hauptprojekt_name)):'')+
+        ' · '+pmPill(k.status==='eingereicht'?'eingereicht':'entwurf', k.status==='eingereicht'?'#3dd68c':'var(--gold)')+
+        (k.status==='eingereicht'&&k.eingereicht_am?(' · eingereicht '+esc(deDateTime(k.eingereicht_am))):'')+'</div>';
     var totals='<div class="cc-sec">Total</div><div class="lcard"><div class="top">'+
       '<div class="nm">'+Number(d.total_stunden||0).toFixed(2)+' h normal</div>'+
       '<div class="nm">CHF '+Number(d.total_spesen||0).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</div></div>'+
       '<div class="meta"><span>ÜZ 25%: '+Number(d.total_uz25||0).toFixed(2)+' h</span><span class="dot">ÜZ 50%: '+Number(d.total_uz50||0).toFixed(2)+' h</span><span class="dot">ÜZ 100%: '+Number(d.total_uz100||0).toFixed(2)+' h</span></div></div>';
+    // ZIEL 3 — Spalten Datum/Projektnummer/Baustelle/Gewerk/Std/Spesen/Tätigkeit(40 Zeichen),
+    // ÜZ/Abw. additiv weiter hinten dran (nicht entfernt, nur nicht Teil der Kernanforderung).
     var zeilenHtml=zeilen.length?(
       '<div class="wr-table-wrap"><table class="wr-table"><thead><tr>'+
-      '<th>Datum</th><th>Projekt/Auftrag</th><th>Gewerk</th><th>Std</th><th>ÜZ25%</th><th>ÜZ50%</th><th>ÜZ100%</th><th>Spesen</th><th>Abw.</th><th>Ausgeführte Arbeiten</th>'+
+      '<th>Datum</th><th>Projektnr.</th><th>Baustelle</th><th>Gewerk</th><th>Std</th><th>Spesen</th><th>Tätigkeit</th>'+
+      '<th>ÜZ25%</th><th>ÜZ50%</th><th>ÜZ100%</th><th>Abw.</th><th>Aktionen</th>'+
       '</tr></thead><tbody>'+zeilen.map(function(z){
         var isAbw=!!z.abwesenheit;
-        var ziel=isAbw?(WR_ABW_LABEL[z.abwesenheit]||z.abwesenheit):esc(z.projekt_name||z.service_objekt||z.projektnummer||'—');
+        var projektnr=isAbw?'—':esc(z.projektnummer_erfasst||z.projektnummer||'—');
+        var baustelle=isAbw?'—':esc(z.standort||z.service_objekt||'—');
         var arb=isAbw?(z.abwesenheit_grund||''):(Array.isArray(z.arbeiten)?z.arbeiten.join(' · '):'');
-        return '<tr><td>'+deDate(z.datum)+'</td>'+
-          '<td>'+ziel+'</td>'+
+        return '<tr data-zid="'+esc(z.id)+'"><td>'+deDate(z.datum)+'</td>'+
+          '<td>'+projektnr+'</td>'+
+          '<td>'+baustelle+'</td>'+
           '<td>'+esc(isAbw?'—':(z.taetigkeit||'—'))+'</td>'+
           '<td class="wr-num">'+(isAbw?'—':Number(z.gesamtstunden||0).toFixed(2))+'</td>'+
+          '<td class="wr-num">'+(!isAbw&&z.spesen?('CHF '+Number(z.spesen).toFixed(2)):'—')+'</td>'+
+          '<td class="wr-arb">'+esc(arb.slice(0,40))+(arb.length>40?'…':'')+'</td>'+
           '<td class="wr-num">'+(!isAbw&&z.ueberzeit_25?Number(z.ueberzeit_25).toFixed(2):'—')+'</td>'+
           '<td class="wr-num">'+(!isAbw&&z.ueberzeit_50?Number(z.ueberzeit_50).toFixed(2):'—')+'</td>'+
           '<td class="wr-num">'+(!isAbw&&z.ueberzeit_100?Number(z.ueberzeit_100).toFixed(2):'—')+'</td>'+
-          '<td class="wr-num">'+(!isAbw&&z.spesen?('CHF '+Number(z.spesen).toFixed(2)):'—')+'</td>'+
           '<td>'+(isAbw?pmPill(z.abwesenheit,'var(--gold)'):'—')+'</td>'+
-          '<td class="wr-arb">'+esc(arb.slice(0,220))+'</td>'+
+          '<td class="wr-actions">'+
+            '<button class="chip" style="font-size:11px" onclick="wrRowEdit(\''+esc(z.id)+'\')">✏️</button>'+
+            '<button class="chip" style="font-size:11px" onclick="wrRowMove(\''+esc(z.id)+'\')">↦</button>'+
+            '<button class="chip" style="font-size:11px" onclick="wrRowDel(\''+esc(z.id)+'\')">🗑</button>'+
+          '</td>'+
         '</tr>';
       }).join('')+'</tbody></table></div>'
     ):'<div class="empty">Keine Tageszeilen.</div>';
-    var zeilenSec='<div class="cc-sec">Tageszeilen ('+zeilen.length+')</div>'+zeilenHtml;
+    var zeilenSec='<div class="cc-sec">Tageszeilen ('+zeilen.length+')</div>'+zeilenHtml+'<div id="wr-action-panel"></div>';
+    var unterschriftHtml='<div class="cc-sec">Unterschriften</div><div class="lcard">'+
+      '<div class="meta"><span>Technik: '+(k.unterschrift_technik_url?('<a href="'+esc(k.unterschrift_technik_url)+'" target="_blank">Bild ansehen</a> ('+esc(deDateTime(k.unterschrift_technik_at))+')'):'ausstehend')+'</span></div>'+
+      '<div class="meta" style="margin-top:6px"><span>Kunde: '+(k.unterschrift_kunde_status==='signiert'?('<a href="'+esc(k.unterschrift_kunde_url||'')+'" target="_blank">Bild ansehen</a> ('+esc(k.unterschrift_kunde_name||'')+', '+esc(deDateTime(k.unterschrift_kunde_at))+')'):(k.unterschrift_kunde_status==='folgt'?('folgt — '+esc(k.unterschrift_kunde_grund||'')):'ausstehend'))+'</span></div>'+
+    '</div>';
     var medienHtml=medien.length?('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px">'+medien.map(function(m){
       var cell=(m.medientyp==='video')
         ? '<video src="'+esc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+esc(m.thumbnail_url)+'"'):'')+' controls preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>'
@@ -2150,9 +2175,80 @@ function openWochenrapport(id){
       return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.04)" title="'+esc(m.stockwerk||'')+'">'+cell+'</div>';
     }).join('')+'</div>'):'<div class="empty">Noch keine Fotos/Videos.</div>';
     var medienSec='<div class="cc-sec">📷 Fotos &amp; Videos ('+medien.length+')</div>'+medienHtml;
-    $('view').innerHTML=head+totals+zeilenSec+medienSec;
+    $('view').innerHTML=head+totals+zeilenSec+unterschriftHtml+medienSec;
     var bb4=$('wr-back4'); if(bb4) bb4.onclick=function(){ go('wochenrapporte'); };
   }).catch(function(){ $('view').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+// ── ZIEL 3 — Master-Vollrechte: ändern/löschen/verschieben, jeweils mit
+// Änderungsprotokoll (gs_wochenrapport_log) serverseitig in pmWochenrapport*. ──
+function wrPanel(html){ var p=$('wr-action-panel'); if(p) p.innerHTML=html?('<div class="lcard" style="margin-top:10px">'+html+'</div>'):''; }
+function wrRowEdit(zid){
+  var z=_wrZeilen.filter(function(x){return x.id===zid;})[0]; if(!z) return;
+  var gewerkOpts=WR_GEWERK.map(function(g){return '<option value="'+esc(g)+'"'+(z.taetigkeit===g?' selected':'')+'>'+esc(g)+'</option>';}).join('');
+  wrPanel(
+    '<div class="cc-sec" style="margin-top:0">Zeile ändern — '+esc(deDate(z.datum))+'</div>'+
+    '<div class="wr-editgrid">'+
+      '<label>Gewerk<select id="wr-e-gewerk"><option value="">—</option>'+gewerkOpts+'</select></label>'+
+      '<label>Stunden<input type="number" step="0.5" id="wr-e-std" value="'+esc(z.gesamtstunden||0)+'"></label>'+
+      '<label>Spesen (CHF)<input type="number" step="0.05" id="wr-e-spesen" value="'+esc(z.spesen||0)+'"></label>'+
+    '</div>'+
+    '<label style="display:block;margin-top:8px">Tätigkeit (eine Zeile je Punkt)<textarea id="wr-e-arb" style="width:100%;min-height:60px">'+esc((z.arbeiten||[]).join('\n'))+'</textarea></label>'+
+    '<div style="display:flex;gap:8px;margin-top:10px">'+
+      '<button class="chip" onclick="wrPanel(\'\')">Abbrechen</button>'+
+      '<button class="chip" style="border-color:var(--gold);color:var(--gold)" onclick="wrRowEditSave(\''+esc(zid)+'\')">Speichern</button>'+
+    '</div>'
+  );
+}
+function wrRowEditSave(zid){
+  var patch={
+    taetigkeit:($('wr-e-gewerk')||{}).value||'',
+    gesamtstunden:($('wr-e-std')||{}).value||0,
+    spesen:($('wr-e-spesen')||{}).value||0,
+    arbeiten:(($('wr-e-arb')||{}).value||'').split('\n').map(function(s){return s.trim();}).filter(Boolean),
+  };
+  api('pm_wochenrapport_update',{id:zid,patch:patch}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('✓ Zeile geändert'); wrPanel(''); openWochenrapport(_wrId);
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
+function wrRowDel(zid){
+  if(!confirm('Diese Zeile wirklich löschen? Wird im Änderungsprotokoll festgehalten.')) return;
+  api('pm_wochenrapport_delete',{id:zid}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('✓ Zeile gelöscht'); openWochenrapport(_wrId);
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
+function wrRowMove(zid){
+  var z=_wrZeilen.filter(function(x){return x.id===zid;})[0]; if(!z) return;
+  wrPanel('<div class="cc-sec" style="margin-top:0">Zeile verschieben — '+esc(deDate(z.datum))+'</div><div class="empty">Lädt Techniker/Projekte…</div>');
+  Promise.all([
+    _wrTechCache?Promise.resolve(_wrTechCache):api('pm_techniker').then(function(d){ _wrTechCache=d.techniker||[]; return _wrTechCache; }),
+    _wrProjCache?Promise.resolve(_wrProjCache):api('pm_projekte').then(function(d){ _wrProjCache=d.projekte||[]; return _wrProjCache; }),
+  ]).then(function(res){
+    var techs=res[0]||[], projs=res[1]||[];
+    var techOpts=techs.map(function(t){return '<option value="'+esc(t.user_id||'')+'"'+(!t.user_id?' disabled':'')+'>'+esc(t.name)+(t.user_id?'':' (kein Login)')+'</option>';}).join('');
+    var projOpts=projs.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name||'Projekt')+(p.projektnummer?(' · '+esc(p.projektnummer)):'')+'</option>';}).join('');
+    wrPanel(
+      '<div class="cc-sec" style="margin-top:0">Zeile verschieben — '+esc(deDate(z.datum))+'</div>'+
+      '<label style="display:block;margin-top:6px">Neuer Techniker (leer = unverändert)<select id="wr-m-tech"><option value="">— unverändert —</option>'+techOpts+'</select></label>'+
+      '<label style="display:block;margin-top:8px">Neues Projekt (leer = unverändert)<select id="wr-m-proj"><option value="">— unverändert —</option>'+projOpts+'</select></label>'+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="chip" onclick="wrPanel(\'\')">Abbrechen</button>'+
+        '<button class="chip" style="border-color:var(--gold);color:var(--gold)" onclick="wrRowMoveSave(\''+esc(zid)+'\')">Verschieben</button>'+
+      '</div>'
+    );
+  }).catch(function(){ wrPanel('<div class="empty">Ladefehler.</div>'); });
+}
+function wrRowMoveSave(zid){
+  var techVal=($('wr-m-tech')||{}).value||'', projVal=($('wr-m-proj')||{}).value||'';
+  if(!techVal && !projVal){ toast('Bitte Techniker oder Projekt wählen'); return; }
+  var body={id:zid};
+  if(techVal) body.techniker_user_id=techVal;
+  if(projVal) body.projekt_id=projVal;
+  api('pm_wochenrapport_move',body).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('✓ Zeile verschoben'); wrPanel(''); openWochenrapport(_wrId);
+  }).catch(function(){ toast('Verbindungsfehler'); });
 }
 function zsLoad(pid){
   api('zs_projekt',{projekt_id:pid}).then(function(d){
