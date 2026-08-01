@@ -984,11 +984,26 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
    beschreibbar ohne Aufklappen. Flexbox statt Grid-Areas — Felder brechen auf dem
    Handy natürlich in Zeilen um, ab 860px reicht die Breite für eine einzige Zeile
    (Tabellen-Optik). Nur "Details" (Arbeiten/Notiz/Fotos) ist eine echte Klappe. ── */
-#tech-cockpit .tc-wk2{border:1px solid rgba(255,255,255,.07);border-radius:14px;overflow:hidden;background:#131519;box-shadow:0 6px 16px rgba(0,0,0,.22);}
+#tech-cockpit .tc-wk2{display:flex;flex-direction:column;gap:12px;background:transparent;border:none;box-shadow:none;}
 #tech-cockpit .tc-wk2-head{display:none;}
-#tech-cockpit .tc-row{display:flex;flex-wrap:wrap;align-items:center;gap:7px 8px;padding:11px 14px;border-top:1px solid rgba(255,255,255,.06);}
-#tech-cockpit .tc-row:first-child{border-top:none;}
-#tech-cockpit .tc-row.tc-newday{border-top:1px solid rgba(201,169,97,.22);}
+/* ZIEL 1 — Kartenlayout: eine Karte pro Tag (tc-daycard), darin 1..n Einträge
+   (tc-row) als vertikal gestapelte Unterkarten, Papierformular-Feldreihenfolge. */
+#tech-cockpit .tc-daycard{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:14px;overflow:hidden;box-shadow:0 6px 16px rgba(0,0,0,.22);}
+#tech-cockpit .tc-day-head{display:flex;align-items:baseline;gap:8px;padding:12px 14px 8px;}
+#tech-cockpit .tc-day-wd{font-weight:800;font-size:13px;color:#C9A961;letter-spacing:.3px;}
+#tech-cockpit .tc-day-dm{font-size:12px;color:#8a97a8;}
+#tech-cockpit .tc-row{display:block;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.06);}
+#tech-cockpit .tc-row:first-of-type{border-top:none;}
+#tech-cockpit .rc-top{display:flex;align-items:center;gap:8px;}
+#tech-cockpit .rc-placeholder{margin-top:8px;font-size:12.5px;color:#5c6878;font-style:italic;}
+#tech-cockpit .rc-grund-wrap{margin-top:8px;}
+#tech-cockpit .rc-body{margin-top:4px;}
+#tech-cockpit .rc-baustelle{margin:2px 0 10px;font-size:12px;color:#8a97a8;}
+#tech-cockpit .rc-timegrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;}
+#tech-cockpit .rc-std-wrap{margin-top:14px;}
+#tech-cockpit .rc-std-flag{color:#C9A961;font-weight:700;font-style:normal;}
+#tech-cockpit .tc-std-big{font-size:19px;font-weight:800;text-align:center;padding:14px 13px;}
+#tech-cockpit .rc-gewerk-chips{margin-top:6px;}
 #tech-cockpit .rc-datum{flex:0 0 46px;font-weight:800;font-size:12.5px;color:#C9A961;align-self:flex-start;padding-top:9px;}
 #tech-cockpit .rc-ziel{flex:1 1 100%;min-width:0;}
 #tech-cockpit .rc-status{flex:0 0 auto;font-size:12px;width:16px;text-align:center;}
@@ -1006,7 +1021,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .rc-spesenwrap .tc-field{max-width:120px;}
 #tech-cockpit .rc-spesen-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
 #tech-cockpit .rc-grund{flex:1 1 100%;}
-#tech-cockpit .rc-icons{flex:1 1 100%;display:flex;align-items:center;gap:14px;margin-top:2px;}
+#tech-cockpit .rc-icons{flex:1 1 100%;display:flex;align-items:center;gap:14px;margin-top:14px;}
 #tech-cockpit .rc-icons button{background:none;border:none;color:#8a97a8;font-size:12.5px;font-weight:700;cursor:pointer;padding:2px 0;font-family:inherit;display:flex;align-items:center;gap:4px;}
 #tech-cockpit .rc-icons .rc-plus{color:#C9A961;}
 #tech-cockpit .rc-icons .rc-del{color:#ff8d8d;margin-left:auto;}
@@ -9050,6 +9065,15 @@ function pdDownloadRapport(id){gsAuthApi('tagesrapport',{action:'get',id:id}).th
 function pdDownloadRechnung(id){gsAuthApi('rechnung',{action:'get',id:id}).then(function(d){if(d.rechnung&&d.rechnung.pdf_signed)window.open(d.rechnung.pdf_signed,'_blank');});}
 
 // ══════════════════════════════════════════════════════════
+// ══ TECHNIKER RAPPORT — TOT / UNBENUTZT (Stand Runde-A-Feinschliff) ═══════
+// initTechRapport() wird NIRGENDS mehr aufgerufen (grep bestätigt) — der aktive
+// Einstieg ist initTechCockpit() -> tcLoadWoche() weiter unten im Abschnitt
+// "TECHNIKER-COCKPIT". Dieser Block (bis "Boot the audio subsystem") inkl.
+// buildTechWeek/techDayData/submitRapport ist die VORGÄNGER-Implementierung
+// (Mo–Fr, 5 Tage, POST /api/rapport) von VOR dem Wochenrapport-Umbau.
+// Bewusst NICHT gelöscht (Anweisung: erst in eigener Runde entfernen) —
+// nur als tot markiert, damit niemand hier weiterbaut.
+// ══════════════════════════════════════════════════════════
 // ══ TECHNIKER RAPPORT ════════════════════════════════════
 // ══════════════════════════════════════════════════════════
 
@@ -9209,6 +9233,7 @@ function setTechStatus(msg,type){
   el.className='tech-status'+(type?' '+type:'');
   setTimeout(function(){if(el.textContent===msg) el.textContent='';},5000);
 }
+// ══ ENDE TOT/UNBENUTZT — ab hier wieder aktiver Code ═══════════════════════
 
 // ── Boot the audio subsystem once all voice vars/functions are defined (accessibility) ──
 (function bootBobAudio(){
@@ -9506,7 +9531,7 @@ function tcGoWocheNeueZeile(kind,id){
     }
     if(zielSel && !zielSel.value){ zielSel.value=(kind==='service'?'s:':'p:')+id; tcRowZielChange(zielSel); }
     rowEl.scrollIntoView({behavior:'smooth',block:'center'});
-    var gw=rowEl.querySelector('.rc-gewerk'); if(gw) gw.focus();
+    var pn=rowEl.querySelector('.f-projektnummer'); if(pn) pn.focus();
   });
 }
 function tcLoadWoche(jahr,woche,after){
@@ -9548,6 +9573,62 @@ function tcGewerkOptions(z){
   var cur=z?z.taetigkeit:null;
   return '<option value=""'+(!cur?' selected':'')+'>Gewerk</option>'+TC_GEWERK.map(function(g){ return '<option value="'+tcEsc(g)+'"'+(cur===g?' selected':'')+'>'+tcEsc(g)+'</option>'; }).join('');
 }
+/* ZIEL 1 — Gewerk als Chip-Reihe statt natives Select (gleiche Bedienlogik wie Spesen). */
+function tcGewerkChipsHtml(cur){
+  return TC_GEWERK.map(function(g){
+    return '<div class="tc-chip'+(cur===g?' sel':'')+'" data-v="'+tcEsc(g)+'" onclick="tcRowGewerkPick(this)">'+tcEsc(g)+'</div>';
+  }).join('');
+}
+function tcRowGewerkPick(el){
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  tcRowInput(el);
+}
+// Pausen-Vorgabe: Kunde-Override (gs_kunden.pause_standard, Stunden) vor 1.25h-Default.
+function tcPauseDefaultH(zielVal){
+  if(zielVal&&zielVal.indexOf('p:')===0){
+    var pid=zielVal.slice(2);
+    var p=tcWocheProjekte.filter(function(x){return x.id===pid;})[0];
+    if(p&&p.pause_standard!=null) return p.pause_standard;
+  }
+  return 1.25;
+}
+// Baustelle/Kunde-Anzeigezeile je Zeile (read-only, aus Projekt-/Service-Metadaten).
+function tcBaustelleText(proj,svc){
+  if(proj){
+    var parts=[proj.standort,proj.kunde_name].filter(Boolean);
+    return parts.length?('Baustelle: '+parts.join(' · ')):'';
+  }
+  if(svc && svc.objekt) return 'Baustelle: '+svc.objekt;
+  return '';
+}
+// Stunden = (Ende-Start)-Pause, auf Halbstunden gerundet. Setzt das Std-Feld direkt
+// und löscht die "abweichend"-Markierung — Start/Ende/Pause-Änderung gilt immer als
+// Neuberechnung, NICHT als manuelle Überschreibung (die kommt nur vom Std-Feld selbst).
+function tcComputeStdFromTimes(rowEl){
+  var s=(rowEl.querySelector('.f-start')||{}).value, e=(rowEl.querySelector('.f-ende')||{}).value;
+  if(!s||!e) return;
+  var p=Number((rowEl.querySelector('.f-pause')||{}).value)||0;
+  var sm=s.split(':'), em=e.split(':');
+  var diffMin=(Number(em[0])*60+Number(em[1]))-(Number(sm[0])*60+Number(sm[1]));
+  var h=Math.max(0, diffMin/60-p);
+  h=Math.round(h*2)/2; // Halbstundenschritte, wie das Std-Feld selbst
+  var stdInp=rowEl.querySelector('.f-std');
+  if(stdInp){ stdInp.value=h; stdInp.setAttribute('data-manuell','0'); }
+  var flag=rowEl.querySelector('.rc-std-flag'); if(flag) flag.style.display='none';
+}
+function tcRowTimeInput(el){
+  var rowEl=el.closest('[data-row]'); if(!rowEl) return;
+  tcComputeStdFromTimes(rowEl);
+  tcRowInput(el);
+}
+// Direktes Überschreiben des Std-Feldes -> sichtbar als "weicht von Start/Ende ab" markieren.
+function tcRowStdManualInput(el){
+  el.setAttribute('data-manuell','1');
+  var rowEl=el.closest('[data-row]');
+  if(rowEl){ var flag=rowEl.querySelector('.rc-std-flag'); if(flag) flag.style.display=''; }
+  tcRowInput(el);
+}
 function tcSpesenSaetzeFor(zielVal){
   if(zielVal&&zielVal.indexOf('p:')===0){
     var pid=zielVal.slice(2);
@@ -9588,8 +9669,10 @@ function tcApplyPrefillToRow(rowEl){
   if(!rowEl) return;
   var zielSel=rowEl.querySelector('.rc-ziel');
   if(zielSel && !zielSel.value && tcWocheDefault.ziel){ zielSel.value=tcWocheDefault.ziel; tcRowZielChange(zielSel); }
-  var gewerkSel=rowEl.querySelector('.rc-gewerk');
-  if(gewerkSel && !gewerkSel.value && tcWocheDefault.gewerk) gewerkSel.value=tcWocheDefault.gewerk;
+  if(tcWocheDefault.gewerk && !rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel')){
+    var chip=rowEl.querySelector('.rc-gewerk-chips .tc-chip[data-v="'+tcWocheDefault.gewerk+'"]');
+    if(chip) tcRowGewerkPick(chip);
+  }
 }
 
 /* ── Überzeit-Schalter (global, blendet die 3 ÜZ-Felder in jeder Zeile ein/aus) ── */
@@ -9614,14 +9697,14 @@ function tcRenderWoche(){
   var meta=metaParts.length?('<div class="tc-kopfmeta">'+tcEsc(metaParts.join(' · '))+'</div>'):'';
   var prefill='<div class="tc-lbl" style="margin-top:14px">Ganze Woche gleiches Projekt? Einmal wählen, füllt leere Tage vor:</div>'+tcPrefillHtml();
   var uzToggle='<div class="tc-uztoggle'+(tcShowUZ?' on':'')+'" id="tc-uztoggle" onclick="tcToggleUZ()"><div class="sw"></div>Überzeit anzeigen (25% / 50% / 100%)</div>';
-  var head='<div class="tc-wk2-head"><span class="h-datum">Tag</span><span class="h-ziel">Projekt/Auftrag</span>'+
-    '<span class="h-gewerk">Gewerk</span><span class="h-std">Std.</span><span class="h-uzgroup">ÜZ 25/50/100%</span>'+
-    '<span class="h-spesen">Spesen</span><span></span></div>';
+  // ZIEL 1 — Kartenlayout: jeder Tag eine eigene Karte (tc-daycard), 1..n Einträge
+  // darunter. Datum steht einmal im Tageskopf, nicht mehr pro Zeile.
   var rowsHtml=dates.map(function(date){
     var list=zByDate[date];
     tcRowSeq[date]=Math.max(list.length,1);
-    if(!list.length) return tcRowHtml(date,0,null,true,true);
-    return list.map(function(z,idx){ return tcRowHtml(date,idx,z,idx===list.length-1,idx===0); }).join('');
+    var dayHead='<div class="tc-day-head"><span class="tc-day-wd">'+TC_WD[tcWeekdayIdx(date)]+'</span><span class="tc-day-dm">'+tcFmtDM(date)+'</span></div>';
+    var entries=list.length?list.map(function(z,idx){ return tcRowHtml(date,idx,z,idx===list.length-1); }).join(''):tcRowHtml(date,0,null,true);
+    return '<div class="tc-daycard">'+dayHead+entries+'</div>';
   }).join('');
   var fuss='<div class="tc-foottotal-row">'+
     '<div class="ft"><span class="lbl">Normalstunden</span><span class="val" id="tc-tot-std">0.00 h</span></div>'+
@@ -9631,7 +9714,7 @@ function tcRenderWoche(){
     '<div class="ft"><span class="lbl">Spesen</span><span class="val" id="tc-tot-spesen">CHF 0.00</span></div>'+
   '</div>';
 
-  tcH('<div class="tc-sec">Wochenblatt</div>'+nav+meta+prefill+uzToggle+'<div class="tc-wk2" id="tc-wk2">'+head+rowsHtml+'</div>'+fuss);
+  tcH('<div class="tc-sec">Wochenblatt</div>'+nav+meta+prefill+uzToggle+'<div class="tc-wk2" id="tc-wk2">'+rowsHtml+'</div>'+fuss);
   tcRecalcTotals();
   tcApplyUZVisibility();
 }
@@ -9644,46 +9727,72 @@ function tcApplyUZVisibility(){
   var head=document.querySelector('.h-uzgroup'); if(head) head.style.display=tcShowUZ?'flex':'none';
 }
 
-/* ── Eine Zeile: Kernfelder immer sichtbar/beschreibbar, Details aufklappbar ── */
-function tcRowHtml(date,idx,z,isLast,isFirstOfDay){
+/* ── Ein Eintrag (Papierformular-Feldreihenfolge): Projekt/Auftrag · Projektnummer ·
+   Baustelle/Kunde · Gewerk · Start · Ende · Pause · Stunden · Spesen · Tätigkeit.
+   Felder (rc-body) sind erst aktiv, sobald ein Ziel gewählt ist — ZIEL 1 Datenrisiko-Fix. ── */
+function tcRowHtml(date,idx,z,isLast){
   var isAbw=!!(z&&z.abwesenheit);
   var zielVal=z?(isAbw?('abw:'+z.abwesenheit):(z.projekt_id?('p:'+z.projekt_id):(z.service_auftrag_id?('s:'+z.service_auftrag_id):''))):'';
+  var hasZiel=!!zielVal;
+  var proj=zielVal.indexOf('p:')===0?tcWocheProjekte.filter(function(p){return p.id===zielVal.slice(2);})[0]:null;
+  var svc=zielVal.indexOf('s:')===0?tcWocheServices.filter(function(s){return s.id===zielVal.slice(2);})[0]:null;
   var saetze=tcSpesenSaetzeFor(zielVal);
   var curSpesen=z&&z.spesen!=null?z.spesen:'';
+  var curProjektnr=(z&&z.projektnummer_erfasst)||(z&&z.projektnummer)||(proj&&proj.projektnummer)||'';
+  var baustelleTxt=tcBaustelleText(proj,svc);
+  var pauseH=(z&&z.pause_minuten!=null)?(z.pause_minuten/60):tcPauseDefaultH(zielVal);
+  var manuell=!!(z&&z.stunden_manuell);
   var rowId=z&&z.id?z.id:'';
-  var dLabel=isFirstOfDay?(TC_WD[tcWeekdayIdx(date)]+'<br>'+tcFmtDM(date)):'';
-  var dis=isAbw?'display:none':'';
-  var disInv=isAbw?'':'display:none';
-  return '<div class="tc-row'+(isFirstOfDay?' tc-newday':'')+'" data-row="'+date+'#'+idx+'" data-date="'+date+'"'+(rowId?(' data-id="'+tcEsc(rowId)+'"'):'')+'>'+
-    '<div class="rc-datum">'+dLabel+'</div>'+
-    '<select class="tc-field rc-ziel" onchange="tcRowZielChange(this)">'+tcZielOptions(z)+'</select>'+
-    '<span class="rc-status" title="">●</span>'+
-    '<select class="tc-field rc-gewerk" style="'+dis+'" onchange="tcRowInput(this)">'+tcGewerkOptions(z)+'</select>'+
-    '<div class="rc-std" style="'+dis+'"><input type="number" step="0.25" min="0" max="24" class="tc-field f-std" placeholder="Std" value="'+tcEsc(z&&z.gesamtstunden||'')+'" oninput="tcRowInput(this)"/></div>'+
-    '<div class="rc-uzgroup" style="'+dis+'">'+
-      '<div class="rc-uz"><div class="rc-uz-lbl">ÜZ 25%</div><input type="number" step="0.25" min="0" class="tc-field f-uz25" value="'+tcEsc(z&&z.ueberzeit_25||'')+'" oninput="tcRowInput(this)"/></div>'+
-      '<div class="rc-uz"><div class="rc-uz-lbl">ÜZ 50%</div><input type="number" step="0.25" min="0" class="tc-field f-uz50" value="'+tcEsc(z&&z.ueberzeit_50||'')+'" oninput="tcRowInput(this)"/></div>'+
-      '<div class="rc-uz"><div class="rc-uz-lbl">ÜZ 100%</div><input type="number" step="0.25" min="0" class="tc-field f-uz100" value="'+tcEsc(z&&z.ueberzeit_100||'')+'" oninput="tcRowInput(this)"/></div>'+
+  var bodyDisp=(hasZiel&&!isAbw)?'':'display:none';
+  var grundDisp=isAbw?'':'display:none';
+  var placeholderDisp=hasZiel?'display:none':'';
+  return '<div class="tc-row" data-row="'+date+'#'+idx+'" data-date="'+date+'"'+(rowId?(' data-id="'+tcEsc(rowId)+'"'):'')+'>'+
+    '<div class="rc-top">'+
+      '<select class="tc-field rc-ziel" onchange="tcRowZielChange(this)">'+tcZielOptions(z)+'</select>'+
+      '<span class="rc-status" title="">●</span>'+
     '</div>'+
-    '<div class="rc-spesenwrap" style="'+dis+'">'+
-      '<input type="number" step="0.05" min="0" class="tc-field f-spesen" placeholder="CHF" value="'+tcEsc(curSpesen)+'" oninput="tcRowInput(this)"/>'+
+    '<div class="rc-placeholder" style="'+placeholderDisp+'">Zuerst Projekt/Auftrag oder Abwesenheit wählen — Felder werden erst danach aktiv.</div>'+
+    '<div class="rc-grund-wrap" style="'+grundDisp+'">'+
+      '<div class="tc-lbl">Grund / Dauer (bei A: inkl. Krankheit)</div>'+
+      '<input class="tc-field rc-grund" placeholder="Grund / Dauer" value="'+tcEsc((z&&z.abwesenheit_grund)||'')+'" oninput="tcRowInput(this)"/>'+
+    '</div>'+
+    '<div class="rc-body" style="'+bodyDisp+'">'+
+      '<div class="tc-lbl">Projektnummer</div>'+
+      '<input class="tc-field f-projektnummer" placeholder="—" value="'+tcEsc(curProjektnr)+'" oninput="tcRowInput(this)"/>'+
+      '<div class="rc-baustelle"'+(baustelleTxt?'':' style="display:none"')+'>'+tcEsc(baustelleTxt)+'</div>'+
+      '<div class="tc-lbl">Gewerk</div>'+
+      '<div class="tc-chips rc-gewerk-chips">'+tcGewerkChipsHtml(z&&z.taetigkeit)+'</div>'+
+      '<div class="rc-timegrid">'+
+        '<div><div class="tc-lbl">Start</div><input type="time" class="tc-field f-start" value="'+tcEsc((z&&z.start_zeit)||'')+'" oninput="tcRowTimeInput(this)"/></div>'+
+        '<div><div class="tc-lbl">Ende</div><input type="time" class="tc-field f-ende" value="'+tcEsc((z&&z.end_zeit)||'')+'" oninput="tcRowTimeInput(this)"/></div>'+
+        '<div><div class="tc-lbl">Pause (h)</div><input type="number" step="0.25" min="0" max="4" class="tc-field f-pause" value="'+tcEsc(pauseH)+'" oninput="tcRowTimeInput(this)"/></div>'+
+      '</div>'+
+      '<div class="rc-std-wrap">'+
+        '<div class="tc-lbl">Stunden<span class="rc-std-flag" style="'+(manuell?'':'display:none')+'"> · abweichend von Start/Ende</span></div>'+
+        '<input type="number" step="0.5" min="0" max="12" class="tc-field f-std tc-std-big" placeholder="Std" value="'+tcEsc(z&&z.gesamtstunden||'')+'" data-manuell="'+(manuell?'1':'0')+'" oninput="tcRowStdManualInput(this)"/>'+
+      '</div>'+
+      '<div class="rc-uzgroup" style="display:none">'+
+        '<div class="rc-uz"><div class="rc-uz-lbl">ÜZ 25%</div><input type="number" step="0.25" min="0" class="tc-field f-uz25" value="'+tcEsc(z&&z.ueberzeit_25||'')+'" oninput="tcRowInput(this)"/></div>'+
+        '<div class="rc-uz"><div class="rc-uz-lbl">ÜZ 50%</div><input type="number" step="0.25" min="0" class="tc-field f-uz50" value="'+tcEsc(z&&z.ueberzeit_50||'')+'" oninput="tcRowInput(this)"/></div>'+
+        '<div class="rc-uz"><div class="rc-uz-lbl">ÜZ 100%</div><input type="number" step="0.25" min="0" class="tc-field f-uz100" value="'+tcEsc(z&&z.ueberzeit_100||'')+'" oninput="tcRowInput(this)"/></div>'+
+      '</div>'+
+      '<div class="tc-lbl">Spesen</div>'+
       '<div class="rc-spesen-chips">'+tcSpesenChipsHtml(saetze,curSpesen)+'</div>'+
-    '</div>'+
-    '<input class="tc-field rc-grund" style="'+disInv+'" placeholder="Grund / Dauer (bei A: inkl. Krankheit)" value="'+tcEsc((z&&z.abwesenheit_grund)||'')+'" oninput="tcRowInput(this)"/>'+
-    '<div class="rc-icons">'+
-      '<button type="button" onclick="tcToggleDetails(this)">⋯ Details</button>'+
-      (rowId?'<button type="button" class="rc-del" onclick="tcRowDel(this)">🗑</button>':'')+
-      (isLast?'<button type="button" class="rc-plus" onclick="tcAddRow(\''+date+'\')">＋</button>':'')+
-    '</div>'+
-    '<div class="rc-details">'+tcDetailsArbNotizHtml(z)+tcDetailsPhotoHtml(z)+'</div>'+
-  '</div>';
-}
-function tcDetailsArbNotizHtml(z){
-  return '<div class="tc-card" style="margin-top:0"><div class="tc-card-head"><span class="tc-card-tit">🛠️ Ausgeführte Arbeiten</span></div>'+
-      '<div class="tc-dictrow" style="margin-top:8px"><textarea class="tc-field rc-arb" placeholder="Steigzone montiert, Radiatoren angeschlossen…" oninput="tcRowInput(this)">'+tcEsc((z&&(z.arbeiten||[]).join('\n'))||'')+'</textarea>'+
+      '<input type="number" step="0.05" min="0" class="tc-field f-spesen" placeholder="CHF (falls abweichend)" value="'+tcEsc(curSpesen)+'" oninput="tcRowInput(this)"/>'+
+      '<div class="tc-lbl">Tätigkeit</div>'+
+      '<div class="tc-dictrow"><textarea class="tc-field rc-arb" placeholder="Steigzone montiert, Radiatoren angeschlossen…" oninput="tcRowInput(this)">'+tcEsc((z&&(z.arbeiten||[]).join('\n'))||'')+'</textarea>'+
       '<button type="button" class="tc-mic" onclick="tcArbDictate(this)">🎙️ Diktieren</button></div>'+
     '</div>'+
-    '<div class="tc-card"><div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div>'+
+    '<div class="rc-icons">'+
+      '<button type="button" onclick="tcToggleDetails(this)">⋯ Notiz &amp; Fotos</button>'+
+      (rowId?'<button type="button" class="rc-del" onclick="tcRowDel(this)">🗑</button>':'')+
+      (isLast?'<button type="button" class="rc-plus" onclick="tcAddRow(\''+date+'\')">＋ weiterer Eintrag</button>':'')+
+    '</div>'+
+    '<div class="rc-details">'+tcDetailsNotizHtml(z)+tcDetailsPhotoHtml(z)+'</div>'+
+  '</div>';
+}
+function tcDetailsNotizHtml(z){
+  return '<div class="tc-card" style="margin-top:0"><div class="tc-card-head"><span class="tc-card-tit">📝 Notiz</span></div>'+
       '<textarea class="tc-field rc-notiz" style="margin-top:8px" placeholder="Besonderheiten…" oninput="tcRowInput(this)">'+tcEsc((z&&z.besonderheiten)||'')+'</textarea>'+
     '</div>';
 }
@@ -9717,7 +9826,7 @@ function tcAddRow(date){
   var rows=document.querySelectorAll('.tc-row[data-date="'+date+'"]');
   var lastRow=rows[rows.length-1]; if(!lastRow) return;
   var idx=(tcRowSeq[date]!=null?tcRowSeq[date]:rows.length);
-  lastRow.insertAdjacentHTML('afterend', tcRowHtml(date,idx,null,true,false));
+  lastRow.insertAdjacentHTML('afterend', tcRowHtml(date,idx,null,true));
   tcRowSeq[date]=idx+1;
   var oldPlus=lastRow.querySelector('.rc-plus'); if(oldPlus) oldPlus.remove();
   tcApplyPrefillToRow(lastRow.nextElementSibling);
@@ -9731,26 +9840,42 @@ function tcRowInput(el){
 }
 function tcRowZielChange(el){
   var rowEl=el.closest('[data-row]'); if(!rowEl) return;
-  var val=el.value, isAbw=val.indexOf('abw:')===0;
-  var setDisp=function(sel,show){ var e=rowEl.querySelector(sel); if(e) e.style.display=show?'':'none'; };
-  setDisp('.rc-gewerk', !isAbw);
-  setDisp('.rc-std', !isAbw);
-  setDisp('.rc-uzgroup', !isAbw && tcShowUZ);
-  setDisp('.rc-spesenwrap', !isAbw);
-  setDisp('.rc-grund', isAbw);
-  if(!isAbw){
+  var val=el.value, isAbw=val.indexOf('abw:')===0, hasZiel=!!val;
+  var ph=rowEl.querySelector('.rc-placeholder'); if(ph) ph.style.display=hasZiel?'none':'';
+  var grund=rowEl.querySelector('.rc-grund-wrap'); if(grund) grund.style.display=isAbw?'':'none';
+  var body=rowEl.querySelector('.rc-body'); if(body) body.style.display=(hasZiel&&!isAbw)?'':'none';
+  if(hasZiel && !isAbw){
+    // Ziel gewechselt: Baustelle/Kunde-Zeile, Projektnummer-Vorschlag, Pause-Default,
+    // Spesen-Sätze neu je nach Projekt/Kunde (Spesenreglement).
+    var proj=val.indexOf('p:')===0?tcWocheProjekte.filter(function(p){return p.id===val.slice(2);})[0]:null;
+    var svc=val.indexOf('s:')===0?tcWocheServices.filter(function(s){return s.id===val.slice(2);})[0]:null;
+    var bTxt=tcBaustelleText(proj,svc);
+    var bEl=rowEl.querySelector('.rc-baustelle');
+    if(bEl){ bEl.textContent=bTxt; bEl.style.display=bTxt?'':'none'; }
+    var pnInp=rowEl.querySelector('.f-projektnummer');
+    if(pnInp && !pnInp.value && proj && proj.projektnummer) pnInp.value=proj.projektnummer;
+    var pauseInp=rowEl.querySelector('.f-pause');
+    if(pauseInp && !rowEl.getAttribute('data-id')) pauseInp.value=tcPauseDefaultH(val); // nur bei neuer Zeile vorbelegen
     var saetze=tcSpesenSaetzeFor(val);
     var chipBox=rowEl.querySelector('.rc-spesen-chips');
     var curInp=rowEl.querySelector('.f-spesen');
     if(chipBox) chipBox.innerHTML=tcSpesenChipsHtml(saetze, curInp?curInp.value:'');
   }
+  tcApplyUZVisibility();
   tcRecalcTotals();
   tcScheduleSave(rowEl);
 }
+/* ZIEL 1 — Fussnote zählt NUR Zeilen mit gewähltem Ziel. Eine leere, nicht
+   zugeordnete Zeile darf nie in Total-Stunden/-Spesen einfliessen (Datenrisiko-Fix). */
 function tcRecalcTotals(){
   function sum(cls){
     var s=0;
-    Array.prototype.forEach.call(document.querySelectorAll('#tc-content .'+cls),function(e){ s+=Number(e.value)||0; });
+    Array.prototype.forEach.call(document.querySelectorAll('#tc-content .tc-row[data-row]'),function(rowEl){
+      var zielVal=(rowEl.querySelector('.rc-ziel')||{}).value||'';
+      if(!zielVal) return;
+      var e=rowEl.querySelector('.'+cls);
+      if(e) s+=Number(e.value)||0;
+    });
     return Math.round(s*100)/100;
   }
   var set=function(id,txt){ var e=document.getElementById(id); if(e) e.textContent=txt; };
@@ -9785,8 +9910,16 @@ function tcCollectRow(rowEl){
   } else {
     if(zielVal.indexOf('s:')===0) body.service_auftrag_id=zielVal.slice(2);
     else body.projekt_id=zielVal.slice(2);
-    body.taetigkeit=(rowEl.querySelector('.rc-gewerk')||{}).value||'';
-    body.stunden=(rowEl.querySelector('.f-std')||{}).value||0;
+    var gewerkChip=rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel');
+    body.taetigkeit=gewerkChip?gewerkChip.getAttribute('data-v'):'';
+    body.start_zeit=(rowEl.querySelector('.f-start')||{}).value||'';
+    body.end_zeit=(rowEl.querySelector('.f-ende')||{}).value||'';
+    var pauseH=(rowEl.querySelector('.f-pause')||{}).value;
+    body.pause_minuten=(pauseH!==''&&pauseH!=null)?Math.round(Number(pauseH)*60):'';
+    var stdInp=rowEl.querySelector('.f-std');
+    body.stunden=stdInp?stdInp.value:0;
+    body.stunden_manuell=!!(stdInp&&stdInp.getAttribute('data-manuell')==='1');
+    body.projektnummer_erfasst=(rowEl.querySelector('.f-projektnummer')||{}).value||'';
     body.uz25=(rowEl.querySelector('.f-uz25')||{}).value||0;
     body.uz50=(rowEl.querySelector('.f-uz50')||{}).value||0;
     body.uz100=(rowEl.querySelector('.f-uz100')||{}).value||0;

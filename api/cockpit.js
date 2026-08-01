@@ -98,6 +98,7 @@ const TECHNIKER_ACTIONS = new Set([
   'tech_projekte', 'tech_projekt', 'tech_rapporte', 'tech_rapport_add',
   // Wochenrapport (Kopf + strukturierte Tageszeilen, siehe unten).
   'tech_tag_save', 'tech_tag_del', 'tech_wochen_rapport', 'tech_wochen_liste',
+  'tech_wochen_einreichen', 'tech_wochen_sign',
   // Feature B/C: Techniker lädt getaggte Medien hoch, sieht Galerie, bucht auf
   // zugewiesene Service-Aufträge, markiert erledigt. Zugriff über die verifizierte Kette.
   'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
@@ -298,8 +299,13 @@ export default async function handler(req, res) {
       case 'tech_tag_del':       return res.status(200).json(await delTechTag(req.body, scope));
       case 'tech_wochen_rapport': return res.status(200).json(await getTechWochenRapport(req.body, scope));
       case 'tech_wochen_liste':  return res.status(200).json(await getTechWochenListe(scope));
+      case 'tech_wochen_einreichen': return res.status(200).json(await einreichenWoche(req.body, scope));
+      case 'tech_wochen_sign':   return res.status(200).json(await saveWochenUnterschrift(req.body, scope));
       case 'pm_wochenrapporte_liste': return res.status(200).json(await pmWochenrapporteListe());
       case 'pm_wochenrapport':   return res.status(200).json(await pmWochenrapport(req.body));
+      case 'pm_wochenrapport_update': return res.status(200).json(await pmWochenrapportUpdate(req.body, scope));
+      case 'pm_wochenrapport_delete': return res.status(200).json(await pmWochenrapportDelete(req.body, scope));
+      case 'pm_wochenrapport_move':   return res.status(200).json(await pmWochenrapportMove(req.body, scope));
       // ── Feature B: Medien (Foto/Video) mit Standort-Tags + Stockwerk-Katalog ──
       case 'medien_list':      return res.status(200).json(await medienList(req.body, scope));
       case 'medien_upload':    return res.status(200).json(await medienUpload(req.body, scope));
@@ -2170,19 +2176,26 @@ async function getTechProjekte(scope) {
     .then(ohneGeloeschte).catch(() => []);
   const taetById = {};
   for (const a of asg) taetById[a.projekt_id] = a.taetigkeit || null;
-  // Spesenreglement des Kunden (falls hinterlegt) je Projekt mitgeben — Wochenrapport-
-  // Editor zeigt dann dessen Sätze statt der Standard-Chips 15/30/35/45.
+  // Spesenreglement + Pausen-Vorgabe des Kunden (falls hinterlegt) je Projekt mitgeben —
+  // Wochenrapport-Editor zeigt dann dessen Sätze/Pause statt der Standard-Chips/1.25h.
+  // Firma (Baustelle/Kunde-Anzeige je Zeile) ebenso — gleiches Muster wie das bereits
+  // bestehende Kopf-Anzeigefeld in getTechWochenRapport (Parität mit Master-Ansicht).
   const kundeIds = [...new Set(rows.map((p) => p.kunde_id).filter(Boolean))];
-  let spesenByKunde = {};
+  let kundeById = {};
   if (kundeIds.length) {
-    const kd = await sbGet(`gs_kunden?id=in.(${kundeIds.join(',')})&select=id,spesenreglement`).catch(() => []);
-    for (const k of kd) if (k.spesenreglement) spesenByKunde[k.id] = k.spesenreglement;
+    const kd = await sbGet(`gs_kunden?id=in.(${kundeIds.join(',')})&select=id,spesenreglement,pause_standard,firma`).catch(() => []);
+    for (const k of kd) kundeById[k.id] = k;
   }
   return {
-    projekte: rows.map((p) => ({
-      ...techSafeProjekt(p), taetigkeit: taetById[p.id] || null,
-      spesenreglement: spesenByKunde[p.kunde_id] || null,
-    })),
+    projekte: rows.map((p) => {
+      const k = kundeById[p.kunde_id] || {};
+      return {
+        ...techSafeProjekt(p), taetigkeit: taetById[p.id] || null,
+        spesenreglement: k.spesenreglement || null,
+        pause_standard: k.pause_standard != null ? Number(k.pause_standard) : null,
+        kunde_name: k.firma || null,
+      };
+    }),
   };
 }
 
@@ -2302,19 +2315,22 @@ function matPositionen(v) {
 }
 // Wochenkopf holen oder anlegen (UNIQUE techniker+jahr+woche). hauptprojekt_id
 // nur beim ERSTEN Anlegen gesetzt (erstes bebuchtes Projekt der Woche).
-async function getOrCreateWochenrapport(scope, jahr, woche, projektIdHint) {
+// Nimmt technikerUserId/technikerId direkt entgegen (statt scope) — so kann sie
+// auch der Master beim Verschieben einer Zeile auf einen ANDEREN Techniker
+// wiederverwenden (pmWochenrapportMove), nicht nur der Techniker für sich selbst.
+async function getOrCreateWochenrapport(technikerUserId, technikerId, jahr, woche, projektIdHint) {
   const find = () => sbGet(
-    `gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=*&limit=1`,
+    `gs_wochenrapporte?techniker_user_id=eq.${technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=*&limit=1`,
   );
   const existing = await find().catch(() => []);
   if (existing && existing[0]) return existing[0];
   let name = 'Techniker';
   try {
-    const t = await sbGet(`gs_techniker?id=eq.${scope.technikerId}&select=name&limit=1`);
+    const t = await sbGet(`gs_techniker?id=eq.${technikerId}&select=name&limit=1`);
     if (t && t[0] && t[0].name) name = t[0].name;
   } catch (_) { /* egal, Fallback-Name */ }
   const row = {
-    techniker_user_id: scope.technikerUserId, jahr, woche,
+    techniker_user_id: technikerUserId, jahr, woche,
     hauptprojekt_id: projektIdHint || null,
     rapport_nr: rapportNr(jahr, woche, name),
   };
@@ -2330,6 +2346,29 @@ async function getOrCreateWochenrapport(scope, jahr, woche, projektIdHint) {
     if (isNoTable(e)) return null; // Migration fehlt noch — Tageszeile speichert trotzdem, nur ohne Kopf.
     throw e;
   }
+}
+
+// ZIEL 2 — 24h-Schreibfenster nach "Woche einreichen". Greift NUR im Techniker-
+// Pfad (saveTechTag/delTechTag/Technik-Unterschrift) — der Master hat dafür die
+// eigenständigen pm_wochenrapport_* Actions, die diese Funktion nie aufrufen.
+function assertWochenSchreibbar(wr) {
+  if (!wr) return; // Migration fehlt noch / kein Kopf → wie bisher, nichts blockieren
+  if (wr.status === 'eingereicht' && wr.eingereicht_am) {
+    const deadline = new Date(wr.eingereicht_am).getTime() + 24 * 60 * 60 * 1000;
+    if (Date.now() > deadline) throw new Forbidden();
+  }
+}
+
+// ZIEL 3 — Änderungsprotokoll. Schreibt VOR dem eigentlichen Eingriff, damit ein
+// Fehler beim Log den Eingriff verhindert statt eine Lücke zu hinterlassen.
+async function logWochenAenderung(scope, { wochenrapportId, tagesrapportId, aktion, feld, wertVorher }) {
+  await sbWrite('POST', 'gs_wochenrapport_log', {
+    wochenrapport_id: wochenrapportId || null,
+    tagesrapport_id: tagesrapportId || null,
+    aktion, feld: feld || null,
+    wert_vorher: wertVorher != null ? wertVorher : null,
+    geaendert_von: scope.userId,
+  });
 }
 
 // Eine Tageszeile speichern: Arbeitstag (Projekt/Service + Stunden) ODER
@@ -2377,7 +2416,14 @@ async function saveTechTag(b, scope) {
 
   const { woche, jahr } = isoWeekJahr(datum);
   const heute = new Date().toISOString().slice(0, 10);
-  const wr = await getOrCreateWochenrapport(scope, jahr, woche, projektIdForHeader);
+  const wr = await getOrCreateWochenrapport(scope.technikerUserId, scope.technikerId, jahr, woche, projektIdForHeader);
+  assertWochenSchreibbar(wr); // ZIEL 2: nach Ablauf des 24h-Fensters gesperrt (Master ausgenommen, s.o.)
+
+  // ZIEL 1 — Pause in Minuten (Client rechnet Stunden↔Minuten um), Manuell-Flag
+  // (Std-Feld weicht von Start/Ende-Pause-Berechnung ab), freie Projektnummer.
+  const pause_minuten = (b.pause_minuten != null && b.pause_minuten !== '') ? num(b.pause_minuten) : null;
+  const stunden_manuell = !!b.stunden_manuell;
+  const projektnummer_erfasst = b.projektnummer_erfasst ? String(b.projektnummer_erfasst).slice(0, 60) : null;
 
   Object.assign(row, {
     datum,
@@ -2387,7 +2433,7 @@ async function saveTechTag(b, scope) {
     ueberzeit_25: (b.uz25 != null && b.uz25 !== '') ? num(b.uz25) : 0,
     ueberzeit_50: (b.uz50 != null && b.uz50 !== '') ? num(b.uz50) : 0,
     ueberzeit_100: (b.uz100 != null && b.uz100 !== '') ? num(b.uz100) : 0,
-    start_zeit, end_zeit,
+    start_zeit, end_zeit, pause_minuten, stunden_manuell, projektnummer_erfasst,
     taetigkeit: GEWERK_OPTIONS.has(b.taetigkeit) ? b.taetigkeit : null,
     spesen: (b.spesen != null && b.spesen !== '') ? num(b.spesen) : 0,
     material: toStrArr(b.material),
@@ -2443,8 +2489,12 @@ async function saveTechTag(b, scope) {
 
 async function delTechTag(b, scope) {
   const id = uuid(b.id);
-  const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=id,techniker_user_id&limit=1`).catch(() => []);
+  const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=id,techniker_user_id,wochenrapport_id&limit=1`).catch(() => []);
   if (!rows[0] || rows[0].techniker_user_id !== scope.technikerUserId) throw new Forbidden();
+  if (rows[0].wochenrapport_id) {
+    const wr = await sbGet(`gs_wochenrapporte?id=eq.${rows[0].wochenrapport_id}&select=status,eingereicht_am&limit=1`).catch(() => []);
+    assertWochenSchreibbar(wr && wr[0]);
+  }
   await sbWrite('DELETE', `gs_tagesrapporte?id=eq.${id}`, {}, 'return=minimal');
   return { ok: true };
 }
@@ -2499,6 +2549,7 @@ async function getTechWochenRapport(b, scope) {
     ...z,
     projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
+    standort: z.projekt_id ? (projMap[z.projekt_id] || {}).standort || null : null,
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
   }));
   const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
