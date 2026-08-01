@@ -1004,6 +1004,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .rc-std-flag{color:#C9A961;font-weight:700;font-style:normal;}
 #tech-cockpit .tc-std-big{font-size:19px;font-weight:800;text-align:center;padding:14px 13px;}
 #tech-cockpit .rc-gewerk-chips{margin-top:6px;}
+#tech-cockpit .rc-time-chips{margin-bottom:6px;}
 #tech-cockpit .rc-datum{flex:0 0 46px;font-weight:800;font-size:12.5px;color:#C9A961;align-self:flex-start;padding-top:9px;}
 #tech-cockpit .rc-ziel{flex:1 1 100%;min-width:0;}
 #tech-cockpit .rc-status{flex:0 0 auto;font-size:12px;width:16px;text-align:center;}
@@ -9694,6 +9695,22 @@ function tcSpesenChipPick(el){
   if(inp){ inp.value=el.getAttribute('data-v'); tcRowInput(inp); }
 }
 
+/* ZIEL 3 (Runde A2) — Schnellwahl-Chips über Start/Ende, gleiche Optik wie
+   Spesen-Chips. Freie Eingabe im Zeitfeld bleibt jederzeit möglich. */
+var TC_ZEIT_CHIPS={start:['06:00','07:00','08:00'],ende:['16:00','16:15','17:00']};
+function tcTimeChipsHtml(kind,cur){
+  return TC_ZEIT_CHIPS[kind].map(function(v){
+    return '<div class="tc-chip tc-chip-sm'+(cur===v?' sel':'')+'" data-v="'+v+'" onclick="tcTimeChipPick(this,\''+kind+'\')">'+v+'</div>';
+  }).join('');
+}
+function tcTimeChipPick(el,kind){
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var rowEl=el.closest('[data-row]'); if(!rowEl) return;
+  var inp=rowEl.querySelector(kind==='start'?'.f-start':'.f-ende');
+  if(inp){ inp.value=el.getAttribute('data-v'); tcRowTimeInput(inp); }
+}
+
 /* ── Kopf: Vorbelegung "ganze Woche gleiches Projekt" — füllt nur noch leere,
    noch nicht gespeicherte Zeilen. Jede Zeile bleibt einzeln überschreibbar. ── */
 function tcPrefillHtml(){
@@ -9979,8 +9996,8 @@ function tcRowHtml(date,idx,z,isLast){
       '<div class="tc-lbl">Gewerk</div>'+
       '<div class="tc-chips rc-gewerk-chips">'+tcGewerkChipsHtml(z&&z.taetigkeit)+'</div>'+
       '<div class="rc-timegrid">'+
-        '<div><div class="tc-lbl">Start</div><input type="time" class="tc-field f-start" value="'+tcEsc((z&&z.start_zeit)||'')+'" oninput="tcRowTimeInput(this)"/></div>'+
-        '<div><div class="tc-lbl">Ende</div><input type="time" class="tc-field f-ende" value="'+tcEsc((z&&z.end_zeit)||'')+'" oninput="tcRowTimeInput(this)"/></div>'+
+        '<div><div class="tc-lbl">Start</div><div class="tc-chips rc-time-chips">'+tcTimeChipsHtml('start',(z&&z.start_zeit)||'')+'</div><input type="time" class="tc-field f-start" value="'+tcEsc((z&&z.start_zeit)||'')+'" oninput="tcRowTimeInput(this)"/></div>'+
+        '<div><div class="tc-lbl">Ende</div><div class="tc-chips rc-time-chips">'+tcTimeChipsHtml('ende',(z&&z.end_zeit)||'')+'</div><input type="time" class="tc-field f-ende" value="'+tcEsc((z&&z.end_zeit)||'')+'" oninput="tcRowTimeInput(this)"/></div>'+
         '<div><div class="tc-lbl">Pause (h)</div><input type="number" step="0.25" min="0" max="4" class="tc-field f-pause" value="'+tcEsc(pauseH)+'" oninput="tcRowTimeInput(this)"/></div>'+
       '</div>'+
       '<div class="rc-std-wrap">'+
