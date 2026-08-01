@@ -984,11 +984,13 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
    beschreibbar ohne Aufklappen. Flexbox statt Grid-Areas — Felder brechen auf dem
    Handy natürlich in Zeilen um, ab 860px reicht die Breite für eine einzige Zeile
    (Tabellen-Optik). Nur "Details" (Arbeiten/Notiz/Fotos) ist eine echte Klappe. ── */
-#tech-cockpit .tc-wk2{display:flex;flex-direction:column;gap:12px;background:transparent;border:none;box-shadow:none;}
+#tech-cockpit .tc-wk2{display:flex;flex-direction:column;gap:18px;background:transparent;border:none;box-shadow:none;}
 #tech-cockpit .tc-wk2-head{display:none;}
 /* ZIEL 1 — Kartenlayout: eine Karte pro Tag (tc-daycard), darin 1..n Einträge
    (tc-row) als vertikal gestapelte Unterkarten, Papierformular-Feldreihenfolge. */
-#tech-cockpit .tc-daycard{background:#131519;border:1px solid rgba(255,255,255,.07);border-radius:14px;overflow:hidden;box-shadow:0 6px 16px rgba(0,0,0,.22);}
+/* ZIEL 4b — dünner goldener Rand statt neutralem Weiss-Rand, Gold nur als
+   Rahmen/Akzent (keine goldenen Flächen). */
+#tech-cockpit .tc-daycard{background:#131519;border:1px solid rgba(201,169,97,.3);border-radius:14px;overflow:hidden;box-shadow:0 6px 16px rgba(0,0,0,.22);}
 #tech-cockpit .tc-day-head{display:flex;align-items:baseline;gap:8px;padding:12px 14px 8px;}
 #tech-cockpit .tc-day-wd{font-weight:800;font-size:13px;color:#C9A961;letter-spacing:.3px;}
 #tech-cockpit .tc-day-dm{font-size:12px;color:#8a97a8;}
@@ -1033,7 +1035,9 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-dictrow{display:flex;gap:8px;align-items:flex-start;}
 #tech-cockpit .tc-dictrow .tc-field{flex:1;}
 #tech-cockpit .tc-chip.tc-chip-sm{padding:6px 11px;font-size:12px;}
-#tech-cockpit .tc-foottotal-row{display:flex;flex-wrap:wrap;gap:8px;padding:13px 14px;background:rgba(201,169,97,.06);border-top:1px solid rgba(255,255,255,.07);}
+/* ZIEL 4b — Fussnote optisch als eigener, klar abgesetzter Abschnitt (kräftigerer
+   Rand als die Tageskarten), damit "Total" nicht mit den Tageszeilen verschwimmt. */
+#tech-cockpit .tc-foottotal-row{display:flex;flex-wrap:wrap;gap:8px;padding:13px 14px;background:rgba(201,169,97,.06);border:1.5px solid rgba(201,169,97,.55);border-radius:14px;margin-top:2px;}
 #tech-cockpit .tc-foottotal-row .ft{flex:1 1 40%;}
 #tech-cockpit .tc-foottotal-row .lbl{display:block;font-size:10.5px;color:#8a97a8;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
 #tech-cockpit .tc-foottotal-row .val{color:#C9A961;font-size:14.5px;font-weight:800;}
@@ -1050,11 +1054,14 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-wr-pill{display:inline-block;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;background:rgba(255,255,255,.06);color:#8a97a8;}
 #tech-cockpit .tc-wr-pill.on{background:rgba(62,207,142,.14);color:#3ecf8e;}
 #tech-cockpit .tc-countdown-chip.locked{background:rgba(255,90,90,.16);color:#ff8d8d;}
-#tech-cockpit .tc-sign-card{margin-top:16px;}
+#tech-cockpit .tc-sign-card{margin-top:18px;border:1.5px solid rgba(201,169,97,.55);}
 #tech-cockpit .tc-sign-block{margin-top:14px;padding-top:14px;border-top:1px dashed rgba(255,255,255,.08);}
 #tech-cockpit .tc-sign-block:first-of-type{margin-top:8px;padding-top:0;border-top:none;}
-#tech-cockpit .tc-sign-pad{width:100%;height:120px;background:#0f1116;border:1px solid rgba(255,255,255,.14);border-radius:11px;touch-action:none;margin-top:8px;display:block;}
-#tech-cockpit .tc-sign-preview{width:100%;max-width:300px;height:120px;object-fit:contain;background:#0f1116;border:1px solid rgba(255,255,255,.14);border-radius:11px;margin-top:8px;display:block;}
+/* ZIEL 4a — Unterschriftsfeld ist ein Dokument-Element: immer weiss/schwarz,
+   unabhängig vom dunklen Command-Center-Stil drumherum (auch im Dunkelmodus). */
+#tech-cockpit .tc-sign-pad{width:100%;height:120px;background:#ffffff;border:1px solid rgba(201,169,97,.55);border-radius:11px;touch-action:none;margin-top:8px;display:block;}
+#tech-cockpit .tc-sign-preview{width:100%;max-width:300px;height:120px;object-fit:contain;background:#ffffff;border:1px solid rgba(201,169,97,.55);border-radius:11px;margin-top:8px;display:block;}
+#tech-cockpit .tc-sign-caption{font-size:11px;color:#8a97a8;text-align:center;margin-top:5px;font-weight:700;letter-spacing:.2px;}
 #tech-cockpit .tc-sign-meta{font-size:11.5px;color:#8a97a8;margin-top:6px;}
 #tech-cockpit .tc-link{font-size:12.5px;color:#C9A961;font-weight:700;cursor:pointer;margin-top:10px;text-decoration:underline;}
 #tech-cockpit .tc-submit-row{margin-top:16px;}
@@ -9837,22 +9844,26 @@ function tcEinreichenHtml(kopf){
   var techName=tcEsc(authTechName||'Techniker');
   var techDone=!!(kopf&&kopf.unterschrift_technik_url);
   var techBlock=techDone
-    ? '<img class="tc-sign-preview" src="'+tcEsc(kopf.unterschrift_technik_url)+'"/><div class="tc-sign-meta">Signiert '+tcEsc(tcFmtDT(kopf.unterschrift_technik_at))+'</div>'
+    ? '<img class="tc-sign-preview" src="'+tcEsc(kopf.unterschrift_technik_url)+'"/><div class="tc-sign-caption">Unterschrift Techniker</div><div class="tc-sign-meta">Signiert '+tcEsc(tcFmtDT(kopf.unterschrift_technik_at))+'</div>'
     : '<canvas id="tc-sign-technik" class="tc-sign-pad"></canvas>'+
+      '<div class="tc-sign-caption">Unterschrift Techniker</div>'+
       '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignClear(\'tc-sign-technik\')">Löschen</button>'+
       '<button type="button" class="tc-btn gold" onclick="tcSaveSign(\'technik\')">Unterschrift speichern</button></div>';
   var kStatus=kopf&&kopf.unterschrift_kunde_status;
   var kundeBlock;
   if(kStatus==='signiert'&&kopf.unterschrift_kunde_url){
     kundeBlock='<img class="tc-sign-preview" src="'+tcEsc(kopf.unterschrift_kunde_url)+'"/>'+
+      '<div class="tc-sign-caption">Unterschrift Auftraggeber</div>'+
       '<div class="tc-sign-meta">Signiert '+tcEsc(tcFmtDT(kopf.unterschrift_kunde_at))+(kopf.unterschrift_kunde_name?(' · '+tcEsc(kopf.unterschrift_kunde_name)):'')+'</div>'+
       '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignKundeReset()">Neu erfassen</button></div>';
   } else if(kStatus==='folgt'){
-    kundeBlock='<div class="tc-sign-meta">Unterschrift folgt'+(kopf.unterschrift_kunde_grund?(' — '+tcEsc(kopf.unterschrift_kunde_grund)):'')+'</div>'+
+    kundeBlock='<div class="tc-sign-caption">Unterschrift Auftraggeber</div>'+
+      '<div class="tc-sign-meta">Unterschrift folgt'+(kopf.unterschrift_kunde_grund?(' — '+tcEsc(kopf.unterschrift_kunde_grund)):'')+'</div>'+
       '<div class="tc-btnrow"><button type="button" class="tc-btn gold" onclick="tcSignKundeReset()">Jetzt nachtragen</button></div>';
   } else {
-    kundeBlock='<input class="tc-field" id="tc-kunde-name" placeholder="Name und Funktion (z.B. Frau Muster, Hausverwaltung)" value="'+tcEsc((kopf&&kopf.unterschrift_kunde_name)||'')+'"/>'+
-      '<canvas id="tc-sign-kunde" class="tc-sign-pad"></canvas>'+
+    kundeBlock='<canvas id="tc-sign-kunde" class="tc-sign-pad"></canvas>'+
+      '<div class="tc-sign-caption">Unterschrift Auftraggeber</div>'+
+      '<input class="tc-field" id="tc-kunde-name" placeholder="Name und Funktion (z.B. Frau Muster, Hausverwaltung)" value="'+tcEsc((kopf&&kopf.unterschrift_kunde_name)||'')+'" style="margin-top:8px"/>'+
       '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignClear(\'tc-sign-kunde\')">Löschen</button>'+
       '<button type="button" class="tc-btn gold" onclick="tcSaveSign(\'kunde\')">Unterschrift speichern</button></div>'+
       '<div class="tc-link" onclick="tcSignFolgt()">Unterschrift folgt (Grund angeben)</div>';
@@ -9880,8 +9891,9 @@ function tcSignFolgt(){
 function tcSignKundeReset(){
   var wrap=document.getElementById('tc-kunde-sign-wrap'); if(!wrap) return;
   wrap.innerHTML='<div class="tc-lbl">Auftraggeber-Bestätigung</div>'+
-    '<input class="tc-field" id="tc-kunde-name" placeholder="Name und Funktion (z.B. Frau Muster, Hausverwaltung)"/>'+
     '<canvas id="tc-sign-kunde" class="tc-sign-pad"></canvas>'+
+    '<div class="tc-sign-caption">Unterschrift Auftraggeber</div>'+
+    '<input class="tc-field" id="tc-kunde-name" placeholder="Name und Funktion (z.B. Frau Muster, Hausverwaltung)" style="margin-top:8px"/>'+
     '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcSignClear(\'tc-sign-kunde\')">Löschen</button>'+
     '<button type="button" class="tc-btn gold" onclick="tcSaveSign(\'kunde\')">Unterschrift speichern</button></div>'+
     '<div class="tc-link" onclick="tcSignFolgt()">Unterschrift folgt (Grund angeben)</div>';
@@ -9901,7 +9913,12 @@ function tcSignInit(canvasId){
   var cv=document.getElementById(canvasId); if(!cv) return;
   var rect=cv.getBoundingClientRect();
   cv.width=Math.max(260,Math.round(rect.width)||300); cv.height=120;
-  var ctx=cv.getContext('2d'); ctx.strokeStyle='#e8edf5'; ctx.lineWidth=2.4; ctx.lineCap='round'; ctx.lineJoin='round';
+  var ctx=cv.getContext('2d');
+  // ZIEL 4a (Runde A2) — Unterschriftsfeld ist ein Dokument-Element: weisser
+  // Grund fest in den Canvas gemalt (nicht nur CSS), damit das exportierte PNG
+  // überall (App, Master-Ansicht, später PDF) opak weiss bleibt statt transparent.
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.strokeStyle='#0a0e14'; ctx.lineWidth=2.4; ctx.lineCap='round'; ctx.lineJoin='round';
   var state={ctx:ctx,has:false}; tcSignState[canvasId]=state;
   var drawing=false,last=null;
   function pos(e){var r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(cv.width/r.width),y:(e.clientY-r.top)*(cv.height/r.height)};}
@@ -9912,7 +9929,7 @@ function tcSignInit(canvasId){
 }
 function tcSignClear(canvasId){
   var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
-  if(st&&cv){ st.ctx.clearRect(0,0,cv.width,cv.height); st.has=false; }
+  if(st&&cv){ st.ctx.clearRect(0,0,cv.width,cv.height); st.ctx.fillStyle='#ffffff'; st.ctx.fillRect(0,0,cv.width,cv.height); st.has=false; }
 }
 function tcSignDataUrl(canvasId){
   var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
