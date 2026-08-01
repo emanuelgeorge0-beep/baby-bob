@@ -9840,19 +9840,24 @@ function tcSignKundeReset(){
 // bestehende Kunden-PDF-Unterschriftsfeld (trInitSign) — hier je Canvas-Id, weil
 // zwei unabhängige Pads (Technik + Kunde) gleichzeitig auf der Seite stehen.
 var tcSignState={};
+// ZIEL 1 (Runde A2) — kein Guard mehr auf tcSignState[canvasId]: tcH() ersetzt bei
+// jedem tcRenderWoche() das komplette innerHTML, die alten <canvas>-Knoten sterben
+// und neue mit derselben ID entstehen. Der alte Guard verhinderte dadurch nach der
+// ERSTEN erfolgreichen Bindung jede weitere Bindung — Pad wirkte "tot" nach jedem
+// Re-Render (Wochenwechsel, Unterschrift speichern, Einreichen). Jetzt: immer neu
+// binden. Pointer Events statt Maus/Touch-Doppelbindung (robuster, ein Codepfad).
 function tcSignInit(canvasId){
-  var cv=document.getElementById(canvasId); if(!cv||tcSignState[canvasId]) return;
+  var cv=document.getElementById(canvasId); if(!cv) return;
   var rect=cv.getBoundingClientRect();
   cv.width=Math.max(260,Math.round(rect.width)||300); cv.height=120;
-  var ctx=cv.getContext('2d'); ctx.strokeStyle='#e8edf5'; ctx.lineWidth=2.4; ctx.lineCap='round';
+  var ctx=cv.getContext('2d'); ctx.strokeStyle='#e8edf5'; ctx.lineWidth=2.4; ctx.lineCap='round'; ctx.lineJoin='round';
   var state={ctx:ctx,has:false}; tcSignState[canvasId]=state;
   var drawing=false,last=null;
-  function pos(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;return {x:(t.clientX-r.left)*(cv.width/r.width),y:(t.clientY-r.top)*(cv.height/r.height)};}
-  function start(e){drawing=true;last=pos(e);e.preventDefault();}
+  function pos(e){var r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(cv.width/r.width),y:(e.clientY-r.top)*(cv.height/r.height)};}
+  function down(e){drawing=true;last=pos(e);try{cv.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault();}
   function move(e){if(!drawing)return;var p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;state.has=true;e.preventDefault();}
-  function end(){drawing=false;}
-  cv.onmousedown=start;cv.onmousemove=move;cv.onmouseup=end;cv.onmouseleave=end;
-  cv.ontouchstart=start;cv.ontouchmove=move;cv.ontouchend=end;
+  function up(e){if(!drawing)return;drawing=false;try{cv.releasePointerCapture(e.pointerId);}catch(_){}}
+  cv.onpointerdown=down; cv.onpointermove=move; cv.onpointerup=up; cv.onpointercancel=up;
 }
 function tcSignClear(canvasId){
   var st=tcSignState[canvasId], cv=document.getElementById(canvasId);

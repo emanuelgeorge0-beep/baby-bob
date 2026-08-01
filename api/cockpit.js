@@ -2507,10 +2507,13 @@ async function einreichenWoche(b, scope) {
   const jahr = parseInt(b.jahr, 10);
   const woche = parseInt(b.woche, 10);
   if (!jahr || !woche) throw new Error('jahr/woche nötig');
-  const rows = await sbGet(`gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=id&limit=1`)
+  const rows = await sbGet(`gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&jahr=eq.${jahr}&woche=eq.${woche}&select=id,unterschrift_technik_path&limit=1`)
     .catch((e) => { if (isNoTable(e)) return null; throw e; });
   if (rows === null) return { notMigrated: true };
   if (!rows[0]) return { error: 'Noch keine Zeile für diese Woche erfasst.' };
+  // ZIEL 1 (Runde A2) — ohne Technik-Unterschrift kein Einreichen. Kunde bleibt
+  // optional ('folgt' + Grund ist ein gültiger, dauerhafter Zustand).
+  if (!rows[0].unterschrift_technik_path) return { error: 'Bitte zuerst mit der Technik-Unterschrift bestätigen.' };
   const r = await sbWrite('PATCH', `gs_wochenrapporte?id=eq.${rows[0].id}`, {
     status: 'eingereicht', eingereicht_am: new Date().toISOString(),
   });
