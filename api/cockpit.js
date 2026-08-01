@@ -2659,12 +2659,31 @@ async function getTechWochenRapport(b, scope) {
 }
 
 // Liste der eigenen Wochenrapporte (Navigation "meine Wochen").
+// ZIEL 2 (Runde A2) — eigene Wochenliste für den Techniker-Reiter "Rapport"
+// (bisher gebaut, aber nie vom Client aufgerufen). Summen + Unterschrift-Status
+// dazu, damit die Liste ohne Klick pro Zeile schon Status/Std/Spesen zeigt —
+// gleiches Summen-Muster wie pmWochenrapporteListe (Master-Seite).
 async function getTechWochenListe(scope) {
   const rows = await sbGet(
-    `gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&select=id,jahr,woche,rapport_nr,status,hauptprojekt_id&order=jahr.desc,woche.desc&limit=52`,
+    `gs_wochenrapporte?techniker_user_id=eq.${scope.technikerUserId}&select=id,jahr,woche,rapport_nr,status,eingereicht_am,hauptprojekt_id,unterschrift_technik_path,unterschrift_kunde_status&order=jahr.desc,woche.desc&limit=52`,
   ).catch((e) => { if (isNoTable(e)) return null; throw e; });
   if (rows === null) return { notMigrated: true, wochen: [] };
-  return { wochen: rows };
+  const ids = rows.map((r) => r.id);
+  let sums = {};
+  if (ids.length) {
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${ids.join(',')})&select=wochenrapport_id,gesamtstunden,spesen`).catch(() => []);
+    for (const z of zeilen) {
+      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, spesen: 0 });
+      s.stunden += Number(z.gesamtstunden || 0); s.spesen += Number(z.spesen || 0);
+    }
+  }
+  return {
+    wochen: rows.map((r) => ({
+      ...r,
+      total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
+      total_spesen: Math.round(((sums[r.id] || {}).spesen || 0) * 100) / 100,
+    })),
+  };
 }
 
 // ── Master: Wochenrapporte ALLER Techniker, projektübergreifend ────────────

@@ -1046,6 +1046,8 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-kopfmeta{font-size:12px;color:#8a97a8;margin-top:2px;line-height:1.5;}
 /* ZIEL 2 — Countdown-Chip (Kopfzeile) + Unterschriften-Karte + Signature-Pads. */
 #tech-cockpit .tc-countdown-chip{display:inline-block;margin-top:4px;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;background:rgba(201,169,97,.14);color:#C9A961;}
+#tech-cockpit .tc-wr-pill{display:inline-block;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;background:rgba(255,255,255,.06);color:#8a97a8;}
+#tech-cockpit .tc-wr-pill.on{background:rgba(62,207,142,.14);color:#3ecf8e;}
 #tech-cockpit .tc-countdown-chip.locked{background:rgba(255,90,90,.16);color:#ff8d8d;}
 #tech-cockpit .tc-sign-card{margin-top:16px;}
 #tech-cockpit .tc-sign-block{margin-top:14px;padding-top:14px;border-top:1px dashed rgba(255,255,255,.08);}
@@ -9515,10 +9517,41 @@ function tcFmtDM(iso){
 }
 function tcWeekdayIdx(iso){ var d=new Date(iso+'T00:00:00Z'); return (d.getUTCDay()+6)%7; } // 0=Mo..6=So
 
+/* ZIEL 2 (Runde A2) — "Rapport"-Reiter zeigt zuerst die Liste aller eigenen
+   Wochen (tech_wochen_liste, bisher gebaut aber nie angebunden), nicht mehr
+   direkt eine einzelne Woche. Eingereichte Wochen bleiben hier sichtbar/
+   anklickbar — es gibt serverseitig keinen Status-Filter (siehe Diagnose). */
 function tcRenderRapporte(){
-  if(!tcWocheState.jahr){ var now=tcISOWeekOfDate(new Date()); tcWocheState.jahr=now.jahr; tcWocheState.woche=now.woche; }
-  tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+  tcRenderWochenListe();
 }
+function tcRenderWochenListe(){
+  tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Lädt…</div>');
+  techApi('tech_wochen_liste',{}).then(function(d){
+    if(d&&d.notMigrated){ tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
+    var wochen=(d&&d.wochen)||[];
+    var neu='<div class="tc-btnrow"><button type="button" class="tc-btn gold" onclick="tcOpenAktuelleWoche()">＋ Aktuelle Woche</button></div>';
+    if(!wochen.length){ tcH('<div class="tc-sec">Meine Rapporte</div>'+neu+'<div class="tc-empty">Noch keine Wochen erfasst.</div>'); return; }
+    var rows=wochen.map(function(w){
+      var dates=tcWeekDates(w.jahr,w.woche);
+      var zeitraum=tcFmtDM(dates[0])+'–'+tcFmtDM(dates[6])+' '+w.jahr;
+      var cd=tcCountdownInfo(w);
+      var eingereicht=w.status==='eingereicht';
+      var stPill='<span class="tc-wr-pill'+(eingereicht?' on':'')+'">'+(eingereicht?'Eingereicht':'Entwurf')+'</span>';
+      var unterschrift=w.unterschrift_technik_path
+        ? (w.unterschrift_kunde_status==='signiert'?'✓ Technik + Kunde':(w.unterschrift_kunde_status==='folgt'?'✓ Technik · Kunde folgt':'✓ Technik'))
+        : '— keine Unterschrift';
+      return '<div class="tc-item" onclick="tcOpenWoche('+w.jahr+','+w.woche+')">'+
+        '<div class="ti-t">KW '+w.woche+' · '+w.jahr+'</div>'+
+        '<div class="ti-m">'+tcEsc(zeitraum)+' · '+Number(w.total_stunden||0).toFixed(2)+' h · CHF '+Number(w.total_spesen||0).toFixed(2)+'</div>'+
+        '<div class="ti-m">'+stPill+(cd?(' <span class="tc-countdown-chip'+(cd.locked?' locked':'')+'">'+tcEsc(cd.text)+'</span>'):'')+'</div>'+
+        '<div class="ti-m">'+tcEsc(unterschrift)+'</div>'+
+      '</div>';
+    }).join('');
+    tcH('<div class="tc-sec">Meine Rapporte</div>'+neu+'<div class="tc-list">'+rows+'</div>');
+  }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
+}
+function tcOpenWoche(jahr,woche){ tcLoadWoche(jahr,woche); }
+function tcOpenAktuelleWoche(){ var now=tcISOWeekOfDate(new Date()); tcLoadWoche(now.jahr,now.woche); }
 function tcWocheNav(delta){
   var mon=tcISOWeekMonday(tcWocheState.jahr,tcWocheState.woche);
   mon.setUTCDate(mon.getUTCDate()+delta*7);
@@ -9702,6 +9735,7 @@ function tcRenderWoche(){
   tcWocheZeilen.forEach(function(z){ if(zByDate[z.datum]) zByDate[z.datum].push(z); });
 
   var cd=tcCountdownInfo(kopf);
+  var backLink='<button type="button" class="tc-back" onclick="tcRenderWochenListe()">‹ Meine Rapporte</button>';
   var nav='<div class="tc-wknav" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
     '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(-1)">‹</button>'+
     '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+
@@ -9731,7 +9765,7 @@ function tcRenderWoche(){
 
   var einreichen=tcEinreichenHtml(kopf);
 
-  tcH('<div class="tc-sec">Wochenblatt</div>'+nav+meta+prefill+uzToggle+'<div class="tc-wk2" id="tc-wk2">'+rowsHtml+'</div>'+fuss+einreichen);
+  tcH(backLink+'<div class="tc-sec">Wochenblatt</div>'+nav+meta+prefill+uzToggle+'<div class="tc-wk2" id="tc-wk2">'+rowsHtml+'</div>'+fuss+einreichen);
   tcRecalcTotals();
   tcApplyUZVisibility();
   tcSignInit('tc-sign-technik');
@@ -9890,12 +9924,14 @@ function tcSaveSign(wer,statusOverride){
     tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
   }).catch(function(){ tcToast('Verbindungsfehler beim Speichern'); });
 }
+// ZIEL 2 (Runde A2) — nach dem Einreichen zurück zur Wochenliste statt auf der
+// (gefühlten) Bestätigungsseite stehenzubleiben. Toast reicht als Rückmeldung.
 function tcSubmitWoche(){
   var btn=document.getElementById('tc-submit-btn'); if(btn){ btn.disabled=true; btn.textContent='Wird eingereicht…'; }
   techApi('tech_wochen_einreichen',{jahr:tcWocheState.jahr,woche:tcWocheState.woche}).then(function(d){
     if(d&&d.error){ tcToast(d.error); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } return; }
     tcToast('✓ Woche eingereicht');
-    tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+    tcRenderWochenListe();
   }).catch(function(){ tcToast('Verbindungsfehler'); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } });
 }
 function tcApplyUZVisibility(){
