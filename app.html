@@ -1035,6 +1035,24 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-dictrow{display:flex;gap:8px;align-items:flex-start;}
 #tech-cockpit .tc-dictrow .tc-field{flex:1;}
 #tech-cockpit .tc-chip.tc-chip-sm{padding:6px 11px;font-size:12px;}
+/* ZIEL 1 (Runde B) — Tätigkeitskatalog: antippbare Tätigkeiten neben dem Freitext. */
+#tech-cockpit .tc-taet-wrap{margin-top:10px;}
+#tech-cockpit .tc-taet-list{display:flex;flex-direction:column;gap:8px;margin-bottom:8px;}
+#tech-cockpit .tc-taet-item{background:#131519;border:1px solid rgba(201,169,97,.22);border-radius:11px;padding:9px 11px;}
+#tech-cockpit .tc-taet-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+#tech-cockpit .tc-taet-item-txt{font-size:13px;color:#e8edf5;font-weight:600;flex:1;}
+#tech-cockpit .tc-taet-item-txt small{color:#8a97a8;font-weight:400;}
+#tech-cockpit .tc-taet-item-btns{display:flex;gap:4px;flex:0 0 auto;}
+#tech-cockpit .tc-taet-item-btns button{background:#0f1116;border:1px solid rgba(255,255,255,.09);color:#8a97a8;border-radius:7px;padding:4px 8px;font-size:11.5px;cursor:pointer;font-family:inherit;}
+#tech-cockpit .tc-taet-item-btns button:hover{color:#C9A961;border-color:rgba(201,169,97,.3);}
+#tech-cockpit .tc-taet-detail{margin-top:9px;padding-top:9px;border-top:1px dashed rgba(255,255,255,.08);display:flex;flex-direction:column;gap:6px;}
+#tech-cockpit .tc-taet-feld .tc-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;}
+#tech-cockpit .tc-stk-row{display:flex;align-items:center;gap:10px;margin-top:4px;}
+#tech-cockpit .tc-stk-row button{background:#0f1116;border:1px solid rgba(201,169,97,.28);color:#C9A961;border-radius:8px;width:30px;height:30px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;}
+#tech-cockpit .tc-taet-stk-val{font-size:14px;font-weight:800;color:#e8edf5;min-width:20px;text-align:center;}
+#tech-cockpit .tc-taet-picker{margin-top:8px;padding:10px 11px;background:#0f1116;border:1px solid rgba(201,169,97,.28);border-radius:11px;}
+#tech-cockpit .tc-taet-kat-chips,#tech-cockpit .tc-taet-item-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+#tech-cockpit .tc-taet-search{margin-top:2px;}
 /* ZIEL 4b — Fussnote optisch als eigener, klar abgesetzter Abschnitt (kräftigerer
    Rand als die Tageskarten), damit "Total" nicht mit den Tageszeilen verschwimmt. */
 #tech-cockpit .tc-foottotal-row{display:flex;flex-wrap:wrap;gap:8px;padding:13px 14px;background:rgba(201,169,97,.06);border:1.5px solid rgba(201,169,97,.55);border-radius:14px;margin-top:2px;}
@@ -9498,6 +9516,15 @@ var TC_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'U
 var TC_GEWERK=['Sanitär','Heizung','Klima','Lüftung','Divers'];
 var TC_SPESEN_DEFAULT=[15,30,35,45];
 var TC_WD=['Mo','Di','Mi','Do','Fr','Sa','So'];
+/* ZIEL 1 (Runde B) — Tätigkeitskatalog: gs_taetigkeitenkatalog.gewerk nutzt
+   kleingeschriebene Slugs, die bestehende Gewerk-Chip-Zeile die deutschen
+   Anzeigelabels — Mapping nur hier im Client, DB/Code-Werte bleiben unangetastet.
+   Unbekanntes fällt still auf 'allgemein' zurück (kein Fehler, kein leerer Picker). */
+var TC_GEWERK_SLUG={'Sanitär':'sanitaer','Heizung':'heizung','Klima':'klima','Lüftung':'lueftung','Divers':'allgemein'};
+function tcTaetGewerkSlug(label){ return TC_GEWERK_SLUG[label]||'allgemein'; }
+var TC_TAET_KATALOG=[]; // einmal pro Wochenladung von tech_taetigkeitenkatalog befüllt
+var TC_DN_CHIPS=['16','20','25','32','40','50','56','63','75','110'];
+var TC_TAET_FELD_LABEL={DN:'DN',STK:'Anzahl',M:'Laufmeter (m)',M2:'Fläche (m²)',ORT:'Ort',TYP:'Typ/Fabrikat',BAR:'Prüfdruck (bar)'};
 
 // ISO-Kalenderwoche aus einem Date-Objekt (spiegelt api/cockpit.js isoWeekJahr).
 function tcISOWeekOfDate(d){
@@ -9594,13 +9621,15 @@ function tcLoadWoche(jahr,woche,after){
     techApi('tech_wochen_rapport',{jahr:jahr,woche:woche}),
     techApi('tech_projekte'),
     techApi('svc_liste'),
+    techApi('tech_taetigkeitenkatalog'),
   ]).then(function(res){
-    var d=res[0]||{}, dp=res[1]||{}, ds=res[2]||{};
+    var d=res[0]||{}, dp=res[1]||{}, ds=res[2]||{}, dt=res[3]||{};
     if(d.notMigrated){ tcH('<div class="tc-sec">Wochenblatt</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
     tcWocheKopf=d.kopf||{jahr:jahr,woche:woche};
     tcWocheZeilen=d.zeilen||[];
     tcWocheProjekte=dp.projekte||[];
     tcWocheServices=(ds.auftraege||[]).filter(function(s){return s.status==='angenommen';});
+    TC_TAET_KATALOG=dt.items||[];
     tcRenderWoche();
     if(typeof after==='function') after();
   }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
@@ -9635,8 +9664,185 @@ function tcGewerkChipsHtml(cur){
 function tcRowGewerkPick(el){
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
+  // Gewerk gewechselt -> ein offener Tätigkeiten-Picker zeigt sonst die falsche
+  // Kategorie-Liste. Zuklappen, nächster "+ Tätigkeit"-Tap baut ihn neu auf.
+  var rowEl=el.closest('[data-row]');
+  var picker=rowEl?rowEl.querySelector('.tc-taet-picker'):null;
+  if(picker){ picker.style.display='none'; picker.innerHTML=''; }
   tcRowInput(el);
 }
+
+/* ── Tätigkeitskatalog (Runde B ZIEL 1) — antippbare Tätigkeiten neben dem
+   bestehenden Freitext (rc-arb, unverändert). Zwei Schritte: Kategorie-Chips
+   (gefiltert nach dem in der Zeile gewählten Gewerk), dann Tätigkeit-Chips
+   (zuletzt verwendet/meistgenutzt zuerst). Details je Tätigkeit sind optional —
+   ein Tap auf die Tätigkeit selbst reicht. Bei Ziel=Serviceauftrag ausgeblendet
+   (Details werden dort erfasst) — quelle_service=true-Einträge kommen serverseitig
+   ohnehin nie in TC_TAET_KATALOG (tech_taetigkeitenkatalog filtert sie raus). ── */
+function tcTaetWrapHtml(z,svc){
+  if(svc) return '<div class="tc-taet-wrap"><div class="tc-hint">Details werden im Serviceauftrag erfasst.</div></div>';
+  var items=((z&&z.taetigkeiten)||[]).slice().sort(function(a,b){return (a.sortierung||0)-(b.sortierung||0);});
+  return '<div class="tc-taet-wrap">'+
+    '<div class="tc-taet-list">'+items.map(tcTaetItemHtml).join('')+'</div>'+
+    '<button type="button" class="tc-btn gold tc-taet-add" onclick="tcTaetPickerToggle(this)">＋ Tätigkeit</button>'+
+    '<div class="tc-taet-picker" style="display:none"></div>'+
+  '</div>';
+}
+function tcTaetItemHtml(item){
+  var details=item.details||{};
+  var felder=(item.felder&&item.felder.length)?item.felder:Object.keys(details);
+  var summary=Object.keys(details).filter(function(k){return details[k]!=null&&details[k]!=='';}).map(function(k){return (TC_TAET_FELD_LABEL[k]||k)+' '+details[k];}).join(' · ');
+  return '<div class="tc-taet-item" data-taetigkeit-id="'+tcEsc(item.taetigkeit_id||'')+'" data-bezeichnung="'+tcEsc(item.bezeichnung_snapshot)+'" data-details=\''+tcEsc(JSON.stringify(details))+'\'>'+
+    '<div class="tc-taet-item-head">'+
+      '<span class="tc-taet-item-txt">'+tcEsc(item.bezeichnung_snapshot)+(summary?' <small>('+tcEsc(summary)+')</small>':'')+'</span>'+
+      '<div class="tc-taet-item-btns">'+
+        '<button type="button" onclick="tcTaetMove(this,-1)" title="nach oben">▲</button>'+
+        '<button type="button" onclick="tcTaetMove(this,1)" title="nach unten">▼</button>'+
+        '<button type="button" onclick="tcTaetDetailToggle(this)">Details</button>'+
+        '<button type="button" onclick="tcTaetRemove(this)">✕</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="tc-taet-detail" style="display:none">'+(felder.length?felder.map(function(c){return tcTaetFeldHtml(c,details[c]);}).join(''):'<div class="tc-hint">Keine Detailfelder für diese Tätigkeit.</div>')+'</div>'+
+  '</div>';
+}
+// Codes: DN=Nennweite(Chips) · STK=Anzahl(Counter) · M/M2/BAR=Zahl · ORT=Text+Stockwerk-Chips · TYP/unbekannt=Freitext.
+function tcTaetFeldHtml(code,val){
+  var inner;
+  if(code==='DN'){
+    inner='<div class="tc-lbl">DN</div><div class="tc-chips">'+TC_DN_CHIPS.map(function(v){return '<div class="tc-chip tc-chip-sm'+(String(val)===v?' sel':'')+'" data-v="'+v+'" onclick="tcTaetChipPick(this,\'DN\')">'+v+'</div>';}).join('')+'</div>';
+  } else if(code==='STK'){
+    inner='<div class="tc-lbl">Anzahl</div><div class="tc-stk-row"><button type="button" onclick="tcTaetStkAdjust(this,-1)">−</button><span class="tc-taet-stk-val">'+(Number(val)||0)+'</span><button type="button" onclick="tcTaetStkAdjust(this,1)">＋</button></div>';
+  } else if(code==='ORT'){
+    inner='<div class="tc-lbl">Ort</div><div class="tc-chips">'+TC_SW_PRESETS.map(function(s){return '<div class="tc-chip tc-chip-sm" data-v="'+tcEsc(s)+'" onclick="tcTaetOrtChip(this)">'+tcEsc(s)+'</div>';}).join('')+'</div>'+
+      '<input class="tc-field" placeholder="… oder frei eintippen" value="'+tcEsc(val||'')+'" oninput="tcTaetDetailInput(this,\'ORT\')"/>';
+  } else if(code==='M'||code==='M2'||code==='BAR'){
+    inner='<div class="tc-lbl">'+tcEsc(TC_TAET_FELD_LABEL[code]||code)+'</div><input type="number" step="0.1" min="0" class="tc-field" value="'+tcEsc(val||'')+'" oninput="tcTaetDetailInput(this,\''+code+'\')"/>';
+  } else {
+    inner='<div class="tc-lbl">'+tcEsc(TC_TAET_FELD_LABEL[code]||code)+'</div><input class="tc-field" value="'+tcEsc(val||'')+'" oninput="tcTaetDetailInput(this,\''+code+'\')"/>';
+  }
+  return '<div class="tc-taet-feld" data-feld="'+tcEsc(code)+'">'+inner+'</div>';
+}
+function tcTaetDetailGet(item){ try{ return JSON.parse(item.getAttribute('data-details')||'{}'); }catch(e){ return {}; } }
+function tcTaetDetailSet(item,details){ item.setAttribute('data-details',JSON.stringify(details)); tcRowInput(item); }
+function tcTaetDetailInput(el,code){
+  var item=el.closest('.tc-taet-item'); if(!item) return;
+  var details=tcTaetDetailGet(item); details[code]=el.value; tcTaetDetailSet(item,details);
+}
+function tcTaetChipPick(el,code){
+  var item=el.closest('.tc-taet-item'); if(!item) return;
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var details=tcTaetDetailGet(item); details[code]=el.getAttribute('data-v'); tcTaetDetailSet(item,details);
+}
+function tcTaetOrtChip(el){
+  var item=el.closest('.tc-taet-item'); if(!item) return;
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var feldWrap=el.closest('[data-feld="ORT"]');
+  var inp=feldWrap?feldWrap.querySelector('input'):null;
+  if(inp){ inp.value=el.getAttribute('data-v'); tcTaetDetailInput(inp,'ORT'); }
+}
+function tcTaetStkAdjust(btn,delta){
+  var item=btn.closest('.tc-taet-item'); if(!item) return;
+  var details=tcTaetDetailGet(item);
+  var n=Math.max(0,(Number(details.STK)||0)+delta);
+  details.STK=n;
+  var disp=btn.closest('.tc-stk-row').querySelector('.tc-taet-stk-val'); if(disp) disp.textContent=n;
+  tcTaetDetailSet(item,details);
+}
+function tcTaetDetailToggle(btn){
+  var item=btn.closest('.tc-taet-item'); if(!item) return;
+  var d=item.querySelector('.tc-taet-detail'); if(!d) return;
+  d.style.display=(d.style.display==='none')?'':'none';
+}
+// Auf/Ab statt echtem Drag — native HTML5-DnD ist auf Touch unzuverlässig (Diagnose Runde B).
+function tcTaetMove(btn,dir){
+  var item=btn.closest('.tc-taet-item'); if(!item) return;
+  var sib=dir<0?item.previousElementSibling:item.nextElementSibling; if(!sib) return;
+  if(dir<0) item.parentNode.insertBefore(item,sib); else item.parentNode.insertBefore(sib,item);
+  tcRowInput(item);
+}
+function tcTaetRemove(btn){
+  var item=btn.closest('.tc-taet-item'); if(!item) return;
+  var rowEl=item.closest('[data-row]');
+  item.remove();
+  if(rowEl){ tcRecalcTotals(); tcScheduleSave(rowEl); }
+}
+function tcTaetAdd(el){
+  var rowEl=el.closest('[data-row]'); if(!rowEl) return;
+  var list=rowEl.querySelector('.tc-taet-list'); if(!list) return;
+  var felder=[]; try{ felder=JSON.parse(el.getAttribute('data-felder')||'[]'); }catch(e){}
+  list.insertAdjacentHTML('beforeend', tcTaetItemHtml({taetigkeit_id:el.getAttribute('data-id'),bezeichnung_snapshot:el.getAttribute('data-bez'),details:{},felder:felder}));
+  tcRecalcTotals(); tcScheduleSave(rowEl);
+}
+function tcTaetPickerToggle(btn){
+  var wrap=btn.closest('.tc-taet-wrap'); if(!wrap) return;
+  var picker=wrap.querySelector('.tc-taet-picker'); if(!picker) return;
+  if(picker.style.display!=='none'){ picker.style.display='none'; return; }
+  var rowEl=btn.closest('[data-row]');
+  var gewerkChip=rowEl?rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel'):null;
+  picker.innerHTML=tcTaetPickerContentHtml(gewerkChip?gewerkChip.getAttribute('data-v'):'');
+  picker.style.display='';
+}
+function tcTaetPickerContentHtml(gewerkLabel){
+  if(!gewerkLabel) return '<div class="tc-hint">Zuerst oben ein Gewerk wählen.</div>';
+  var slug=tcTaetGewerkSlug(gewerkLabel);
+  var items=TC_TAET_KATALOG.filter(function(k){return k.gewerk===slug;});
+  if(!items.length) return '<div class="tc-hint">Kein Katalog für dieses Gewerk hinterlegt.</div>';
+  var firstKat=items[0].kategorie;
+  var firstItems=items.filter(function(k){return k.kategorie===firstKat;});
+  return '<input class="tc-field tc-taet-search" placeholder="Suchen…" oninput="tcTaetSearch(this)"/>'+
+    '<div class="tc-taet-kat-chips">'+tcTaetKatChipsHtml(items,firstKat)+'</div>'+
+    '<div class="tc-taet-item-chips">'+tcTaetItemChipsHtml(firstItems)+'</div>';
+}
+function tcTaetKatChipsHtml(items,curKat){
+  var kats=[]; items.forEach(function(k){ if(kats.indexOf(k.kategorie)<0) kats.push(k.kategorie); });
+  return kats.map(function(k){ return '<div class="tc-chip'+(k===curKat?' sel':'')+'" data-kat="'+tcEsc(k)+'" onclick="tcTaetKatPick(this)">'+tcEsc(k)+'</div>'; }).join('');
+}
+function tcTaetKatPick(el){
+  var picker=el.closest('.tc-taet-picker'); if(!picker) return;
+  var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
+  el.classList.add('sel');
+  var rowEl=el.closest('[data-row]');
+  var gewerkChip=rowEl?rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel'):null;
+  var slug=tcTaetGewerkSlug(gewerkChip?gewerkChip.getAttribute('data-v'):'');
+  var kat=el.getAttribute('data-kat');
+  var items=TC_TAET_KATALOG.filter(function(k){return k.gewerk===slug&&k.kategorie===kat;});
+  var box=picker.querySelector('.tc-taet-item-chips'); if(box) box.innerHTML=tcTaetItemChipsHtml(items);
+  var search=picker.querySelector('.tc-taet-search'); if(search) search.value='';
+}
+// Zuletzt verwendet zuerst, dann meistgenutzt, dann Katalog-Reihenfolge.
+function tcTaetItemChipsHtml(items){
+  var sorted=items.slice().sort(function(a,b){
+    var az=a.verwendet_zuletzt||'', bz=b.verwendet_zuletzt||'';
+    if(az!==bz) return az>bz?-1:1;
+    var au=a.verwendet_anzahl||0, bu=b.verwendet_anzahl||0;
+    if(au!==bu) return bu-au;
+    return (a.sortierung||0)-(b.sortierung||0);
+  });
+  return sorted.map(function(k){
+    return '<div class="tc-chip" data-id="'+tcEsc(k.id)+'" data-bez="'+tcEsc(k.bezeichnung)+'" data-felder=\''+tcEsc(JSON.stringify((k.detailfelder&&k.detailfelder.felder)||[]))+'\' onclick="tcTaetAdd(this)">'+tcEsc(k.bezeichnung)+'</div>';
+  }).join('');
+}
+// Suche geht über ALLE Kategorien des Gewerks hinweg (Kategorie-Schritt wird übersprungen).
+function tcTaetSearch(input){
+  var picker=input.closest('.tc-taet-picker'); if(!picker) return;
+  var box=picker.querySelector('.tc-taet-item-chips'); if(!box) return;
+  var rowEl=input.closest('[data-row]');
+  var gewerkChip=rowEl?rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel'):null;
+  var slug=tcTaetGewerkSlug(gewerkChip?gewerkChip.getAttribute('data-v'):'');
+  var q=(input.value||'').trim().toLowerCase();
+  var items;
+  if(!q){
+    var katChip=picker.querySelector('.tc-taet-kat-chips .tc-chip.sel');
+    var kat=katChip?katChip.getAttribute('data-kat'):null;
+    items=TC_TAET_KATALOG.filter(function(k){return k.gewerk===slug&&(!kat||k.kategorie===kat);});
+  } else {
+    items=TC_TAET_KATALOG.filter(function(k){return k.gewerk===slug&&k.bezeichnung.toLowerCase().indexOf(q)>=0;});
+  }
+  box.innerHTML=tcTaetItemChipsHtml(items);
+}
+
 // Pausen-Vorgabe: Kunde-Override (gs_kunden.pause_standard, Stunden) vor 1.25h-Default.
 function tcPauseDefaultH(zielVal){
   if(zielVal&&zielVal.indexOf('p:')===0){
@@ -10032,6 +10238,7 @@ function tcRowHtml(date,idx,z,isLast){
       '<div class="tc-lbl">Tätigkeit</div>'+
       '<div class="tc-dictrow"><textarea class="tc-field rc-arb" placeholder="Steigzone montiert, Radiatoren angeschlossen…" oninput="tcRowInput(this)">'+tcEsc((z&&(z.arbeiten||[]).join('\n'))||'')+'</textarea>'+
       '<button type="button" class="tc-mic" onclick="tcArbDictate(this)">🎙️ Diktieren</button></div>'+
+      tcTaetWrapHtml(z,svc)+
     '</div>'+
     '<div class="rc-icons">'+
       '<button type="button" onclick="tcToggleDetails(this)">⋯ Notiz &amp; Fotos</button>'+
@@ -10110,6 +10317,13 @@ function tcRowZielChange(el){
     var chipBox=rowEl.querySelector('.rc-spesen-chips');
     var curInp=rowEl.querySelector('.f-spesen');
     if(chipBox) chipBox.innerHTML=tcSpesenChipsHtml(saetze, curInp?curInp.value:'');
+    // ZIEL 1 (Runde B) — Ziel-Wechsel Projekt<->Serviceauftrag: Tätigkeiten-Picker
+    // zeigen/verstecken. Wechsel AUF Service leert eine evtl. schon begonnene
+    // Auswahl bewusst (die gehört dort nicht hin, Details kommen im Serviceauftrag).
+    // Wechsel zwischen zwei Projekten lässt eine bestehende Auswahl unangetastet
+    // (gleiche Logik wie Projektnummer/Freitext — nichts wird stillschweigend gelöscht).
+    var taetWrap=rowEl.querySelector('.tc-taet-wrap');
+    if(taetWrap && (svc || !taetWrap.querySelector('.tc-taet-list'))) taetWrap.outerHTML=tcTaetWrapHtml(null, svc);
   }
   tcApplyUZVisibility();
   tcRecalcTotals();
@@ -10176,6 +10390,20 @@ function tcCollectRow(rowEl){
     body.spesen=(rowEl.querySelector('.f-spesen')||{}).value||0;
     body.arbeiten=tcLines((rowEl.querySelector('.rc-arb')||{}).value||'');
     body.notiz=(rowEl.querySelector('.rc-notiz')||{}).value||'';
+    // ZIEL 1 (Runde B) — Katalog-Tätigkeiten aus der DOM-Reihenfolge (Auf/Ab-Pfeile
+    // verschieben die .tc-taet-item-Elemente direkt) — leer bei Serviceauftrag-Zielen
+    // (Picker dort nicht gerendert) oder wenn keine gewählt wurden.
+    var taetigkeiten=[];
+    Array.prototype.forEach.call(rowEl.querySelectorAll('.tc-taet-list .tc-taet-item'),function(it,i){
+      var details={}; try{ details=JSON.parse(it.getAttribute('data-details')||'{}'); }catch(e){}
+      taetigkeiten.push({
+        taetigkeit_id: it.getAttribute('data-taetigkeit-id')||null,
+        bezeichnung_snapshot: it.getAttribute('data-bezeichnung')||'',
+        details: details,
+        sortierung: (i+1)*10,
+      });
+    });
+    body.taetigkeiten=taetigkeiten;
   }
   return body;
 }

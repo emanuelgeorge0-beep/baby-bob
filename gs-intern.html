@@ -719,7 +719,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','taetigkeitenkatalog'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -741,6 +741,7 @@ function go(v){
   else if(v==='lizenz') renderLizenz();
   else if(v==='subanfragen') renderSubAnfragen();
   else if(v==='wochenrapporte') renderWochenrapporte();
+  else if(v==='taetigkeitenkatalog') renderTaetigkeitenkatalog();
 }
 function router(){ go(curView); }
 
@@ -1205,6 +1206,7 @@ function renderMehr(){
   var mods=[
     {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
     {v:'wochenrapporte',ic:'📆',t:'Wochenrapporte',d:'Alle Techniker, alle Projekte – Stunden, Spesen, Material, Fotos pro KW'},
+    {v:'taetigkeitenkatalog',ic:'🗂️',t:'Tätigkeitskatalog',d:'Katalog für die Tätigkeitsauswahl im Wochenrapport pflegen (anlegen, umbenennen, sortieren, deaktivieren)'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
     {v:'lizenz',ic:'🔑',t:'Kunden & Lizenzen',d:'Pro Partner-Account Features freischalten – serverseitig durchgesetzt'},
     {v:'subanfragen',ic:'📐',t:'Sub-Anfragen',d:'Sub-/Akkord-Anfragen der Partner: kalkulieren & Angebot erstellen'},
@@ -2248,6 +2250,136 @@ function wrRowMoveSave(zid){
   api('pm_wochenrapport_move',body).then(function(d){
     if(d&&d.error){ toast(d.error); return; }
     toast('✓ Zeile verschoben'); wrPanel(''); openWochenrapport(_wrId);
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
+
+// ══ TÄTIGKEITSKATALOG (Runde B ZIEL 1c) — Katalogpflege ══
+// Slug ist die stabile Identität (Vorgabe des Nutzers) — nur bei "Neu" gesetzt,
+// bei "Ändern" schreibgeschützt. Deaktivieren statt Löschen: alte Rapporte
+// referenzieren die id weiter über bezeichnung_snapshot.
+var KT_GEWERKE=[{v:'sanitaer',l:'Sanitär'},{v:'heizung',l:'Heizung'},{v:'lueftung',l:'Lüftung'},{v:'klima',l:'Klima'},{v:'allgemein',l:'Allgemein'}];
+var KT_FELDER=[{c:'DN',l:'DN (Nennweite)'},{c:'STK',l:'Anzahl'},{c:'M',l:'Laufmeter'},{c:'M2',l:'Fläche (m²)'},{c:'ORT',l:'Ort'},{c:'TYP',l:'Typ/Fabrikat'},{c:'BAR',l:'Prüfdruck (bar)'}];
+var _ktItems=[];
+function renderTaetigkeitenkatalog(){
+  $('view').innerHTML='<h2><span class="acc">🗂️</span> Tätigkeitskatalog</h2>'+backRow()+
+    '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:10px">Katalog für die Tätigkeitsauswahl im Wochenrapport — nie löschen, nur deaktivieren.</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:12px"><button class="chip" style="border-color:var(--gold-line);color:var(--gold)" onclick="ktNewForm()">＋ Neue Tätigkeit</button></div>'+
+    '<div id="kt-new"></div>'+
+    '<div id="kt-list">'+skeletonCards(4)+'</div>';
+  wireBack();
+  ktLoad();
+}
+function ktLoad(){
+  api('pm_taetigkeitenkatalog_liste',{}).then(function(d){
+    if(d&&d.notMigrated){ $('kt-list').innerHTML=migRow('scripts/taetigkeiten_katalog.sql im Supabase SQL Editor ausführen.'); return; }
+    _ktItems=(d&&d.items)||[];
+    ktRenderList();
+  }).catch(function(){ $('kt-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+function ktRenderList(){
+  var box=$('kt-list'); if(!box) return;
+  if(!_ktItems.length){ box.innerHTML='<div class="empty">Noch kein Katalog-Eintrag.</div>'; return; }
+  // Gruppiert Gewerk → Kategorie, in der vom Server gelieferten Reihenfolge
+  // (gewerk, kategorie, sortierung) — keine erneute Sortierung nötig.
+  var html='', curGewerk=null, curKat=null;
+  _ktItems.forEach(function(k){
+    var gLabel=(KT_GEWERKE.filter(function(g){return g.v===k.gewerk;})[0]||{}).l||k.gewerk;
+    if(k.gewerk!==curGewerk){ html+='<div class="cc-sec" style="margin-top:16px">'+esc(gLabel)+'</div>'; curGewerk=k.gewerk; curKat=null; }
+    if(k.kategorie!==curKat){ html+='<div class="usub" style="color:var(--muted);font-size:12px;margin:6px 0 4px">'+esc(k.kategorie)+'</div>'; curKat=k.kategorie; }
+    html+=ktItemRowHtml(k);
+  });
+  box.innerHTML=html;
+}
+function ktFelderSummary(k){
+  var felder=(k.detailfelder&&k.detailfelder.felder)||[];
+  if(!felder.length) return '—';
+  return felder.map(function(c){ return (KT_FELDER.filter(function(f){return f.c===c;})[0]||{}).l||c; }).join(' · ');
+}
+function ktItemRowHtml(k){
+  return '<div class="lcard" style="'+(k.aktiv?'':'opacity:.55')+'" data-ktrow="'+esc(k.id)+'">'+
+    '<div class="top"><div class="nm">'+esc(k.bezeichnung)+(k.quelle_service?' <span style="color:var(--muted2);font-size:11px">(Service)</span>':'')+'</div>'+
+    pmPill(k.aktiv?'aktiv':'inaktiv', k.aktiv?'#3dd68c':'var(--muted2)')+'</div>'+
+    '<div class="meta"><span>'+esc(k.slug)+'</span><span class="dot">'+esc(ktFelderSummary(k))+'</span><span class="dot">Sort. '+esc(k.sortierung)+'</span></div>'+
+    '<div style="display:flex;gap:8px;margin-top:8px">'+
+      '<button class="chip" style="font-size:11px" onclick="ktEditToggle(\''+esc(k.id)+'\')">✏️ Ändern</button>'+
+      '<button class="chip" style="font-size:11px" onclick="ktToggleAktiv(\''+esc(k.id)+'\')">'+(k.aktiv?'Deaktivieren':'Aktivieren')+'</button>'+
+    '</div>'+
+    '<div id="kt-edit-'+esc(k.id)+'"></div>'+
+  '</div>';
+}
+function ktFelderCheckboxesHtml(prefix, gewaehlte){
+  gewaehlte=gewaehlte||[];
+  return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">'+KT_FELDER.map(function(f){
+    var on=gewaehlte.indexOf(f.c)>-1;
+    return '<label class="chip" style="cursor:pointer;'+(on?'border-color:var(--gold-line);color:var(--gold)':'')+'">'+
+      '<input type="checkbox" id="'+prefix+'-feld-'+f.c+'" '+(on?'checked':'')+' style="margin-right:5px;vertical-align:middle"/>'+esc(f.l)+
+    '</label>';
+  }).join('')+'</div>';
+}
+function ktFelderAusCheckboxen(prefix){
+  return KT_FELDER.map(function(f){return f.c;}).filter(function(c){ var e=$(prefix+'-feld-'+c); return e&&e.checked; });
+}
+function ktEditToggle(id){
+  var slot=$('kt-edit-'+id); if(!slot) return;
+  if(slot.innerHTML){ slot.innerHTML=''; return; }
+  var k=_ktItems.filter(function(x){return x.id===id;})[0]; if(!k) return;
+  slot.innerHTML='<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">'+
+    '<input class="field" id="kt-e-bez-'+id+'" value="'+esc(k.bezeichnung)+'" placeholder="Bezeichnung"/>'+
+    '<input class="field" id="kt-e-kat-'+id+'" value="'+esc(k.kategorie)+'" placeholder="Kategorie" style="margin-top:8px"/>'+
+    '<input class="field" id="kt-e-sort-'+id+'" type="number" step="10" value="'+esc(k.sortierung)+'" placeholder="Sortierung" style="margin-top:8px;max-width:120px"/>'+
+    ktFelderCheckboxesHtml('kt-e-'+id, (k.detailfelder&&k.detailfelder.felder)||[])+
+    '<div style="display:flex;gap:8px;margin-top:10px"><button class="chip" style="border-color:var(--gold-line);color:var(--gold)" onclick="ktEditSave(\''+id+'\')">Speichern</button></div>'+
+  '</div>';
+}
+function ktEditSave(id){
+  var patch={
+    id: id,
+    bezeichnung: ($('kt-e-bez-'+id)||{}).value||'',
+    kategorie: ($('kt-e-kat-'+id)||{}).value||'',
+    sortierung: Number(($('kt-e-sort-'+id)||{}).value)||0,
+    felder: ktFelderAusCheckboxen('kt-e-'+id),
+  };
+  if(!patch.bezeichnung.trim()){ toast('Bezeichnung nötig'); return; }
+  api('pm_taetigkeitenkatalog_update',patch).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('✓ Gespeichert'); ktLoad();
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
+function ktToggleAktiv(id){
+  var k=_ktItems.filter(function(x){return x.id===id;})[0];
+  if(k&&k.aktiv&&!confirm('"'+k.bezeichnung+'" deaktivieren? Sie verschwindet aus dem Wochenrapport-Picker, bleibt aber für alte Rapporte erhalten.')) return;
+  api('pm_taetigkeitenkatalog_toggle',{id:id}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('✓ Aktualisiert'); ktLoad();
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
+function ktNewForm(){
+  var slot=$('kt-new'); if(!slot) return;
+  if(slot.innerHTML){ slot.innerHTML=''; return; }
+  slot.innerHTML='<div class="lcard" style="margin-bottom:12px">'+
+    '<select class="field" id="kt-n-gewerk">'+KT_GEWERKE.map(function(g){return '<option value="'+g.v+'">'+esc(g.l)+'</option>';}).join('')+'</select>'+
+    '<input class="field" id="kt-n-slug" placeholder="Slug (z.B. kaltwasserleitung) — später nicht mehr änderbar" style="margin-top:8px"/>'+
+    '<input class="field" id="kt-n-bez" placeholder="Bezeichnung" style="margin-top:8px"/>'+
+    '<input class="field" id="kt-n-kat" placeholder="Kategorie (z.B. Leitungsbau)" style="margin-top:8px"/>'+
+    ktFelderCheckboxesHtml('kt-n',[])+
+    '<label class="chip" style="cursor:pointer;margin-top:8px;display:inline-block"><input type="checkbox" id="kt-n-service" style="margin-right:5px;vertical-align:middle"/>Service-Tätigkeit (im Wochenrapport ausgeblendet)</label>'+
+    '<div style="display:flex;gap:8px;margin-top:10px"><button class="chip" style="border-color:var(--gold-line);color:var(--gold)" onclick="ktNewSave()">Anlegen</button></div>'+
+  '</div>';
+}
+function ktNewSave(){
+  var body={
+    gewerk: ($('kt-n-gewerk')||{}).value||'',
+    slug: (($('kt-n-slug')||{}).value||'').trim().toLowerCase().replace(/[^a-z0-9_]/g,''),
+    bezeichnung: ($('kt-n-bez')||{}).value||'',
+    kategorie: ($('kt-n-kat')||{}).value||'',
+    felder: ktFelderAusCheckboxen('kt-n'),
+    quelle_service: !!($('kt-n-service')||{}).checked,
+  };
+  if(!body.slug){ toast('Slug nötig'); return; }
+  if(!body.bezeichnung.trim()){ toast('Bezeichnung nötig'); return; }
+  api('pm_taetigkeitenkatalog_create',body).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }
+    toast('✓ Angelegt'); $('kt-new').innerHTML=''; ktLoad();
   }).catch(function(){ toast('Verbindungsfehler'); });
 }
 function zsLoad(pid){

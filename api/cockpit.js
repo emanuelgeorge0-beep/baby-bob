@@ -98,7 +98,7 @@ const TECHNIKER_ACTIONS = new Set([
   'tech_projekte', 'tech_projekt', 'tech_rapporte', 'tech_rapport_add',
   // Wochenrapport (Kopf + strukturierte Tageszeilen, siehe unten).
   'tech_tag_save', 'tech_tag_del', 'tech_wochen_rapport', 'tech_wochen_liste',
-  'tech_wochen_einreichen', 'tech_wochen_sign',
+  'tech_wochen_einreichen', 'tech_wochen_sign', 'tech_taetigkeitenkatalog',
   // Feature B/C: Techniker lädt getaggte Medien hoch, sieht Galerie, bucht auf
   // zugewiesene Service-Aufträge, markiert erledigt. Zugriff über die verifizierte Kette.
   'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
@@ -301,6 +301,12 @@ export default async function handler(req, res) {
       case 'tech_wochen_liste':  return res.status(200).json(await getTechWochenListe(scope));
       case 'tech_wochen_einreichen': return res.status(200).json(await einreichenWoche(req.body, scope));
       case 'tech_wochen_sign':   return res.status(200).json(await saveWochenUnterschrift(req.body, scope));
+      // ── Tätigkeitskatalog (Runde B ZIEL 1) ──
+      case 'tech_taetigkeitenkatalog': return res.status(200).json(await getTaetigkeitenKatalogTech(scope));
+      case 'pm_taetigkeitenkatalog_liste':  return res.status(200).json(await pmTaetigkeitenKatalogListe());
+      case 'pm_taetigkeitenkatalog_create': return res.status(200).json(await pmTaetigkeitenKatalogCreate(req.body));
+      case 'pm_taetigkeitenkatalog_update': return res.status(200).json(await pmTaetigkeitenKatalogUpdate(req.body));
+      case 'pm_taetigkeitenkatalog_toggle': return res.status(200).json(await pmTaetigkeitenKatalogToggle(req.body));
       case 'pm_wochenrapporte_liste': return res.status(200).json(await pmWochenrapporteListe());
       case 'pm_wochenrapport':   return res.status(200).json(await pmWochenrapport(req.body));
       case 'pm_wochenrapport_update': return res.status(200).json(await pmWochenrapportUpdate(req.body, scope));
@@ -2300,6 +2306,11 @@ const ABWESENHEIT_CODES = new Set(['G', 'F', 'M', 'U', 'A']);
 // Gewerk: feste Schnellwahl (Chips im Wochenrapport-Editor) statt Freitext — strukturiert
 // für spätere Auswertung/Rechnung/Filter. Server validiert gegen dieselbe Liste.
 const GEWERK_OPTIONS = new Set(['Sanitär', 'Heizung', 'Klima', 'Lüftung', 'Divers']);
+// Tätigkeitskatalog (Runde B ZIEL 1) — eigenständige Tabellen gs_taetigkeitenkatalog
+// / gs_tagesrapport_taetigkeitenkatalog (NICHT gs_taetigkeiten — das ist das
+// bestehende Projekt-Tätigkeiten-Log, siehe addTaetigkeit weiter unten).
+const TAET_GEWERKE = new Set(['sanitaer', 'heizung', 'lueftung', 'klima', 'allgemein']);
+const TAET_DETAIL_CODES = new Set(['DN', 'STK', 'M', 'M2', 'ORT', 'TYP', 'BAR']);
 
 function rapportNr(jahr, woche, name) {
   const slug = String(name || 'Techniker').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9äöüÄÖÜ-]/g, '') || 'Techniker';
@@ -2369,6 +2380,157 @@ async function logWochenAenderung(scope, { wochenrapportId, tagesrapportId, akti
     wert_vorher: wertVorher != null ? wertVorher : null,
     geaendert_von: scope.userId,
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TÄTIGKEITSKATALOG (Runde B ZIEL 1) — antippbare Tätigkeiten statt Freitext.
+// gs_taetigkeitenkatalog (Daten, Master pflegt) + gs_tagesrapport_taetigkeitenkatalog
+// (Zuordnung, mehrere pro Zeile). bezeichnung_snapshot ist PFLICHT: Anzeige
+// liest IMMER den Snapshot, nie den Katalog — Umbenennen/Deaktivieren im
+// Katalog darf bereits erfasste Rapporte nie rückwirkend verändern.
+// scripts/taetigkeiten_katalog.sql muss zuerst gelaufen sein.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Techniker-Ansicht: nur aktive, nicht-Service-Einträge (quelle_service=false
+// bleibt im Wochenrapport ausgeblendet, greift automatisch sobald die Service-
+// abteilung als zweite Quelle dazukommt) + eigene Nutzungshäufigkeit für
+// "zuletzt verwendet"/"meistgenutzt" (Client sortiert damit innerhalb der
+// Kategorie-Chips). Aggregation in JS, da PostgREST kein GROUP BY kann.
+async function getTaetigkeitenKatalogTech(scope) {
+  const katalog = await sbGet(
+    'gs_taetigkeitenkatalog?aktiv=eq.true&quelle_service=eq.false&select=id,gewerk,slug,bezeichnung,kategorie,detailfelder,sortierung&order=gewerk.asc,kategorie.asc,sortierung.asc',
+  ).catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (katalog === null) return { notMigrated: true, items: [] };
+  const usage = {};
+  try {
+    const rows = await sbGet(
+      `gs_tagesrapport_taetigkeitenkatalog?select=taetigkeit_id,created_at,tagesrapport:gs_tagesrapporte!inner(techniker_user_id)` +
+      `&tagesrapport.techniker_user_id=eq.${scope.technikerUserId}&order=created_at.desc&limit=500`,
+    );
+    for (const r of rows) {
+      if (!r.taetigkeit_id) continue;
+      if (!usage[r.taetigkeit_id]) usage[r.taetigkeit_id] = { anzahl: 0, zuletzt: r.created_at };
+      usage[r.taetigkeit_id].anzahl += 1;
+    }
+  } catch (_) { /* Nutzungsstatistik optional — Katalog funktioniert auch ohne */ }
+  const items = katalog.map((k) => ({
+    ...k,
+    verwendet_anzahl: (usage[k.id] || {}).anzahl || 0,
+    verwendet_zuletzt: (usage[k.id] || {}).zuletzt || null,
+  }));
+  return { items };
+}
+
+// Master-Ansicht: ALLE Zeilen (auch inaktive) — Katalogpflege braucht die volle Liste.
+async function pmTaetigkeitenKatalogListe() {
+  const rows = await sbGet('gs_taetigkeitenkatalog?select=*&order=gewerk.asc,kategorie.asc,sortierung.asc')
+    .catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (rows === null) return { notMigrated: true, items: [] };
+  return { items: rows };
+}
+
+function taetFelderAusBody(b) {
+  return Array.isArray(b.felder) ? b.felder.filter((f) => TAET_DETAIL_CODES.has(String(f))) : [];
+}
+
+// Anlegen — slug wird NUR hier gesetzt, danach nie mehr geändert (siehe Update).
+async function pmTaetigkeitenKatalogCreate(b) {
+  const gewerk = String(b.gewerk || '').trim();
+  if (!TAET_GEWERKE.has(gewerk)) throw new Error('ungültiges gewerk');
+  const slug = String(b.slug || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!slug) throw new Error('slug nötig');
+  const bezeichnung = String(b.bezeichnung || '').trim().slice(0, 200);
+  if (!bezeichnung) throw new Error('bezeichnung nötig');
+  const row = {
+    gewerk, slug, bezeichnung,
+    kategorie: String(b.kategorie || '').trim().slice(0, 100) || 'Allgemein',
+    detailfelder: { felder: taetFelderAusBody(b) },
+    sortierung: Number.isFinite(Number(b.sortierung)) ? Number(b.sortierung) : 999,
+    quelle_service: !!b.quelle_service,
+  };
+  try {
+    const r = await sbWrite('POST', 'gs_taetigkeitenkatalog', row);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) {
+    if (/duplicate key|23505/i.test((e && e.message) || '')) return { error: 'Dieser Slug existiert für dieses Gewerk bereits.' };
+    if (isNoTable(e)) return { notMigrated: true };
+    throw e;
+  }
+}
+
+// Ändern — bezeichnung/kategorie/detailfelder/sortierung/quelle_service frei
+// editierbar, gewerk/slug NIE (stabile Identität, siehe scripts/taetigkeiten_katalog.sql).
+async function pmTaetigkeitenKatalogUpdate(b) {
+  const id = uuid(b.id);
+  const patch = {};
+  if (b.bezeichnung !== undefined) patch.bezeichnung = String(b.bezeichnung).trim().slice(0, 200);
+  if (b.kategorie !== undefined) patch.kategorie = String(b.kategorie).trim().slice(0, 100);
+  if (b.sortierung !== undefined) patch.sortierung = Number(b.sortierung) || 0;
+  if (b.felder !== undefined) patch.detailfelder = { felder: taetFelderAusBody(b) };
+  if (b.quelle_service !== undefined) patch.quelle_service = !!b.quelle_service;
+  if (!Object.keys(patch).length) return { error: 'nichts zu ändern' };
+  try {
+    const r = await sbWrite('PATCH', `gs_taetigkeitenkatalog?id=eq.${id}`, patch);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+// Deaktivieren/Aktivieren — NIE löschen (alte Rapporte referenzieren die id
+// weiter über bezeichnung_snapshot/taetigkeit_id ON DELETE SET NULL).
+async function pmTaetigkeitenKatalogToggle(b) {
+  const id = uuid(b.id);
+  let aktiv = b.aktiv;
+  if (aktiv === undefined) {
+    const cur = await sbGet(`gs_taetigkeitenkatalog?id=eq.${id}&select=aktiv&limit=1`).catch(() => []);
+    if (!cur[0]) return { error: 'nicht gefunden' };
+    aktiv = !cur[0].aktiv;
+  }
+  try {
+    const r = await sbWrite('PATCH', `gs_taetigkeitenkatalog?id=eq.${id}`, { aktiv: !!aktiv });
+    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+// Für mehrere Tagesrapporte auf einmal die gewählten Tätigkeiten nachladen
+// (Wochenansicht Techniker + Master). "felder" kommt per Embed aus dem AKTUELLEN
+// Katalog-Eintrag (für die Bearbeitung); die Anzeige selbst nutzt immer
+// bezeichnung_snapshot, nie taetigkeit.bezeichnung.
+async function loadTaetigkeitenFuerTagesrapporte(ids) {
+  if (!ids || !ids.length) return {};
+  const rows = await sbGet(
+    `gs_tagesrapport_taetigkeitenkatalog?tagesrapport_id=in.(${ids.join(',')})` +
+    '&select=id,tagesrapport_id,taetigkeit_id,bezeichnung_snapshot,details,sortierung,taetigkeit:gs_taetigkeitenkatalog(detailfelder)' +
+    '&order=sortierung.asc',
+  ).catch(() => []);
+  const map = {};
+  for (const r of rows) {
+    const felder = (r.taetigkeit && r.taetigkeit.detailfelder && r.taetigkeit.detailfelder.felder) || [];
+    if (!map[r.tagesrapport_id]) map[r.tagesrapport_id] = [];
+    map[r.tagesrapport_id].push({
+      id: r.id, taetigkeit_id: r.taetigkeit_id, bezeichnung_snapshot: r.bezeichnung_snapshot,
+      details: r.details || {}, sortierung: r.sortierung, felder,
+    });
+  }
+  return map;
+}
+
+// Ersetzt die Auswahl komplett (delete+insert) — die Reihenfolge/Auswahl kommt
+// bei jedem Speichern neu vom Client. undefined (z.B. Abwesenheits-Zeile) lässt
+// bestehende Zuordnungen unangetastet; [] löscht sie bewusst.
+async function syncTagesrapportTaetigkeiten(tagesrapportId, list) {
+  if (!Array.isArray(list)) return;
+  await sbWrite('DELETE', `gs_tagesrapport_taetigkeitenkatalog?tagesrapport_id=eq.${tagesrapportId}`, {}, 'return=minimal').catch(() => {});
+  const rows = list
+    .filter((t) => t && String(t.bezeichnung_snapshot || '').trim())
+    .slice(0, 40)
+    .map((t, i) => ({
+      tagesrapport_id: tagesrapportId,
+      taetigkeit_id: (t.taetigkeit_id && UUID_RE.test(String(t.taetigkeit_id))) ? t.taetigkeit_id : null,
+      bezeichnung_snapshot: String(t.bezeichnung_snapshot).slice(0, 200),
+      details: (t.details && typeof t.details === 'object') ? t.details : {},
+      sortierung: Number.isFinite(Number(t.sortierung)) ? Number(t.sortierung) : (i + 1) * 10,
+    }));
+  if (rows.length) await sbWrite('POST', 'gs_tagesrapport_taetigkeitenkatalog', rows);
 }
 
 // Eine Tageszeile speichern: Arbeitstag (Projekt/Service + Stunden) ODER
@@ -2448,13 +2610,32 @@ async function saveTechTag(b, scope) {
 
   const notMigratedErr = (e) => /column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '');
 
+  // ZIEL 1 (Runde B) — Tätigkeiten-Katalog gehört zur Zeile, wird bei jedem
+  // Speichern komplett ersetzt (delete+insert) und dem Antwort-Row angehängt,
+  // damit der Client sie sofort hat, ohne die Woche neu zu laden.
+  const finishSave = async (savedRow) => {
+    const saved = Array.isArray(savedRow) ? savedRow[0] : savedRow;
+    if (saved && saved.id) {
+      await syncTagesrapportTaetigkeiten(saved.id, b.taetigkeiten);
+      saved.taetigkeiten = Array.isArray(b.taetigkeiten)
+        ? b.taetigkeiten.filter((t) => t && String(t.bezeichnung_snapshot || '').trim()).map((t, i) => ({
+          taetigkeit_id: t.taetigkeit_id || null,
+          bezeichnung_snapshot: String(t.bezeichnung_snapshot).slice(0, 200),
+          details: (t.details && typeof t.details === 'object') ? t.details : {},
+          sortierung: Number.isFinite(Number(t.sortierung)) ? Number(t.sortierung) : (i + 1) * 10,
+        }))
+        : [];
+    }
+    return { ok: true, row: saved };
+  };
+
   // Bestehende Zeile bearbeiten (id mitgeschickt, Eigentum geprüft).
   if (b.id) {
     const own = await sbGet(`gs_tagesrapporte?id=eq.${uuid(b.id)}&select=id,techniker_user_id&limit=1`).catch(() => []);
     if (!own[0] || own[0].techniker_user_id !== scope.technikerUserId) throw new Forbidden();
     try {
       const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${uuid(b.id)}`, row);
-      return { ok: true, row: Array.isArray(r) ? r[0] : r };
+      return await finishSave(r);
     } catch (e) {
       if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
         return { error: 'Für diesen Tag/Projekt existiert bereits eine andere Zeile.' };
@@ -2469,7 +2650,7 @@ async function saveTechTag(b, scope) {
   // statt Fehler (matcht "Zeile antippen = bearbeiten" ohne dass der Client die id kennt).
   try {
     const r = await sbWrite('POST', 'gs_tagesrapporte', row);
-    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+    return await finishSave(r);
   } catch (e) {
     if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
       const filter = row.service_auftrag_id
@@ -2478,7 +2659,7 @@ async function saveTechTag(b, scope) {
       const existing = await sbGet(`gs_tagesrapporte?${filter}&select=id`).catch(() => []);
       if (existing && existing[0]) {
         const r2 = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${existing[0].id}`, row);
-        return { ok: true, row: Array.isArray(r2) ? r2[0] : r2 };
+        return await finishSave(r2);
       }
       return { error: 'Für diesen Tag existiert bereits ein Rapport.' };
     }
@@ -2632,12 +2813,14 @@ async function getTechWochenRapport(b, scope) {
     const sv = await sbGet(`gs_service_auftrag?id=in.(${serviceIds.join(',')})&select=id,objekt,auftragsnummer`).catch(() => []);
     for (const s of sv) svcMap[s.id] = s;
   }
+  const taetMap = await loadTaetigkeitenFuerTagesrapporte(zeilen.map((z) => z.id));
   const zeilenOut = zeilen.map((z) => ({
     ...z,
     projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
     standort: z.projekt_id ? (projMap[z.projekt_id] || {}).standort || null : null,
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
+    taetigkeiten: taetMap[z.id] || [],
   }));
   const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {
@@ -2758,12 +2941,14 @@ async function pmWochenrapport(b) {
     const sv = await sbGet(`gs_service_auftrag?id=in.(${serviceIds.join(',')})&select=id,objekt,auftragsnummer`).catch(() => []);
     for (const s of sv) svcMap[s.id] = s;
   }
+  const taetMap = await loadTaetigkeitenFuerTagesrapporte(rapportIds);
   const zeilenOut = zeilen.map((z) => ({
     ...z,
     projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
     projektnummer: z.projekt_id ? (projMap[z.projekt_id] || {}).projektnummer || null : null,
     standort: z.projekt_id ? (projMap[z.projekt_id] || {}).standort || null : null,
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
+    taetigkeiten: taetMap[z.id] || [],
   }));
   const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {

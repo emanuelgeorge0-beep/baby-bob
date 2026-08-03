@@ -11,6 +11,10 @@
    dünne goldene Trennlinie (#C9A961) unter dem Kopf, sonst neutral. Der dunkle
    Command-Center-Stil (schwarz/gold, #0A0A0B/#C9A961) gilt ausschliesslich für
    die Oberfläche (Cockpits, Wochenblatt) – NIE für ein Dokument.
+7. Vor jedem CREATE TABLE prüfen, ob der Tabellenname in der DB oder im Code
+   bereits vorkommt (grep + Schema-Check).
+8. Kein DROP TABLE ohne vorherige Prüfung auf Zeileninhalt und Code-Referenzen.
+   Bei Treffer: melden, nicht ausführen.
 ## Arbeitsweise (Token-sparend)
 - Erst relevanten Code lesen, in 2-3 Sätzen zusammenfassen, DANN ändern.
 - Keine Rückfragen, wenn Antwort im Code oder hier steht. Nur bei echten Weggabelungen fragen.
