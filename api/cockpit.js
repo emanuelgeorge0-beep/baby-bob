@@ -311,6 +311,10 @@ export default async function handler(req, res) {
       case 'pm_wochenrapport':   return res.status(200).json(await pmWochenrapport(req.body));
       case 'pm_wochenrapport_update': return res.status(200).json(await pmWochenrapportUpdate(req.body, scope));
       case 'pm_wochenrapport_delete': return res.status(200).json(await pmWochenrapportDelete(req.body, scope));
+      // ZIEL 2 — ganzer Wochenrapport inkl. aller Tageszeilen (nicht zu verwechseln
+      // mit pm_wochenrapport_delete = eine Tageszeile). Master-only wie die anderen
+      // pm_wochenrapport_*: bewusst NICHT in PM_ACTIONS/TECHNIKER_ACTIONS gelistet.
+      case 'pm_wochenrapport_kopf_delete': return res.status(200).json(await pmWochenrapportKopfDelete(req.body, scope));
       case 'pm_wochenrapport_move':   return res.status(200).json(await pmWochenrapportMove(req.body, scope));
       // ── Feature B: Medien (Foto/Video) mit Standort-Tags + Stockwerk-Katalog ──
       case 'medien_list':      return res.status(200).json(await medienList(req.body, scope));
@@ -3120,6 +3124,73 @@ async function pmWochenrapportDelete(b, scope) {
   });
   await sbWrite('DELETE', `gs_tagesrapporte?id=eq.${id}`, {}, 'return=minimal');
   return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZIEL 2 (Feinschliff II) — Master löscht einen GANZEN Wochenrapport.
+// Bewusst NICHT pm_wochenrapport_delete: die Action gibt es schon und sie löscht
+// eine einzelne TAGESZEILE. Zwei so verschiedene Wirkungen unter einem Namen
+// wären eine Falle.
+//
+// Reihenfolge ist wichtig:
+//   1. Kopf + alle Tageszeilen lesen
+//   2. JEDE Tageszeile einzeln protokollieren, dann den Kopf
+//   3. erst danach löschen
+// gs_tagesrapporte.wochenrapport_id hat ON DELETE CASCADE — das Löschen des
+// Kopfes räumt die Zeilen mit ab. Ohne den Einzel-Log wäre danach nichts mehr
+// rekonstruierbar; genau dafür ist das Protokoll da. Schlägt das Logging fehl,
+// bricht der ganze Vorgang ab und es wird nichts gelöscht.
+//
+// Die KW-Nummer muss als Bestätigung mitkommen (zweite Stufe). Der Dialog im
+// Cockpit fragt sie ab; die Prüfung hier stellt sicher, dass auch ein direkter
+// API-Aufruf nicht versehentlich einen Rapport ausradiert.
+//
+// NICHT angefasst: Unterschriftsdateien im Bucket (unterschrift_technik_path /
+// _kunde_path). Die bleiben als Waisen liegen und werden im Ergebnis gemeldet,
+// nicht still weggeräumt — Storage-Aufräumen ist eine eigene Entscheidung.
+// Fotos überleben ebenfalls: gs_projekt_medien.tagesrapport_id ist ON DELETE
+// SET NULL, die Bilder bleiben am Projekt hängen.
+// ═══════════════════════════════════════════════════════════════════════════
+async function pmWochenrapportKopfDelete(b, scope) {
+  const id = uuid(b.id);
+  const kopfRows = await sbGet(`gs_wochenrapporte?id=eq.${id}&select=*&limit=1`)
+    .catch((e) => { if (isNoTable(e)) return null; throw e; });
+  if (kopfRows === null) return { notMigrated: true };
+  const kopf = kopfRows && kopfRows[0];
+  if (!kopf) return { error: 'Wochenrapport nicht gefunden' };
+
+  // Zweite Stufe: eingetippte KW muss zum Rapport passen.
+  const bestaetigt = parseInt(b.bestaetigung_woche, 10);
+  if (!Number.isFinite(bestaetigt) || bestaetigt !== Number(kopf.woche)) {
+    return { error: `Bestätigung stimmt nicht — bitte die Kalenderwoche ${kopf.woche} eingeben.` };
+  }
+
+  const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=eq.${id}&select=*`).catch(() => []);
+
+  // 2a. Jede Tageszeile einzeln — der vollständige Datensatz als Snapshot.
+  for (const z of zeilen) {
+    await logWochenAenderung(scope, {
+      wochenrapportId: kopf.id, tagesrapportId: z.id,
+      aktion: 'geloescht', feld: 'wochenrapport_komplett', wertVorher: z,
+    });
+  }
+  // 2b. Der Kopf selbst, inklusive Zahl der mitgelöschten Zeilen.
+  await logWochenAenderung(scope, {
+    wochenrapportId: kopf.id, tagesrapportId: null,
+    aktion: 'geloescht', feld: 'kopf',
+    wertVorher: { ...kopf, _geloeschte_tageszeilen: zeilen.length },
+  });
+
+  await sbWrite('DELETE', `gs_wochenrapporte?id=eq.${id}`, {}, 'return=minimal');
+
+  const waisen = [kopf.unterschrift_technik_path, kopf.unterschrift_kunde_path].filter(Boolean);
+  return {
+    ok: true,
+    geloescht: { kopf: 1, zeilen: zeilen.length },
+    rapport_nr: kopf.rapport_nr || null,
+    // Nur Meldung, keine Aktion — siehe Kommentar oben.
+    unterschriften_im_speicher: waisen.length,
+  };
 }
 
 // Verschiebt eine Zeile auf einen anderen Techniker und/oder ein anderes Projekt.

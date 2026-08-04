@@ -2177,9 +2177,57 @@ function openWochenrapport(id){
       return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.04)" title="'+esc(m.stockwerk||'')+'">'+cell+'</div>';
     }).join('')+'</div>'):'<div class="empty">Noch keine Fotos/Videos.</div>';
     var medienSec='<div class="cc-sec">📷 Fotos &amp; Videos ('+medien.length+')</div>'+medienHtml;
-    $('view').innerHTML=head+totals+zeilenSec+unterschriftHtml+medienSec;
+    // ZIEL 2 (Feinschliff II) — ganzen Wochenrapport löschen. Bewusst ganz unten
+    // und optisch abgesetzt: das ist die einzige Aktion hier, die nicht
+    // rückgängig zu machen ist.
+    _wrKopf=k; _wrZeilenAnzahl=zeilen.length;
+    var gefahr='<div class="cc-sec" style="margin-top:22px">Gefahrenzone</div>'+
+      '<div class="lcard" style="border-color:rgba(255,107,107,.35)">'+
+        '<div class="meta"><span>Löscht diesen Wochenrapport samt allen '+zeilen.length+' Tageszeilen. '+
+          'Fotos bleiben am Projekt erhalten, der Vorgang wird protokolliert. Nicht umkehrbar.</span></div>'+
+        '<div style="display:flex;gap:8px;margin-top:10px">'+
+          '<button class="chip" style="font-size:11px;border-color:rgba(255,107,107,.5);color:#ff8f8f" onclick="wrKopfDelStart()">🗑 Ganzen Wochenrapport löschen</button>'+
+        '</div>'+
+        '<div id="wr-kopfdel-panel"></div>'+
+      '</div>';
+    $('view').innerHTML=head+totals+zeilenSec+unterschriftHtml+medienSec+gefahr;
     var bb4=$('wr-back4'); if(bb4) bb4.onclick=function(){ go('wochenrapporte'); };
   }).catch(function(){ $('view').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+
+// ── ZIEL 2 — Löschen des ganzen Wochenrapports, zweistufig ─────────────────
+// Stufe 1: dieser Bestätigungsblock mit Klartext, was verschwindet.
+// Stufe 2: die KW-Nummer muss eingetippt werden. Der Server prüft sie ein
+// zweites Mal (pmWochenrapportKopfDelete) — ein versehentlicher Direktaufruf
+// der API kann damit keinen Rapport ausradieren.
+var _wrKopf=null, _wrZeilenAnzahl=0;
+function wrKopfDelStart(){
+  var p=$('wr-kopfdel-panel'); if(!p||!_wrKopf) return;
+  if(p.innerHTML){ p.innerHTML=''; return; }
+  p.innerHTML='<div style="margin-top:12px;padding-top:12px;border-top:1px dashed rgba(255,107,107,.35)">'+
+    '<div style="font-weight:800;margin-bottom:6px">'+esc(_wrKopf.techniker_name||'Techniker')+' · KW '+esc(_wrKopf.woche)+' · '+esc(_wrKopf.jahr)+'</div>'+
+    '<div class="meta" style="margin-bottom:10px"><span>'+esc(_wrKopf.rapport_nr||'ohne Nummer')+' · '+_wrZeilenAnzahl+' Tageszeile'+(_wrZeilenAnzahl===1?'':'n')+
+      ' werden mitgelöscht. Die Rapportnummer wird nicht neu vergeben.</span></div>'+
+    '<div style="color:var(--muted);font-size:12px;margin-bottom:4px">Zum Bestätigen die Kalenderwoche eintippen: <b>'+esc(_wrKopf.woche)+'</b></div>'+
+    '<input class="field" id="wr-kopfdel-kw" inputmode="numeric" placeholder="KW-Nummer" style="max-width:140px"/>'+
+    '<div style="display:flex;gap:8px;margin-top:10px">'+
+      '<button class="chip" style="font-size:11px" onclick="wrKopfDelStart()">Abbrechen</button>'+
+      '<button class="chip" id="wr-kopfdel-go" style="font-size:11px;border-color:rgba(255,107,107,.5);color:#ff8f8f" onclick="wrKopfDelGo()">Endgültig löschen</button>'+
+    '</div></div>';
+  var inp=$('wr-kopfdel-kw'); if(inp) inp.focus();
+}
+function wrKopfDelGo(){
+  if(!_wrKopf) return;
+  var kw=(($('wr-kopfdel-kw')||{}).value||'').trim();
+  if(String(Number(kw))!==String(Number(_wrKopf.woche))){ toast('KW stimmt nicht — bitte '+_wrKopf.woche+' eintippen'); return; }
+  var btn=$('wr-kopfdel-go'); if(btn){ btn.disabled=true; btn.textContent='Wird gelöscht…'; }
+  api('pm_wochenrapport_kopf_delete',{id:_wrKopf.id,bestaetigung_woche:Number(kw)}).then(function(d){
+    if(!d||d.error){ toast((d&&d.error)||'Löschen fehlgeschlagen'); if(btn){ btn.disabled=false; btn.textContent='Endgültig löschen'; } return; }
+    toast('✓ Wochenrapport gelöscht ('+(d.geloescht?d.geloescht.zeilen:0)+' Tageszeilen)');
+    // Hinweis auf zurückbleibende Unterschriftsdateien — melden, nicht wegräumen.
+    if(d.unterschriften_im_speicher) setTimeout(function(){ toast(d.unterschriften_im_speicher+' Unterschriftsdatei(en) bleiben im Speicher'); },2400);
+    go('wochenrapporte');
+  }).catch(function(){ toast('Verbindungsfehler'); if(btn){ btn.disabled=false; btn.textContent='Endgültig löschen'; } });
 }
 // ── ZIEL 3 — Master-Vollrechte: ändern/löschen/verschieben, jeweils mit
 // Änderungsprotokoll (gs_wochenrapport_log) serverseitig in pmWochenrapport*. ──
