@@ -994,6 +994,38 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-day-head{display:flex;align-items:baseline;gap:8px;padding:12px 14px 8px;}
 #tech-cockpit .tc-day-wd{font-weight:800;font-size:13px;color:#C9A961;letter-spacing:.3px;}
 #tech-cockpit .tc-day-dm{font-size:12px;color:#8a97a8;}
+
+/* ZIEL 4 (Feinschliff II) — Wochenwahl als Rad statt ‹ ›-Pfeilen.
+   Zwei Spalten (Jahr · KW mit Datumsspanne), je eine echte Scroll-Spalte mit
+   scroll-snap. Die aktive Zeile steht mittig im goldenen Band, die übrigen
+   verblassen über die Maske nach oben und unten weg. Kein natives <select>:
+   das öffnet auf iOS ein eigenes Rad und bricht die Optik.
+   TC_WHEEL_ROW_H in JS muss zu --twh passen. */
+#tech-cockpit .tc-wheel{--twh:34px;position:relative;display:flex;gap:10px;
+  background:#131519;border:1px solid rgba(201,169,97,.3);border-radius:14px;padding:6px 8px;margin-bottom:8px;}
+#tech-cockpit .tc-wheel-col{flex:1;height:calc(var(--twh)*5);overflow-y:auto;overflow-x:hidden;
+  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:relative;z-index:2;}
+#tech-cockpit .tc-wheel-col::-webkit-scrollbar{display:none;}
+#tech-cockpit .tc-wheel-col.jahr{flex:0 0 78px;}
+/* Zwei Leerzeilen oben/unten, damit auch die erste/letzte Zeile mittig einrasten kann. */
+#tech-cockpit .tc-wheel-pad{height:calc(var(--twh)*2);}
+#tech-cockpit .tc-wheel-opt{height:var(--twh);scroll-snap-align:center;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1.15;color:#8a97a8;font-size:13px;font-weight:700;
+  opacity:.38;transition:opacity .18s ease,color .18s ease,transform .18s ease;transform:scale(.9);
+  cursor:pointer;white-space:nowrap;}
+#tech-cockpit .tc-wheel-opt small{font-size:10px;font-weight:600;opacity:.85;}
+#tech-cockpit .tc-wheel-opt.near{opacity:.62;transform:scale(.95);}
+#tech-cockpit .tc-wheel-opt.sel{opacity:1;color:#C9A961;transform:scale(1);font-weight:800;}
+/* Goldenes Band + Verblassen: rein dekorativ, darf keine Taps schlucken. */
+#tech-cockpit .tc-wheel-band{position:absolute;left:6px;right:6px;top:50%;height:var(--twh);
+  transform:translateY(-50%);border-top:1px solid rgba(201,169,97,.34);border-bottom:1px solid rgba(201,169,97,.34);
+  background:rgba(201,169,97,.07);border-radius:8px;pointer-events:none;z-index:1;}
+#tech-cockpit .tc-wheel-fade{position:absolute;left:0;right:0;height:calc(var(--twh)*1.7);pointer-events:none;z-index:3;}
+#tech-cockpit .tc-wheel-fade.top{top:6px;background:linear-gradient(#131519 12%,rgba(19,21,25,0));}
+#tech-cockpit .tc-wheel-fade.bot{bottom:6px;background:linear-gradient(rgba(19,21,25,0),#131519 88%);}
+#tech-cockpit .tc-wheel-today{display:block;width:100%;margin-top:2px;background:none;border:none;
+  color:#8a97a8;font-size:11.5px;font-weight:700;padding:5px;cursor:pointer;}
+#tech-cockpit .tc-wheel-today.on{color:#C9A961;}
 #tech-cockpit .tc-row{display:block;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.06);}
 #tech-cockpit .tc-row:first-of-type{border-top:none;}
 #tech-cockpit .rc-top{display:flex;align-items:center;gap:8px;}
@@ -9317,6 +9349,13 @@ function tcSwitchToMaster(){ location.href='/gs-intern-7k2x'; }
 function tcH(html){ var c=document.getElementById('tc-content'); if(c) c.innerHTML=html; var s=document.getElementById('tech-cockpit'); if(s) s.scrollTop=0; }
 function tcEsc(s){ return (typeof gsEsc==='function')?gsEsc(s):String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 function tcToast(m){ if(typeof toast==='function') toast(m); }
+/* ZIEL 7 (Feinschliff II) — haptisches Feedback, wo das Gerät es kann.
+   navigator.vibrate gibt es auf iOS/Safari nicht; der Aufruf muss dort still
+   scheitern, nicht werfen. Bewusst sehr kurz (6–12 ms) — ein Wegweiser, kein
+   Rütteln. Wird nie im Leerlauf ausgelöst, nur nach echten Zustandswechseln. */
+function tcHaptik(ms){
+  try{ if(navigator&&typeof navigator.vibrate==='function') navigator.vibrate(ms||8); }catch(_){}
+}
 function tcStBadge(st){ st=String(st||'').toLowerCase(); return '<span class="tc-st '+tcEsc(st)+'">'+tcEsc(st||'—')+'</span>'; }
 
 function initTechCockpit(){
@@ -9610,6 +9649,9 @@ function tcRenderWochenListe(){
 }
 function tcOpenWoche(jahr,woche){ tcLoadWoche(jahr,woche); }
 function tcOpenAktuelleWoche(){ var now=tcISOWeekOfDate(new Date()); tcLoadWoche(now.jahr,now.woche); }
+// ZIEL 4 — seit dem Wochen-Rad nicht mehr aus dem UI aufgerufen (die ‹ ›-Pfeile
+// sind weg). Bleibt als Wochensprung-Helfer stehen: rechnet über den Montag und
+// trägt dadurch Jahres-/53-Wochen-Grenzen korrekt (KW53/2026 → KW1/2027).
 function tcWocheNav(delta){
   var mon=tcISOWeekMonday(tcWocheState.jahr,tcWocheState.woche);
   mon.setUTCDate(mon.getUTCDate()+delta*7);
@@ -9989,12 +10031,12 @@ function tcRenderWoche(){
 
   var cd=tcCountdownInfo(kopf);
   var backLink='<button type="button" class="tc-back" onclick="tcRenderWochenListe()">‹ Meine Rapporte</button>';
-  var nav='<div class="tc-wknav" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
-    '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(-1)">‹</button>'+
-    '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+
+  // ZIEL 4 — Rad statt ‹ ›. Der Kopf darunter behält Rapportnummer + Countdown.
+  var nav=tcWheelHtml(jahr,woche)+
+    '<div class="tc-wknav" style="text-align:center;margin-bottom:6px">'+
+      (kopf.rapport_nr?('<div class="ti-m" style="font-weight:800;color:#C9A961">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+
       (cd?('<div class="tc-countdown-chip'+(cd.locked?' locked':'')+'" id="tc-countdown">'+tcEsc(cd.text)+'</div>'):'<div id="tc-countdown" style="display:none"></div>')+
-    '</div>'+
-    '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(1)">›</button></div>';
+    '</div>';
   var metaParts=[kopf.hauptkunde_name,kopf.hauptprojekt_name,(authTechName||'Techniker')].filter(Boolean);
   var meta=metaParts.length?('<div class="tc-kopfmeta">'+tcEsc(metaParts.join(' · '))+'</div>'):'';
   var prefill='<div class="tc-lbl" style="margin-top:14px">Ganze Woche gleiches Projekt? Einmal wählen, füllt leere Tage vor:</div>'+tcPrefillHtml();
@@ -10023,9 +10065,134 @@ function tcRenderWoche(){
   tcApplyUZVisibility();
   tcSignInit('tc-sign-technik');
   tcSignInit('tc-sign-kunde');
+  tcWheelInit();
   if(tcCountdownTimer) clearInterval(tcCountdownTimer);
   tcApplyLockState();
   tcCountdownTimer=setInterval(tcApplyLockState,60000);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 4 — Kalenderwochen-Rad (Uber-Stil). Zwei Spalten: Jahr und KW mit
+   Datumsspanne. Echtes Touch-Scrollen mit CSS scroll-snap, kein natives
+   <select> (das öffnet auf iOS ein eigenes Rad und bricht die Optik).
+
+   Zwei Fallen, die hier bewusst behandelt sind:
+   1. tcLoadWoche() rendert die GANZE Seite neu, das Rad also auch. Würde das
+      Setzen der Scrollposition danach den scroll-Handler auslösen, liefe eine
+      Endlosschleife aus Laden→Rendern→Scrollen→Laden. Deshalb tcWheelBusy.
+   2. Jahreswechsel ändert die Zahl der Wochen (2026 hat 53, 2027 nur 52).
+      Die KW-Spalte wird darum bei Jahreswechsel neu gebaut und die Woche auf
+      das Maximum des neuen Jahres geklemmt.
+   ══════════════════════════════════════════════════════════════════════════ */
+var TC_WHEEL_ROW_H=34;      // muss zu --twh im CSS passen
+var tcWheelBusy=false;      // unterdrückt den scroll-Handler während des Aufbaus
+var tcWheelTimer=null;
+
+function tcWheelJahre(){
+  var jetzt=tcISOWeekOfDate(new Date()).jahr, out=[];
+  for(var j=jetzt-2;j<=jetzt+1;j++) out.push(j);
+  return out;
+}
+function tcWheelOptHtml(val,label,sub,sel){
+  return '<div class="tc-wheel-opt'+(sel?' sel':'')+'" data-v="'+val+'" onclick="tcWheelTap(this)">'+
+    '<span>'+tcEsc(label)+'</span>'+(sub?('<small>'+tcEsc(sub)+'</small>'):'')+'</div>';
+}
+function tcWheelWochenOptsHtml(jahr,woche){
+  var n=tcISOWeeksInYear(jahr), html='';
+  for(var w=1;w<=n;w++){
+    var d=tcWeekDates(jahr,w);
+    html+=tcWheelOptHtml(w,'KW '+w,tcFmtDM(d[0])+'–'+tcFmtDM(d[6]),w===woche);
+  }
+  return html;
+}
+function tcWheelHtml(jahr,woche){
+  var pad='<div class="tc-wheel-pad"></div>';
+  var jahrOpts=tcWheelJahre().map(function(j){ return tcWheelOptHtml(j,String(j),'',j===jahr); }).join('');
+  var now=tcISOWeekOfDate(new Date());
+  var istJetzt=(jahr===now.jahr&&woche===now.woche);
+  return '<div class="tc-wheel" id="tc-wheel">'+
+      '<div class="tc-wheel-band"></div>'+
+      '<div class="tc-wheel-col jahr" id="tc-wheel-jahr" data-kind="jahr">'+pad+jahrOpts+pad+'</div>'+
+      '<div class="tc-wheel-col" id="tc-wheel-woche" data-kind="woche">'+pad+tcWheelWochenOptsHtml(jahr,woche)+pad+'</div>'+
+      '<div class="tc-wheel-fade top"></div><div class="tc-wheel-fade bot"></div>'+
+    '</div>'+
+    '<button type="button" class="tc-wheel-today'+(istJetzt?' on':'')+'" onclick="tcWheelHeute()">'+
+      (istJetzt?'● Aktuelle Woche':'↩︎ Zur aktuellen Woche')+'</button>';
+}
+// Aktive Zeile jeder Spalte mittig einrasten lassen, ohne den Handler zu wecken.
+function tcWheelInit(){
+  var w=document.getElementById('tc-wheel'); if(!w) return;
+  tcWheelBusy=true;
+  ['tc-wheel-jahr','tc-wheel-woche'].forEach(function(id){
+    var col=document.getElementById(id); if(!col) return;
+    var sel=col.querySelector('.tc-wheel-opt.sel');
+    var opts=col.querySelectorAll('.tc-wheel-opt');
+    var idx=sel?Array.prototype.indexOf.call(opts,sel):0;
+    col.scrollTop=idx*TC_WHEEL_ROW_H;
+    col.onscroll=tcWheelScroll;
+    tcWheelPaint(col);
+  });
+  setTimeout(function(){ tcWheelBusy=false; },80);
+}
+// Nähe zur Mitte als Optik: sel / near / verblasst.
+function tcWheelPaint(col){
+  var idx=Math.round(col.scrollTop/TC_WHEEL_ROW_H);
+  Array.prototype.forEach.call(col.querySelectorAll('.tc-wheel-opt'),function(o,i){
+    o.classList.toggle('sel',i===idx);
+    o.classList.toggle('near',Math.abs(i-idx)===1);
+  });
+  return idx;
+}
+function tcWheelValue(col){
+  var opts=col.querySelectorAll('.tc-wheel-opt');
+  var o=opts[Math.max(0,Math.min(opts.length-1,Math.round(col.scrollTop/TC_WHEEL_ROW_H)))];
+  return o?Number(o.getAttribute('data-v')):null;
+}
+function tcWheelScroll(e){
+  var col=e.target||e.currentTarget; if(!col) return;
+  tcWheelPaint(col);
+  if(tcWheelBusy) return;
+  if(tcWheelTimer) clearTimeout(tcWheelTimer);
+  // 140 ms nach dem letzten Scroll-Ereignis gilt das Rad als eingerastet.
+  tcWheelTimer=setTimeout(function(){ tcWheelSettle(col.getAttribute('data-kind')); },140);
+}
+function tcWheelSettle(kind){
+  var jc=document.getElementById('tc-wheel-jahr'), wc=document.getElementById('tc-wheel-woche');
+  if(!jc||!wc) return;
+  var jahr=tcWheelValue(jc); if(!jahr) return;
+  if(kind==='jahr'&&jahr!==tcWocheState.jahr){
+    // Jahr gewechselt: KW-Spalte neu aufbauen (52 vs. 53 Wochen) und die Woche
+    // auf das Maximum des neuen Jahres klemmen.
+    var max=tcISOWeeksInYear(jahr);
+    var woche=Math.min(tcWocheState.woche||1,max);
+    tcWheelBusy=true;
+    wc.innerHTML='<div class="tc-wheel-pad"></div>'+tcWheelWochenOptsHtml(jahr,woche)+'<div class="tc-wheel-pad"></div>';
+    wc.scrollTop=(woche-1)*TC_WHEEL_ROW_H;
+    tcWheelPaint(wc);
+    setTimeout(function(){ tcWheelBusy=false; },80);
+    tcHaptik(8);
+    tcLoadWoche(jahr,woche);
+    return;
+  }
+  var w2=tcWheelValue(wc); if(!w2) return;
+  if(jahr===tcWocheState.jahr&&w2===tcWocheState.woche) return; // nichts geändert
+  tcHaptik(8);
+  tcLoadWoche(jahr,w2);
+}
+// Direkter Tap auf eine Zeile — schneller als scrollen, gleiche Wirkung.
+function tcWheelTap(el){
+  var col=el.closest('.tc-wheel-col'); if(!col) return;
+  var opts=col.querySelectorAll('.tc-wheel-opt');
+  var idx=Array.prototype.indexOf.call(opts,el);
+  col.scrollTo({top:idx*TC_WHEEL_ROW_H,behavior:'smooth'});
+  if(tcWheelTimer) clearTimeout(tcWheelTimer);
+  tcWheelTimer=setTimeout(function(){ tcWheelSettle(col.getAttribute('data-kind')); },260);
+}
+function tcWheelHeute(){
+  var now=tcISOWeekOfDate(new Date());
+  if(now.jahr===tcWocheState.jahr&&now.woche===tcWocheState.woche) return;
+  tcHaptik(8);
+  tcLoadWoche(now.jahr,now.woche);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
