@@ -2918,6 +2918,17 @@ async function getTechWochenRapport(b, scope) {
     for (const s of sv) svcMap[s.id] = s;
   }
   const taetMap = await loadTaetigkeitenFuerTagesrapporte(zeilen.map((z) => z.id));
+  // ZIEL 1 (Feinschliff II) — Anzahl Fotos je Tageszeile. Nur dafür da, dass die
+  // Rückgängig-Pille beim Löschen ehrlich sagen kann, dass die Fotos am Projekt
+  // bleiben und nicht mehr am Tag hängen (gs_projekt_medien.tagesrapport_id ist
+  // ON DELETE SET NULL). Eine Abfrage für die ganze Woche, in JS gezählt —
+  // PostgREST kann kein GROUP BY.
+  const medienZahl = {};
+  const zIds = zeilen.map((z) => z.id).filter(Boolean);
+  if (zIds.length) {
+    const m = await sbGet(`gs_projekt_medien?tagesrapport_id=in.(${zIds.join(',')})&select=tagesrapport_id`).catch(() => []);
+    for (const x of m) medienZahl[x.tagesrapport_id] = (medienZahl[x.tagesrapport_id] || 0) + 1;
+  }
   const zeilenOut = zeilen.map((z) => ({
     ...z,
     projekt_name: z.projekt_id ? (projMap[z.projekt_id] || {}).name || null : null,
@@ -2925,6 +2936,7 @@ async function getTechWochenRapport(b, scope) {
     standort: z.projekt_id ? (projMap[z.projekt_id] || {}).standort || null : null,
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
     taetigkeiten: taetMap[z.id] || [],
+    medien_anzahl: medienZahl[z.id] || 0,
   }));
   const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {

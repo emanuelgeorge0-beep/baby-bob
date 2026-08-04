@@ -1028,6 +1028,30 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-wheel-today{display:block;width:100%;margin-top:2px;background:none;border:none;
   color:#8a97a8;font-size:11.5px;font-weight:700;padding:5px;cursor:pointer;}
 #tech-cockpit .tc-wheel-today.on{color:#C9A961;}
+
+/* ZIEL 1 (Feinschliff II) — Rückgängig-Pille. Liegt bewusst AUSSERHALB von
+   #tc-content: tcH() ersetzt dessen innerHTML komplett, die Pille würde sonst
+   bei jedem Neuladen der Woche mitsterben — genau in dem Moment, in dem man
+   sie braucht. Darum direkt am <body>. */
+.tc-undo{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));
+  transform:translate(-50%,140%);z-index:9000;display:flex;align-items:center;gap:12px;
+  max-width:calc(100vw - 28px);padding:11px 12px 11px 16px;border-radius:14px;
+  background:#1b1e24;border:1px solid rgba(201,169,97,.42);box-shadow:0 10px 30px rgba(0,0,0,.5);
+  opacity:0;pointer-events:none;transition:transform .24s cubic-bezier(.2,.9,.3,1),opacity .2s ease;}
+.tc-undo.show{transform:translate(-50%,0);opacity:1;pointer-events:auto;}
+.tc-undo-txt{color:#e8edf5;font-size:13px;font-weight:700;line-height:1.25;min-width:0;}
+.tc-undo-txt small{display:block;font-size:11px;font-weight:600;color:#8a97a8;margin-top:2px;}
+.tc-undo-btn{flex:0 0 auto;border:none;border-radius:10px;padding:9px 14px;cursor:pointer;
+  background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;font-weight:800;font-size:13px;}
+/* Ablaufbalken: zeigt, wie lange die Pille noch da ist. Rein visuell. */
+.tc-undo-bar{position:absolute;left:0;bottom:0;height:2px;background:#C9A961;border-radius:0 0 14px 14px;
+  width:100%;transform-origin:left center;}
+.tc-undo.show .tc-undo-bar{animation:tcUndoBar 8s linear forwards;}
+@keyframes tcUndoBar{from{transform:scaleX(1);}to{transform:scaleX(0);}}
+@media (prefers-reduced-motion:reduce){
+  .tc-undo{transition:opacity .2s ease;transform:translate(-50%,0);}
+  .tc-undo.show .tc-undo-bar{animation:none;}
+}
 #tech-cockpit .tc-row{display:block;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.06);}
 #tech-cockpit .tc-row:first-of-type{border-top:none;}
 #tech-cockpit .rc-top{display:flex;align-items:center;gap:8px;}
@@ -9368,6 +9392,66 @@ function tcToast(m){ if(typeof toast==='function') toast(m); }
 function tcHaptik(ms){
   try{ if(navigator&&typeof navigator.vibrate==='function') navigator.vibrate(ms||8); }catch(_){}
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 1 (Feinschliff II) — Rückgängig-Pille.
+
+   BEWUSST KEIN globaler Undo-Stack: es gibt genau EINEN Slot. Eine neue Aktion
+   überschreibt die vorige, die dann endgültig ist. Ein Stack über die ganze App
+   würde bedeuten, dass ein Tap Minuten später etwas zurückholt, an das niemand
+   mehr denkt — bei Rapportdaten ist das gefährlicher als hilfreich.
+
+   Die Pille erscheint NICHT, wenn die Woche gesperrt ist (24h-Fenster
+   abgelaufen). Ein Tap liefe dort in ein serverseitiges 403 — lieber gar keine
+   Pille als eine, die nicht hält, was sie verspricht.
+
+   8 Sekunden, danach ist die Aktion endgültig. Der Balken am unteren Rand
+   zeigt die verbleibende Zeit.
+   ══════════════════════════════════════════════════════════════════════════ */
+var tcUndoState=null;   // {fn:Function, timer:number}
+function tcUndoEl(){
+  var el=document.getElementById('tc-undo');
+  if(!el){
+    el=document.createElement('div');
+    el.id='tc-undo'; el.className='tc-undo';
+    el.innerHTML='<div class="tc-undo-txt" id="tc-undo-txt"></div>'+
+      '<button type="button" class="tc-undo-btn" onclick="tcUndoRun()">Rückgängig</button>'+
+      '<div class="tc-undo-bar"></div>';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+// text  = was passiert ist ("Eintrag gelöscht")
+// fn    = stellt den Zustand davor wieder her
+// sub   = optionale zweite Zeile für ehrliche Einschränkungen (z.B. Fotos)
+function tcUndoShow(text,fn,sub){
+  // Gesperrte Woche → gar keine Pille. Bewusst tcCountdownInfo statt
+  // tcApplyLockState: letzteres schreibt am DOM herum, das gehört hier nicht hin.
+  var cd=tcCountdownInfo(tcWocheKopf);
+  if(cd&&cd.locked) return;
+  tcUndoClear();
+  var el=tcUndoEl();
+  var t=document.getElementById('tc-undo-txt');
+  if(t) t.innerHTML=tcEsc(text)+(sub?('<small>'+tcEsc(sub)+'</small>'):'');
+  // Balken-Animation neu starten: Klasse kurz abnehmen erzwingt den Reflow.
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  tcUndoState={fn:fn,timer:setTimeout(tcUndoHide,8000)};
+}
+function tcUndoHide(){
+  var el=document.getElementById('tc-undo'); if(el) el.classList.remove('show');
+  tcUndoClear();
+}
+function tcUndoClear(){
+  if(tcUndoState&&tcUndoState.timer) clearTimeout(tcUndoState.timer);
+  tcUndoState=null;
+}
+function tcUndoRun(){
+  if(!tcUndoState||typeof tcUndoState.fn!=='function'){ tcUndoHide(); return; }
+  var fn=tcUndoState.fn;
+  tcUndoHide();               // erst schliessen, dann handeln (kein Doppel-Tap)
+  tcHaptik(12);
+  try{ fn(); }catch(e){ tcToast('Rückgängig nicht möglich'); }
+}
 function tcStBadge(st){ st=String(st||'').toLowerCase(); return '<span class="tc-st '+tcEsc(st)+'">'+tcEsc(st||'—')+'</span>'; }
 
 function initTechCockpit(){
@@ -9386,6 +9470,9 @@ function tcBuildNav(){
 }
 function tcNavActive(v){ var n=document.getElementById('tc-nav'); if(!n) return; Array.prototype.forEach.call(n.querySelectorAll('button'),function(b){ b.classList.toggle('on',b.getAttribute('data-v')===v); }); }
 function tcGo(view){
+  // ZIEL 1 — beim Verlassen der Ansicht die Rückgängig-Pille schliessen. Ein
+  // Tap darauf würde sonst in einem Kontext wirken, den man gerade verlassen hat.
+  if(typeof tcUndoHide==='function') tcUndoHide();
   tcState.view=view; tcNavActive(view);
   if(view==='projekte') return tcRenderProjekte();
   if(view==='service')  return tcRenderService();
@@ -9637,6 +9724,7 @@ function tcRenderRapporte(){
   tcRenderWochenListe();
 }
 function tcRenderWochenListe(){
+  tcUndoHide();   // ZIEL 1 — Pille gehört zur Wochenansicht, nicht zur Liste
   tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Lädt…</div>');
   techApi('tech_wochen_liste',{}).then(function(d){
     if(d&&d.notMigrated){ tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
@@ -9844,18 +9932,43 @@ function tcTaetMove(btn,dir){
   if(dir<0) item.parentNode.insertBefore(item,sib); else item.parentNode.insertBefore(sib,item);
   tcRowInput(item);
 }
+/* ZIEL 1 (Feinschliff II) — Tätigkeit löschen mit Rückgängig. Der Eintrag wird
+   an genau der Position wieder eingesetzt, an der er stand (Reihenfolge ist
+   fachlich relevant, sie geht als sortierung mit ans Backend). */
 function tcTaetRemove(btn){
   var item=btn.closest('.tc-taet-item'); if(!item) return;
   var rowEl=item.closest('[data-row]');
+  var list=item.parentNode;
+  var idx=Array.prototype.indexOf.call(list.children,item);
+  var html=item.outerHTML;
+  var bez=item.getAttribute('data-bezeichnung')||'Tätigkeit';
   item.remove();
   if(rowEl){ tcRecalcTotals(); tcScheduleSave(rowEl); }
+  tcHaptik(8);
+  tcUndoShow('„'+bez+'" entfernt',function(){
+    if(!list||!list.isConnected) return;   // Woche neu geladen → nichts zu tun
+    var knoten=tcHtmlZuKnoten(html);
+    if(idx<list.children.length) list.insertBefore(knoten,list.children[idx]);
+    else list.appendChild(knoten);
+    var r=list.closest('[data-row]');
+    if(r){ tcRecalcTotals(); tcScheduleSave(r); }
+  });
 }
 function tcTaetAdd(el){
   var rowEl=el.closest('[data-row]'); if(!rowEl) return;
   var list=rowEl.querySelector('.tc-taet-list'); if(!list) return;
   var felder=[]; try{ felder=JSON.parse(el.getAttribute('data-felder')||'[]'); }catch(e){}
-  list.insertAdjacentHTML('beforeend', tcTaetItemHtml({taetigkeit_id:el.getAttribute('data-id'),bezeichnung_snapshot:el.getAttribute('data-bez'),details:{},felder:felder}));
+  var bez=el.getAttribute('data-bez')||'Tätigkeit';
+  list.insertAdjacentHTML('beforeend', tcTaetItemHtml({taetigkeit_id:el.getAttribute('data-id'),bezeichnung_snapshot:bez,details:{},felder:felder}));
+  var neu=list.lastElementChild;
   tcRecalcTotals(); tcScheduleSave(rowEl);
+  tcHaptik(6);
+  tcUndoShow('„'+bez+'" hinzugefügt',function(){
+    if(!neu||!neu.isConnected) return;
+    var r=neu.closest('[data-row]');
+    neu.remove();
+    if(r){ tcRecalcTotals(); tcScheduleSave(r); }
+  });
 }
 function tcTaetPickerToggle(btn){
   var wrap=btn.closest('.tc-taet-wrap'); if(!wrap) return;
@@ -10065,7 +10178,9 @@ function tcRenderWoche(){
     tcRowSeq[date]=Math.max(list.length,1);
     var dayHead='<div class="tc-day-head"><span class="tc-day-wd">'+TC_WD[tcWeekdayIdx(date)]+'</span><span class="tc-day-dm">'+tcFmtDM(date)+'</span></div>';
     var entries=list.length?list.map(function(z,idx){ return tcRowHtml(date,idx,z,idx===list.length-1); }).join(''):tcRowHtml(date,0,null,true);
-    return '<div class="tc-daycard">'+dayHead+entries+'</div>';
+    // data-daycard: nötig, damit tcDayFixup die Karte auch dann noch findet,
+    // wenn ihre letzte Zeile gerade entfernt wurde (ZIEL 1).
+    return '<div class="tc-daycard" data-daycard="'+date+'">'+dayHead+entries+'</div>';
   }).join('');
   var fuss='<div class="tc-foottotal-row">'+
     '<div class="ft"><span class="lbl">Normalstunden</span><span class="val" id="tc-tot-std">0.00 h</span></div>'+
@@ -10337,13 +10452,51 @@ function tcSignInit(canvasId){
   var drawing=false,last=null;
   function pos(e){var r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(cv.width/r.width),y:(e.clientY-r.top)*(cv.height/r.height)};}
   function down(e){drawing=true;last=pos(e);try{cv.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault();}
-  function move(e){if(!drawing)return;var p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;state.has=true;e.preventDefault();}
+  function move(e){if(!drawing)return;var p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;
+    // ZIEL 7 — erster Strich macht "Unterschrift speichern" zur nächsten Aktion.
+    if(!state.has){ state.has=true; tcSignGlowUpdate(canvasId); }
+    e.preventDefault();}
   function up(e){if(!drawing)return;drawing=false;try{cv.releasePointerCapture(e.pointerId);}catch(_){}}
   cv.onpointerdown=down; cv.onpointermove=move; cv.onpointerup=up; cv.onpointercancel=up;
 }
+/* ZIEL 1 (Feinschliff II) — Unterschrift löschen mit Rückgängig. Der Canvas-
+   Inhalt wird VOR dem Leeren als Bild gesichert und beim Rückgängig wieder
+   hineingezeichnet. Betrifft nur das noch nicht gespeicherte Pad; eine bereits
+   gespeicherte Unterschrift läuft über "Neu erfassen" und ist davon unberührt. */
 function tcSignClear(canvasId){
   var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
-  if(st&&cv){ st.ctx.clearRect(0,0,cv.width,cv.height); st.ctx.fillStyle='#ffffff'; st.ctx.fillRect(0,0,cv.width,cv.height); st.has=false; }
+  if(!st||!cv) return;
+  var hatte=st.has;
+  var vorher=hatte?cv.toDataURL('image/png'):null;
+  st.ctx.clearRect(0,0,cv.width,cv.height);
+  st.ctx.fillStyle='#ffffff'; st.ctx.fillRect(0,0,cv.width,cv.height);
+  st.has=false;
+  tcSignGlowUpdate(canvasId);
+  if(!hatte) return;             // leeres Pad geleert — nichts rückgängig zu machen
+  tcHaptik(8);
+  tcUndoShow('Unterschrift gelöscht',function(){
+    var st2=tcSignState[canvasId], cv2=document.getElementById(canvasId);
+    if(!st2||!cv2||!vorher) return;
+    var img=new Image();
+    img.onload=function(){
+      st2.ctx.fillStyle='#ffffff'; st2.ctx.fillRect(0,0,cv2.width,cv2.height);
+      st2.ctx.drawImage(img,0,0,cv2.width,cv2.height);
+      st2.has=true;
+      tcSignGlowUpdate(canvasId);
+    };
+    img.src=vorher;
+  });
+}
+/* ZIEL 7 (Feinschliff II) — sobald etwas gezeichnet ist, bekommt „Unterschrift
+   speichern" den goldenen Schimmer: das ist ab diesem Moment die nächste
+   logische Aktion. Wird auch von tcSignClear/dem Zeichnen selbst aufgerufen. */
+function tcSignGlowUpdate(canvasId){
+  var cv=document.getElementById(canvasId); if(!cv) return;
+  var block=cv.closest('.tc-sign-block')||cv.parentNode; if(!block) return;
+  var st=tcSignState[canvasId];
+  Array.prototype.forEach.call(block.querySelectorAll('.tc-btn.gold'),function(b){
+    b.classList.toggle('tc-next',!!(st&&st.has));
+  });
 }
 function tcSignDataUrl(canvasId){
   var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
@@ -10448,9 +10601,12 @@ function tcRowHtml(date,idx,z,isLast){
       '<button type="button" class="tc-mic" onclick="tcArbDictate(this)">🎙️ Diktieren</button></div>'+
       tcTaetWrapHtml(z,svc)+
     '</div>'+
+    // ZIEL 1 (Feinschliff II) — Löschen IMMER anbieten, nicht erst nach dem
+    // ersten Speichern. Eine per "＋ weiterer Eintrag" erzeugte Zeile war bisher
+    // gar nicht mehr loszuwerden. Ohne id wird sie rein im Client entfernt.
     '<div class="rc-icons">'+
       '<button type="button" onclick="tcToggleDetails(this)">⋯ Notiz &amp; Fotos</button>'+
-      (rowId?'<button type="button" class="rc-del" onclick="tcRowDel(this)">🗑</button>':'')+
+      '<button type="button" class="rc-del" onclick="tcRowDel(this)">🗑</button>'+
       (isLast?'<button type="button" class="rc-plus" onclick="tcAddRow(\''+date+'\')">＋ weiterer Eintrag</button>':'')+
     '</div>'+
     '<div class="rc-details">'+tcDetailsNotizHtml(z)+tcDetailsPhotoHtml(z)+'</div>'+
@@ -10494,7 +10650,54 @@ function tcAddRow(date){
   lastRow.insertAdjacentHTML('afterend', tcRowHtml(date,idx,null,true));
   tcRowSeq[date]=idx+1;
   var oldPlus=lastRow.querySelector('.rc-plus'); if(oldPlus) oldPlus.remove();
-  tcApplyPrefillToRow(lastRow.nextElementSibling);
+  var neu=lastRow.nextElementSibling;
+  tcApplyPrefillToRow(neu);
+  tcHaptik(6);
+  // ZIEL 1 — Rückgängig. Die Zeile ist beim Anlegen noch nicht gespeichert;
+  // hat der Vorbelegungs-Automat inzwischen ein Ziel gesetzt und damit den
+  // Autosave ausgelöst, trägt sie eine data-id — dann muss auch der Server
+  // aufräumen, sonst bliebe eine Karteileiche in der Woche stehen.
+  tcUndoShow('Eintrag hinzugefügt',function(){
+    if(!neu||!neu.isConnected) return;
+    var id=neu.getAttribute('data-id');
+    var d=neu.getAttribute('data-date');
+    var t=tcRowTimers.get(neu); if(t) clearTimeout(t);   // laufenden Autosave stoppen
+    neu.remove();
+    tcDayFixup(d);
+    tcRecalcTotals();
+    if(id){
+      techApi('tech_tag_del',{id:id}).then(function(){
+        tcWocheZeilen=tcWocheZeilen.filter(function(z){return z.id!==id;});
+      }).catch(function(){ tcToast('Zeile konnte serverseitig nicht entfernt werden'); });
+    }
+  });
+}
+
+/* ZIEL 1 — nach dem Entfernen einer Zeile den Tag wieder in einen gültigen
+   Zustand bringen: bleibt keine Zeile übrig, kommt eine leere zurück (sonst
+   hätte der Tag keine Eingabemöglichkeit mehr), und die jetzt letzte Zeile
+   bekommt den "＋ weiterer Eintrag"-Knopf. */
+function tcDayFixup(date){
+  var karte=document.querySelector('[data-daycard="'+date+'"]');
+  var rows=document.querySelectorAll('.tc-row[data-date="'+date+'"]');
+  if(!rows.length){
+    if(!karte) return;
+    karte.insertAdjacentHTML('beforeend', tcRowHtml(date,0,null,true));
+    tcRowSeq[date]=1;
+    tcApplyPrefillToRow(karte.querySelector('.tc-row[data-date="'+date+'"]'));
+    tcApplyUZVisibility(); tcApplyLockState();
+    return;
+  }
+  Array.prototype.forEach.call(rows,function(r,i){
+    var plus=r.querySelector('.rc-plus');
+    if(i===rows.length-1&&!plus){
+      var b=document.createElement('button'); b.type='button'; b.className='rc-plus';
+      b.textContent='＋ weiterer Eintrag';
+      b.onclick=function(){ tcAddRow(date); };
+      var icons=r.querySelector('.rc-icons'); if(icons) icons.appendChild(b);
+    } else if(i!==rows.length-1&&plus){ plus.remove(); }
+  });
+  tcApplyLockState();
 }
 
 /* ── Live-Eingabe: Feld ändert sich → Totals sofort neu, Zeile debounced speichern ── */
@@ -10640,12 +10843,9 @@ function tcMergeSavedRow(z){
   if(i>=0) tcWocheZeilen[i]=Object.assign({},tcWocheZeilen[i],z); else tcWocheZeilen.push(z);
 }
 function tcRefreshRowChrome(rowEl,z){
-  var icons=rowEl.querySelector('.rc-icons');
-  if(icons && !icons.querySelector('.rc-del')){
-    var del=document.createElement('button'); del.type='button'; del.className='rc-del'; del.textContent='🗑';
-    del.onclick=function(){ tcRowDel(del); };
-    icons.insertBefore(del, icons.querySelector('.rc-plus')||null);
-  }
+  // ZIEL 1 — der 🗑-Knopf wird seit dieser Runde IMMER gerendert (auch ohne
+  // data-id), das Nachrüsten hier entfällt. Bleibt nur der Fotoblock, der erst
+  // nach dem ersten Speichern eine tagesrapport_id zum Anhängen hat.
   var details=rowEl.querySelector('.rc-details');
   if(details && details.classList.contains('open') && !details.querySelector('.tc-details-photo')){
     var last=details.lastElementChild;
@@ -10659,16 +10859,58 @@ function tcRefreshRowChrome(rowEl,z){
     }
   }
 }
+/* ZIEL 1 (Feinschliff II) — Eintrag löschen. Zwei Fälle:
+   • ohne data-id: noch nie gespeichert, reines DOM-Element. Löschen und
+     Rückgängig laufen komplett im Client, der Server sieht davon nichts.
+   • mit data-id: serverseitig löschen. Rückgängig legt die Zeile NEU an
+     (tech_tag_save) — sie bekommt dabei eine neue id. Daran hängende Fotos
+     bleiben am Projekt, verlieren aber die Tagesbindung
+     (gs_projekt_medien.tagesrapport_id ist ON DELETE SET NULL). Genau das sagt
+     die Pille als zweite Zeile, statt es zu verschweigen.
+   Bestätigung bleibt in beiden Fällen — Pille UND confirm(), weil Löschen die
+   einzige Aktion hier ist, die Erfasstes vernichtet. */
 function tcRowDel(btn){
   var rowEl=btn.closest('[data-row]'); if(!rowEl) return;
+  var id=rowEl.getAttribute('data-id');
+  var date=rowEl.getAttribute('data-date');
+
+  if(!id){
+    if(!confirm('Diesen noch nicht gespeicherten Eintrag entfernen?')) return;
+    var vorher=rowEl.outerHTML, parent=rowEl.parentNode, next=rowEl.nextElementSibling;
+    var t=tcRowTimers.get(rowEl); if(t) clearTimeout(t);
+    rowEl.remove(); tcDayFixup(date); tcRecalcTotals(); tcHaptik(10);
+    tcUndoShow('Eintrag entfernt',function(){
+      if(!parent||!parent.isConnected) return;   // Woche wurde inzwischen neu geladen
+      if(next&&next.isConnected) parent.insertBefore(tcHtmlZuKnoten(vorher),next);
+      else parent.appendChild(tcHtmlZuKnoten(vorher));
+      tcDayFixup(date); tcRecalcTotals(); tcApplyUZVisibility();
+    });
+    return;
+  }
+
   if(!confirm('Diese Zeile wirklich löschen?')) return;
-  var id=rowEl.getAttribute('data-id'); if(!id) return;
+  // Zustand VOR dem Löschen sichern — danach ist er weg.
+  var snapshot=tcCollectRow(rowEl);
+  var zeile=tcWocheZeilen.filter(function(z){return z.id===id;})[0]||{};
+  var fotos=Number(zeile.medien_anzahl||0);
   techApi('tech_tag_del',{id:id}).then(function(d){
     if(d&&d.error){ tcToast(d.error); return; }
     tcWocheZeilen=tcWocheZeilen.filter(function(z){return z.id!==id;});
-    tcToast('Zeile gelöscht');
+    tcHaptik(10);
+    tcUndoShow('Eintrag gelöscht',function(){
+      if(!snapshot){ tcToast('Rückgängig nicht möglich'); return; }
+      techApi('tech_tag_save',snapshot).then(function(r){
+        if(r&&r.error){ tcToast(r.error); return; }
+        tcToast('✓ Eintrag wiederhergestellt');
+        tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+      }).catch(function(){ tcToast('Verbindungsfehler beim Wiederherstellen'); });
+    }, fotos?(fotos+' Foto'+(fotos===1?'':'s')+' bleiben am Projekt, nicht mehr am Tag'):'');
     tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
   }).catch(function(){ tcToast('Verbindungsfehler'); });
+}
+// HTML-String → echter Knoten (für das Wiedereinsetzen einer entfernten Zeile).
+function tcHtmlZuKnoten(html){
+  var box=document.createElement('div'); box.innerHTML=html; return box.firstElementChild;
 }
 
 /* ── Diktieren "Ausgeführte Arbeiten": gleicher Web-Speech-Stack wie die Material-
