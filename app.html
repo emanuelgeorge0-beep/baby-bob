@@ -1078,7 +1078,10 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
    #tc-content: tcH() ersetzt dessen innerHTML komplett, die Pille würde sonst
    bei jedem Neuladen der Woche mitsterben — genau in dem Moment, in dem man
    sie braucht. Darum direkt am <body>. */
-.tc-undo{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));
+/* bottom: über der fixen Bottom-Navigation (.tc-nav, ~59 px + safe-area), sonst
+   liegt die Pille darunter und der "Rückgängig"-Knopf ist nicht erreichbar.
+   z-index über der Nav (die hat 40). */
+.tc-undo{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom,0px));
   transform:translate(-50%,140%);z-index:9000;display:flex;align-items:center;gap:12px;
   max-width:calc(100vw - 28px);padding:11px 12px 11px 16px;border-radius:14px;
   background:#1b1e24;border:1px solid rgba(201,169,97,.42);box-shadow:0 10px 30px rgba(0,0,0,.5);
