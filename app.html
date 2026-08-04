@@ -1041,10 +1041,29 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
    verblassen über die Maske nach oben und unten weg. Kein natives <select>:
    das öffnet auf iOS ein eigenes Rad und bricht die Optik.
    TC_WHEEL_ROW_H in JS muss zu --twh passen. */
+/* FIX tageskarten-leer — das Rad war ein OFFENER, 170 px hoher Scroll-Container
+   quer über dem Inhalt. Auf dem Handy landet der erste Wisch nach der
+   Projektauswahl genau darauf, das Rad verbraucht die Geste, wechselt die Woche
+   und lädt neu — die noch nicht gespeicherte Zeile war damit weg.
+   Jetzt: zugeklappte Schaltfläche im Fluss, das Rad öffnet als Overlay.
+   Solange nichts offen ist, gibt es keine Scrollfläche, die etwas abfangen kann. */
+#tech-cockpit .tc-wheel-trigger{display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;background:#131519;border:1px solid rgba(201,169,97,.3);border-radius:14px;
+  padding:11px 14px;margin-bottom:8px;cursor:pointer;color:#e8edf5;font-weight:800;font-size:15px;}
+#tech-cockpit .tc-wheel-trigger small{display:block;font-size:11.5px;font-weight:600;color:#8a97a8;margin-top:2px;}
+#tech-cockpit .tc-wheel-trigger .pfeil{color:#C9A961;font-size:12px;}
+#tech-cockpit .tc-wheel-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:8000;
+  display:flex;align-items:flex-end;justify-content:center;}
+#tech-cockpit .tc-wheel-sheet{width:100%;max-width:520px;background:#0f1115;
+  border-top:1px solid rgba(201,169,97,.35);border-radius:18px 18px 0 0;
+  padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px));}
+#tech-cockpit .tc-wheel-sheet .tc-sec{margin-top:0;}
 #tech-cockpit .tc-wheel{--twh:34px;position:relative;display:flex;gap:10px;
   background:#131519;border:1px solid rgba(201,169,97,.3);border-radius:14px;padding:6px 8px;margin-bottom:8px;}
 #tech-cockpit .tc-wheel-col{flex:1;height:calc(var(--twh)*5);overflow-y:auto;overflow-x:hidden;
-  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:relative;z-index:2;}
+  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:relative;z-index:2;
+  /* Scrollbewegung bleibt im Rad und läuft nicht in die Seite über (und umgekehrt). */
+  overscroll-behavior:contain;}
 #tech-cockpit .tc-wheel-col::-webkit-scrollbar{display:none;}
 #tech-cockpit .tc-wheel-col.jahr{flex:0 0 78px;}
 /* Zwei Leerzeilen oben/unten, damit auch die erste/letzte Zeile mittig einrasten kann. */
@@ -9832,7 +9851,22 @@ function tcGoWocheNeueZeile(kind,id){
     var pn=rowEl.querySelector('.f-projektnummer'); if(pn) pn.focus();
   });
 }
+/* FIX tageskarten-leer — vor jedem Wochenwechsel den ausstehenden Autosave
+   sofort ausführen. tcScheduleSave wartet 700 ms; wer in dieser Zeit die Woche
+   wechselt, verlor bisher die begonnene Zeile ersatzlos. */
+function tcFlushOffeneSpeicherungen(){
+  if(!tcRowTimers||!tcRowTimers.size) return;
+  var offen=[];
+  tcRowTimers.forEach(function(t,rowEl){ clearTimeout(t); offen.push(rowEl); });
+  tcRowTimers.clear();
+  offen.forEach(function(rowEl){
+    // Nur Zeilen mit gewähltem Ziel — tcSaveRowEl verwirft leere ohnehin.
+    if(rowEl&&rowEl.isConnected) tcSaveRowEl(rowEl);
+  });
+}
 function tcLoadWoche(jahr,woche,after){
+  tcFlushOffeneSpeicherungen();
+  tcWheelSchliessen();
   tcWocheState.jahr=jahr; tcWocheState.woche=woche;
   tcH('<div class="tc-sec">Wochenblatt</div><div class="tc-empty">Lädt…</div>');
   Promise.all([
@@ -10302,7 +10336,7 @@ function tcRenderWoche(){
   tcApplyUZVisibility();
   tcSignInit('tc-sign-technik');
   tcSignInit('tc-sign-kunde');
-  tcWheelInit();
+  // tcWheelInit() entfaellt hier: das Rad entsteht erst beim Oeffnen (tcWheelOeffnen).
   if(tcCountdownTimer) clearInterval(tcCountdownTimer);
   tcApplyLockState();
   tcCountdownTimer=setInterval(tcApplyLockState,60000);
@@ -10324,6 +10358,8 @@ function tcRenderWoche(){
 var TC_WHEEL_ROW_H=34;      // muss zu --twh im CSS passen
 var tcWheelBusy=false;      // unterdrückt den scroll-Handler während des Aufbaus
 var tcWheelTimer=null;
+var tcWheelGeste=false;     // wurde das Rad wirklich angefasst? (siehe tcWheelInit)
+var tcWheelJahrAktiv=null;  // zuletzt im Rad eingerastetes Jahr
 
 function tcWheelJahre(){
   var jetzt=tcISOWeekOfDate(new Date()).jahr, out=[];
@@ -10342,24 +10378,60 @@ function tcWheelWochenOptsHtml(jahr,woche){
   }
   return html;
 }
+/* Zugeklappter Zustand: nur eine Schaltfläche im Fluss der Seite, kein
+   Scroll-Container. Das eigentliche Rad entsteht erst beim Öffnen. */
 function tcWheelHtml(jahr,woche){
+  var d=tcWeekDates(jahr,woche);
+  var now=tcISOWeekOfDate(new Date());
+  var istJetzt=(jahr===now.jahr&&woche===now.woche);
+  return '<div class="tc-wheel-trigger" id="tc-wheel-trigger" onclick="tcWheelOeffnen()">'+
+      '<div style="text-align:center"><div>KW '+woche+' · '+jahr+'</div>'+
+        '<small>'+tcEsc(tcFmtDM(d[0])+'–'+tcFmtDM(d[6]))+(istJetzt?' · aktuelle Woche':'')+'</small></div>'+
+      '<span class="pfeil">▾</span>'+
+    '</div>'+
+    '<div id="tc-wheel-slot"></div>';
+}
+// Rad als Overlay öffnen. Solange es offen ist, scrollt die Seite dahinter
+// nicht — die Geste kann also nicht mehr fehlgedeutet werden.
+function tcWheelOeffnen(){
+  var slot=document.getElementById('tc-wheel-slot'); if(!slot) return;
+  var jahr=tcWocheState.jahr, woche=tcWocheState.woche;
   var pad='<div class="tc-wheel-pad"></div>';
   var jahrOpts=tcWheelJahre().map(function(j){ return tcWheelOptHtml(j,String(j),'',j===jahr); }).join('');
   var now=tcISOWeekOfDate(new Date());
   var istJetzt=(jahr===now.jahr&&woche===now.woche);
-  return '<div class="tc-wheel" id="tc-wheel">'+
-      '<div class="tc-wheel-band"></div>'+
-      '<div class="tc-wheel-col jahr" id="tc-wheel-jahr" data-kind="jahr">'+pad+jahrOpts+pad+'</div>'+
-      '<div class="tc-wheel-col" id="tc-wheel-woche" data-kind="woche">'+pad+tcWheelWochenOptsHtml(jahr,woche)+pad+'</div>'+
-      '<div class="tc-wheel-fade top"></div><div class="tc-wheel-fade bot"></div>'+
-    '</div>'+
-    '<button type="button" class="tc-wheel-today'+(istJetzt?' on':'')+'" onclick="tcWheelHeute()">'+
-      (istJetzt?'● Aktuelle Woche':'↩︎ Zur aktuellen Woche')+'</button>';
+  slot.innerHTML='<div class="tc-wheel-backdrop" id="tc-wheel-backdrop" onclick="tcWheelBackdropTap(event)">'+
+    '<div class="tc-wheel-sheet" onclick="event.stopPropagation()">'+
+      '<div class="tc-sec">Woche wählen</div>'+
+      '<div class="tc-wheel" id="tc-wheel">'+
+        '<div class="tc-wheel-band"></div>'+
+        '<div class="tc-wheel-col jahr" id="tc-wheel-jahr" data-kind="jahr">'+pad+jahrOpts+pad+'</div>'+
+        '<div class="tc-wheel-col" id="tc-wheel-woche" data-kind="woche">'+pad+tcWheelWochenOptsHtml(jahr,woche)+pad+'</div>'+
+        '<div class="tc-wheel-fade top"></div><div class="tc-wheel-fade bot"></div>'+
+      '</div>'+
+      '<button type="button" class="tc-wheel-today'+(istJetzt?' on':'')+'" onclick="tcWheelHeute()">'+
+        (istJetzt?'● Aktuelle Woche':'↩︎ Zur aktuellen Woche')+'</button>'+
+      '<div class="tc-btnrow"><button type="button" class="tc-btn ghost" onclick="tcWheelSchliessen()">Schliessen</button></div>'+
+    '</div></div>';
+  tcWheelInit();
+}
+function tcWheelSchliessen(){
+  var slot=document.getElementById('tc-wheel-slot'); if(slot) slot.innerHTML='';
+  tcWheelGeste=false;
+}
+function tcWheelBackdropTap(e){
+  if(e&&e.target&&e.target.id==='tc-wheel-backdrop') tcWheelSchliessen();
 }
 // Aktive Zeile jeder Spalte mittig einrasten lassen, ohne den Handler zu wecken.
 function tcWheelInit(){
   var w=document.getElementById('tc-wheel'); if(!w) return;
   tcWheelBusy=true;
+  tcWheelGeste=false;
+  tcWheelJahrAktiv=tcWocheState.jahr;
+  // Ein Wochenwechsel gilt nur nach einer ECHTEN Berührung im Rad. Damit lösen
+  // Layout-Nachläufer, Snap-Korrekturen und programmatisches Scrollen keinen
+  // Wechsel mehr aus — das war der Kern des Fehlers.
+  w.addEventListener('pointerdown',function(){ tcWheelGeste=true; });
   ['tc-wheel-jahr','tc-wheel-woche'].forEach(function(id){
     var col=document.getElementById(id); if(!col) return;
     var sel=col.querySelector('.tc-wheel-opt.sel');
@@ -10394,36 +10466,56 @@ function tcWheelScroll(e){
   tcWheelTimer=setTimeout(function(){ tcWheelSettle(col.getAttribute('data-kind')); },140);
 }
 function tcWheelSettle(kind){
+  if(!tcWheelGeste) return;   // ohne echte Berührung im Rad kein Wochenwechsel
   var jc=document.getElementById('tc-wheel-jahr'), wc=document.getElementById('tc-wheel-woche');
   if(!jc||!wc) return;
   var jahr=tcWheelValue(jc); if(!jahr) return;
-  if(kind==='jahr'&&jahr!==tcWocheState.jahr){
-    // Jahr gewechselt: KW-Spalte neu aufbauen (52 vs. 53 Wochen) und die Woche
-    // auf das Maximum des neuen Jahres klemmen.
-    var max=tcISOWeeksInYear(jahr);
-    var woche=Math.min(tcWocheState.woche||1,max);
-    tcWheelBusy=true;
-    wc.innerHTML='<div class="tc-wheel-pad"></div>'+tcWheelWochenOptsHtml(jahr,woche)+'<div class="tc-wheel-pad"></div>';
-    wc.scrollTop=(woche-1)*TC_WHEEL_ROW_H;
-    tcWheelPaint(wc);
-    setTimeout(function(){ tcWheelBusy=false; },80);
-    tcHaptik(8);
-    tcLoadWoche(jahr,woche);
-    return;
-  }
+  // Jahreswechsel baut nur die KW-Spalte neu (52 vs. 53 Wochen) und klemmt die
+  // Woche aufs Maximum. Er lädt bewusst NICHT und schliesst das Rad nicht —
+  // sonst müsste man es nach jedem Jahreswechsel neu öffnen, um die Woche zu
+  // wählen. Geladen wird erst, wenn die KW-Spalte einrastet.
+  if(kind==='jahr'){ tcWheelJahrWechsel(jahr); return; }
   var w2=tcWheelValue(wc); if(!w2) return;
-  if(jahr===tcWocheState.jahr&&w2===tcWocheState.woche) return; // nichts geändert
-  tcHaptik(8);
-  tcLoadWoche(jahr,w2);
+  tcWheelWocheWaehlen(jahr,w2);
 }
-// Direkter Tap auf eine Zeile — schneller als scrollen, gleiche Wirkung.
+// Jahresspalte umgestellt → KW-Spalte neu aufbauen. Gemeinsam genutzt von
+// Scroll-Einrasten und direktem Tap.
+function tcWheelJahrWechsel(jahr){
+  var wc=document.getElementById('tc-wheel-woche'); if(!wc) return;
+  if(jahr===tcWheelJahrAktiv) return;
+  tcWheelJahrAktiv=jahr;
+  var max=tcISOWeeksInYear(jahr);
+  var woche=Math.min(tcWocheState.woche||1,max);
+  tcWheelBusy=true;
+  wc.innerHTML='<div class="tc-wheel-pad"></div>'+tcWheelWochenOptsHtml(jahr,woche)+'<div class="tc-wheel-pad"></div>';
+  wc.scrollTop=(woche-1)*TC_WHEEL_ROW_H;
+  tcWheelPaint(wc);
+  setTimeout(function(){ tcWheelBusy=false; },80);
+  tcHaptik(8);
+}
+function tcWheelWocheWaehlen(jahr,woche){
+  if(!jahr||!woche) return;
+  if(jahr===tcWocheState.jahr&&woche===tcWocheState.woche){ tcWheelSchliessen(); return; }
+  tcHaptik(8);
+  tcLoadWoche(jahr,woche);   // schliesst das Rad und rettet offene Speicherungen
+}
+/* Direkter Tap auf eine Zeile. Nimmt den angetippten Wert UNMITTELBAR aus
+   data-v, statt eine weiche Scroll-Animation abzuwarten und danach die
+   Position zurückzulesen — das war unzuverlässig, weil der Tap dann davon
+   abhing, ob die Animation rechtzeitig fertig wurde. */
 function tcWheelTap(el){
   var col=el.closest('.tc-wheel-col'); if(!col) return;
+  var wert=Number(el.getAttribute('data-v')); if(!wert) return;
   var opts=col.querySelectorAll('.tc-wheel-opt');
   var idx=Array.prototype.indexOf.call(opts,el);
-  col.scrollTo({top:idx*TC_WHEEL_ROW_H,behavior:'smooth'});
   if(tcWheelTimer) clearTimeout(tcWheelTimer);
-  tcWheelTimer=setTimeout(function(){ tcWheelSettle(col.getAttribute('data-kind')); },260);
+  tcWheelBusy=true;
+  col.scrollTop=idx*TC_WHEEL_ROW_H;
+  tcWheelPaint(col);
+  setTimeout(function(){ tcWheelBusy=false; },80);
+  if(col.getAttribute('data-kind')==='jahr'){ tcWheelJahrWechsel(wert); return; }
+  var jc=document.getElementById('tc-wheel-jahr');
+  tcWheelWocheWaehlen(jc?tcWheelValue(jc):tcWocheState.jahr, wert);
 }
 function tcWheelHeute(){
   var now=tcISOWeekOfDate(new Date());

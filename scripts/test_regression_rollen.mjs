@@ -132,6 +132,10 @@ for (const a of ['pm_wochenrapport_kopf_delete', 'pm_katalog_entscheidung']) {
 const MUSS_APP = [
   'tcISOWeekMonday', 'tcISOWeeksInYear',              // ZIEL 4
   'tcWheelHtml', 'tcWheelInit', 'tcWheelSettle', 'tcWheelTap', 'tcWheelHeute',
+  // Fix tageskarten-leer: Rad ist zugeklappt und öffnet als Overlay, ausstehende
+  // Speicherungen werden vor einem Wochenwechsel ausgeführt.
+  'tcWheelOeffnen', 'tcWheelSchliessen', 'tcWheelBackdropTap',
+  'tcWheelJahrWechsel', 'tcWheelWocheWaehlen', 'tcFlushOffeneSpeicherungen',
   'tcUndoShow', 'tcUndoRun', 'tcUndoHide', 'tcDayFixup', 'tcHtmlZuKnoten',  // ZIEL 1
   'tcHaptik', 'tcSignGlowUpdate',                     // ZIEL 7
   'tcTaetVorschlaegeHtml', 'tcRowProjektId',          // ZIEL 6
