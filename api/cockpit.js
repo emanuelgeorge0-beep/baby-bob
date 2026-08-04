@@ -2505,23 +2505,43 @@ async function getTaetigkeitenKatalogTech(scope) {
     'gs_taetigkeitenkatalog?aktiv=eq.true&quelle_service=eq.false&select=id,gewerk,slug,bezeichnung,kategorie,detailfelder,sortierung&order=gewerk.asc,kategorie.asc,sortierung.asc',
   ).catch((e) => { if (isNoTable(e)) return null; throw e; });
   if (katalog === null) return { notMigrated: true, items: [] };
+  // ZIEL 6 (Feinschliff II) — für die Vorschlags-Chips zusätzlich mitzählen, auf
+  // WELCHEN Projekten der Techniker eine Tätigkeit schon verwendet hat. Damit
+  // kann der Client sekundär auf dasselbe Projekt gewichten. Kein neuer Zähler
+  // in der DB: das kommt weiterhin aus den vorhandenen Zuordnungszeilen, nur mit
+  // projekt_id im selben !inner-Embed — also ohne zusätzliche Abfrage.
+  //
+  // Nach Gewerk muss NICHT extra gruppiert werden: jede Katalogtätigkeit gehört
+  // zu genau einem Gewerk, und der Picker zeigt ohnehin nur die des gewählten
+  // Gewerks. Die Gewerk-Filterung passiert also schon durch die Auswahl selbst.
   const usage = {};
   try {
     const rows = await sbGet(
-      `gs_tagesrapport_taetigkeitenkatalog?select=taetigkeit_id,created_at,tagesrapport:gs_tagesrapporte!inner(techniker_user_id)` +
+      `gs_tagesrapport_taetigkeitenkatalog?select=taetigkeit_id,created_at,tagesrapport:gs_tagesrapporte!inner(techniker_user_id,projekt_id)` +
       `&tagesrapport.techniker_user_id=eq.${scope.technikerUserId}&order=created_at.desc&limit=500`,
     );
     for (const r of rows) {
       if (!r.taetigkeit_id) continue;
-      if (!usage[r.taetigkeit_id]) usage[r.taetigkeit_id] = { anzahl: 0, zuletzt: r.created_at };
-      usage[r.taetigkeit_id].anzahl += 1;
+      // order=created_at.desc → die erste gesehene Zeile ist zugleich die jüngste.
+      if (!usage[r.taetigkeit_id]) usage[r.taetigkeit_id] = { anzahl: 0, zuletzt: r.created_at, projekte: {} };
+      const u = usage[r.taetigkeit_id];
+      u.anzahl += 1;
+      const pid = r.tagesrapport && r.tagesrapport.projekt_id;
+      if (pid) u.projekte[pid] = (u.projekte[pid] || 0) + 1;
     }
   } catch (_) { /* Nutzungsstatistik optional — Katalog funktioniert auch ohne */ }
-  const items = katalog.map((k) => ({
-    ...k,
-    verwendet_anzahl: (usage[k.id] || {}).anzahl || 0,
-    verwendet_zuletzt: (usage[k.id] || {}).zuletzt || null,
-  }));
+  const items = katalog.map((k) => {
+    const u = usage[k.id] || {};
+    const out = {
+      ...k,
+      verwendet_anzahl: u.anzahl || 0,
+      verwendet_zuletzt: u.zuletzt || null,
+    };
+    // Nur mitschicken, wenn es etwas zu sagen gibt — die grosse Mehrheit der
+    // Katalogzeilen hat keine Historie, der Payload bleibt dadurch klein.
+    if (u.projekte && Object.keys(u.projekte).length) out.verwendet_projekte = u.projekte;
+    return out;
+  });
   return { items };
 }
 

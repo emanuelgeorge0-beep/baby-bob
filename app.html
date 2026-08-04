@@ -1025,6 +1025,13 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-wheel-fade{position:absolute;left:0;right:0;height:calc(var(--twh)*1.7);pointer-events:none;z-index:3;}
 #tech-cockpit .tc-wheel-fade.top{top:6px;background:linear-gradient(#131519 12%,rgba(19,21,25,0));}
 #tech-cockpit .tc-wheel-fade.bot{bottom:6px;background:linear-gradient(rgba(19,21,25,0),#131519 88%);}
+/* ZIEL 6 — Vorschlags-Chips zuoberst im Tätigkeits-Picker. Optisch klar von den
+   Kategorie-Chips getrennt, damit niemand sie für eine Kategorie hält. */
+#tech-cockpit .tc-taet-vorschlaege{padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed rgba(201,169,97,.25);}
+#tech-cockpit .tc-chip-vorschlag{border-color:rgba(201,169,97,.45);color:#e8d6a8;}
+/* Schon auf DIESEM Projekt benutzt — der stärkste Treffer, entsprechend deutlich. */
+#tech-cockpit .tc-chip-vorschlag.auf-projekt{border-color:rgba(201,169,97,.85);color:#C9A961;font-weight:800;}
+
 #tech-cockpit .tc-wheel-today{display:block;width:100%;margin-top:2px;background:none;border:none;
   color:#8a97a8;font-size:11.5px;font-weight:700;padding:5px;cursor:pointer;}
 #tech-cockpit .tc-wheel-today.on{color:#C9A961;}
@@ -9976,19 +9983,72 @@ function tcTaetPickerToggle(btn){
   if(picker.style.display!=='none'){ picker.style.display='none'; return; }
   var rowEl=btn.closest('[data-row]');
   var gewerkChip=rowEl?rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel'):null;
-  picker.innerHTML=tcTaetPickerContentHtml(gewerkChip?gewerkChip.getAttribute('data-v'):'');
+  // ZIEL 6 — Projekt der Zeile mitgeben, damit die Vorschläge sekundär darauf
+  // gewichten können. Bei Abwesenheit/Serviceauftrag bleibt es leer.
+  picker.innerHTML=tcTaetPickerContentHtml(gewerkChip?gewerkChip.getAttribute('data-v'):'', tcRowProjektId(rowEl));
   picker.style.display='';
 }
-function tcTaetPickerContentHtml(gewerkLabel){
+// Projekt-Id der Zeile aus dem Ziel-Select ('p:<uuid>'), sonst null.
+function tcRowProjektId(rowEl){
+  var v=rowEl?((rowEl.querySelector('.rc-ziel')||{}).value||''):'';
+  return v.indexOf('p:')===0?v.slice(2):null;
+}
+function tcTaetPickerContentHtml(gewerkLabel,projektId){
   if(!gewerkLabel) return '<div class="tc-hint">Zuerst oben ein Gewerk wählen.</div>';
   var slug=tcTaetGewerkSlug(gewerkLabel);
   var items=TC_TAET_KATALOG.filter(function(k){return k.gewerk===slug;});
   if(!items.length) return '<div class="tc-hint">Kein Katalog für dieses Gewerk hinterlegt.</div>';
   var firstKat=items[0].kategorie;
   var firstItems=items.filter(function(k){return k.kategorie===firstKat;});
-  return '<input class="tc-field tc-taet-search" placeholder="Suchen…" oninput="tcTaetSearch(this)"/>'+
+  return tcTaetVorschlaegeHtml(items,projektId)+
+    '<input class="tc-field tc-taet-search" placeholder="Suchen…" oninput="tcTaetSearch(this)"/>'+
     '<div class="tc-taet-kat-chips">'+tcTaetKatChipsHtml(items,firstKat)+'</div>'+
     '<div class="tc-taet-item-chips">'+tcTaetItemChipsHtml(firstItems)+'</div>';
+}
+
+/* ZIEL 6 (Feinschliff II) — Vorschläge zuoberst im Picker, direkt antippbar,
+   ohne vorher eine Kategorie zu wählen. Bis zu sechs.
+
+   Reihenfolge: was DIESER Techniker am häufigsten benutzt (verwendet_anzahl,
+   serverseitig auf seine eigenen Rapporte gefiltert), innerhalb des bereits
+   gewählten Gewerks; wer dieselbe Tätigkeit schon auf DIESEM Projekt erfasst
+   hat, wird zusätzlich hochgezogen. Gleichstand entscheidet "zuletzt benutzt".
+
+   Ohne eigene Historie erscheint die Zeile GAR NICHT. Sechs Katalogeinträge in
+   Katalogreihenfolge wären keine Vorschläge, sondern Rauschen — dafür sind die
+   Kategorie-Chips darunter da. */
+var TC_TAET_VORSCHLAG_MAX=6;
+function tcTaetVorschlaegeHtml(items,projektId){
+  var mitHistorie=items.filter(function(k){return (k.verwendet_anzahl||0)>0;});
+  if(!mitHistorie.length) return '';
+  var rang=mitHistorie.map(function(k){
+    var aufProjekt=(projektId&&k.verwendet_projekte&&k.verwendet_projekte[projektId])||0;
+    return {
+      k:k,
+      // Projektbezug wiegt schwer, ersetzt aber die Gesamthäufigkeit nicht:
+      // etwas, das der Techniker überall dauernd macht, bleibt weit vorne.
+      score:(k.verwendet_anzahl||0)+aufProjekt*3,
+      aufProjekt:aufProjekt,
+      zuletzt:k.verwendet_zuletzt||'',
+    };
+  }).sort(function(a,b){
+    if(a.score!==b.score) return b.score-a.score;
+    if(a.zuletzt!==b.zuletzt) return a.zuletzt>b.zuletzt?-1:1;
+    return (a.k.sortierung||0)-(b.k.sortierung||0);
+  }).slice(0,TC_TAET_VORSCHLAG_MAX);
+
+  var chips=rang.map(function(r){
+    var k=r.k;
+    return '<div class="tc-chip tc-chip-vorschlag'+(r.aufProjekt?' auf-projekt':'')+'"'+
+      ' data-id="'+tcEsc(k.id)+'" data-bez="'+tcEsc(k.bezeichnung)+'"'+
+      ' data-felder=\''+tcEsc(JSON.stringify((k.detailfelder&&k.detailfelder.felder)||[]))+'\''+
+      ' title="'+tcEsc(k.kategorie+' · '+(k.verwendet_anzahl||0)+'× benutzt'+(r.aufProjekt?(', davon '+r.aufProjekt+'× auf diesem Projekt'):''))+'"'+
+      ' onclick="tcTaetAdd(this)">'+tcEsc(k.bezeichnung)+'</div>';
+  }).join('');
+  return '<div class="tc-taet-vorschlaege">'+
+      '<div class="tc-lbl" style="margin-top:0">Häufig von dir'+(projektId?' · auf diesem Projekt zuerst':'')+'</div>'+
+      '<div class="tc-chips">'+chips+'</div>'+
+    '</div>';
 }
 function tcTaetKatChipsHtml(items,curKat){
   var kats=[]; items.forEach(function(k){ if(kats.indexOf(k.kategorie)<0) kats.push(k.kategorie); });
