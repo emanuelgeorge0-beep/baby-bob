@@ -2040,6 +2040,16 @@ async function savePmKunde(b, scope) {
     if (b[f] !== undefined) patch[f] = String(b[f] || '').trim().slice(0, 160) || null;
   });
   if (b.plz !== undefined) patch.plz = String(b.plz || '').trim().slice(0, 12) || null;
+  // ZIEL 3 — Kundenkürzel (3 Zeichen) für die Rapportnummer R-{KUERZEL}-{JAHR}-{NNNN}.
+  // Leer = bewusst kein Kürzel (Rapporte laufen dann auf den Fallback GSO).
+  // Eine Teileingabe wird NICHT still verworfen, sondern abgelehnt — sonst
+  // glaubt der Master, er habe gepflegt, und die Nummern laufen auf GSO.
+  if (b.kuerzel !== undefined) {
+    const roh = String(b.kuerzel || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!roh) patch.kuerzel = null;
+    else if (roh.length !== 3) return { error: 'Kundenkürzel muss genau 3 Zeichen haben (A–Z, 0–9).' };
+    else patch.kuerzel = roh;
+  }
   if (b.id) {
     // Bestehenden Kunden nur ändern, wenn er dem Partner gehört (Besitz via eigener
     // partner_user_id, nicht über ein Projekt).
@@ -2049,8 +2059,10 @@ async function savePmKunde(b, scope) {
       if (owner !== scope.partnerId) throw new Forbidden();
     }
     const id = uuid(b.id);
-    const r = await sbWrite('PATCH', `gs_kunden?id=eq.${id}`, patch);
-    return { ok: true, kunde: Array.isArray(r) ? r[0] : r };
+    try {
+      const r = await sbWrite('PATCH', `gs_kunden?id=eq.${id}`, patch);
+      return { ok: true, kunde: Array.isArray(r) ? r[0] : r };
+    } catch (e) { return kundeSchreibfehler(e, patch); }
   }
   if (!patch.firma && !patch.kontaktperson) throw new Error('Firma oder Kontakt nötig');
   // Neuanlage durch Partner → Besitz erzwingen. Fehlt die Spalte (vor Migration),
@@ -2064,9 +2076,25 @@ async function savePmKunde(b, scope) {
       r = await sbWrite('POST', 'gs_kunden', base);
       return { ok: true, kunde: Array.isArray(r) ? r[0] : r, scopeNotMigrated: true };
     }
-    throw e;
+    return kundeSchreibfehler(e, patch);
   }
   return { ok: true, kunde: Array.isArray(r) ? r[0] : r };
+}
+
+// Schreibfehler auf gs_kunden in eine lesbare Meldung übersetzen statt 500.
+// ZIEL 3: das Kürzel ist UNIQUE — zwei Kunden mit "NIE" würden sonst denselben
+// Nummernkreis teilen, deshalb die eigene Meldung.
+function kundeSchreibfehler(e, patch) {
+  const msg = (e && e.message) || '';
+  if (/duplicate key|23505/i.test(msg)) {
+    if (/kuerzel/i.test(msg)) return { error: `Das Kürzel „${patch.kuerzel}" ist bereits an einen anderen Kunden vergeben.` };
+    return { error: 'Dieser Eintrag existiert bereits.' };
+  }
+  if (/gs_kunden_kuerzel_chk|23514/i.test(msg)) return { error: 'Kundenkürzel muss genau 3 Zeichen haben (A–Z, 0–9).' };
+  if (/column|does not exist|PGRST204|schema cache/i.test(msg) && 'kuerzel' in patch) {
+    return { error: 'Kundenkürzel noch nicht migriert — scripts/rapportnummer.sql im Supabase SQL-Editor ausführen.' };
+  }
+  throw e;
 }
 
 async function getPmTechniker() {
@@ -2312,9 +2340,59 @@ const GEWERK_OPTIONS = new Set(['Sanitär', 'Heizung', 'Klima', 'Lüftung', 'Div
 const TAET_GEWERKE = new Set(['sanitaer', 'heizung', 'lueftung', 'klima', 'allgemein']);
 const TAET_DETAIL_CODES = new Set(['DN', 'STK', 'M', 'M2', 'ORT', 'TYP', 'BAR']);
 
-function rapportNr(jahr, woche, name) {
+// ALTFORMAT WR-{jahr}-{woche}-{Vorname}. Bleibt als Notnagel bestehen: solange
+// scripts/rapportnummer.sql nicht gelaufen ist, gibt es weder Kürzel noch
+// Nummernkreis — dann bekommt der Rapport lieber eine Nummer im alten Format
+// als gar keine. Bestehende Zeilen behalten ihre Nummer ohnehin.
+function rapportNrAlt(jahr, woche, name) {
   const slug = String(name || 'Techniker').trim().split(/\s+/)[0].replace(/[^a-zA-Z0-9äöüÄÖÜ-]/g, '') || 'Techniker';
   return `WR-${jahr}-${woche}-${slug}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZIEL 3 (Feinschliff II) — Rapportnummer R-{KUERZEL}-{JAHR}-{4-stellig},
+// Zähler PRO KUNDE UND JAHR. Vergabe genau EINMAL beim Anlegen des Wochenkopfs
+// (getOrCreateWochenrapport), danach eingefroren.
+//
+// Der Kunde kommt aus dem ERSTEN gebuchten Projekt der Woche (hauptprojekt_id).
+// Eine Woche kann auf mehrere Kunden laufen — die Nummer bleibt trotzdem die
+// des ersten, sonst wäre eine bereits vergebene Nummer nachträglich unstimmig.
+//
+// Der Zähler steht in gs_rapport_nummernkreis und wird über die SQL-Funktion
+// gs_rapport_nr_next gezogen (INSERT … ON CONFLICT DO UPDATE = atomar, zwei
+// parallel gespeicherte Wochen bekommen garantiert verschiedene Nummern).
+// Löschen eines Rapports (ZIEL 2) fasst den Zähler NICHT an — eine Nummer wird
+// nie wiederverwendet, die Lücke bleibt bewusst stehen.
+// ═══════════════════════════════════════════════════════════════════════════
+const RAPPORT_KUERZEL_FALLBACK = 'GSO'; // Kunde ohne gepflegtes Kürzel / kein Kunde
+
+// Kunde + Kürzel zum Projekt. Beide Lesezugriffe einzeln abgesichert: fehlt die
+// Spalte kuerzel noch (SQL nicht gelaufen), soll trotzdem die kunde_id ankommen.
+async function kundeUndKuerzel(projektId) {
+  if (!projektId) return { kundeId: null, kuerzel: null };
+  let kundeId = null;
+  try {
+    const p = await sbGet(`gs_projekte?id=eq.${projektId}&select=kunde_id&limit=1`);
+    kundeId = (p && p[0] && p[0].kunde_id) || null;
+  } catch (_) { return { kundeId: null, kuerzel: null }; }
+  if (!kundeId) return { kundeId: null, kuerzel: null };
+  try {
+    const k = await sbGet(`gs_kunden?id=eq.${kundeId}&select=kuerzel&limit=1`);
+    return { kundeId, kuerzel: (k && k[0] && k[0].kuerzel) || null };
+  } catch (_) { return { kundeId, kuerzel: null }; } // Spalte fehlt → Fallback-Kürzel
+}
+
+// Zieht die nächste Nummer. null = Nummernkreis noch nicht migriert → Aufrufer
+// nimmt das Altformat. Wirft bewusst nie: eine fehlende Nummer darf das
+// Speichern einer Tageszeile nicht verhindern.
+async function zieheRapportNummer(kuerzel, jahr) {
+  const k = String(kuerzel || RAPPORT_KUERZEL_FALLBACK).toUpperCase();
+  try {
+    const r = await sbWrite('POST', 'rpc/gs_rapport_nr_next', { p_kuerzel: k, p_jahr: jahr });
+    const seq = Number(Array.isArray(r) ? r[0] : r);
+    if (!Number.isFinite(seq) || seq < 1) return null;
+    return { seq, nr: `R-${k}-${jahr}-${String(seq).padStart(4, '0')}` };
+  } catch (_) { return null; }
 }
 // Strukturierte Material-Zeilen sanitisieren (Bezeichnung Pflicht, Menge optional).
 function matPositionen(v) {
@@ -2343,16 +2421,38 @@ async function getOrCreateWochenrapport(technikerUserId, technikerId, jahr, woch
   const row = {
     techniker_user_id: technikerUserId, jahr, woche,
     hauptprojekt_id: projektIdHint || null,
-    rapport_nr: rapportNr(jahr, woche, name),
+  };
+  // ZIEL 3 — Nummer pro Kunde ziehen. Klappt das nicht (SQL noch nicht gelaufen),
+  // bleibt es beim Altformat; der Rapport entsteht in jedem Fall.
+  const { kundeId, kuerzel } = await kundeUndKuerzel(projektIdHint);
+  const nummer = await zieheRapportNummer(kuerzel, jahr);
+  if (nummer) {
+    row.kunde_id = kundeId;
+    row.rapport_seq = nummer.seq;
+    row.rapport_nr = nummer.nr;
+  } else {
+    row.rapport_nr = rapportNrAlt(jahr, woche, name);
+  }
+  const post = async (r) => {
+    const res = await sbWrite('POST', 'gs_wochenrapporte', r);
+    return Array.isArray(res) ? res[0] : res;
   };
   try {
-    const r = await sbWrite('POST', 'gs_wochenrapporte', row);
-    return Array.isArray(r) ? r[0] : r;
+    return await post(row);
   } catch (e) {
-    if (/duplicate key|23505/i.test((e && e.message) || '')) {
+    const msg = (e && e.message) || '';
+    if (/duplicate key|23505/i.test(msg)) {
       // Race (zwei Zeilen derselben Woche parallel gespeichert) → nochmal lesen.
+      // Die eben gezogene Nummer verfällt dabei — gewollt, Lücken sind erlaubt.
       const again = await find().catch(() => []);
       if (again && again[0]) return again[0];
+    }
+    // Nummernkreis migriert, aber die neuen Spalten auf gs_wochenrapporte fehlen
+    // (halb gelaufenes SQL). Ohne sie erneut versuchen statt 500 zu werfen.
+    if (/column|does not exist|PGRST204|schema cache/i.test(msg) && ('kunde_id' in row || 'rapport_seq' in row)) {
+      const { kunde_id, rapport_seq, ...ohne } = row;
+      ohne.rapport_nr = row.rapport_nr || rapportNrAlt(jahr, woche, name);
+      try { return await post(ohne); } catch (e2) { if (isNoTable(e2)) return null; throw e2; }
     }
     if (isNoTable(e)) return null; // Migration fehlt noch — Tageszeile speichert trotzdem, nur ohne Kopf.
     throw e;
@@ -4080,6 +4180,15 @@ async function exportRapporte(projektId, scope) {
     const ts = await sbGet(`gs_techniker?user_id=in.(${uids.join(',')})&select=user_id,name`).catch(() => []);
     for (const t of ts) if (t.user_id) nameByUid[t.user_id] = t.name;
   }
+  // ZIEL 3 (Feinschliff II) — Rapportnummern der beteiligten Wochenköpfe.
+  // Pro KW können mehrere sein (je Techniker ein eigener Wochenkopf), darum
+  // Menge statt Einzelwert. Fehlt die Tabelle/Spalte noch → einfach leer.
+  const wrIds = [...new Set(raps.map((r) => r.wochenrapport_id).filter(Boolean))];
+  const nrByWr = {};
+  if (wrIds.length) {
+    const wrs = await sbGet(`gs_wochenrapporte?id=in.(${wrIds.join(',')})&select=id,rapport_nr`).catch(() => []);
+    for (const w of wrs) if (w.rapport_nr) nrByWr[w.id] = w.rapport_nr;
+  }
   // Nach KW gruppieren.
   const groups = new Map();
   for (const r of raps) { const k = `${r.jahr}-${String(r.woche).padStart(2, '0')}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
@@ -4099,6 +4208,9 @@ async function exportRapporte(projektId, scope) {
     total += sumH;
     const [jahr, woche] = k.split('-');
     blocks.push({ t: 'h2', text: `KW ${Number(woche)}/${jahr} · ${sumH.toFixed(1)} h · ${anyOffen ? 'offen' : 'verrechnet'}` });
+    // ZIEL 3 — Rapportnummer(n) dieser Woche direkt unter die Überschrift.
+    const nrs = [...new Set(rows.map((r) => nrByWr[r.wochenrapport_id]).filter(Boolean))].sort();
+    if (nrs.length) blocks.push({ t: 'kv', label: nrs.length > 1 ? 'Rapportnummern' : 'Rapportnummer', value: nrs.join(', ') });
     for (const r of rows) {
       const arb = (Array.isArray(r.arbeiten) ? r.arbeiten.join(' · ') : (r.arbeiten || '')).slice(0, 70);
       blocks.push({ t: 'kv', label: `${r.datum} · ${nameByUid[r.techniker_user_id] || 'Techniker'}`, value: `${Number(r.gesamtstunden || 0)} h  ${arb}` });

@@ -9654,6 +9654,8 @@ function tcRenderWochenListe(){
         : '— keine Unterschrift';
       return '<div class="tc-item" onclick="tcOpenWoche('+w.jahr+','+w.woche+')">'+
         '<div class="ti-t">KW '+w.woche+' · '+w.jahr+'</div>'+
+        // ZIEL 3 — Rapportnummer auch in der Liste (bisher nur im Wochenblatt-Kopf).
+        (w.rapport_nr?('<div class="ti-m" style="font-weight:800;color:#C9A961">'+tcEsc(w.rapport_nr)+'</div>'):'')+
         '<div class="ti-m">'+tcEsc(zeitraum)+' · '+Number(w.total_stunden||0).toFixed(2)+' h · CHF '+Number(w.total_spesen||0).toFixed(2)+'</div>'+
         '<div class="ti-m">'+stPill+(cd?(' <span class="tc-countdown-chip'+(cd.locked?' locked':'')+'">'+tcEsc(cd.text)+'</span>'):'')+'</div>'+
         '<div class="ti-m">'+tcEsc(unterschrift)+'</div>'+

@@ -3382,7 +3382,12 @@ function openKundenListe(){
   api('pm_kunden').then(function(d){
     _pmKunden=d.kunden||[];
     var rows=_pmKunden.length?_pmKunden.map(function(k){
-      return '<div class="lcard" data-kid="'+esc(k.id)+'"><div class="top"><div class="nm">'+esc(k.firma||k.kontaktperson||'Kunde')+'</div></div>'+
+      // ZIEL 3 — Kürzel direkt in der Liste: auf einen Blick sichtbar, wer noch
+      // keines hat (dessen Rapporte laufen sonst still auf den Sammelkreis GSO).
+      var kz=k.kuerzel
+        ? '<span style="font-weight:800;letter-spacing:1.5px;color:var(--gold)">'+esc(k.kuerzel)+'</span>'
+        : '<span style="color:var(--muted2)">kein Kürzel</span>';
+      return '<div class="lcard" data-kid="'+esc(k.id)+'"><div class="top"><div class="nm">'+esc(k.firma||k.kontaktperson||'Kunde')+'</div>'+kz+'</div>'+
         '<div class="meta">'+(k.kontaktperson?'<span>'+esc(k.kontaktperson)+'</span>':'')+(k.telefon?'<span class="dot">'+esc(k.telefon)+'</span>':'')+(k.ort?'<span class="dot">'+esc(k.ort)+'</span>':'')+'</div></div>';
     }).join(''):'<div class="empty" style="padding:12px">Noch keine Kunden.</div>';
     openSheet('<h3>Kunden</h3>'+
@@ -3407,6 +3412,16 @@ function openKundeEdit(k,onDone){
     '<div class="row2" style="display:flex;gap:8px;margin-top:8px">'+
       '<input class="field" id="ke-plz" placeholder="PLZ" value="'+esc(k.plz||'')+'" style="max-width:110px"/>'+
       '<input class="field" id="ke-ort" placeholder="Ort" value="'+esc(k.ort||'')+'"/></div>'+
+    // ZIEL 3 (Feinschliff II) — Kundenkürzel für die Rapportnummer.
+    // 3 Zeichen, wird in R-{KUERZEL}-{JAHR}-{NNNN} sichtbar. Leer lassen ist
+    // erlaubt; die Rapporte laufen dann auf den Sammel-Nummernkreis GSO.
+    '<div style="margin-top:12px"><div style="color:var(--muted);font-size:12px;margin-bottom:4px">'+
+      'Kürzel für Rapportnummern (3 Zeichen)</div>'+
+      '<input class="field" id="ke-kuerzel" placeholder="z.B. NIE" maxlength="3" value="'+esc(k.kuerzel||'')+'" '+
+        'style="max-width:120px;text-transform:uppercase;letter-spacing:2px;font-weight:800" '+
+        'oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,\'\');keKuerzelHint()"/>'+
+      '<div id="ke-kuerzel-hint" style="color:var(--muted2);font-size:11.5px;margin-top:5px">'+esc(keKuerzelBeispiel(k.kuerzel))+'</div>'+
+    '</div>'+
     '<div class="login-msg" id="ke-msg" style="margin-top:8px"></div>'+
     '<button class="btn btn-gold" id="ke-save" style="margin-top:12px">Speichern</button>'+
     '<button class="btn ghost" id="ke-cancel">Abbrechen</button>');
@@ -3414,12 +3429,30 @@ function openKundeEdit(k,onDone){
   $('ke-save').onclick=function(){
     var firma=($('ke-firma')||{}).value, kontakt=($('ke-kontakt')||{}).value;
     if(!((firma||'').trim())&&!((kontakt||'').trim())){ $('ke-msg').className='login-msg err'; $('ke-msg').textContent='Firma oder Kontaktperson erforderlich'; return; }
+    var kuerzel=(($('ke-kuerzel')||{}).value||'').trim();
+    if(kuerzel&&kuerzel.length!==3){ $('ke-msg').className='login-msg err'; $('ke-msg').textContent='Kürzel muss genau 3 Zeichen haben (oder ganz leer bleiben)'; return; }
     var body={id:k.id||undefined,firma:firma,kontaktperson:kontakt,telefon:($('ke-tel')||{}).value,
-      email:($('ke-mail')||{}).value,adresse:($('ke-adr')||{}).value,plz:($('ke-plz')||{}).value,ort:($('ke-ort')||{}).value};
+      email:($('ke-mail')||{}).value,adresse:($('ke-adr')||{}).value,plz:($('ke-plz')||{}).value,ort:($('ke-ort')||{}).value,
+      kuerzel:kuerzel};
     var btn=$('ke-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
-    api('pm_kunde_save',body).then(function(d){ toast('Gespeichert'); if(typeof onDone==='function') onDone(d&&d.kunde); else closeSheet(); })
-      .catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('ke-msg').className='login-msg err'; $('ke-msg').textContent='Fehler beim Speichern'; });
+    api('pm_kunde_save',body).then(function(d){
+      // Serverseitige Ablehnung (Kürzel doppelt / nicht migriert) sichtbar machen,
+      // statt sie als "Gespeichert" zu quittieren.
+      if(d&&d.error){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('ke-msg').className='login-msg err'; $('ke-msg').textContent=d.error; return; }
+      toast('Gespeichert'); if(typeof onDone==='function') onDone(d&&d.kunde); else closeSheet();
+    }).catch(function(){ if(btn){ btn.disabled=false; btn.textContent='Speichern'; } $('ke-msg').className='login-msg err'; $('ke-msg').textContent='Fehler beim Speichern'; });
   };
+}
+// Zeigt live, wie die Rapportnummer mit diesem Kürzel aussehen wird.
+function keKuerzelBeispiel(kz){
+  var jahr=new Date().getFullYear();
+  return kz&&kz.length===3
+    ? ('Rapporte dieses Kunden: R-'+kz+'-'+jahr+'-0001, -0002, …')
+    : ('Ohne Kürzel laufen die Rapporte auf den Sammelkreis: R-GSO-'+jahr+'-0001');
+}
+function keKuerzelHint(){
+  var h=$('ke-kuerzel-hint'); if(!h) return;
+  h.textContent=keKuerzelBeispiel((($('ke-kuerzel')||{}).value||'').trim());
 }
 
 // ── Techniker zuweisen ──
