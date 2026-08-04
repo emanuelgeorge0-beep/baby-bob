@@ -2051,7 +2051,15 @@ async function savePmKunde(b, scope) {
   // Leer = bewusst kein Kürzel (Rapporte laufen dann auf den Fallback GSO).
   // Eine Teileingabe wird NICHT still verworfen, sondern abgelehnt — sonst
   // glaubt der Master, er habe gepflegt, und die Nummern laufen auf GSO.
-  if (b.kuerzel !== undefined) {
+  //
+  // NUR MASTER. savePmKunde steht in PM_ACTIONS, also nutzen es auch Partner für
+  // ihre eigenen Kunden. Das Kürzel ist aber global eindeutig (UNIQUE über alle
+  // Kunden hinweg): dürfte ein Partner es setzen, könnte er einem anderen ein
+  // Kürzel wegnehmen und würde beim Kollidieren fremde Kundendaten erahnen.
+  // Die Anforderung sagt ausdrücklich „Master pflegt es". Ein Partner-Aufruf mit
+  // kuerzel wird still ignoriert, nicht abgelehnt — sein Formular sendet das Feld
+  // gar nicht, ein Treffer hier wäre also kein legitimer Bedienfehler.
+  if (b.kuerzel !== undefined && scope && scope.isMaster) {
     const roh = String(b.kuerzel || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (!roh) patch.kuerzel = null;
     else if (roh.length !== 3) return { error: 'Kundenkürzel muss genau 3 Zeichen haben (A–Z, 0–9).' };
@@ -4332,7 +4340,16 @@ async function exportRapporte(projektId, scope) {
   // ZIEL 3 (Feinschliff II) — Rapportnummern der beteiligten Wochenköpfe.
   // Pro KW können mehrere sein (je Techniker ein eigener Wochenkopf), darum
   // Menge statt Einzelwert. Fehlt die Tabelle/Spalte noch → einfach leer.
-  const wrIds = [...new Set(raps.map((r) => r.wochenrapport_id).filter(Boolean))];
+  //
+  // NUR MASTER. pm_export_rapporte steht in PM_ACTIONS, ein Partner exportiert
+  // damit sein eigenes Projekt. Die Rapportnummer trägt aber das Kürzel des
+  // Kunden, über den der Wochenkopf ANGELEGT wurde — bei einer Woche, die auf
+  // mehreren Baustellen lief, ist das ein fremder Kunde. Der Partner bekäme
+  // damit ein Kürzel zu sehen, das ihn nichts angeht. Für ihn bleibt das PDF
+  // unverändert wie bisher.
+  const wrIds = (scope && scope.isMaster)
+    ? [...new Set(raps.map((r) => r.wochenrapport_id).filter(Boolean))]
+    : [];
   const nrByWr = {};
   if (wrIds.length) {
     const wrs = await sbGet(`gs_wochenrapporte?id=in.(${wrIds.join(',')})&select=id,rapport_nr`).catch(() => []);
