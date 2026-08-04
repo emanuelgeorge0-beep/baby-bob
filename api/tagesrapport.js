@@ -303,10 +303,19 @@ function isoWeek(dateStr) {
   const ys = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil((((d - ys) / 86400000) + 1) / 7);
 }
+// ZIEL 4 (Rapport Feinschliff II) — KORREKTUR. Die alte Fassung rechnete
+// "1. Januar + (KW-1)*7, dann auf Montag zurück" und lag damit in jedem Jahr,
+// dessen 1.1. auf Fr/Sa/So fällt, eine ganze Woche daneben (2027, 2028, …).
+// Betrifft hier die Wochenübersicht (action 'week') und hasOverdue — eine
+// falsche Woche hätte dort Rapporte als überfällig gemeldet, die es nicht sind.
+// Jetzt nach ISO 8601: KW1 ist die Woche, die den 4. Januar enthält.
+// Belegt für jeden Tag 2026–2030 in scripts/test_isowoche.mjs.
 function mondayToFriday(jahr, kw) {
-  const simple = new Date(Date.UTC(jahr, 0, 1 + (kw - 1) * 7));
-  const dow = simple.getUTCDay() || 7;
-  const monday = new Date(simple); monday.setUTCDate(simple.getUTCDate() - dow + 1);
+  const jan4 = new Date(Date.UTC(jahr, 0, 4));
+  const dow = jan4.getUTCDay() || 7;
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() + 1 - dow);
+  monday.setUTCDate(monday.getUTCDate() + (kw - 1) * 7);
   return Array.from({ length: 5 }, (_, i) => { const d = new Date(monday); d.setUTCDate(monday.getUTCDate() + i); return isoDate(d); });
 }
 function hasOverdue(rows, todayStr, jahr, kw) {

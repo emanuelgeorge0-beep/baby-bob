@@ -6502,10 +6502,15 @@ function trClearSign(){if(trSignCtx){trSignCtx.clearRect(0,0,300,120);trSignHas=
 // Dec 28 liegt immer in der letzten ISO-Woche → so erkennt man 52- vs. 53-KW-Jahre.
 function trWeeksInYear(y){ return getKW(new Date(y,11,28)); }
 // Montag der gewünschten ISO-Woche (UTC; identisch zur Backend-Berechnung mondayToFriday).
+// ZIEL 4 (Feinschliff II) — dieselbe Korrektur wie bei tcISOWeekMonday: KW1 ist
+// die Woche mit dem 4. Januar. Die alte "1.1. + (KW-1)*7"-Formel war in jedem
+// Jahr falsch, dessen 1.1. auf Fr/Sa/So fällt (2027, 2028, …).
 function trMondayOfWeek(y,kw){
-  var simple=new Date(Date.UTC(y,0,1+(kw-1)*7));
-  var dow=simple.getUTCDay()||7;
-  var monday=new Date(simple);monday.setUTCDate(simple.getUTCDate()-dow+1);
+  var jan4=new Date(Date.UTC(y,0,4));
+  var dow=jan4.getUTCDay()||7;
+  var monday=new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate()+1-dow);
+  monday.setUTCDate(monday.getUTCDate()+(kw-1)*7);
   return monday;
 }
 function trFmtDM(d){return ('0'+d.getUTCDate()).slice(-2)+'.'+('0'+(d.getUTCMonth()+1)).slice(-2)+'.';}
@@ -9535,11 +9540,29 @@ function tcISOWeekOfDate(d){
   var woche=Math.ceil((((d-yearStart)/86400000)+1)/7);
   return {jahr:d.getUTCFullYear(),woche:woche};
 }
+/* ZIEL 4 (Feinschliff II) — KORREKTUR. Die alte Fassung rechnete
+   "1. Januar + (KW-1)*7, dann auf Montag zurück". Das stimmt nur, wenn der
+   1.1. auf Mo–Do fällt. Fällt er auf Fr/Sa/So, liegt das Ergebnis eine Woche
+   zu früh: tcISOWeekMonday(2027,1) lieferte 2026-12-28 — das ist KW53/2026,
+   nicht KW1/2027. Eine Tageszeile wäre damit in der falschen Woche gelandet,
+   also im falschen Wochenrapport und in der falschen Abrechnung.
+   Jetzt nach ISO 8601: KW1 ist die Woche, die den 4. Januar enthält.
+   Gegenprobe: tcISOWeekOfDate (oben) nutzt die Donnerstags-Regel und war
+   bereits korrekt — beide Richtungen sind jetzt zueinander invers, geprüft
+   für jeden Tag 2026–2030 in scripts/test_isowoche.mjs. */
 function tcISOWeekMonday(jahr,woche){
-  var simple=new Date(Date.UTC(jahr,0,1+(woche-1)*7));
-  var dow=simple.getUTCDay()||7;
-  simple.setUTCDate(simple.getUTCDate()+1-dow);
-  return simple;
+  var jan4=new Date(Date.UTC(jahr,0,4));
+  var dow=jan4.getUTCDay()||7;                 // 1=Mo … 7=So
+  var mon=new Date(jan4);
+  mon.setUTCDate(jan4.getUTCDate()+1-dow);     // Montag der KW1
+  mon.setUTCDate(mon.getUTCDate()+(woche-1)*7);
+  return mon;
+}
+// Anzahl KW eines Jahres (52 oder 53). Der 28.12. liegt immer in der letzten KW.
+// Braucht der Wochen-Picker (ZIEL 4), damit das Rad nie eine KW53 anbietet,
+// die es im gewählten Jahr nicht gibt. 2026 IST ein 53-Wochen-Jahr.
+function tcISOWeeksInYear(jahr){
+  return tcISOWeekOfDate(new Date(Date.UTC(jahr,11,28))).woche;
 }
 function tcWeekDates(jahr,woche){
   var mon=tcISOWeekMonday(jahr,woche), out=[];
