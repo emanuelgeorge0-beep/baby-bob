@@ -958,6 +958,44 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-btn{flex:1;min-width:130px;border:none;border-radius:12px;padding:13px 16px;font-weight:800;font-size:14px;cursor:pointer;text-align:center;}
 #tech-cockpit .tc-btn.gold{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
 #tech-cockpit .tc-btn.ghost{background:#131519;border:1px solid rgba(255,255,255,.09);color:#e8edf5;}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 7 (Feinschliff II) — Button-Rückmeldung. Dezente Wegweiser:
+   1. Druck  — jeder Knopf sinkt beim Antippen kurz ein.
+   2. Schimmer — die NÄCHSTE logische Aktion (.tc-next) atmet leicht golden.
+   3. Haken  — nach erfolgreichem Speichern pulst das ✓ der Zeile einmal.
+   Alles über :active bzw. eine Klasse, keine Dauer-Animation im Leerlauf.
+   prefers-reduced-motion schaltet die Bewegung ab, die Farbe bleibt.
+   ══════════════════════════════════════════════════════════════════════════ */
+#tech-cockpit .tc-btn,#tech-cockpit .tc-chip,#tech-cockpit .rc-icons button,
+#tech-cockpit .tc-mic,#tech-cockpit .tc-back,#tech-cockpit .tc-wheel-today,
+.tc-undo-btn{transition:transform .09s ease,filter .12s ease,box-shadow .18s ease;}
+#tech-cockpit .tc-btn:active,#tech-cockpit .tc-chip:active,#tech-cockpit .rc-icons button:active,
+#tech-cockpit .tc-mic:active,#tech-cockpit .tc-back:active,#tech-cockpit .tc-wheel-today:active,
+.tc-undo-btn:active{transform:scale(.955);filter:brightness(.92);}
+#tech-cockpit .tc-btn:disabled:active{transform:none;filter:none;}
+
+/* Nächste logische Aktion. Weich und langsam — ein Hinweis, kein Blinken. */
+#tech-cockpit .tc-btn.tc-next{animation:tcNextGlow 2.4s ease-in-out infinite;}
+@keyframes tcNextGlow{
+  0%,100%{box-shadow:0 0 0 0 rgba(201,169,97,0);}
+  50%    {box-shadow:0 0 0 5px rgba(201,169,97,.20),0 0 18px rgba(201,169,97,.30);}
+}
+/* Haken-Puls nach erfolgreichem Speichern einer Zeile. */
+#tech-cockpit .rc-status.saved.puls{animation:tcHakenPuls .5s ease-out;}
+@keyframes tcHakenPuls{
+  0%  {transform:scale(1);}
+  35% {transform:scale(1.5);}
+  100%{transform:scale(1);}
+}
+@media (prefers-reduced-motion:reduce){
+  #tech-cockpit .tc-btn,#tech-cockpit .tc-chip,#tech-cockpit .rc-icons button,
+  #tech-cockpit .tc-mic,#tech-cockpit .tc-back,#tech-cockpit .tc-wheel-today,
+  .tc-undo-btn{transition:none;}
+  #tech-cockpit .tc-btn:active,#tech-cockpit .tc-chip:active{transform:none;}
+  #tech-cockpit .tc-btn.tc-next{animation:none;box-shadow:0 0 0 3px rgba(201,169,97,.30);}
+  #tech-cockpit .rc-status.saved.puls{animation:none;}
+}
 #tech-cockpit .tc-back{background:transparent;border:none;color:#C9A961;font-size:13px;font-weight:700;cursor:pointer;padding:2px 0 12px;}
 #tech-cockpit .tc-lbl{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#8a97a8;font-weight:700;margin:14px 0 6px;}
 #tech-cockpit .tc-field{width:100%;background:#0f1116;border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:12px 13px;color:#e8edf5;font-size:14.5px;font-family:inherit;box-sizing:border-box;}
@@ -9839,6 +9877,7 @@ function tcGewerkChipsHtml(cur){
   }).join('');
 }
 function tcRowGewerkPick(el){
+  tcHaptik(5);   // ZIEL 7 — Chips sind die meistgetippten Elemente
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
   // Gewerk gewechselt -> ein offener Tätigkeiten-Picker zeigt sonst die falsche
@@ -9906,6 +9945,7 @@ function tcTaetDetailInput(el,code){
   var details=tcTaetDetailGet(item); details[code]=el.value; tcTaetDetailSet(item,details);
 }
 function tcTaetChipPick(el,code){
+  tcHaptik(5);
   var item=el.closest('.tc-taet-item'); if(!item) return;
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
@@ -10157,6 +10197,7 @@ function tcSpesenChipsHtml(saetze,cur){
   }).join('');
 }
 function tcSpesenChipPick(el){
+  tcHaptik(5);
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
   var inp=wrap.parentNode.querySelector('.f-spesen');
@@ -10172,6 +10213,7 @@ function tcTimeChipsHtml(kind,cur){
   }).join('');
 }
 function tcTimeChipPick(el,kind){
+  tcHaptik(5);
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
   var rowEl=el.closest('[data-row]'); if(!rowEl) return;
@@ -10457,6 +10499,10 @@ function tcEinreichenHtml(kopf){
       '<div class="tc-link" onclick="tcSignFolgt()">Unterschrift folgt (Grund angeben)</div>';
   }
   var submitted=kopf&&kopf.status==='eingereicht';
+  // ZIEL 7 — Schimmer auf "Woche einreichen", sobald die Technik-Unterschrift
+  // steht: ab da ist das die nächste logische Aktion (ohne sie lehnt der Server
+  // das Einreichen ohnehin ab, siehe einreichenWoche).
+  var submitNext=(!submitted&&techDone)?' tc-next':'';
   return '<div class="tc-card tc-sign-card">'+
     '<div class="tc-sec" style="margin-top:0">Unterschriften</div>'+
     '<div class="tc-sign-block" id="tc-sign-technik-wrap"><div class="tc-lbl">Monteur/Techniker — '+techName+'</div>'+techBlock+'</div>'+
@@ -10464,7 +10510,7 @@ function tcEinreichenHtml(kopf){
     '<div class="tc-submit-row">'+
       (submitted
         ? '<div class="tc-submit-done">✓ Woche eingereicht am '+tcEsc(tcFmtDT(kopf.eingereicht_am))+'</div>'
-        : '<button type="button" class="tc-btn gold tc-submit-btn" id="tc-submit-btn" onclick="tcSubmitWoche()">📋 Woche einreichen</button>')+
+        : '<button type="button" class="tc-btn gold tc-submit-btn'+submitNext+'" id="tc-submit-btn" onclick="tcSubmitWoche()">📋 Woche einreichen</button>')+
     '</div>'+
   '</div>';
 }
@@ -10581,6 +10627,7 @@ function tcSaveSign(wer,statusOverride){
   }
   techApi('tech_wochen_sign',body).then(function(d){
     if(d&&d.error){ tcToast(d.error); return; }
+    tcHaptik(14);   // ZIEL 7 — bestätigt den Abschluss eines echten Schritts
     tcToast('✓ Unterschrift gespeichert');
     tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
   }).catch(function(){ tcToast('Verbindungsfehler beim Speichern'); });
@@ -10591,6 +10638,7 @@ function tcSubmitWoche(){
   var btn=document.getElementById('tc-submit-btn'); if(btn){ btn.disabled=true; btn.textContent='Wird eingereicht…'; }
   techApi('tech_wochen_einreichen',{jahr:tcWocheState.jahr,woche:tcWocheState.woche}).then(function(d){
     if(d&&d.error){ tcToast(d.error); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } return; }
+    tcHaptik(18);   // ZIEL 7 — der Wochenabschluss darf sich deutlich anfühlen
     tcToast('✓ Woche eingereicht');
     tcRenderWochenListe();
   }).catch(function(){ tcToast('Verbindungsfehler'); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } });
@@ -10830,9 +10878,16 @@ function tcScheduleSave(rowEl){
 }
 function tcRowStatus(rowEl,state,msg){
   var el=rowEl.querySelector('.rc-status'); if(!el) return;
+  var vorher=el.className;
   el.className='rc-status '+state;
   el.textContent=state==='saving'?'⏳':state==='saved'?'✓':state==='error'?'⚠':'●';
   el.title=msg||'';
+  // ZIEL 7 — Haken pulst genau EINMAL beim Übergang nach 'saved'. Nicht bei
+  // jedem Aufruf: der Autosave läuft oft, ein Dauerpulsen wäre Effektgewitter.
+  if(state==='saved'&&vorher.indexOf('saved')<0){
+    el.classList.remove('puls'); void el.offsetWidth; el.classList.add('puls');
+    tcHaptik(6);
+  }
 }
 function tcCollectRow(rowEl){
   var datum=rowEl.getAttribute('data-date');
