@@ -307,6 +307,9 @@ export default async function handler(req, res) {
       case 'pm_taetigkeitenkatalog_create': return res.status(200).json(await pmTaetigkeitenKatalogCreate(req.body));
       case 'pm_taetigkeitenkatalog_update': return res.status(200).json(await pmTaetigkeitenKatalogUpdate(req.body));
       case 'pm_taetigkeitenkatalog_toggle': return res.status(200).json(await pmTaetigkeitenKatalogToggle(req.body));
+      // ZIEL 8e — Entscheidungsprotokoll der Katalog-Anlage (Master-only wie die
+      // übrige Katalogpflege: nicht in PM_ACTIONS/TECHNIKER_ACTIONS gelistet).
+      case 'pm_katalog_entscheidung': return res.status(200).json(await pmKatalogEntscheidungLog(req.body, scope));
       case 'pm_wochenrapporte_liste': return res.status(200).json(await pmWochenrapporteListe());
       case 'pm_wochenrapport':   return res.status(200).json(await pmWochenrapport(req.body));
       case 'pm_wochenrapport_update': return res.status(200).json(await pmWochenrapportUpdate(req.body, scope));
@@ -2613,6 +2616,49 @@ async function pmTaetigkeitenKatalogToggle(b) {
     const r = await sbWrite('PATCH', `gs_taetigkeitenkatalog?id=eq.${id}`, { aktiv: !!aktiv });
     return { ok: true, row: Array.isArray(r) ? r[0] : r };
   } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ZIEL 8e (Feinschliff II) — Entscheidungsprotokoll der Katalog-Anlage.
+// Jeder Durchlauf des Anlegen-Dialogs schreibt GENAU EINE Zeile, auch der
+// Abbruch: wer den Dialog wegklickt, hat etwas gesucht und nicht gefunden.
+// Genau das ist das interessante Signal über die Qualität der Vorschläge.
+//
+// Wirft nie: ein fehlgeschlagenes Protokoll darf das Anlegen nicht blockieren.
+// Der Client feuert das absichtlich "nebenher" ab.
+// ═══════════════════════════════════════════════════════════════════════════
+const KATALOG_ENTSCHEIDUNGEN = new Set(['neu_angelegt', 'bestehende_gewaehlt', 'reaktiviert', 'abgebrochen']);
+
+async function pmKatalogEntscheidungLog(b, scope) {
+  const entscheidung = String(b.entscheidung || '');
+  if (!KATALOG_ENTSCHEIDUNGEN.has(entscheidung)) return { error: 'ungültige entscheidung' };
+  // Nur die angezeigten Vorschläge, auf das Wesentliche gekürzt — das ist ein
+  // Snapshot des Moments, nicht ein Verweis auf den heutigen Katalogstand.
+  const vorschlaege = Array.isArray(b.vorgeschlagene_aehnliche)
+    ? b.vorgeschlagene_aehnliche.slice(0, 20).map((v) => ({
+      slug: String((v && v.slug) || '').slice(0, 80),
+      gewerk: String((v && v.gewerk) || '').slice(0, 40),
+      kategorie: String((v && v.kategorie) || '').slice(0, 100),
+      score: Number.isFinite(Number(v && v.score)) ? Math.round(Number(v.score) * 100) / 100 : null,
+      aktiv: !!(v && v.aktiv),
+    }))
+    : [];
+  const row = {
+    neue_taetigkeit_id: (b.neue_taetigkeit_id && UUID_RE.test(String(b.neue_taetigkeit_id))) ? b.neue_taetigkeit_id : null,
+    gewaehlte_taetigkeit_id: (b.gewaehlte_taetigkeit_id && UUID_RE.test(String(b.gewaehlte_taetigkeit_id))) ? b.gewaehlte_taetigkeit_id : null,
+    vorgeschlagene_aehnliche: vorschlaege,
+    entscheidung,
+    eingabe_bezeichnung: b.eingabe_bezeichnung ? String(b.eingabe_bezeichnung).slice(0, 200) : null,
+    eingabe_gewerk: b.eingabe_gewerk ? String(b.eingabe_gewerk).slice(0, 40) : null,
+    entschieden_von: scope.userId,
+  };
+  try {
+    await sbWrite('POST', 'gs_katalog_entscheidung', row, 'return=minimal');
+    return { ok: true };
+  } catch (e) {
+    if (isNoTable(e)) return { notMigrated: true };
+    return { ok: false }; // still schlucken — Protokoll darf nie blockieren
+  }
 }
 
 // Für mehrere Tagesrapporte auf einmal die gewählten Tätigkeiten nachladen

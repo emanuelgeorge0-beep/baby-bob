@@ -2401,34 +2401,313 @@ function ktToggleAktiv(id){
     toast('✓ Aktualisiert'); ktLoad();
   }).catch(function(){ toast('Verbindungsfehler'); });
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 8 (Feinschliff II) — Duplikatschutz und Eingabevorschläge im Katalog.
+
+   Die Prüfung läuft komplett im Client gegen _ktItems. Das geht, weil
+   pm_taetigkeitenkatalog_liste bewusst NICHT auf aktiv filtert: die Liste
+   enthält alle Gewerke und auch die deaktivierten Einträge — genau das, was
+   die Anforderung verlangt. Bei ~71 Zeilen ist Levenshtein in JS billiger als
+   ein Roundtrip; pg_trgm liegt als optionaler Index in der SQL bereit, falls
+   der Katalog irgendwann in die Tausende wächst.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// Normalisierung: Kleinschreibung, Umlaute aufgelöst, Leerzeichen/Bindestriche
+// weg, gängige Endungen vereinheitlicht (montiert/montieren/Montage → mont).
+var KT_ENDUNGEN=[
+  /ierungen$/,/ierung$/,/ierten$/,/ieren$/,/iert$/,
+  /ungen$/,/ung$/,/agen$/,/age$/,
+  /en$/,/er$/,/es$/,/em$/,/e$/,/t$/,/n$/,/s$/
+];
+function ktUmlaute(s){
+  return String(s||'').toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss');
+}
+function ktStamm(wort){
+  if(wort.length<=4) return wort;                 // kurze Wörter nicht verstümmeln
+  for(var i=0;i<KT_ENDUNGEN.length;i++){
+    var m=KT_ENDUNGEN[i];
+    if(m.test(wort)){
+      var kurz=wort.replace(m,'');
+      if(kurz.length>=3) return kurz;             // nur die ERSTE passende Regel
+    }
+  }
+  return wort;
+}
+function ktNorm(s){
+  return ktUmlaute(s).split(/[^a-z0-9]+/).filter(Boolean).map(ktStamm).join('');
+}
+// Levenshtein-Distanz, zwei Zeilen statt voller Matrix.
+function ktLev(a,b){
+  if(a===b) return 0;
+  if(!a.length) return b.length;
+  if(!b.length) return a.length;
+  var prev=[],cur=[],i,j;
+  for(j=0;j<=b.length;j++) prev[j]=j;
+  for(i=1;i<=a.length;i++){
+    cur[0]=i;
+    for(j=1;j<=b.length;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a.charAt(i-1)===b.charAt(j-1)?0:1));
+    }
+    for(j=0;j<=b.length;j++) prev[j]=cur[j];
+  }
+  return prev[b.length];
+}
+// 0..1. Zusätzlich zur reinen Distanz zählt ein enthaltener Teilstring —
+// "Waschtisch montiert" vs. "Waschtisch demontiert" soll deutlich anschlagen.
+function ktAehnlichkeit(a,b){
+  var x=ktNorm(a), y=ktNorm(b);
+  if(!x||!y) return 0;
+  if(x===y) return 1;
+  var lang=Math.max(x.length,y.length);
+  var score=1-(ktLev(x,y)/lang);
+  if(x.indexOf(y)>=0||y.indexOf(x)>=0) score=Math.max(score,0.82);
+  return score;
+}
+// Ähnliche Einträge über ALLE Gewerke, auch deaktivierte. minScore steuert,
+// ob es die lockere Live-Suche oder die strengere Speicher-Warnung ist.
+function ktAehnliche(bez,minScore,max){
+  if(!bez||bez.trim().length<3) return [];
+  var q=bez.trim().toLowerCase();
+  return _ktItems.map(function(k){
+    var s=ktAehnlichkeit(bez,k.bezeichnung);
+    // Reine Tippsuche zusätzlich: "wasch" findet "Waschtisch montiert".
+    if(k.bezeichnung.toLowerCase().indexOf(q)>=0) s=Math.max(s,0.75);
+    return {k:k,score:s};
+  }).filter(function(x){ return x.score>=minScore; })
+    .sort(function(a,b){ return b.score-a.score; })
+    .slice(0,max||6);
+}
+// Für das Protokoll (ZIEL 8e): genau das, was angezeigt wurde.
+function ktVorschlagSnapshot(liste){
+  return liste.map(function(x){
+    return {slug:x.k.slug,gewerk:x.k.gewerk,kategorie:x.k.kategorie,score:x.score,aktiv:!!x.k.aktiv};
+  });
+}
+function ktGewerkLabel(v){ return (KT_GEWERKE.filter(function(g){return g.v===v;})[0]||{}).l||v; }
+
+// Slug-Vorschlag aus der Bezeichnung — editierbar, siehe ktSlugManuell.
+function ktSlugVorschlag(bez){
+  return ktUmlaute(bez).replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48);
+}
+var _ktSlugManuell=false;      // true, sobald der Slug von Hand angefasst wurde
+var _ktLetzteVorschlaege=[];   // was zuletzt angezeigt wurde (fürs Protokoll)
+var _ktDialogOffen=false;      // für die 'abgebrochen'-Meldung beim Schliessen
+
 function ktNewForm(){
   var slot=$('kt-new'); if(!slot) return;
-  if(slot.innerHTML){ slot.innerHTML=''; return; }
+  if(slot.innerHTML){ ktNewAbbrechen(); return; }
+  _ktSlugManuell=false; _ktLetzteVorschlaege=[]; _ktDialogOffen=true; _ktWarnungQuittiert=false; _ktFeldVorschlag=[];
   slot.innerHTML='<div class="lcard" style="margin-bottom:12px">'+
-    '<select class="field" id="kt-n-gewerk">'+KT_GEWERKE.map(function(g){return '<option value="'+g.v+'">'+esc(g.l)+'</option>';}).join('')+'</select>'+
-    '<input class="field" id="kt-n-slug" placeholder="Slug (z.B. kaltwasserleitung) — später nicht mehr änderbar" style="margin-top:8px"/>'+
-    '<input class="field" id="kt-n-bez" placeholder="Bezeichnung" style="margin-top:8px"/>'+
-    '<input class="field" id="kt-n-kat" placeholder="Kategorie (z.B. Leitungsbau)" style="margin-top:8px"/>'+
+    '<select class="field" id="kt-n-gewerk" onchange="ktNewGewerkChange()">'+KT_GEWERKE.map(function(g){return '<option value="'+g.v+'">'+esc(g.l)+'</option>';}).join('')+'</select>'+
+    '<input class="field" id="kt-n-bez" placeholder="Bezeichnung" style="margin-top:8px" oninput="ktBezInput()"/>'+
+    // ZIEL 8a — Treffer erscheinen ab dem dritten Zeichen direkt unter dem Feld.
+    '<div id="kt-n-treffer"></div>'+
+    '<input class="field" id="kt-n-slug" placeholder="Slug — wird vorgeschlagen, später nicht mehr änderbar" style="margin-top:8px" oninput="ktSlugInput()"/>'+
+    '<div id="kt-n-slug-hint" style="color:var(--muted2);font-size:11.5px;margin-top:4px"></div>'+
+    // ZIEL 8d — Kategorien des Gewerks als Auswahl, freie Eingabe bleibt möglich.
+    '<input class="field" id="kt-n-kat" list="kt-n-katlist" placeholder="Kategorie (z.B. Leitungsbau)" style="margin-top:8px" oninput="ktKatInput()"/>'+
+    '<datalist id="kt-n-katlist"></datalist>'+
+    '<div id="kt-n-kat-hint" style="color:var(--muted2);font-size:11.5px;margin-top:4px"></div>'+
     ktFelderCheckboxesHtml('kt-n',[])+
+    '<div id="kt-n-felder-hint" style="color:var(--muted2);font-size:11.5px;margin-top:6px"></div>'+
     '<label class="chip" style="cursor:pointer;margin-top:8px;display:inline-block"><input type="checkbox" id="kt-n-service" style="margin-right:5px;vertical-align:middle"/>Service-Tätigkeit (im Wochenrapport ausgeblendet)</label>'+
-    '<div style="display:flex;gap:8px;margin-top:10px"><button class="chip" style="border-color:var(--gold-line);color:var(--gold)" onclick="ktNewSave()">Anlegen</button></div>'+
+    '<div id="kt-n-warnung"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:10px">'+
+      '<button class="chip" onclick="ktNewAbbrechen()">Abbrechen</button>'+
+      '<button class="chip" style="border-color:var(--gold-line);color:var(--gold)" onclick="ktNewSave()">Anlegen</button>'+
+    '</div>'+
   '</div>';
+  ktNewGewerkChange();
 }
+// Schliessen ohne Anlegen ist ein Signal: es wurde etwas gesucht und nicht
+// gefunden. Wird protokolliert, sobald überhaupt etwas getippt war (ZIEL 8e).
+function ktNewAbbrechen(){
+  var bez=(($('kt-n-bez')||{}).value||'').trim();
+  if(_ktDialogOffen&&bez.length>=3){
+    ktLogEntscheidung('abgebrochen',{bez:bez,gewerk:($('kt-n-gewerk')||{}).value||''});
+  }
+  _ktDialogOffen=false;
+  var slot=$('kt-new'); if(slot) slot.innerHTML='';
+}
+function ktNewGewerkChange(){
+  var gew=($('kt-n-gewerk')||{}).value||'';
+  // Kategorien, die in DIESEM Gewerk schon verwendet werden.
+  var kats=[];
+  _ktItems.forEach(function(k){ if(k.gewerk===gew&&kats.indexOf(k.kategorie)<0) kats.push(k.kategorie); });
+  var dl=$('kt-n-katlist');
+  if(dl) dl.innerHTML=kats.sort().map(function(c){ return '<option value="'+esc(c)+'"></option>'; }).join('');
+  var hint=$('kt-n-kat-hint');
+  if(hint) hint.textContent=kats.length?('Bereits in '+ktGewerkLabel(gew)+': '+kats.sort().join(' · ')):('Noch keine Kategorie in '+ktGewerkLabel(gew)+'.');
+  ktSlugInput(); ktKatInput();
+}
+// ZIEL 8a — Live-Suche ab dem dritten Zeichen.
+function ktBezInput(){
+  var bez=(($('kt-n-bez')||{}).value||'');
+  // Neuer Text => die vorige Warnung war fuer etwas anderes quittiert.
+  _ktWarnungQuittiert=false;
+  if(!_ktSlugManuell){ var s=$('kt-n-slug'); if(s){ s.value=ktSlugVorschlag(bez); ktSlugInput(); } }
+  var box=$('kt-n-treffer'); if(!box) return;
+  if(bez.trim().length<3){ box.innerHTML=''; _ktLetzteVorschlaege=[]; ktWarnungLeeren(); return; }
+  var treffer=ktAehnliche(bez,0.55,6);
+  _ktLetzteVorschlaege=treffer;
+  if(!treffer.length){ box.innerHTML='<div style="color:var(--muted2);font-size:11.5px;margin-top:5px">Nichts Ähnliches im Katalog gefunden.</div>'; ktWarnungLeeren(); return; }
+  box.innerHTML='<div style="margin-top:6px;padding:8px 10px;border:1px solid rgba(201,169,97,.28);border-radius:10px">'+
+    '<div style="color:var(--muted);font-size:11.5px;margin-bottom:6px">Ähnlich vorhanden — antippen, statt neu anzulegen:</div>'+
+    treffer.map(function(x){
+      var k=x.k;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer" onclick="ktZuBestehendem(\''+esc(k.id)+'\')">'+
+        '<span style="font-weight:700'+(k.aktiv?'':';opacity:.6')+'">'+esc(k.bezeichnung)+'</span>'+
+        '<span style="color:var(--muted2);font-size:11.5px">'+esc(ktGewerkLabel(k.gewerk))+' / '+esc(k.kategorie)+'</span>'+
+        (k.aktiv?'':'<span style="color:#ffb86b;font-size:11px">deaktiviert</span>')+
+        '<span style="margin-left:auto;color:var(--muted2);font-size:11px">'+Math.round(x.score*100)+'%</span>'+
+      '</div>';
+    }).join('')+'</div>';
+  ktWarnungLeeren();
+}
+// Tap auf einen Treffer: springt zum bestehenden Eintrag statt neu anzulegen.
+// Ist er deaktiviert, wird das Reaktivieren angeboten.
+function ktZuBestehendem(id){
+  var k=_ktItems.filter(function(x){return x.id===id;})[0]; if(!k) return;
+  var bez=(($('kt-n-bez')||{}).value||'').trim();
+  var gew=($('kt-n-gewerk')||{}).value||'';
+  if(!k.aktiv){
+    if(confirm('„'+k.bezeichnung+'" existiert, ist aber deaktiviert.\n\nJetzt reaktivieren?')){
+      api('pm_taetigkeitenkatalog_toggle',{id:id,aktiv:true}).then(function(d){
+        if(d&&d.error){ toast(d.error); return; }
+        ktLogEntscheidung('reaktiviert',{bez:bez,gewerk:gew,gewaehlt:id});
+        _ktDialogOffen=false; $('kt-new').innerHTML='';
+        toast('✓ Reaktiviert'); ktLoad(); setTimeout(function(){ ktSpringeZu(id); },350);
+      }).catch(function(){ toast('Verbindungsfehler'); });
+    }
+    return;
+  }
+  ktLogEntscheidung('bestehende_gewaehlt',{bez:bez,gewerk:gew,gewaehlt:id});
+  _ktDialogOffen=false; $('kt-new').innerHTML='';
+  ktSpringeZu(id);
+}
+// Zum Eintrag scrollen und ihn kurz hervorheben.
+function ktSpringeZu(id){
+  var row=document.querySelector('[data-ktrow="'+id+'"]');
+  if(!row){ toast('Eintrag ist in der Liste'); return; }
+  row.scrollIntoView({behavior:'smooth',block:'center'});
+  row.style.transition='box-shadow .3s ease';
+  row.style.boxShadow='0 0 0 2px var(--gold)';
+  setTimeout(function(){ row.style.boxShadow=''; },1800);
+}
+// ZIEL 8c — Slug-Kollision hart verhindern (UNIQUE(gewerk,slug) steht bereits).
+function ktSlugInput(){
+  var el=$('kt-n-slug'); if(!el) return;
+  if(document.activeElement===el) _ktSlugManuell=true;
+  el.value=el.value.toLowerCase().replace(/[^a-z0-9_]/g,'');
+  var hint=$('kt-n-slug-hint'); if(!hint) return;
+  var gew=($('kt-n-gewerk')||{}).value||'';
+  var kollision=_ktItems.filter(function(k){return k.gewerk===gew&&k.slug===el.value;})[0];
+  if(!el.value){ hint.textContent='Wird aus der Bezeichnung vorgeschlagen.'; hint.style.color='var(--muted2)'; return; }
+  if(kollision){
+    hint.textContent='✗ Slug „'+el.value+'" ist in '+ktGewerkLabel(gew)+' bereits vergeben ('+kollision.bezeichnung+'). Bitte ändern.';
+    hint.style.color='#ff8f8f';
+  } else {
+    hint.textContent='✓ Slug frei in '+ktGewerkLabel(gew)+'.';
+    hint.style.color='var(--muted2)';
+  }
+}
+// ZIEL 8d — Detailfeld-Vorschlag aus ähnlichen Tätigkeiten desselben Gewerks
+// und derselben Kategorie. Wird NICHT still angehakt: der Master übernimmt ihn
+// bewusst per Knopf, sonst speichert er Felder, die er nie gesehen hat.
+function ktKatInput(){
+  var hint=$('kt-n-felder-hint'); if(!hint) return;
+  var gew=($('kt-n-gewerk')||{}).value||'';
+  var kat=(($('kt-n-kat')||{}).value||'').trim();
+  if(!kat){ hint.innerHTML=''; return; }
+  var zaehler={};
+  _ktItems.forEach(function(k){
+    if(k.gewerk!==gew||k.kategorie!==kat) return;
+    ((k.detailfelder&&k.detailfelder.felder)||[]).forEach(function(c){ zaehler[c]=(zaehler[c]||0)+1; });
+  });
+  var codes=Object.keys(zaehler).sort(function(a,b){return zaehler[b]-zaehler[a];});
+  if(!codes.length){ hint.innerHTML=''; return; }
+  var labels=codes.map(function(c){ return (KT_FELDER.filter(function(f){return f.c===c;})[0]||{}).l||c; });
+  // Codes in einer Variablen halten statt als JSON durch ein inline-onclick zu
+  // reichen — esc() wandelt Anführungszeichen in Entities, das Array käme dort
+  // kaputt an.
+  _ktFeldVorschlag=codes;
+  hint.innerHTML='Ähnliche in „'+esc(kat)+'" nutzen: '+esc(labels.join(' · '))+
+    ' <span style="color:var(--gold);cursor:pointer;font-weight:700" onclick="ktFelderUebernehmen()">übernehmen</span>';
+}
+var _ktFeldVorschlag=[];
+function ktFelderUebernehmen(){
+  (_ktFeldVorschlag||[]).forEach(function(c){ var e=$('kt-n-feld-'+c); if(e) e.checked=true; });
+  toast('Detailfelder übernommen');
+}
+function ktWarnungLeeren(){ var w=$('kt-n-warnung'); if(w) w.innerHTML=''; }
+
+/* ZIEL 8b — Ähnlichkeitsprüfung VOR dem Speichern. Nur ein Hinweis, kein
+   Verbot: bewusst weitermachen muss möglich bleiben. Erst der zweite Tap auf
+   "Anlegen" (dann heisst er "Trotzdem anlegen") speichert wirklich. */
+var _ktWarnungQuittiert=false;
 function ktNewSave(){
+  var gewerk=($('kt-n-gewerk')||{}).value||'';
+  var bez=(($('kt-n-bez')||{}).value||'').trim();
+  var slug=(($('kt-n-slug')||{}).value||'').trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
+  if(!bez){ toast('Bezeichnung nötig'); return; }
+  if(!slug){ toast('Slug nötig'); return; }
+
+  // (c) Kollision blockiert hart — der Server würde es ohnehin ablehnen.
+  var kollision=_ktItems.filter(function(k){return k.gewerk===gewerk&&k.slug===slug;})[0];
+  if(kollision){
+    toast('Slug „'+slug+'" ist in '+ktGewerkLabel(gewerk)+' bereits vergeben');
+    ktSlugInput(); var se=$('kt-n-slug'); if(se) se.focus();
+    return;
+  }
+
+  // (b) Ähnlichkeitswarnung — streng gegen ALLE Gewerke, auch deaktivierte.
+  var aehnlich=ktAehnliche(bez,0.72,4);
+  _ktLetzteVorschlaege=aehnlich.length?aehnlich:_ktLetzteVorschlaege;
+  if(aehnlich.length&&!_ktWarnungQuittiert){
+    var w=$('kt-n-warnung');
+    if(w){
+      w.innerHTML='<div style="margin-top:10px;padding:10px;border:1px solid rgba(255,184,107,.45);border-radius:10px">'+
+        '<div style="font-weight:700;color:#ffb86b;margin-bottom:6px">Ähnlich vorhanden</div>'+
+        aehnlich.map(function(x){
+          return '<div style="padding:3px 0"><span style="font-weight:700;cursor:pointer" onclick="ktZuBestehendem(\''+esc(x.k.id)+'\')">'+esc(x.k.bezeichnung)+'</span> '+
+            '<span style="color:var(--muted2);font-size:11.5px">('+esc(ktGewerkLabel(x.k.gewerk))+' / '+esc(x.k.kategorie)+')</span>'+
+            (x.k.aktiv?'':' <span style="color:#ffb86b;font-size:11px">— existiert, ist aber deaktiviert. Antippen zum Reaktivieren.</span>')+
+          '</div>';
+        }).join('')+
+        '<div style="color:var(--muted);font-size:11.5px;margin-top:8px">Trotzdem anlegen? Dann nochmal auf „Anlegen" tippen.</div>'+
+      '</div>';
+    }
+    _ktWarnungQuittiert=true;
+    return;
+  }
+
   var body={
-    gewerk: ($('kt-n-gewerk')||{}).value||'',
-    slug: (($('kt-n-slug')||{}).value||'').trim().toLowerCase().replace(/[^a-z0-9_]/g,''),
-    bezeichnung: ($('kt-n-bez')||{}).value||'',
+    gewerk:gewerk, slug:slug, bezeichnung:bez,
     kategorie: ($('kt-n-kat')||{}).value||'',
     felder: ktFelderAusCheckboxen('kt-n'),
     quelle_service: !!($('kt-n-service')||{}).checked,
   };
-  if(!body.slug){ toast('Slug nötig'); return; }
-  if(!body.bezeichnung.trim()){ toast('Bezeichnung nötig'); return; }
   api('pm_taetigkeitenkatalog_create',body).then(function(d){
     if(d&&d.error){ toast(d.error); return; }
+    ktLogEntscheidung('neu_angelegt',{bez:bez,gewerk:gewerk,neu:(d&&d.row&&d.row.id)||null});
+    _ktDialogOffen=false; _ktWarnungQuittiert=false;
     toast('✓ Angelegt'); $('kt-new').innerHTML=''; ktLoad();
   }).catch(function(){ toast('Verbindungsfehler'); });
+}
+
+// ZIEL 8e — Protokoll. Läuft nebenher: ein Fehler hier darf nie die eigentliche
+// Aktion stören, deshalb kein Nutzer-Feedback im Fehlerfall.
+function ktLogEntscheidung(entscheidung,o){
+  o=o||{};
+  api('pm_katalog_entscheidung',{
+    entscheidung: entscheidung,
+    eingabe_bezeichnung: o.bez||'',
+    eingabe_gewerk: o.gewerk||'',
+    neue_taetigkeit_id: o.neu||null,
+    gewaehlte_taetigkeit_id: o.gewaehlt||null,
+    vorgeschlagene_aehnliche: ktVorschlagSnapshot(_ktLetzteVorschlaege||[]),
+  }).catch(function(){});
 }
 function zsLoad(pid){
   api('zs_projekt',{projekt_id:pid}).then(function(d){
