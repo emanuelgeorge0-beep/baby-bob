@@ -43,7 +43,7 @@ const zeilen = tage.slice(0, 5).map((datum, i) => ({
   ueberzeit_25: 0, ueberzeit_50: 0, ueberzeit_100: 0, status: 'entwurf',
 }));
 
-function seite(szenario) {
+function seite(szenario, szenario2) {
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><style>${style}</style></head>
 <body><div id="tech-cockpit" class="tech-screen" style="display:block">
@@ -54,9 +54,20 @@ var FEHLER=[];
 window.onerror=function(m,u,l,c){ FEHLER.push('JS-Fehler: '+m+' @'+l+':'+c); };
 window.addEventListener('unhandledrejection',function(e){ FEHLER.push('Rejection: '+(e.reason&&e.reason.message||e.reason)); });
 var ZEILEN=${JSON.stringify(zeilen)};
-var GELADEN=[], authTechName='Testtechniker';
+var GELADEN=[], AUFRUFE=[], NETZ=[], authTechName='Testtechniker';
 function toast(){} function showScreen(){} function gsAuthApi(){ return Promise.resolve({}); }
+// Jede echte Netzwerkanfrage waere in diesem Aufbau ein Fehler - alles laeuft
+// ueber den Stub. Wird mitgeschrieben statt still zu scheitern.
+window.fetch=function(u){ NETZ.push(String(u)); return Promise.reject(new Error('Netzzugriff im Test: '+u)); };
+// Bestaetigungsdialoge im Test immer bejahen.
+window.confirm=function(){ return true; };
+var KATALOG=[
+  {id:'K1',gewerk:'heizung',slug:'heizkoerper_montiert',bezeichnung:'Heizkoerper montiert',kategorie:'Fertigmontage',detailfelder:{felder:['STK','DN']},sortierung:10,verwendet_anzahl:4,verwendet_zuletzt:'2026-07-30T10:00:00Z',verwendet_projekte:{P1:3}},
+  {id:'K2',gewerk:'heizung',slug:'leitung_verlegt',bezeichnung:'Leitung verlegt',kategorie:'Leitungsbau',detailfelder:{felder:['M']},sortierung:20,verwendet_anzahl:2,verwendet_zuletzt:'2026-07-28T10:00:00Z'},
+  {id:'K3',gewerk:'heizung',slug:'entlueftet',bezeichnung:'Anlage entlueftet',kategorie:'Inbetriebnahme',detailfelder:{felder:[]},sortierung:30,verwendet_anzahl:0,verwendet_zuletzt:null}
+];
 function stubApi(a,b){
+  AUFRUFE.push({action:a,body:b||{}});
   if(a==='tech_wochen_rapport'){
     GELADEN.push(b.jahr+'/'+b.woche);
     var eigene=(b.jahr===2026&&b.woche===33)?ZEILEN:[];
@@ -65,8 +76,12 @@ function stubApi(a,b){
   }
   if(a==='tech_projekte') return Promise.resolve({projekte:[{id:'P1',name:'Langstrasse 149',projektnummer:'25-001',standort:'Zürich',kunde_name:'Muster AG'}]});
   if(a==='svc_liste') return Promise.resolve({auftraege:[]});
-  if(a==='tech_taetigkeitenkatalog') return Promise.resolve({items:[]});
+  if(a==='tech_taetigkeitenkatalog') return Promise.resolve({items:KATALOG});
   if(a==='tech_tag_save') return Promise.resolve({ok:true,row:{id:'NEU',datum:b.datum,projekt_id:b.projekt_id}});
+  if(a==='tech_tag_del') return Promise.resolve({ok:true});
+  if(a==='tech_wochen_sign') return Promise.resolve({ok:true});
+  if(a==='tech_wochen_einreichen') return Promise.resolve({ok:true});
+  if(a==='tech_wochen_liste') return Promise.resolve({wochen:[]});
   return Promise.resolve({});
 }
 </script>
@@ -89,12 +104,20 @@ function felderSichtbar(r){
     &&r.querySelector('.f-start')&&r.querySelector('.f-ende')&&r.querySelector('.f-pause')
     &&r.querySelector('.f-std')&&r.querySelectorAll('.rc-spesen-chips .tc-chip').length===4);
 }
+function touchEvt(typ,el,y){
+  var t=new Touch({identifier:1,target:el,clientX:100,clientY:y});
+  return new TouchEvent(typ,{bubbles:true,cancelable:true,touches:typ==='touchend'?[]:[t],
+    targetTouches:typ==='touchend'?[]:[t],changedTouches:[t]});
+}
 function ende(){ sag(FEHLER.length?('\\n✗ '+FEHLER.length+' Fehler:\\n   '+FEHLER.join('\\n   ')):'\\n✓ Szenario bestanden'); sag('FERTIG'); }
 
 tcLoadWoche(2026,33,function(){ setTimeout(los,250); });
 
 function los(){
   ${szenario}
+}
+function teilZwei(r,tag){
+  ${szenario2 || ''}
 }
 </script></body></html>`;
 }
@@ -180,20 +203,222 @@ const SZENARIO_C = `
   },250);
 `;
 
+// Szenario D — ZUSATZ 1: Scroll-Isolation, echte Touch-Gesten, Body-Sperre.
+const SZENARIO_D = `
+  sag('SZENARIO D — Scroll-Isolation des Rades (echte Touch-Gesten)');
+  // Seite erst nach unten bringen, damit die Rueckkehr messbar ist.
+  document.body.style.minHeight='3000px';
+  window.scrollTo(0,420);
+  var vorher=window.scrollY;
+  pruef(vorher===420,'Seite steht auf Position 420 (bekommen: '+vorher+')');
+
+  tcWheelOeffnen();
+  var rad=document.getElementById('tc-wheel');
+  var col=document.getElementById('tc-wheel-woche');
+  pruef(!!rad&&!!col,'Rad offen');
+  setTimeout(function(){ weiter(rad,col,vorher); },150);
+}
+function weiter(rad,col,vorher){
+
+  // (1) Seite hinter dem Rad gesperrt?
+  pruef(getComputedStyle(document.body).position==='fixed','Body ist gesperrt, die Seite kann nicht mitscrollen');
+  pruef(document.body.style.top==='-420px','Sperre haelt die Scrollposition fest (top='+document.body.style.top+')');
+
+  // (2) Deklarative Isolation — genau das, was auf echtem Touch wirkt.
+  pruef(getComputedStyle(col).overscrollBehaviorY==='contain','overscroll-behavior:contain auf der Rad-Spalte');
+  pruef(getComputedStyle(col).touchAction==='pan-y','touch-action:pan-y nur innerhalb des Rades');
+  var bd=document.getElementById('tc-wheel-backdrop');
+  pruef(getComputedStyle(bd).touchAction==='none','Hintergrund nimmt keine Wischgeste an (touch-action:none)');
+  pruef(getComputedStyle(document.querySelector('.tc-wheel-opt')).scrollSnapStop==='always','scroll-snap-stop:always — eine Geste, eine Rastung');
+
+  // (3) Echte Touch-Geste im Rad: waehrend der Finger liegt, darf nichts einrasten.
+  col.dispatchEvent(touchEvt('touchstart',col,300));
+  pruef(tcWheelFinger===true,'touchstart wird erkannt (nicht nur Maus/Pointer)');
+  pruef(tcWheelGeste===true,'Geste als echt markiert');
+  var kwVorher=tcWocheState.woche;
+  col.scrollTop=col.scrollTop+TC_WHEEL_ROW_H*2;
+  col.dispatchEvent(new Event('scroll'));
+  setTimeout(function(){
+    pruef(tcWocheState.woche===kwVorher,'solange der Finger aufliegt, wechselt die Woche NICHT');
+    // Loslassen -> jetzt darf eingerastet werden.
+    col.dispatchEvent(touchEvt('touchend',col,300));
+    setTimeout(function(){
+      pruef(tcWocheState.woche===kwVorher+2,'nach dem Loslassen rastet es auf die gescrollte Woche ein (bekommen: '+tcWocheState.woche+')');
+      pruef(!document.getElementById('tc-wheel'),'Rad schliesst nach der Wahl');
+      // (4) Body wieder frei und exakt an derselben Stelle.
+      pruef(getComputedStyle(document.body).position!=='fixed','Body-Sperre wieder aufgehoben');
+      pruef(window.scrollY===420,'Seite steht wieder exakt auf 420 (bekommen: '+window.scrollY+')');
+      // (5) Tap ausserhalb schliesst.
+      tcWheelOeffnen();
+      pruef(!!document.getElementById('tc-wheel'),'Rad erneut offen');
+      var bd2=document.getElementById('tc-wheel-backdrop');
+      bd2.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+      pruef(!document.getElementById('tc-wheel'),'Tap auf den Hintergrund schliesst das Rad');
+      pruef(window.scrollY===420,'auch danach steht die Seite wieder auf 420 (bekommen: '+window.scrollY+')');
+      ende();
+    },400);
+  },400);
+`;
+
+// Szenario E — ZUSATZ 2a: jeder Weg im Wochenblatt einmal durchlaufen.
+// Jeder Schritt muss MESSBAR etwas bewirken; blosses "kein Fehler" genügt nicht.
+const SZENARIO_E = `
+  sag('SZENARIO E — vollständiger Durchlauf aller Wege');
+  var r=leereZeile(); if(!r) { pruef(false,'leere Zeile vorhanden'); return ende(); }
+  var tag=r.getAttribute('data-date');
+
+  // 1 Projekt wählen
+  var sel=r.querySelector('.rc-ziel'); sel.value='p:P1'; tcRowZielChange(sel);
+  pruef(felderSichtbar(r),'1  Projekt wählen blendet den Feldblock ein');
+  pruef(tcCollectRow(r).projekt_id==='P1','1  Projekt landet in den Speicherdaten');
+
+  // 2 Gewerk
+  var gw=r.querySelectorAll('.rc-gewerk-chips .tc-chip');
+  pruef(gw.length===5,'2  fünf Gewerk-Chips (Sanitär/Heizung/Klima/Lüftung/Divers)');
+  tcRowGewerkPick(gw[1]);
+  pruef(gw[1].classList.contains('sel'),'2  Gewerk-Chip wird als gewählt markiert');
+  pruef(tcCollectRow(r).taetigkeit==='Heizung','2  Gewerk landet in den Speicherdaten');
+
+  // 3 Start/Ende über die Schnellwahl-Chips
+  var sc=r.querySelectorAll('.rc-timegrid .tc-chips')[0].querySelectorAll('.tc-chip');
+  var ec=r.querySelectorAll('.rc-timegrid .tc-chips')[1].querySelectorAll('.tc-chip');
+  tcTimeChipPick(sc[1],'start'); tcTimeChipPick(ec[2],'ende');
+  pruef(r.querySelector('.f-start').value==='07:00','3  Start-Chip setzt 07:00');
+  pruef(r.querySelector('.f-ende').value==='17:00','3  Ende-Chip setzt 17:00');
+
+  // 4 Pause + berechnete Stunden  (17:00-07:00) - 1.25 = 8.75
+  var pause=r.querySelector('.f-pause');
+  pruef(Number(pause.value)===1.25,'4  Pause mit 1.25 h (75 min) vorbelegt');
+  // (17:00-07:00) - 1.25 = 8.75, gerundet auf Halbstundenschritte = 9.00.
+  // Die Rundung ist so vorgesehen (Uebergabe 01.08.: "Std-Feld in
+  // Halbstundenschritten"), deshalb ist 9.00 der Sollwert, nicht 8.75.
+  pruef(Number(r.querySelector('.f-std').value)===9,'4  Stunden = (Ende-Start)-Pause, auf Halbstunden gerundet = 9.00 (bekommen: '+r.querySelector('.f-std').value+')');
+  pause.value='2'; tcRowTimeInput(pause);
+  pruef(Number(r.querySelector('.f-std').value)===8,'4  Pause ändern rechnet die Stunden neu (8.00)');
+
+  // 5 Stunden von Hand überschreiben -> als abweichend markiert
+  var std=r.querySelector('.f-std'); std.value='7.5'; tcRowStdManualInput(std);
+  pruef(std.getAttribute('data-manuell')==='1','5  manuelle Stunden werden als solche vermerkt');
+  pruef(getComputedStyle(r.querySelector('.rc-std-flag')).display!=='none','5  Hinweis "abweichend von Start/Ende" erscheint');
+  pruef(tcCollectRow(r).stunden_manuell===true,'5  Merkmal geht mit an den Server');
+
+  // 6 Spesen
+  var sp=r.querySelectorAll('.rc-spesen-chips .tc-chip');
+  pruef(sp.length===4,'6  vier Spesen-Chips (15/30/35/45)');
+  tcSpesenChipPick(sp[1]);
+  pruef(Number(r.querySelector('.f-spesen').value)===30,'6  Spesen-Chip setzt CHF 30');
+
+  // 7 Tätigkeits-Picker: Vorschläge (ZIEL 6) + Kategorien
+  r.querySelector('.tc-taet-add').click();
+  var picker=r.querySelector('.tc-taet-picker');
+  pruef(picker.style.display!=='none','7  Picker öffnet');
+  var vor=picker.querySelectorAll('.tc-chip-vorschlag');
+  pruef(vor.length===2,'7  ZIEL 6: Vorschläge aus eigener Nutzung (bekommen: '+vor.length+')');
+  pruef(vor[0].classList.contains('auf-projekt'),'7  ZIEL 6: auf diesem Projekt Genutztes steht vorn und ist hervorgehoben');
+  pruef(picker.querySelectorAll('.tc-taet-kat-chips .tc-chip').length===3,'7  drei Kategorien des Gewerks');
+
+  // 8 Tätigkeit hinzufügen
+  tcTaetAdd(vor[0]);
+  var items=r.querySelectorAll('.tc-taet-list .tc-taet-item');
+  pruef(items.length===1,'8  Tätigkeit wird der Zeile hinzugefügt');
+  pruef(tcCollectRow(r).taetigkeiten.length===1,'8  Tätigkeit geht mit an den Server');
+  pruef(document.getElementById('tc-undo').classList.contains('show'),'8  Rückgängig-Pille erscheint');
+
+  // 9 Tätigkeit löschen + Rückgängig
+  tcTaetRemove(r.querySelector('.tc-taet-item button[onclick*="tcTaetRemove"]'));
+  pruef(r.querySelectorAll('.tc-taet-item').length===0,'9  Tätigkeit gelöscht');
+  tcUndoRun();
+  pruef(r.querySelectorAll('.tc-taet-item').length===1,'9  Rückgängig holt die Tätigkeit zurück');
+
+  // 10 Notiz  (liegt im Detailbereich)
+  r.querySelector('.rc-icons button').click();
+  var notiz=r.querySelector('.rc-notiz'); notiz.value='Steigzone geprüft'; tcRowInput(notiz);
+  pruef(tcCollectRow(r).notiz==='Steigzone geprüft','10  Notiz landet in den Speicherdaten');
+
+  // 11 Diktat
+  pruef(!!r.querySelector('.tc-mic'),'11  Diktier-Knopf für die Tätigkeitsbeschreibung vorhanden');
+  var arb=r.querySelector('.rc-arb'); arb.value='Radiatoren angeschlossen'; tcRowInput(arb);
+  pruef(tcCollectRow(r).arbeiten[0]==='Radiatoren angeschlossen','11  Freitext landet in den Speicherdaten');
+
+  setTimeout(function(){ teilZwei(r,tag); },900);   // Autosave (700 ms) abwarten
+`;
+
+const SZENARIO_E2 = `
+  // 12 Autosave hat gefeuert
+  var saves=AUFRUFE.filter(function(x){return x.action==='tech_tag_save';});
+  pruef(saves.length>=1,'12  Autosave hat gespeichert ('+saves.length+' Aufrufe)');
+  var letzte=saves[saves.length-1].body;
+  pruef(letzte.taetigkeit==='Heizung'&&Number(letzte.spesen)===30&&Number(letzte.stunden)===7.5,
+    '12  gespeicherte Werte stimmen (Gewerk/Spesen/Stunden)');
+  pruef(getComputedStyle(r.querySelector('.rc-status')).display!=='none','12  Speicher-Anzeige der Zeile vorhanden');
+
+  // 13 weiterer Eintrag / Eintrag löschen / Rückgängig
+  var vorZahl=document.querySelectorAll('.tc-row[data-date="'+tag+'"]').length;
+  tcAddRow(tag);
+  pruef(document.querySelectorAll('.tc-row[data-date="'+tag+'"]').length===vorZahl+1,'13  "＋ weiterer Eintrag" fügt eine Zeile hinzu');
+  var neu=document.querySelectorAll('.tc-row[data-date="'+tag+'"]')[vorZahl];
+  pruef(!!neu.querySelector('.rc-del'),'13  auch die neue, ungespeicherte Zeile hat einen Löschknopf');
+  tcRowDel(neu.querySelector('.rc-del'));
+  pruef(document.querySelectorAll('.tc-row[data-date="'+tag+'"]').length===vorZahl,'13  Löschen entfernt sie wieder');
+  tcUndoRun();
+  pruef(document.querySelectorAll('.tc-row[data-date="'+tag+'"]').length===vorZahl+1,'13  Rückgängig setzt sie zurück');
+  tcRowDel(document.querySelectorAll('.tc-row[data-date="'+tag+'"]')[vorZahl].querySelector('.rc-del'));
+
+  // 14 Unterschrift zeichnen
+  var cv=document.getElementById('tc-sign-technik');
+  pruef(!!cv&&cv.height===240,'14  Unterschriftfeld 240 px hoch');
+  function stift(typ,x,y){ cv.dispatchEvent(new PointerEvent(typ,{bubbles:true,clientX:x,clientY:y,pointerId:1,pointerType:'touch'})); }
+  var box=cv.getBoundingClientRect();
+  stift('pointerdown',box.left+20,box.top+40); stift('pointermove',box.left+80,box.top+90); stift('pointerup',box.left+80,box.top+90);
+  pruef(tcSignState['tc-sign-technik'].has===true,'14  Zeichnen wird erkannt');
+  pruef(!!tcSignDataUrl('tc-sign-technik'),'14  Unterschrift liefert ein Bild');
+  var speichern=[].slice.call(document.querySelectorAll('#tc-sign-technik-wrap .tc-btn.gold'))[0];
+  pruef(speichern&&speichern.classList.contains('tc-next'),'14  ZIEL 7: "Unterschrift speichern" bekommt den goldenen Schimmer');
+
+  // 15 Unterschrift löschen + Rückgängig
+  tcSignClear('tc-sign-technik');
+  pruef(tcSignState['tc-sign-technik'].has===false,'15  Unterschrift gelöscht');
+  pruef(document.getElementById('tc-undo').classList.contains('show'),'15  Rückgängig-Pille erscheint');
+  tcUndoRun();
+  setTimeout(function(){
+    pruef(tcSignState['tc-sign-technik'].has===true,'15  Rückgängig holt die Unterschrift zurück');
+
+    // 16 Einreichen
+    tcSaveSign('technik');
+    setTimeout(function(){
+      var sig=AUFRUFE.filter(function(x){return x.action==='tech_wochen_sign';});
+      pruef(sig.length===1&&!!sig[0].body.data,'16  Unterschrift wird mit Bilddaten gesendet');
+      tcSubmitWoche();
+      setTimeout(function(){
+        pruef(AUFRUFE.some(function(x){return x.action==='tech_wochen_einreichen';}),'16  "Woche einreichen" ruft den Server');
+        // 17 Nichts ist unterwegs ins echte Netz gegangen
+        pruef(NETZ.length===0,'17  kein ungewollter Netzzugriff ('+NETZ.length+')');
+        ende();
+      },300);
+    },300);
+  },300);
+`;
+
 const dir = mkdtempSync(join(tmpdir(), 'wochenblatt-'));
 let fehler = 0;
-for (const [name, sz] of [['A', SZENARIO_A], ['B', SZENARIO_B], ['C', SZENARIO_C]]) {
+for (const [name, sz, sz2] of [['A', SZENARIO_A], ['B', SZENARIO_B], ['C', SZENARIO_C], ['D', SZENARIO_D], ['E', SZENARIO_E, SZENARIO_E2]]) {
   const datei = join(dir, `szenario_${name}.html`);
-  writeFileSync(datei, seite(sz));
+  writeFileSync(datei, seite(sz, sz2));
   const dom = execFileSync(CHROME, ['--headless', '--disable-gpu', '--no-sandbox',
-    '--window-size=390,844', '--virtual-time-budget=8000', '--dump-dom', `file://${datei}`],
+    '--window-size=390,844', '--touch-events=enabled', '--virtual-time-budget=9000', '--dump-dom', `file://${datei}`],
   { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
   const m = dom.match(/<pre id="ergebnis">([\s\S]*?)<\/pre>/);
   const text = m ? m[1].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"') : '(keine Ausgabe)';
   console.log(text.trim().replace(/\nFERTIG$/, ''));
+  // WICHTIG: ein Szenario, das unterwegs stirbt, hat frueher stillschweigend
+  // "bestanden" gemeldet, weil einfach kein ✗ ausgegeben wurde. Ohne die
+  // FERTIG-Marke gilt der Lauf deshalb als fehlgeschlagen.
+  if (!/FERTIG/.test(text)) {
+    console.log(`✗  Szenario ${name} ist unterwegs abgebrochen — kein FERTIG erreicht.`);
+    fehler++;
+  } else if (/✗/.test(text)) { fehler++; }
   console.log('');
-  if (/✗/.test(text)) fehler++;
 }
 console.log('─'.repeat(60));
-console.log(fehler ? `✗ ${fehler} von 3 Szenarien fehlgeschlagen` : "✓ alle 3 Szenarien bestanden");
+console.log(fehler ? `✗ ${fehler} von 5 Szenarien fehlgeschlagen` : "✓ alle 5 Szenarien bestanden");
 process.exit(fehler ? 1 : 0);

@@ -93,6 +93,23 @@ mehr im Lesefluss der Seite.**
    ausstehender Autosave sofort ausgeführt (`tcFlushOffeneSpeicherungen`).
    Eine begonnene Zeile ist damit gespeichert, bevor die Ansicht wechselt.
 
+6. **Scroll-Isolation (ZUSATZ 1).** Solange das Rad offen ist, bleibt jede
+   Geste dort, wo sie hingehört:
+   - `overscroll-behavior:contain` auf Rad und Spalten — die Bewegung läuft
+     nicht in die Seite über und umgekehrt.
+   - `touch-action:pan-y` ausschliesslich in den Rad-Spalten; Hintergrund und
+     Blatt nehmen mit `touch-action:none` gar keine Wischgeste an.
+   - Die Seite dahinter wird gesperrt (`tcSeiteSperren`: `body{position:fixed;
+     top:-Y}`) und beim Schliessen **exakt an dieselbe Scrollposition**
+     zurückgesetzt. `overflow:hidden` allein genügt auf iOS Safari nicht.
+   - Trägheit: `scroll-snap-stop:always` begrenzt eine Wischgeste auf genau
+     eine Rastung, und solange ein Finger aufliegt, wird überhaupt nicht
+     eingerastet — die Woche kann nicht mitten in der Bewegung wegspringen.
+   - Ein Tap auf den Hintergrund schliesst.
+7. **Nebenbefund beim Prüfen:** die 80-ms-Aufbausperre verschluckte
+   Wischgesten, die unmittelbar nach dem Öffnen begannen — das Rad wirkte
+   kurz tot. Eine echte Berührung schlägt die Sperre jetzt durch.
+
 Nachher (Branch `fix/tageskarten-leer`), gleiche Reproduktion:
 
 | Schritt | `.rc-body` | KW | Ladevorgänge |
