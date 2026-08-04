@@ -958,6 +958,44 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-btn{flex:1;min-width:130px;border:none;border-radius:12px;padding:13px 16px;font-weight:800;font-size:14px;cursor:pointer;text-align:center;}
 #tech-cockpit .tc-btn.gold{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
 #tech-cockpit .tc-btn.ghost{background:#131519;border:1px solid rgba(255,255,255,.09);color:#e8edf5;}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 7 (Feinschliff II) — Button-Rückmeldung. Dezente Wegweiser:
+   1. Druck  — jeder Knopf sinkt beim Antippen kurz ein.
+   2. Schimmer — die NÄCHSTE logische Aktion (.tc-next) atmet leicht golden.
+   3. Haken  — nach erfolgreichem Speichern pulst das ✓ der Zeile einmal.
+   Alles über :active bzw. eine Klasse, keine Dauer-Animation im Leerlauf.
+   prefers-reduced-motion schaltet die Bewegung ab, die Farbe bleibt.
+   ══════════════════════════════════════════════════════════════════════════ */
+#tech-cockpit .tc-btn,#tech-cockpit .tc-chip,#tech-cockpit .rc-icons button,
+#tech-cockpit .tc-mic,#tech-cockpit .tc-back,#tech-cockpit .tc-wheel-today,
+.tc-undo-btn{transition:transform .09s ease,filter .12s ease,box-shadow .18s ease;}
+#tech-cockpit .tc-btn:active,#tech-cockpit .tc-chip:active,#tech-cockpit .rc-icons button:active,
+#tech-cockpit .tc-mic:active,#tech-cockpit .tc-back:active,#tech-cockpit .tc-wheel-today:active,
+.tc-undo-btn:active{transform:scale(.955);filter:brightness(.92);}
+#tech-cockpit .tc-btn:disabled:active{transform:none;filter:none;}
+
+/* Nächste logische Aktion. Weich und langsam — ein Hinweis, kein Blinken. */
+#tech-cockpit .tc-btn.tc-next{animation:tcNextGlow 2.4s ease-in-out infinite;}
+@keyframes tcNextGlow{
+  0%,100%{box-shadow:0 0 0 0 rgba(201,169,97,0);}
+  50%    {box-shadow:0 0 0 5px rgba(201,169,97,.20),0 0 18px rgba(201,169,97,.30);}
+}
+/* Haken-Puls nach erfolgreichem Speichern einer Zeile. */
+#tech-cockpit .rc-status.saved.puls{animation:tcHakenPuls .5s ease-out;}
+@keyframes tcHakenPuls{
+  0%  {transform:scale(1);}
+  35% {transform:scale(1.5);}
+  100%{transform:scale(1);}
+}
+@media (prefers-reduced-motion:reduce){
+  #tech-cockpit .tc-btn,#tech-cockpit .tc-chip,#tech-cockpit .rc-icons button,
+  #tech-cockpit .tc-mic,#tech-cockpit .tc-back,#tech-cockpit .tc-wheel-today,
+  .tc-undo-btn{transition:none;}
+  #tech-cockpit .tc-btn:active,#tech-cockpit .tc-chip:active{transform:none;}
+  #tech-cockpit .tc-btn.tc-next{animation:none;box-shadow:0 0 0 3px rgba(201,169,97,.30);}
+  #tech-cockpit .rc-status.saved.puls{animation:none;}
+}
 #tech-cockpit .tc-back{background:transparent;border:none;color:#C9A961;font-size:13px;font-weight:700;cursor:pointer;padding:2px 0 12px;}
 #tech-cockpit .tc-lbl{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#8a97a8;font-weight:700;margin:14px 0 6px;}
 #tech-cockpit .tc-field{width:100%;background:#0f1116;border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:12px 13px;color:#e8edf5;font-size:14.5px;font-family:inherit;box-sizing:border-box;}
@@ -991,9 +1029,74 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 /* ZIEL 4b — dünner goldener Rand statt neutralem Weiss-Rand, Gold nur als
    Rahmen/Akzent (keine goldenen Flächen). */
 #tech-cockpit .tc-daycard{background:#131519;border:1px solid rgba(201,169,97,.3);border-radius:14px;overflow:hidden;box-shadow:0 6px 16px rgba(0,0,0,.22);}
-#tech-cockpit .tc-day-head{display:flex;align-items:baseline;gap:8px;padding:12px 14px 8px;}
-#tech-cockpit .tc-day-wd{font-weight:800;font-size:13px;color:#C9A961;letter-spacing:.3px;}
-#tech-cockpit .tc-day-dm{font-size:12px;color:#8a97a8;}
+#tech-cockpit .tc-day-head{display:flex;align-items:baseline;gap:9px;padding:14px 14px 9px;}
+/* ZIEL 5 — Tageskopf deutlich grösser: der Wochentag ist beim Durchblättern auf
+   der Baustelle der wichtigste Ankerpunkt der Karte. 13px → 20px. */
+#tech-cockpit .tc-day-wd{font-weight:800;font-size:20px;color:#C9A961;letter-spacing:.2px;line-height:1.15;}
+#tech-cockpit .tc-day-dm{font-size:15px;font-weight:700;color:#8a97a8;}
+
+/* ZIEL 4 (Feinschliff II) — Wochenwahl als Rad statt ‹ ›-Pfeilen.
+   Zwei Spalten (Jahr · KW mit Datumsspanne), je eine echte Scroll-Spalte mit
+   scroll-snap. Die aktive Zeile steht mittig im goldenen Band, die übrigen
+   verblassen über die Maske nach oben und unten weg. Kein natives <select>:
+   das öffnet auf iOS ein eigenes Rad und bricht die Optik.
+   TC_WHEEL_ROW_H in JS muss zu --twh passen. */
+#tech-cockpit .tc-wheel{--twh:34px;position:relative;display:flex;gap:10px;
+  background:#131519;border:1px solid rgba(201,169,97,.3);border-radius:14px;padding:6px 8px;margin-bottom:8px;}
+#tech-cockpit .tc-wheel-col{flex:1;height:calc(var(--twh)*5);overflow-y:auto;overflow-x:hidden;
+  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:relative;z-index:2;}
+#tech-cockpit .tc-wheel-col::-webkit-scrollbar{display:none;}
+#tech-cockpit .tc-wheel-col.jahr{flex:0 0 78px;}
+/* Zwei Leerzeilen oben/unten, damit auch die erste/letzte Zeile mittig einrasten kann. */
+#tech-cockpit .tc-wheel-pad{height:calc(var(--twh)*2);}
+#tech-cockpit .tc-wheel-opt{height:var(--twh);scroll-snap-align:center;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1.15;color:#8a97a8;font-size:13px;font-weight:700;
+  opacity:.38;transition:opacity .18s ease,color .18s ease,transform .18s ease;transform:scale(.9);
+  cursor:pointer;white-space:nowrap;}
+#tech-cockpit .tc-wheel-opt small{font-size:10px;font-weight:600;opacity:.85;}
+#tech-cockpit .tc-wheel-opt.near{opacity:.62;transform:scale(.95);}
+#tech-cockpit .tc-wheel-opt.sel{opacity:1;color:#C9A961;transform:scale(1);font-weight:800;}
+/* Goldenes Band + Verblassen: rein dekorativ, darf keine Taps schlucken. */
+#tech-cockpit .tc-wheel-band{position:absolute;left:6px;right:6px;top:50%;height:var(--twh);
+  transform:translateY(-50%);border-top:1px solid rgba(201,169,97,.34);border-bottom:1px solid rgba(201,169,97,.34);
+  background:rgba(201,169,97,.07);border-radius:8px;pointer-events:none;z-index:1;}
+#tech-cockpit .tc-wheel-fade{position:absolute;left:0;right:0;height:calc(var(--twh)*1.7);pointer-events:none;z-index:3;}
+#tech-cockpit .tc-wheel-fade.top{top:6px;background:linear-gradient(#131519 12%,rgba(19,21,25,0));}
+#tech-cockpit .tc-wheel-fade.bot{bottom:6px;background:linear-gradient(rgba(19,21,25,0),#131519 88%);}
+/* ZIEL 6 — Vorschlags-Chips zuoberst im Tätigkeits-Picker. Optisch klar von den
+   Kategorie-Chips getrennt, damit niemand sie für eine Kategorie hält. */
+#tech-cockpit .tc-taet-vorschlaege{padding-bottom:10px;margin-bottom:10px;border-bottom:1px dashed rgba(201,169,97,.25);}
+#tech-cockpit .tc-chip-vorschlag{border-color:rgba(201,169,97,.45);color:#e8d6a8;}
+/* Schon auf DIESEM Projekt benutzt — der stärkste Treffer, entsprechend deutlich. */
+#tech-cockpit .tc-chip-vorschlag.auf-projekt{border-color:rgba(201,169,97,.85);color:#C9A961;font-weight:800;}
+
+#tech-cockpit .tc-wheel-today{display:block;width:100%;margin-top:2px;background:none;border:none;
+  color:#8a97a8;font-size:11.5px;font-weight:700;padding:5px;cursor:pointer;}
+#tech-cockpit .tc-wheel-today.on{color:#C9A961;}
+
+/* ZIEL 1 (Feinschliff II) — Rückgängig-Pille. Liegt bewusst AUSSERHALB von
+   #tc-content: tcH() ersetzt dessen innerHTML komplett, die Pille würde sonst
+   bei jedem Neuladen der Woche mitsterben — genau in dem Moment, in dem man
+   sie braucht. Darum direkt am <body>. */
+.tc-undo{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));
+  transform:translate(-50%,140%);z-index:9000;display:flex;align-items:center;gap:12px;
+  max-width:calc(100vw - 28px);padding:11px 12px 11px 16px;border-radius:14px;
+  background:#1b1e24;border:1px solid rgba(201,169,97,.42);box-shadow:0 10px 30px rgba(0,0,0,.5);
+  opacity:0;pointer-events:none;transition:transform .24s cubic-bezier(.2,.9,.3,1),opacity .2s ease;}
+.tc-undo.show{transform:translate(-50%,0);opacity:1;pointer-events:auto;}
+.tc-undo-txt{color:#e8edf5;font-size:13px;font-weight:700;line-height:1.25;min-width:0;}
+.tc-undo-txt small{display:block;font-size:11px;font-weight:600;color:#8a97a8;margin-top:2px;}
+.tc-undo-btn{flex:0 0 auto;border:none;border-radius:10px;padding:9px 14px;cursor:pointer;
+  background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;font-weight:800;font-size:13px;}
+/* Ablaufbalken: zeigt, wie lange die Pille noch da ist. Rein visuell. */
+.tc-undo-bar{position:absolute;left:0;bottom:0;height:2px;background:#C9A961;border-radius:0 0 14px 14px;
+  width:100%;transform-origin:left center;}
+.tc-undo.show .tc-undo-bar{animation:tcUndoBar 8s linear forwards;}
+@keyframes tcUndoBar{from{transform:scaleX(1);}to{transform:scaleX(0);}}
+@media (prefers-reduced-motion:reduce){
+  .tc-undo{transition:opacity .2s ease;transform:translate(-50%,0);}
+  .tc-undo.show .tc-undo-bar{animation:none;}
+}
 #tech-cockpit .tc-row{display:block;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.06);}
 #tech-cockpit .tc-row:first-of-type{border-top:none;}
 #tech-cockpit .rc-top{display:flex;align-items:center;gap:8px;}
@@ -1077,8 +1180,18 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-sign-block:first-of-type{margin-top:8px;padding-top:0;border-top:none;}
 /* ZIEL 4a — Unterschriftsfeld ist ein Dokument-Element: immer weiss/schwarz,
    unabhängig vom dunklen Command-Center-Stil drumherum (auch im Dunkelmodus). */
-#tech-cockpit .tc-sign-pad{width:100%;height:120px;background:#ffffff;border:1px solid rgba(201,169,97,.55);border-radius:11px;touch-action:none;margin-top:8px;display:block;}
-#tech-cockpit .tc-sign-preview{width:100%;max-width:300px;height:120px;object-fit:contain;background:#ffffff;border:1px solid rgba(201,169,97,.55);border-radius:11px;margin-top:8px;display:block;}
+/* ZIEL 5 (Feinschliff II) — Unterschriftfeld doppelt so hoch (120 → 240),
+   nach unten gewachsen. Gilt für Technik und Auftraggeber.
+   ACHTUNG bei Änderungen: die Höhe steht an ZWEI Stellen und muss gleich
+   bleiben — hier im CSS und als cv.height in tcSignInit. Laufen sie
+   auseinander, ist der gezeichnete Strich gegenüber dem Finger verschoben.
+   Das exportierte PNG kommt aus demselben Canvas und wird automatisch
+   doppelt hoch — kein separater Eingriff nötig. */
+#tech-cockpit .tc-sign-pad{width:100%;height:240px;background:#ffffff;border:1px solid rgba(201,169,97,.55);border-radius:11px;touch-action:none;margin-top:8px;display:block;}
+/* ZIEL 5 — Vorschau der bereits gespeicherten Unterschrift zieht mit auf 240.
+   object-fit:contain: alte Unterschriften (noch 120 px hoch) werden dadurch
+   mittig eingepasst statt verzerrt — sie bleiben vollständig lesbar. */
+#tech-cockpit .tc-sign-preview{width:100%;max-width:300px;height:240px;object-fit:contain;background:#ffffff;border:1px solid rgba(201,169,97,.55);border-radius:11px;margin-top:8px;display:block;}
 #tech-cockpit .tc-sign-caption{font-size:11px;color:#8a97a8;text-align:center;margin-top:5px;font-weight:700;letter-spacing:.2px;}
 #tech-cockpit .tc-sign-meta{font-size:11.5px;color:#8a97a8;margin-top:6px;}
 #tech-cockpit .tc-link{font-size:12.5px;color:#C9A961;font-weight:700;cursor:pointer;margin-top:10px;text-decoration:underline;}
@@ -6502,10 +6615,15 @@ function trClearSign(){if(trSignCtx){trSignCtx.clearRect(0,0,300,120);trSignHas=
 // Dec 28 liegt immer in der letzten ISO-Woche → so erkennt man 52- vs. 53-KW-Jahre.
 function trWeeksInYear(y){ return getKW(new Date(y,11,28)); }
 // Montag der gewünschten ISO-Woche (UTC; identisch zur Backend-Berechnung mondayToFriday).
+// ZIEL 4 (Feinschliff II) — dieselbe Korrektur wie bei tcISOWeekMonday: KW1 ist
+// die Woche mit dem 4. Januar. Die alte "1.1. + (KW-1)*7"-Formel war in jedem
+// Jahr falsch, dessen 1.1. auf Fr/Sa/So fällt (2027, 2028, …).
 function trMondayOfWeek(y,kw){
-  var simple=new Date(Date.UTC(y,0,1+(kw-1)*7));
-  var dow=simple.getUTCDay()||7;
-  var monday=new Date(simple);monday.setUTCDate(simple.getUTCDate()-dow+1);
+  var jan4=new Date(Date.UTC(y,0,4));
+  var dow=jan4.getUTCDay()||7;
+  var monday=new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate()+1-dow);
+  monday.setUTCDate(monday.getUTCDate()+(kw-1)*7);
   return monday;
 }
 function trFmtDM(d){return ('0'+d.getUTCDate()).slice(-2)+'.'+('0'+(d.getUTCMonth()+1)).slice(-2)+'.';}
@@ -9312,6 +9430,73 @@ function tcSwitchToMaster(){ location.href='/gs-intern-7k2x'; }
 function tcH(html){ var c=document.getElementById('tc-content'); if(c) c.innerHTML=html; var s=document.getElementById('tech-cockpit'); if(s) s.scrollTop=0; }
 function tcEsc(s){ return (typeof gsEsc==='function')?gsEsc(s):String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 function tcToast(m){ if(typeof toast==='function') toast(m); }
+/* ZIEL 7 (Feinschliff II) — haptisches Feedback, wo das Gerät es kann.
+   navigator.vibrate gibt es auf iOS/Safari nicht; der Aufruf muss dort still
+   scheitern, nicht werfen. Bewusst sehr kurz (6–12 ms) — ein Wegweiser, kein
+   Rütteln. Wird nie im Leerlauf ausgelöst, nur nach echten Zustandswechseln. */
+function tcHaptik(ms){
+  try{ if(navigator&&typeof navigator.vibrate==='function') navigator.vibrate(ms||8); }catch(_){}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 1 (Feinschliff II) — Rückgängig-Pille.
+
+   BEWUSST KEIN globaler Undo-Stack: es gibt genau EINEN Slot. Eine neue Aktion
+   überschreibt die vorige, die dann endgültig ist. Ein Stack über die ganze App
+   würde bedeuten, dass ein Tap Minuten später etwas zurückholt, an das niemand
+   mehr denkt — bei Rapportdaten ist das gefährlicher als hilfreich.
+
+   Die Pille erscheint NICHT, wenn die Woche gesperrt ist (24h-Fenster
+   abgelaufen). Ein Tap liefe dort in ein serverseitiges 403 — lieber gar keine
+   Pille als eine, die nicht hält, was sie verspricht.
+
+   8 Sekunden, danach ist die Aktion endgültig. Der Balken am unteren Rand
+   zeigt die verbleibende Zeit.
+   ══════════════════════════════════════════════════════════════════════════ */
+var tcUndoState=null;   // {fn:Function, timer:number}
+function tcUndoEl(){
+  var el=document.getElementById('tc-undo');
+  if(!el){
+    el=document.createElement('div');
+    el.id='tc-undo'; el.className='tc-undo';
+    el.innerHTML='<div class="tc-undo-txt" id="tc-undo-txt"></div>'+
+      '<button type="button" class="tc-undo-btn" onclick="tcUndoRun()">Rückgängig</button>'+
+      '<div class="tc-undo-bar"></div>';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+// text  = was passiert ist ("Eintrag gelöscht")
+// fn    = stellt den Zustand davor wieder her
+// sub   = optionale zweite Zeile für ehrliche Einschränkungen (z.B. Fotos)
+function tcUndoShow(text,fn,sub){
+  // Gesperrte Woche → gar keine Pille. Bewusst tcCountdownInfo statt
+  // tcApplyLockState: letzteres schreibt am DOM herum, das gehört hier nicht hin.
+  var cd=tcCountdownInfo(tcWocheKopf);
+  if(cd&&cd.locked) return;
+  tcUndoClear();
+  var el=tcUndoEl();
+  var t=document.getElementById('tc-undo-txt');
+  if(t) t.innerHTML=tcEsc(text)+(sub?('<small>'+tcEsc(sub)+'</small>'):'');
+  // Balken-Animation neu starten: Klasse kurz abnehmen erzwingt den Reflow.
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  tcUndoState={fn:fn,timer:setTimeout(tcUndoHide,8000)};
+}
+function tcUndoHide(){
+  var el=document.getElementById('tc-undo'); if(el) el.classList.remove('show');
+  tcUndoClear();
+}
+function tcUndoClear(){
+  if(tcUndoState&&tcUndoState.timer) clearTimeout(tcUndoState.timer);
+  tcUndoState=null;
+}
+function tcUndoRun(){
+  if(!tcUndoState||typeof tcUndoState.fn!=='function'){ tcUndoHide(); return; }
+  var fn=tcUndoState.fn;
+  tcUndoHide();               // erst schliessen, dann handeln (kein Doppel-Tap)
+  tcHaptik(12);
+  try{ fn(); }catch(e){ tcToast('Rückgängig nicht möglich'); }
+}
 function tcStBadge(st){ st=String(st||'').toLowerCase(); return '<span class="tc-st '+tcEsc(st)+'">'+tcEsc(st||'—')+'</span>'; }
 
 function initTechCockpit(){
@@ -9330,6 +9515,9 @@ function tcBuildNav(){
 }
 function tcNavActive(v){ var n=document.getElementById('tc-nav'); if(!n) return; Array.prototype.forEach.call(n.querySelectorAll('button'),function(b){ b.classList.toggle('on',b.getAttribute('data-v')===v); }); }
 function tcGo(view){
+  // ZIEL 1 — beim Verlassen der Ansicht die Rückgängig-Pille schliessen. Ein
+  // Tap darauf würde sonst in einem Kontext wirken, den man gerade verlassen hat.
+  if(typeof tcUndoHide==='function') tcUndoHide();
   tcState.view=view; tcNavActive(view);
   if(view==='projekte') return tcRenderProjekte();
   if(view==='service')  return tcRenderService();
@@ -9515,7 +9703,10 @@ var tcWocheDefault={ziel:'',gewerk:''}; // Kopf-Vorbelegung "ganze Woche gleiche
 var TC_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'Unfall',A:'Absenzen (Grund/Dauer)'};
 var TC_GEWERK=['Sanitär','Heizung','Klima','Lüftung','Divers'];
 var TC_SPESEN_DEFAULT=[15,30,35,45];
-var TC_WD=['Mo','Di','Mi','Do','Fr','Sa','So'];
+// ZIEL 5 (Feinschliff II) — Wochentag ausgeschrieben ("Montag 20.07." statt
+// "Mo 20.07."). Nur diese eine Stelle nutzt die Liste; das Kurzformat wird
+// nirgends sonst gebraucht.
+var TC_WD=['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
 /* ZIEL 1 (Runde B) — Tätigkeitskatalog: gs_taetigkeitenkatalog.gewerk nutzt
    kleingeschriebene Slugs, die bestehende Gewerk-Chip-Zeile die deutschen
    Anzeigelabels — Mapping nur hier im Client, DB/Code-Werte bleiben unangetastet.
@@ -9535,11 +9726,29 @@ function tcISOWeekOfDate(d){
   var woche=Math.ceil((((d-yearStart)/86400000)+1)/7);
   return {jahr:d.getUTCFullYear(),woche:woche};
 }
+/* ZIEL 4 (Feinschliff II) — KORREKTUR. Die alte Fassung rechnete
+   "1. Januar + (KW-1)*7, dann auf Montag zurück". Das stimmt nur, wenn der
+   1.1. auf Mo–Do fällt. Fällt er auf Fr/Sa/So, liegt das Ergebnis eine Woche
+   zu früh: tcISOWeekMonday(2027,1) lieferte 2026-12-28 — das ist KW53/2026,
+   nicht KW1/2027. Eine Tageszeile wäre damit in der falschen Woche gelandet,
+   also im falschen Wochenrapport und in der falschen Abrechnung.
+   Jetzt nach ISO 8601: KW1 ist die Woche, die den 4. Januar enthält.
+   Gegenprobe: tcISOWeekOfDate (oben) nutzt die Donnerstags-Regel und war
+   bereits korrekt — beide Richtungen sind jetzt zueinander invers, geprüft
+   für jeden Tag 2026–2030 in scripts/test_isowoche.mjs. */
 function tcISOWeekMonday(jahr,woche){
-  var simple=new Date(Date.UTC(jahr,0,1+(woche-1)*7));
-  var dow=simple.getUTCDay()||7;
-  simple.setUTCDate(simple.getUTCDate()+1-dow);
-  return simple;
+  var jan4=new Date(Date.UTC(jahr,0,4));
+  var dow=jan4.getUTCDay()||7;                 // 1=Mo … 7=So
+  var mon=new Date(jan4);
+  mon.setUTCDate(jan4.getUTCDate()+1-dow);     // Montag der KW1
+  mon.setUTCDate(mon.getUTCDate()+(woche-1)*7);
+  return mon;
+}
+// Anzahl KW eines Jahres (52 oder 53). Der 28.12. liegt immer in der letzten KW.
+// Braucht der Wochen-Picker (ZIEL 4), damit das Rad nie eine KW53 anbietet,
+// die es im gewählten Jahr nicht gibt. 2026 IST ein 53-Wochen-Jahr.
+function tcISOWeeksInYear(jahr){
+  return tcISOWeekOfDate(new Date(Date.UTC(jahr,11,28))).woche;
 }
 function tcWeekDates(jahr,woche){
   var mon=tcISOWeekMonday(jahr,woche), out=[];
@@ -9560,6 +9769,7 @@ function tcRenderRapporte(){
   tcRenderWochenListe();
 }
 function tcRenderWochenListe(){
+  tcUndoHide();   // ZIEL 1 — Pille gehört zur Wochenansicht, nicht zur Liste
   tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Lädt…</div>');
   techApi('tech_wochen_liste',{}).then(function(d){
     if(d&&d.notMigrated){ tcH('<div class="tc-sec">Meine Rapporte</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
@@ -9577,6 +9787,8 @@ function tcRenderWochenListe(){
         : '— keine Unterschrift';
       return '<div class="tc-item" onclick="tcOpenWoche('+w.jahr+','+w.woche+')">'+
         '<div class="ti-t">KW '+w.woche+' · '+w.jahr+'</div>'+
+        // ZIEL 3 — Rapportnummer auch in der Liste (bisher nur im Wochenblatt-Kopf).
+        (w.rapport_nr?('<div class="ti-m" style="font-weight:800;color:#C9A961">'+tcEsc(w.rapport_nr)+'</div>'):'')+
         '<div class="ti-m">'+tcEsc(zeitraum)+' · '+Number(w.total_stunden||0).toFixed(2)+' h · CHF '+Number(w.total_spesen||0).toFixed(2)+'</div>'+
         '<div class="ti-m">'+stPill+(cd?(' <span class="tc-countdown-chip'+(cd.locked?' locked':'')+'">'+tcEsc(cd.text)+'</span>'):'')+'</div>'+
         '<div class="ti-m">'+tcEsc(unterschrift)+'</div>'+
@@ -9587,6 +9799,9 @@ function tcRenderWochenListe(){
 }
 function tcOpenWoche(jahr,woche){ tcLoadWoche(jahr,woche); }
 function tcOpenAktuelleWoche(){ var now=tcISOWeekOfDate(new Date()); tcLoadWoche(now.jahr,now.woche); }
+// ZIEL 4 — seit dem Wochen-Rad nicht mehr aus dem UI aufgerufen (die ‹ ›-Pfeile
+// sind weg). Bleibt als Wochensprung-Helfer stehen: rechnet über den Montag und
+// trägt dadurch Jahres-/53-Wochen-Grenzen korrekt (KW53/2026 → KW1/2027).
 function tcWocheNav(delta){
   var mon=tcISOWeekMonday(tcWocheState.jahr,tcWocheState.woche);
   mon.setUTCDate(mon.getUTCDate()+delta*7);
@@ -9662,6 +9877,7 @@ function tcGewerkChipsHtml(cur){
   }).join('');
 }
 function tcRowGewerkPick(el){
+  tcHaptik(5);   // ZIEL 7 — Chips sind die meistgetippten Elemente
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
   // Gewerk gewechselt -> ein offener Tätigkeiten-Picker zeigt sonst die falsche
@@ -9729,6 +9945,7 @@ function tcTaetDetailInput(el,code){
   var details=tcTaetDetailGet(item); details[code]=el.value; tcTaetDetailSet(item,details);
 }
 function tcTaetChipPick(el,code){
+  tcHaptik(5);
   var item=el.closest('.tc-taet-item'); if(!item) return;
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
@@ -9762,18 +9979,43 @@ function tcTaetMove(btn,dir){
   if(dir<0) item.parentNode.insertBefore(item,sib); else item.parentNode.insertBefore(sib,item);
   tcRowInput(item);
 }
+/* ZIEL 1 (Feinschliff II) — Tätigkeit löschen mit Rückgängig. Der Eintrag wird
+   an genau der Position wieder eingesetzt, an der er stand (Reihenfolge ist
+   fachlich relevant, sie geht als sortierung mit ans Backend). */
 function tcTaetRemove(btn){
   var item=btn.closest('.tc-taet-item'); if(!item) return;
   var rowEl=item.closest('[data-row]');
+  var list=item.parentNode;
+  var idx=Array.prototype.indexOf.call(list.children,item);
+  var html=item.outerHTML;
+  var bez=item.getAttribute('data-bezeichnung')||'Tätigkeit';
   item.remove();
   if(rowEl){ tcRecalcTotals(); tcScheduleSave(rowEl); }
+  tcHaptik(8);
+  tcUndoShow('„'+bez+'" entfernt',function(){
+    if(!list||!list.isConnected) return;   // Woche neu geladen → nichts zu tun
+    var knoten=tcHtmlZuKnoten(html);
+    if(idx<list.children.length) list.insertBefore(knoten,list.children[idx]);
+    else list.appendChild(knoten);
+    var r=list.closest('[data-row]');
+    if(r){ tcRecalcTotals(); tcScheduleSave(r); }
+  });
 }
 function tcTaetAdd(el){
   var rowEl=el.closest('[data-row]'); if(!rowEl) return;
   var list=rowEl.querySelector('.tc-taet-list'); if(!list) return;
   var felder=[]; try{ felder=JSON.parse(el.getAttribute('data-felder')||'[]'); }catch(e){}
-  list.insertAdjacentHTML('beforeend', tcTaetItemHtml({taetigkeit_id:el.getAttribute('data-id'),bezeichnung_snapshot:el.getAttribute('data-bez'),details:{},felder:felder}));
+  var bez=el.getAttribute('data-bez')||'Tätigkeit';
+  list.insertAdjacentHTML('beforeend', tcTaetItemHtml({taetigkeit_id:el.getAttribute('data-id'),bezeichnung_snapshot:bez,details:{},felder:felder}));
+  var neu=list.lastElementChild;
   tcRecalcTotals(); tcScheduleSave(rowEl);
+  tcHaptik(6);
+  tcUndoShow('„'+bez+'" hinzugefügt',function(){
+    if(!neu||!neu.isConnected) return;
+    var r=neu.closest('[data-row]');
+    neu.remove();
+    if(r){ tcRecalcTotals(); tcScheduleSave(r); }
+  });
 }
 function tcTaetPickerToggle(btn){
   var wrap=btn.closest('.tc-taet-wrap'); if(!wrap) return;
@@ -9781,19 +10023,72 @@ function tcTaetPickerToggle(btn){
   if(picker.style.display!=='none'){ picker.style.display='none'; return; }
   var rowEl=btn.closest('[data-row]');
   var gewerkChip=rowEl?rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel'):null;
-  picker.innerHTML=tcTaetPickerContentHtml(gewerkChip?gewerkChip.getAttribute('data-v'):'');
+  // ZIEL 6 — Projekt der Zeile mitgeben, damit die Vorschläge sekundär darauf
+  // gewichten können. Bei Abwesenheit/Serviceauftrag bleibt es leer.
+  picker.innerHTML=tcTaetPickerContentHtml(gewerkChip?gewerkChip.getAttribute('data-v'):'', tcRowProjektId(rowEl));
   picker.style.display='';
 }
-function tcTaetPickerContentHtml(gewerkLabel){
+// Projekt-Id der Zeile aus dem Ziel-Select ('p:<uuid>'), sonst null.
+function tcRowProjektId(rowEl){
+  var v=rowEl?((rowEl.querySelector('.rc-ziel')||{}).value||''):'';
+  return v.indexOf('p:')===0?v.slice(2):null;
+}
+function tcTaetPickerContentHtml(gewerkLabel,projektId){
   if(!gewerkLabel) return '<div class="tc-hint">Zuerst oben ein Gewerk wählen.</div>';
   var slug=tcTaetGewerkSlug(gewerkLabel);
   var items=TC_TAET_KATALOG.filter(function(k){return k.gewerk===slug;});
   if(!items.length) return '<div class="tc-hint">Kein Katalog für dieses Gewerk hinterlegt.</div>';
   var firstKat=items[0].kategorie;
   var firstItems=items.filter(function(k){return k.kategorie===firstKat;});
-  return '<input class="tc-field tc-taet-search" placeholder="Suchen…" oninput="tcTaetSearch(this)"/>'+
+  return tcTaetVorschlaegeHtml(items,projektId)+
+    '<input class="tc-field tc-taet-search" placeholder="Suchen…" oninput="tcTaetSearch(this)"/>'+
     '<div class="tc-taet-kat-chips">'+tcTaetKatChipsHtml(items,firstKat)+'</div>'+
     '<div class="tc-taet-item-chips">'+tcTaetItemChipsHtml(firstItems)+'</div>';
+}
+
+/* ZIEL 6 (Feinschliff II) — Vorschläge zuoberst im Picker, direkt antippbar,
+   ohne vorher eine Kategorie zu wählen. Bis zu sechs.
+
+   Reihenfolge: was DIESER Techniker am häufigsten benutzt (verwendet_anzahl,
+   serverseitig auf seine eigenen Rapporte gefiltert), innerhalb des bereits
+   gewählten Gewerks; wer dieselbe Tätigkeit schon auf DIESEM Projekt erfasst
+   hat, wird zusätzlich hochgezogen. Gleichstand entscheidet "zuletzt benutzt".
+
+   Ohne eigene Historie erscheint die Zeile GAR NICHT. Sechs Katalogeinträge in
+   Katalogreihenfolge wären keine Vorschläge, sondern Rauschen — dafür sind die
+   Kategorie-Chips darunter da. */
+var TC_TAET_VORSCHLAG_MAX=6;
+function tcTaetVorschlaegeHtml(items,projektId){
+  var mitHistorie=items.filter(function(k){return (k.verwendet_anzahl||0)>0;});
+  if(!mitHistorie.length) return '';
+  var rang=mitHistorie.map(function(k){
+    var aufProjekt=(projektId&&k.verwendet_projekte&&k.verwendet_projekte[projektId])||0;
+    return {
+      k:k,
+      // Projektbezug wiegt schwer, ersetzt aber die Gesamthäufigkeit nicht:
+      // etwas, das der Techniker überall dauernd macht, bleibt weit vorne.
+      score:(k.verwendet_anzahl||0)+aufProjekt*3,
+      aufProjekt:aufProjekt,
+      zuletzt:k.verwendet_zuletzt||'',
+    };
+  }).sort(function(a,b){
+    if(a.score!==b.score) return b.score-a.score;
+    if(a.zuletzt!==b.zuletzt) return a.zuletzt>b.zuletzt?-1:1;
+    return (a.k.sortierung||0)-(b.k.sortierung||0);
+  }).slice(0,TC_TAET_VORSCHLAG_MAX);
+
+  var chips=rang.map(function(r){
+    var k=r.k;
+    return '<div class="tc-chip tc-chip-vorschlag'+(r.aufProjekt?' auf-projekt':'')+'"'+
+      ' data-id="'+tcEsc(k.id)+'" data-bez="'+tcEsc(k.bezeichnung)+'"'+
+      ' data-felder=\''+tcEsc(JSON.stringify((k.detailfelder&&k.detailfelder.felder)||[]))+'\''+
+      ' title="'+tcEsc(k.kategorie+' · '+(k.verwendet_anzahl||0)+'× benutzt'+(r.aufProjekt?(', davon '+r.aufProjekt+'× auf diesem Projekt'):''))+'"'+
+      ' onclick="tcTaetAdd(this)">'+tcEsc(k.bezeichnung)+'</div>';
+  }).join('');
+  return '<div class="tc-taet-vorschlaege">'+
+      '<div class="tc-lbl" style="margin-top:0">Häufig von dir'+(projektId?' · auf diesem Projekt zuerst':'')+'</div>'+
+      '<div class="tc-chips">'+chips+'</div>'+
+    '</div>';
 }
 function tcTaetKatChipsHtml(items,curKat){
   var kats=[]; items.forEach(function(k){ if(kats.indexOf(k.kategorie)<0) kats.push(k.kategorie); });
@@ -9902,6 +10197,7 @@ function tcSpesenChipsHtml(saetze,cur){
   }).join('');
 }
 function tcSpesenChipPick(el){
+  tcHaptik(5);
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
   var inp=wrap.parentNode.querySelector('.f-spesen');
@@ -9917,6 +10213,7 @@ function tcTimeChipsHtml(kind,cur){
   }).join('');
 }
 function tcTimeChipPick(el,kind){
+  tcHaptik(5);
   var wrap=el.parentNode; Array.prototype.forEach.call(wrap.querySelectorAll('.tc-chip'),function(x){x.classList.remove('sel');});
   el.classList.add('sel');
   var rowEl=el.closest('[data-row]'); if(!rowEl) return;
@@ -9966,12 +10263,12 @@ function tcRenderWoche(){
 
   var cd=tcCountdownInfo(kopf);
   var backLink='<button type="button" class="tc-back" onclick="tcRenderWochenListe()">‹ Meine Rapporte</button>';
-  var nav='<div class="tc-wknav" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">'+
-    '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(-1)">‹</button>'+
-    '<div style="text-align:center;flex:1"><div class="ti-t">KW '+woche+' · '+jahr+'</div>'+(kopf.rapport_nr?('<div class="ti-m">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+
+  // ZIEL 4 — Rad statt ‹ ›. Der Kopf darunter behält Rapportnummer + Countdown.
+  var nav=tcWheelHtml(jahr,woche)+
+    '<div class="tc-wknav" style="text-align:center;margin-bottom:6px">'+
+      (kopf.rapport_nr?('<div class="ti-m" style="font-weight:800;color:#C9A961">'+tcEsc(kopf.rapport_nr)+'</div>'):'')+
       (cd?('<div class="tc-countdown-chip'+(cd.locked?' locked':'')+'" id="tc-countdown">'+tcEsc(cd.text)+'</div>'):'<div id="tc-countdown" style="display:none"></div>')+
-    '</div>'+
-    '<button class="tc-btn ghost" style="width:44px;flex:0 0 auto" onclick="tcWocheNav(1)">›</button></div>';
+    '</div>';
   var metaParts=[kopf.hauptkunde_name,kopf.hauptprojekt_name,(authTechName||'Techniker')].filter(Boolean);
   var meta=metaParts.length?('<div class="tc-kopfmeta">'+tcEsc(metaParts.join(' · '))+'</div>'):'';
   var prefill='<div class="tc-lbl" style="margin-top:14px">Ganze Woche gleiches Projekt? Einmal wählen, füllt leere Tage vor:</div>'+tcPrefillHtml();
@@ -9983,7 +10280,9 @@ function tcRenderWoche(){
     tcRowSeq[date]=Math.max(list.length,1);
     var dayHead='<div class="tc-day-head"><span class="tc-day-wd">'+TC_WD[tcWeekdayIdx(date)]+'</span><span class="tc-day-dm">'+tcFmtDM(date)+'</span></div>';
     var entries=list.length?list.map(function(z,idx){ return tcRowHtml(date,idx,z,idx===list.length-1); }).join(''):tcRowHtml(date,0,null,true);
-    return '<div class="tc-daycard">'+dayHead+entries+'</div>';
+    // data-daycard: nötig, damit tcDayFixup die Karte auch dann noch findet,
+    // wenn ihre letzte Zeile gerade entfernt wurde (ZIEL 1).
+    return '<div class="tc-daycard" data-daycard="'+date+'">'+dayHead+entries+'</div>';
   }).join('');
   var fuss='<div class="tc-foottotal-row">'+
     '<div class="ft"><span class="lbl">Normalstunden</span><span class="val" id="tc-tot-std">0.00 h</span></div>'+
@@ -10000,9 +10299,134 @@ function tcRenderWoche(){
   tcApplyUZVisibility();
   tcSignInit('tc-sign-technik');
   tcSignInit('tc-sign-kunde');
+  tcWheelInit();
   if(tcCountdownTimer) clearInterval(tcCountdownTimer);
   tcApplyLockState();
   tcCountdownTimer=setInterval(tcApplyLockState,60000);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZIEL 4 — Kalenderwochen-Rad (Uber-Stil). Zwei Spalten: Jahr und KW mit
+   Datumsspanne. Echtes Touch-Scrollen mit CSS scroll-snap, kein natives
+   <select> (das öffnet auf iOS ein eigenes Rad und bricht die Optik).
+
+   Zwei Fallen, die hier bewusst behandelt sind:
+   1. tcLoadWoche() rendert die GANZE Seite neu, das Rad also auch. Würde das
+      Setzen der Scrollposition danach den scroll-Handler auslösen, liefe eine
+      Endlosschleife aus Laden→Rendern→Scrollen→Laden. Deshalb tcWheelBusy.
+   2. Jahreswechsel ändert die Zahl der Wochen (2026 hat 53, 2027 nur 52).
+      Die KW-Spalte wird darum bei Jahreswechsel neu gebaut und die Woche auf
+      das Maximum des neuen Jahres geklemmt.
+   ══════════════════════════════════════════════════════════════════════════ */
+var TC_WHEEL_ROW_H=34;      // muss zu --twh im CSS passen
+var tcWheelBusy=false;      // unterdrückt den scroll-Handler während des Aufbaus
+var tcWheelTimer=null;
+
+function tcWheelJahre(){
+  var jetzt=tcISOWeekOfDate(new Date()).jahr, out=[];
+  for(var j=jetzt-2;j<=jetzt+1;j++) out.push(j);
+  return out;
+}
+function tcWheelOptHtml(val,label,sub,sel){
+  return '<div class="tc-wheel-opt'+(sel?' sel':'')+'" data-v="'+val+'" onclick="tcWheelTap(this)">'+
+    '<span>'+tcEsc(label)+'</span>'+(sub?('<small>'+tcEsc(sub)+'</small>'):'')+'</div>';
+}
+function tcWheelWochenOptsHtml(jahr,woche){
+  var n=tcISOWeeksInYear(jahr), html='';
+  for(var w=1;w<=n;w++){
+    var d=tcWeekDates(jahr,w);
+    html+=tcWheelOptHtml(w,'KW '+w,tcFmtDM(d[0])+'–'+tcFmtDM(d[6]),w===woche);
+  }
+  return html;
+}
+function tcWheelHtml(jahr,woche){
+  var pad='<div class="tc-wheel-pad"></div>';
+  var jahrOpts=tcWheelJahre().map(function(j){ return tcWheelOptHtml(j,String(j),'',j===jahr); }).join('');
+  var now=tcISOWeekOfDate(new Date());
+  var istJetzt=(jahr===now.jahr&&woche===now.woche);
+  return '<div class="tc-wheel" id="tc-wheel">'+
+      '<div class="tc-wheel-band"></div>'+
+      '<div class="tc-wheel-col jahr" id="tc-wheel-jahr" data-kind="jahr">'+pad+jahrOpts+pad+'</div>'+
+      '<div class="tc-wheel-col" id="tc-wheel-woche" data-kind="woche">'+pad+tcWheelWochenOptsHtml(jahr,woche)+pad+'</div>'+
+      '<div class="tc-wheel-fade top"></div><div class="tc-wheel-fade bot"></div>'+
+    '</div>'+
+    '<button type="button" class="tc-wheel-today'+(istJetzt?' on':'')+'" onclick="tcWheelHeute()">'+
+      (istJetzt?'● Aktuelle Woche':'↩︎ Zur aktuellen Woche')+'</button>';
+}
+// Aktive Zeile jeder Spalte mittig einrasten lassen, ohne den Handler zu wecken.
+function tcWheelInit(){
+  var w=document.getElementById('tc-wheel'); if(!w) return;
+  tcWheelBusy=true;
+  ['tc-wheel-jahr','tc-wheel-woche'].forEach(function(id){
+    var col=document.getElementById(id); if(!col) return;
+    var sel=col.querySelector('.tc-wheel-opt.sel');
+    var opts=col.querySelectorAll('.tc-wheel-opt');
+    var idx=sel?Array.prototype.indexOf.call(opts,sel):0;
+    col.scrollTop=idx*TC_WHEEL_ROW_H;
+    col.onscroll=tcWheelScroll;
+    tcWheelPaint(col);
+  });
+  setTimeout(function(){ tcWheelBusy=false; },80);
+}
+// Nähe zur Mitte als Optik: sel / near / verblasst.
+function tcWheelPaint(col){
+  var idx=Math.round(col.scrollTop/TC_WHEEL_ROW_H);
+  Array.prototype.forEach.call(col.querySelectorAll('.tc-wheel-opt'),function(o,i){
+    o.classList.toggle('sel',i===idx);
+    o.classList.toggle('near',Math.abs(i-idx)===1);
+  });
+  return idx;
+}
+function tcWheelValue(col){
+  var opts=col.querySelectorAll('.tc-wheel-opt');
+  var o=opts[Math.max(0,Math.min(opts.length-1,Math.round(col.scrollTop/TC_WHEEL_ROW_H)))];
+  return o?Number(o.getAttribute('data-v')):null;
+}
+function tcWheelScroll(e){
+  var col=e.target||e.currentTarget; if(!col) return;
+  tcWheelPaint(col);
+  if(tcWheelBusy) return;
+  if(tcWheelTimer) clearTimeout(tcWheelTimer);
+  // 140 ms nach dem letzten Scroll-Ereignis gilt das Rad als eingerastet.
+  tcWheelTimer=setTimeout(function(){ tcWheelSettle(col.getAttribute('data-kind')); },140);
+}
+function tcWheelSettle(kind){
+  var jc=document.getElementById('tc-wheel-jahr'), wc=document.getElementById('tc-wheel-woche');
+  if(!jc||!wc) return;
+  var jahr=tcWheelValue(jc); if(!jahr) return;
+  if(kind==='jahr'&&jahr!==tcWocheState.jahr){
+    // Jahr gewechselt: KW-Spalte neu aufbauen (52 vs. 53 Wochen) und die Woche
+    // auf das Maximum des neuen Jahres klemmen.
+    var max=tcISOWeeksInYear(jahr);
+    var woche=Math.min(tcWocheState.woche||1,max);
+    tcWheelBusy=true;
+    wc.innerHTML='<div class="tc-wheel-pad"></div>'+tcWheelWochenOptsHtml(jahr,woche)+'<div class="tc-wheel-pad"></div>';
+    wc.scrollTop=(woche-1)*TC_WHEEL_ROW_H;
+    tcWheelPaint(wc);
+    setTimeout(function(){ tcWheelBusy=false; },80);
+    tcHaptik(8);
+    tcLoadWoche(jahr,woche);
+    return;
+  }
+  var w2=tcWheelValue(wc); if(!w2) return;
+  if(jahr===tcWocheState.jahr&&w2===tcWocheState.woche) return; // nichts geändert
+  tcHaptik(8);
+  tcLoadWoche(jahr,w2);
+}
+// Direkter Tap auf eine Zeile — schneller als scrollen, gleiche Wirkung.
+function tcWheelTap(el){
+  var col=el.closest('.tc-wheel-col'); if(!col) return;
+  var opts=col.querySelectorAll('.tc-wheel-opt');
+  var idx=Array.prototype.indexOf.call(opts,el);
+  col.scrollTo({top:idx*TC_WHEEL_ROW_H,behavior:'smooth'});
+  if(tcWheelTimer) clearTimeout(tcWheelTimer);
+  tcWheelTimer=setTimeout(function(){ tcWheelSettle(col.getAttribute('data-kind')); },260);
+}
+function tcWheelHeute(){
+  var now=tcISOWeekOfDate(new Date());
+  if(now.jahr===tcWocheState.jahr&&now.woche===tcWocheState.woche) return;
+  tcHaptik(8);
+  tcLoadWoche(now.jahr,now.woche);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -10075,6 +10499,10 @@ function tcEinreichenHtml(kopf){
       '<div class="tc-link" onclick="tcSignFolgt()">Unterschrift folgt (Grund angeben)</div>';
   }
   var submitted=kopf&&kopf.status==='eingereicht';
+  // ZIEL 7 — Schimmer auf "Woche einreichen", sobald die Technik-Unterschrift
+  // steht: ab da ist das die nächste logische Aktion (ohne sie lehnt der Server
+  // das Einreichen ohnehin ab, siehe einreichenWoche).
+  var submitNext=(!submitted&&techDone)?' tc-next':'';
   return '<div class="tc-card tc-sign-card">'+
     '<div class="tc-sec" style="margin-top:0">Unterschriften</div>'+
     '<div class="tc-sign-block" id="tc-sign-technik-wrap"><div class="tc-lbl">Monteur/Techniker — '+techName+'</div>'+techBlock+'</div>'+
@@ -10082,7 +10510,7 @@ function tcEinreichenHtml(kopf){
     '<div class="tc-submit-row">'+
       (submitted
         ? '<div class="tc-submit-done">✓ Woche eingereicht am '+tcEsc(tcFmtDT(kopf.eingereicht_am))+'</div>'
-        : '<button type="button" class="tc-btn gold tc-submit-btn" id="tc-submit-btn" onclick="tcSubmitWoche()">📋 Woche einreichen</button>')+
+        : '<button type="button" class="tc-btn gold tc-submit-btn'+submitNext+'" id="tc-submit-btn" onclick="tcSubmitWoche()">📋 Woche einreichen</button>')+
     '</div>'+
   '</div>';
 }
@@ -10118,7 +10546,8 @@ var tcSignState={};
 function tcSignInit(canvasId){
   var cv=document.getElementById(canvasId); if(!cv) return;
   var rect=cv.getBoundingClientRect();
-  cv.width=Math.max(260,Math.round(rect.width)||300); cv.height=120;
+  // ZIEL 5 — 240 muss zur Höhe von .tc-sign-pad im CSS passen (siehe dort).
+  cv.width=Math.max(260,Math.round(rect.width)||300); cv.height=240;
   var ctx=cv.getContext('2d');
   // ZIEL 4a (Runde A2) — Unterschriftsfeld ist ein Dokument-Element: weisser
   // Grund fest in den Canvas gemalt (nicht nur CSS), damit das exportierte PNG
@@ -10129,13 +10558,51 @@ function tcSignInit(canvasId){
   var drawing=false,last=null;
   function pos(e){var r=cv.getBoundingClientRect();return {x:(e.clientX-r.left)*(cv.width/r.width),y:(e.clientY-r.top)*(cv.height/r.height)};}
   function down(e){drawing=true;last=pos(e);try{cv.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault();}
-  function move(e){if(!drawing)return;var p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;state.has=true;e.preventDefault();}
+  function move(e){if(!drawing)return;var p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;
+    // ZIEL 7 — erster Strich macht "Unterschrift speichern" zur nächsten Aktion.
+    if(!state.has){ state.has=true; tcSignGlowUpdate(canvasId); }
+    e.preventDefault();}
   function up(e){if(!drawing)return;drawing=false;try{cv.releasePointerCapture(e.pointerId);}catch(_){}}
   cv.onpointerdown=down; cv.onpointermove=move; cv.onpointerup=up; cv.onpointercancel=up;
 }
+/* ZIEL 1 (Feinschliff II) — Unterschrift löschen mit Rückgängig. Der Canvas-
+   Inhalt wird VOR dem Leeren als Bild gesichert und beim Rückgängig wieder
+   hineingezeichnet. Betrifft nur das noch nicht gespeicherte Pad; eine bereits
+   gespeicherte Unterschrift läuft über "Neu erfassen" und ist davon unberührt. */
 function tcSignClear(canvasId){
   var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
-  if(st&&cv){ st.ctx.clearRect(0,0,cv.width,cv.height); st.ctx.fillStyle='#ffffff'; st.ctx.fillRect(0,0,cv.width,cv.height); st.has=false; }
+  if(!st||!cv) return;
+  var hatte=st.has;
+  var vorher=hatte?cv.toDataURL('image/png'):null;
+  st.ctx.clearRect(0,0,cv.width,cv.height);
+  st.ctx.fillStyle='#ffffff'; st.ctx.fillRect(0,0,cv.width,cv.height);
+  st.has=false;
+  tcSignGlowUpdate(canvasId);
+  if(!hatte) return;             // leeres Pad geleert — nichts rückgängig zu machen
+  tcHaptik(8);
+  tcUndoShow('Unterschrift gelöscht',function(){
+    var st2=tcSignState[canvasId], cv2=document.getElementById(canvasId);
+    if(!st2||!cv2||!vorher) return;
+    var img=new Image();
+    img.onload=function(){
+      st2.ctx.fillStyle='#ffffff'; st2.ctx.fillRect(0,0,cv2.width,cv2.height);
+      st2.ctx.drawImage(img,0,0,cv2.width,cv2.height);
+      st2.has=true;
+      tcSignGlowUpdate(canvasId);
+    };
+    img.src=vorher;
+  });
+}
+/* ZIEL 7 (Feinschliff II) — sobald etwas gezeichnet ist, bekommt „Unterschrift
+   speichern" den goldenen Schimmer: das ist ab diesem Moment die nächste
+   logische Aktion. Wird auch von tcSignClear/dem Zeichnen selbst aufgerufen. */
+function tcSignGlowUpdate(canvasId){
+  var cv=document.getElementById(canvasId); if(!cv) return;
+  var block=cv.closest('.tc-sign-block')||cv.parentNode; if(!block) return;
+  var st=tcSignState[canvasId];
+  Array.prototype.forEach.call(block.querySelectorAll('.tc-btn.gold'),function(b){
+    b.classList.toggle('tc-next',!!(st&&st.has));
+  });
 }
 function tcSignDataUrl(canvasId){
   var st=tcSignState[canvasId], cv=document.getElementById(canvasId);
@@ -10160,6 +10627,7 @@ function tcSaveSign(wer,statusOverride){
   }
   techApi('tech_wochen_sign',body).then(function(d){
     if(d&&d.error){ tcToast(d.error); return; }
+    tcHaptik(14);   // ZIEL 7 — bestätigt den Abschluss eines echten Schritts
     tcToast('✓ Unterschrift gespeichert');
     tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
   }).catch(function(){ tcToast('Verbindungsfehler beim Speichern'); });
@@ -10170,6 +10638,7 @@ function tcSubmitWoche(){
   var btn=document.getElementById('tc-submit-btn'); if(btn){ btn.disabled=true; btn.textContent='Wird eingereicht…'; }
   techApi('tech_wochen_einreichen',{jahr:tcWocheState.jahr,woche:tcWocheState.woche}).then(function(d){
     if(d&&d.error){ tcToast(d.error); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } return; }
+    tcHaptik(18);   // ZIEL 7 — der Wochenabschluss darf sich deutlich anfühlen
     tcToast('✓ Woche eingereicht');
     tcRenderWochenListe();
   }).catch(function(){ tcToast('Verbindungsfehler'); if(btn){ btn.disabled=false; btn.textContent='📋 Woche einreichen'; } });
@@ -10240,9 +10709,12 @@ function tcRowHtml(date,idx,z,isLast){
       '<button type="button" class="tc-mic" onclick="tcArbDictate(this)">🎙️ Diktieren</button></div>'+
       tcTaetWrapHtml(z,svc)+
     '</div>'+
+    // ZIEL 1 (Feinschliff II) — Löschen IMMER anbieten, nicht erst nach dem
+    // ersten Speichern. Eine per "＋ weiterer Eintrag" erzeugte Zeile war bisher
+    // gar nicht mehr loszuwerden. Ohne id wird sie rein im Client entfernt.
     '<div class="rc-icons">'+
       '<button type="button" onclick="tcToggleDetails(this)">⋯ Notiz &amp; Fotos</button>'+
-      (rowId?'<button type="button" class="rc-del" onclick="tcRowDel(this)">🗑</button>':'')+
+      '<button type="button" class="rc-del" onclick="tcRowDel(this)">🗑</button>'+
       (isLast?'<button type="button" class="rc-plus" onclick="tcAddRow(\''+date+'\')">＋ weiterer Eintrag</button>':'')+
     '</div>'+
     '<div class="rc-details">'+tcDetailsNotizHtml(z)+tcDetailsPhotoHtml(z)+'</div>'+
@@ -10286,7 +10758,54 @@ function tcAddRow(date){
   lastRow.insertAdjacentHTML('afterend', tcRowHtml(date,idx,null,true));
   tcRowSeq[date]=idx+1;
   var oldPlus=lastRow.querySelector('.rc-plus'); if(oldPlus) oldPlus.remove();
-  tcApplyPrefillToRow(lastRow.nextElementSibling);
+  var neu=lastRow.nextElementSibling;
+  tcApplyPrefillToRow(neu);
+  tcHaptik(6);
+  // ZIEL 1 — Rückgängig. Die Zeile ist beim Anlegen noch nicht gespeichert;
+  // hat der Vorbelegungs-Automat inzwischen ein Ziel gesetzt und damit den
+  // Autosave ausgelöst, trägt sie eine data-id — dann muss auch der Server
+  // aufräumen, sonst bliebe eine Karteileiche in der Woche stehen.
+  tcUndoShow('Eintrag hinzugefügt',function(){
+    if(!neu||!neu.isConnected) return;
+    var id=neu.getAttribute('data-id');
+    var d=neu.getAttribute('data-date');
+    var t=tcRowTimers.get(neu); if(t) clearTimeout(t);   // laufenden Autosave stoppen
+    neu.remove();
+    tcDayFixup(d);
+    tcRecalcTotals();
+    if(id){
+      techApi('tech_tag_del',{id:id}).then(function(){
+        tcWocheZeilen=tcWocheZeilen.filter(function(z){return z.id!==id;});
+      }).catch(function(){ tcToast('Zeile konnte serverseitig nicht entfernt werden'); });
+    }
+  });
+}
+
+/* ZIEL 1 — nach dem Entfernen einer Zeile den Tag wieder in einen gültigen
+   Zustand bringen: bleibt keine Zeile übrig, kommt eine leere zurück (sonst
+   hätte der Tag keine Eingabemöglichkeit mehr), und die jetzt letzte Zeile
+   bekommt den "＋ weiterer Eintrag"-Knopf. */
+function tcDayFixup(date){
+  var karte=document.querySelector('[data-daycard="'+date+'"]');
+  var rows=document.querySelectorAll('.tc-row[data-date="'+date+'"]');
+  if(!rows.length){
+    if(!karte) return;
+    karte.insertAdjacentHTML('beforeend', tcRowHtml(date,0,null,true));
+    tcRowSeq[date]=1;
+    tcApplyPrefillToRow(karte.querySelector('.tc-row[data-date="'+date+'"]'));
+    tcApplyUZVisibility(); tcApplyLockState();
+    return;
+  }
+  Array.prototype.forEach.call(rows,function(r,i){
+    var plus=r.querySelector('.rc-plus');
+    if(i===rows.length-1&&!plus){
+      var b=document.createElement('button'); b.type='button'; b.className='rc-plus';
+      b.textContent='＋ weiterer Eintrag';
+      b.onclick=function(){ tcAddRow(date); };
+      var icons=r.querySelector('.rc-icons'); if(icons) icons.appendChild(b);
+    } else if(i!==rows.length-1&&plus){ plus.remove(); }
+  });
+  tcApplyLockState();
 }
 
 /* ── Live-Eingabe: Feld ändert sich → Totals sofort neu, Zeile debounced speichern ── */
@@ -10359,9 +10878,16 @@ function tcScheduleSave(rowEl){
 }
 function tcRowStatus(rowEl,state,msg){
   var el=rowEl.querySelector('.rc-status'); if(!el) return;
+  var vorher=el.className;
   el.className='rc-status '+state;
   el.textContent=state==='saving'?'⏳':state==='saved'?'✓':state==='error'?'⚠':'●';
   el.title=msg||'';
+  // ZIEL 7 — Haken pulst genau EINMAL beim Übergang nach 'saved'. Nicht bei
+  // jedem Aufruf: der Autosave läuft oft, ein Dauerpulsen wäre Effektgewitter.
+  if(state==='saved'&&vorher.indexOf('saved')<0){
+    el.classList.remove('puls'); void el.offsetWidth; el.classList.add('puls');
+    tcHaptik(6);
+  }
 }
 function tcCollectRow(rowEl){
   var datum=rowEl.getAttribute('data-date');
@@ -10432,12 +10958,9 @@ function tcMergeSavedRow(z){
   if(i>=0) tcWocheZeilen[i]=Object.assign({},tcWocheZeilen[i],z); else tcWocheZeilen.push(z);
 }
 function tcRefreshRowChrome(rowEl,z){
-  var icons=rowEl.querySelector('.rc-icons');
-  if(icons && !icons.querySelector('.rc-del')){
-    var del=document.createElement('button'); del.type='button'; del.className='rc-del'; del.textContent='🗑';
-    del.onclick=function(){ tcRowDel(del); };
-    icons.insertBefore(del, icons.querySelector('.rc-plus')||null);
-  }
+  // ZIEL 1 — der 🗑-Knopf wird seit dieser Runde IMMER gerendert (auch ohne
+  // data-id), das Nachrüsten hier entfällt. Bleibt nur der Fotoblock, der erst
+  // nach dem ersten Speichern eine tagesrapport_id zum Anhängen hat.
   var details=rowEl.querySelector('.rc-details');
   if(details && details.classList.contains('open') && !details.querySelector('.tc-details-photo')){
     var last=details.lastElementChild;
@@ -10451,16 +10974,58 @@ function tcRefreshRowChrome(rowEl,z){
     }
   }
 }
+/* ZIEL 1 (Feinschliff II) — Eintrag löschen. Zwei Fälle:
+   • ohne data-id: noch nie gespeichert, reines DOM-Element. Löschen und
+     Rückgängig laufen komplett im Client, der Server sieht davon nichts.
+   • mit data-id: serverseitig löschen. Rückgängig legt die Zeile NEU an
+     (tech_tag_save) — sie bekommt dabei eine neue id. Daran hängende Fotos
+     bleiben am Projekt, verlieren aber die Tagesbindung
+     (gs_projekt_medien.tagesrapport_id ist ON DELETE SET NULL). Genau das sagt
+     die Pille als zweite Zeile, statt es zu verschweigen.
+   Bestätigung bleibt in beiden Fällen — Pille UND confirm(), weil Löschen die
+   einzige Aktion hier ist, die Erfasstes vernichtet. */
 function tcRowDel(btn){
   var rowEl=btn.closest('[data-row]'); if(!rowEl) return;
+  var id=rowEl.getAttribute('data-id');
+  var date=rowEl.getAttribute('data-date');
+
+  if(!id){
+    if(!confirm('Diesen noch nicht gespeicherten Eintrag entfernen?')) return;
+    var vorher=rowEl.outerHTML, parent=rowEl.parentNode, next=rowEl.nextElementSibling;
+    var t=tcRowTimers.get(rowEl); if(t) clearTimeout(t);
+    rowEl.remove(); tcDayFixup(date); tcRecalcTotals(); tcHaptik(10);
+    tcUndoShow('Eintrag entfernt',function(){
+      if(!parent||!parent.isConnected) return;   // Woche wurde inzwischen neu geladen
+      if(next&&next.isConnected) parent.insertBefore(tcHtmlZuKnoten(vorher),next);
+      else parent.appendChild(tcHtmlZuKnoten(vorher));
+      tcDayFixup(date); tcRecalcTotals(); tcApplyUZVisibility();
+    });
+    return;
+  }
+
   if(!confirm('Diese Zeile wirklich löschen?')) return;
-  var id=rowEl.getAttribute('data-id'); if(!id) return;
+  // Zustand VOR dem Löschen sichern — danach ist er weg.
+  var snapshot=tcCollectRow(rowEl);
+  var zeile=tcWocheZeilen.filter(function(z){return z.id===id;})[0]||{};
+  var fotos=Number(zeile.medien_anzahl||0);
   techApi('tech_tag_del',{id:id}).then(function(d){
     if(d&&d.error){ tcToast(d.error); return; }
     tcWocheZeilen=tcWocheZeilen.filter(function(z){return z.id!==id;});
-    tcToast('Zeile gelöscht');
+    tcHaptik(10);
+    tcUndoShow('Eintrag gelöscht',function(){
+      if(!snapshot){ tcToast('Rückgängig nicht möglich'); return; }
+      techApi('tech_tag_save',snapshot).then(function(r){
+        if(r&&r.error){ tcToast(r.error); return; }
+        tcToast('✓ Eintrag wiederhergestellt');
+        tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
+      }).catch(function(){ tcToast('Verbindungsfehler beim Wiederherstellen'); });
+    }, fotos?(fotos+' Foto'+(fotos===1?'':'s')+' bleiben am Projekt, nicht mehr am Tag'):'');
     tcLoadWoche(tcWocheState.jahr,tcWocheState.woche);
   }).catch(function(){ tcToast('Verbindungsfehler'); });
+}
+// HTML-String → echter Knoten (für das Wiedereinsetzen einer entfernten Zeile).
+function tcHtmlZuKnoten(html){
+  var box=document.createElement('div'); box.innerHTML=html; return box.firstElementChild;
 }
 
 /* ── Diktieren "Ausgeführte Arbeiten": gleicher Web-Speech-Stack wie die Material-
