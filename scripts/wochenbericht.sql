@@ -57,7 +57,12 @@ CREATE TABLE IF NOT EXISTS gs_wochenberichte (
   quelle             TEXT NOT NULL DEFAULT 'projekt'
                        CHECK (quelle IN ('projekt','service')),
   projekt_id         UUID REFERENCES gs_projekte(id)        ON DELETE CASCADE,
-  service_auftrag_id UUID REFERENCES gs_service_auftrag(id) ON DELETE CASCADE,
+  -- Bewusst OHNE Fremdschlüssel. Die Spalte trägt bereits die Serviceabteilung,
+  -- der FK folgt erst beim Bau derselben (gleiches Muster wie seinerzeit
+  -- gs_tagesrapporte.service_auftrag_id, siehe schema_rollen_foto_service.sql:72
+  -- „FK wird in Feature C gesetzt"). Die Integrität hängt bis dahin am CHECK
+  -- gs_wochenberichte_bindung_chk unten, der ohne FK auskommt.
+  service_auftrag_id UUID,
 
   jahr               INT  NOT NULL CHECK (jahr BETWEEN 2000 AND 2999),
   woche              INT  NOT NULL CHECK (woche BETWEEN 1 AND 53),
@@ -90,6 +95,15 @@ COMMENT ON COLUMN gs_wochenberichte.daten IS
   'Eingefrorener Datenstand beim Versand. Spätere Korrekturen an gs_tagesrapporte ändern einen versendeten Bericht nicht.';
 COMMENT ON COLUMN gs_wochenberichte.quelle IS
   'projekt | service. service ist vorbereitet, aber noch nicht implementiert.';
+COMMENT ON COLUMN gs_wochenberichte.service_auftrag_id IS
+  'OHNE Fremdschlüssel angelegt. Der FK auf gs_service_auftrag(id) ON DELETE CASCADE wird '
+  'nachgezogen, sobald die Serviceabteilung gebaut wird — analog zu dem Weg, den '
+  'gs_tagesrapporte.service_auftrag_id genommen hat (Spalte zuerst, FK in einem zweiten '
+  'guarded DO-Block). Bis dahin sichert der CHECK gs_wochenberichte_bindung_chk, dass die '
+  'Spalte nur zusammen mit quelle=''service'' und ohne projekt_id gesetzt sein kann. '
+  'Nachtragen später mit: ALTER TABLE gs_wochenberichte ADD CONSTRAINT '
+  'gs_wochenberichte_service_fk FOREIGN KEY (service_auftrag_id) '
+  'REFERENCES gs_service_auftrag(id) ON DELETE CASCADE;';
 
 
 -- ── 3. Eindeutigkeit = Race-Schutz ─────────────────────────────────────────
