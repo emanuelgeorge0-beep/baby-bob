@@ -2776,8 +2776,6 @@ async function saveTechTag(b, scope) {
     start_zeit, end_zeit, pause_minuten, stunden_manuell, projektnummer_erfasst,
     taetigkeit: GEWERK_OPTIONS.has(b.taetigkeit) ? b.taetigkeit : null,
     spesen: (b.spesen != null && b.spesen !== '') ? num(b.spesen) : 0,
-    material: toStrArr(b.material),
-    material_positionen: matPositionen(b.material_positionen),
     arbeiten: toStrArr(b.arbeiten),
     besonderheiten: b.notiz ? String(b.notiz).slice(0, 2000) : null,
     status: b.status === 'entwurf' ? 'entwurf' : 'eingereicht',
@@ -2785,6 +2783,22 @@ async function saveTechTag(b, scope) {
     erfasst_von: scope.technikerUserId,
     rueckwirkend: datum < heute,
   });
+
+  // MATERIAL — nur schreiben, wenn der Client es tatsächlich mitgeschickt hat.
+  //
+  // Das Wochenblatt-Formular hat heute kein Materialfeld: tcCollectRow() in
+  // app.html sendet weder `material` noch `material_positionen`. Vorher standen
+  // beide Felder unbedingt im row-Objekt, also schrieb JEDES Speichern (auch der
+  // Autosave) hart '{}' und '[]' zurück — und löschte damit still, was im
+  // Arbeitsrapport an derselben Zeile erfasst worden war. Das ist Datenverlust,
+  // kein fehlendes Feature.
+  //
+  // Ein PATCH ohne den Schlüssel lässt die Spalte unangetastet; ein INSERT ohne
+  // den Schlüssel nimmt den DB-Default ('{}' bzw. '[]'). `undefined` heisst also
+  // „nicht anfassen", ein ausdrücklich gesendetes leeres Array heisst weiterhin
+  // „leeren" — das bleibt möglich, sobald die Materialerfassung gebaut wird.
+  if (b.material !== undefined) row.material = toStrArr(b.material);
+  if (b.material_positionen !== undefined) row.material_positionen = matPositionen(b.material_positionen);
 
   const notMigratedErr = (e) => /column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '');
 
