@@ -719,7 +719,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','taetigkeitenkatalog'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','wochenberichte','taetigkeitenkatalog'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -741,6 +741,7 @@ function go(v){
   else if(v==='lizenz') renderLizenz();
   else if(v==='subanfragen') renderSubAnfragen();
   else if(v==='wochenrapporte') renderWochenrapporte();
+  else if(v==='wochenberichte') renderWochenberichte();
   else if(v==='taetigkeitenkatalog') renderTaetigkeitenkatalog();
 }
 function router(){ go(curView); }
@@ -1206,6 +1207,7 @@ function renderMehr(){
   var mods=[
     {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
     {v:'wochenrapporte',ic:'📆',t:'Wochenrapporte',d:'Alle Techniker, alle Projekte – Stunden, Spesen, Material, Fotos pro KW'},
+    {v:'wochenberichte',ic:'📄',t:'Wochenbericht',d:'Projekt × KW für den Bauleiter — Tagesverlauf, Tätigkeiten, Fotos. Vorschau, PDF, Versand'},
     {v:'taetigkeitenkatalog',ic:'🗂️',t:'Tätigkeitskatalog',d:'Katalog für die Tätigkeitsauswahl im Wochenrapport pflegen (anlegen, umbenennen, sortieren, deaktivieren)'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
     {v:'lizenz',ic:'🔑',t:'Kunden & Lizenzen',d:'Pro Partner-Account Features freischalten – serverseitig durchgesetzt'},
@@ -2299,6 +2301,326 @@ function wrRowMoveSave(zid){
     if(d&&d.error){ toast(d.error); return; }
     toast('✓ Zeile verschoben'); wrPanel(''); openWochenrapport(_wrId);
   }).catch(function(){ toast('Verbindungsfehler'); });
+}
+
+// ══ WOCHENBERICHT (Projekt × KW) — das Bauleiter-Dokument ══════════════════
+// Zweites, eigenes Modul neben den Wochenrapporten (Techniker × Woche). Der
+// Wochenrapport oben wird hier NICHT angefasst.
+//
+// Eigener Endpunkt /api/wochenbericht: der nimmt den Token im Authorization-
+// Header, nicht im Body wie /api/cockpit. Deshalb ein eigener Aufrufer statt
+// api() — bewusst daneben, nicht api() umgebaut.
+function wbApi(action, params){
+  return fetch('/api/wochenbericht',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+    body:JSON.stringify(Object.assign({action:action},params||{}))})
+  .then(function(r){
+    // 401 = Token-Problem → Refresh/Logout wie ueberall. 403 = Rollen-/Eigentums-
+    // Problem → das ist eine Aussage, keine abgelaufene Sitzung; die gehoert dem
+    // Nutzer angezeigt und darf ihn nicht ausloggen.
+    if(r.status===401){ handleForbidden(); throw new Error('unauthorized'); }
+    return r.json();
+  });
+}
+
+// ISO-8601-Kalenderwoche eines Datums. Muss mit isoWocheVonDatum() in
+// lib/wochenbericht.js übereinstimmen, sonst zeigt die Auswahl eine andere
+// Woche an als der Server einsammelt.
+function wbIsoWeek(d){
+  var t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  var day=t.getUTCDay()||7;
+  t.setUTCDate(t.getUTCDate()+4-day);
+  var ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return {woche:Math.ceil((((t-ys)/86400000)+1)/7), jahr:t.getUTCFullYear()};
+}
+// Montag..Sonntag einer KW — nur für die Anzeige im Auswahlfeld.
+function wbBereich(jahr,woche){
+  var jan4=Date.UTC(jahr,0,4), dow=new Date(jan4).getUTCDay()||7;
+  var mo=new Date(jan4-(dow-1)*86400000+(woche-1)*7*86400000);
+  var so=new Date(mo.getTime()+6*86400000);
+  var f=function(x){ return ('0'+x.getUTCDate()).slice(-2)+'.'+('0'+(x.getUTCMonth()+1)).slice(-2)+'.'; };
+  return f(mo)+'–'+f(so);
+}
+function wbLetzteWochen(n){
+  var out=[], d=new Date();
+  for(var i=0;i<n;i++){ var k=wbIsoWeek(d); out.push(k); d.setDate(d.getDate()-7); }
+  return out;
+}
+
+var _wbProjekte=[], _wbSel=null, _wbDaten=null, _wbBlobUrl=null;
+
+function renderWochenberichte(){
+  $('view').innerHTML='<h2><span class="acc">📄</span> Wochenbericht</h2>'+backRow()+
+    '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+
+      'Projekt × Kalenderwoche — das Dokument für den Bauleiter. Fasst zusammen, was alle Techniker '+
+      'in der Woche auf dieses Projekt gebucht haben. Getrennt vom Wochenrapport (Techniker × Woche).</div>'+
+    '<div id="wb-picker">'+skeletonCards(1)+'</div>'+
+    '<div id="wb-vorschau"></div>'+
+    '<div id="wb-versand"></div>'+
+    '<div id="wb-liste"></div>';
+  wireBack();
+  wbFreeBlob();
+  _wbDaten=null;
+  api('pm_projekte').then(function(d){
+    if(!$('wb-picker')) return;
+    _wbProjekte=(d&&d.projekte)||[];
+    wbPaintPicker();
+  }).catch(function(){ var el=$('wb-picker'); if(el) el.innerHTML='<div class="empty">Projekte konnten nicht geladen werden.</div>'; });
+}
+
+function wbPaintPicker(){
+  if(!$('wb-picker')) return;
+  if(!_wbProjekte.length){ $('wb-picker').innerHTML='<div class="empty">Noch keine Projekte angelegt.</div>'; return; }
+  var wochen=wbLetzteWochen(16);
+  var vorauswahlP=(_wbSel&&_wbSel.projekt_id)||_wbProjekte[0].id;
+  var vorauswahlK=(_wbSel?(_wbSel.jahr+'-'+_wbSel.woche):(wochen[0].jahr+'-'+wochen[0].woche));
+  $('wb-picker').innerHTML=
+    '<div class="lcard">'+
+      '<label class="cc-sec" style="margin-top:0">Projekt</label>'+
+      '<select id="wb-projekt" class="field" style="width:100%;margin-bottom:12px">'+
+        _wbProjekte.map(function(p){
+          var lbl=(p.projektnummer?(p.projektnummer+' · '):'')+(p.name||'Projekt');
+          return '<option value="'+esc(p.id)+'"'+(p.id===vorauswahlP?' selected':'')+'>'+esc(lbl)+'</option>';
+        }).join('')+
+      '</select>'+
+      '<label class="cc-sec">Kalenderwoche</label>'+
+      '<select id="wb-kw" class="field" style="width:100%;margin-bottom:14px">'+
+        wochen.map(function(w){
+          var v=w.jahr+'-'+w.woche;
+          return '<option value="'+v+'"'+(v===vorauswahlK?' selected':'')+'>KW '+w.woche+' / '+w.jahr+' · '+wbBereich(w.jahr,w.woche)+'</option>';
+        }).join('')+
+      '</select>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="chip on" id="wb-go">Bericht erzeugen</button>'+
+        '<button class="chip" id="wb-hist">Bisherige Berichte</button>'+
+      '</div>'+
+    '</div>';
+  $('wb-go').onclick=wbVorschau;
+  $('wb-hist').onclick=wbListe;
+}
+
+function wbAuswahl(){
+  var p=$('wb-projekt'), k=$('wb-kw');
+  if(!p||!k) return null;
+  var teile=String(k.value).split('-');
+  var proj=null;
+  for(var i=0;i<_wbProjekte.length;i++) if(_wbProjekte[i].id===p.value) proj=_wbProjekte[i];
+  return {projekt_id:p.value, jahr:parseInt(teile[0],10), woche:parseInt(teile[1],10), projekt:proj};
+}
+
+// ── Vorschau: sammelt nur ein, schreibt nichts ─────────────────────────────
+function wbVorschau(){
+  var s=wbAuswahl(); if(!s) return;
+  _wbSel=s; wbFreeBlob();
+  $('wb-versand').innerHTML=''; $('wb-liste').innerHTML='';
+  $('wb-vorschau').innerHTML='<div class="cc-sec">Vorschau</div>'+skeletonCards(2);
+  wbApi('vorschau',{projekt_id:s.projekt_id,jahr:s.jahr,woche:s.woche}).then(function(d){
+    // Wer waehrend des Ladens wegnavigiert, hat das Ziel-Element nicht mehr —
+    // dann still aussteigen statt mit einer TypeError-Kaskade abzustuerzen.
+    if(!$('wb-vorschau')) return;
+    if(d&&d.notMigrated){ $('wb-vorschau').innerHTML='<div class="empty" style="padding:12px;font-size:12.5px">'+esc(d.error)+'</div>'; return; }
+    if(!d||d.error){ $('wb-vorschau').innerHTML='<div class="empty">'+esc((d&&d.error)||'Fehler')+'</div>'; return; }
+    _wbDaten=d.daten;
+    wbPaintVorschau(d.daten);
+  }).catch(function(){ var el=$('wb-vorschau'); if(el) el.innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+
+function wbStatusFarbe(st){
+  if(st==='eingereicht') return '#3dd68c';
+  if(st==='unbekannt') return '#ff8f8f';
+  return 'var(--gold)';
+}
+
+function wbPaintVorschau(dt){
+  if(!$('wb-vorschau')) return;
+  var k=dt.kopf, s=dt.summen;
+  var uz=(Number(s.uz25)||0)+(Number(s.uz50)||0)+(Number(s.uz100)||0);
+  var kachel=function(v,l){ return '<div class="cc-tile"><div class="cck">'+esc(l)+'</div><div class="ccv">'+esc(v)+'</div></div>'; };
+
+  var kopfHtml='<div class="lcard"><div class="top">'+
+      '<div class="nm">'+esc(k.titel||'Projekt')+'</div>'+
+      pmPill('KW '+k.woche+'/'+k.jahr,'var(--gold)')+'</div>'+
+    '<div class="meta">'+(k.nummer?'<span>'+esc(k.nummer)+'</span>':'')+
+      '<span class="dot">'+esc(deDate(k.von))+' – '+esc(deDate(k.bis))+'</span>'+
+      (k.kunde?'<span class="dot">'+esc(k.kunde)+'</span>':'')+'</div></div>';
+
+  var summenHtml='<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin:10px 0">'+
+    kachel(Number(s.stunden||0).toFixed(2)+' h','Stunden')+
+    kachel(uz.toFixed(2)+' h','Überzeit')+
+    kachel(String(s.tage||0),'Tage')+
+    kachel(String(s.techniker||0),'Techniker')+
+    kachel('CHF '+Number(s.spesen||0).toFixed(2),'Spesen')+
+    '</div>';
+
+  var est=dt.einreichstatus||[];
+  var offen=est.filter(function(e){ return e.status!=='eingereicht'; });
+  var estHtml='<div class="cc-sec">Einreichstatus ('+est.length+')</div>'+
+    (est.length?('<div class="list">'+est.map(function(e){
+      return '<div class="lcard"><div class="top"><div class="nm">'+esc(e.techniker)+'</div>'+
+        pmPill(e.status,wbStatusFarbe(e.status))+'</div>'+
+        '<div class="meta"><span>'+e.tage+' Tag'+(e.tage===1?'':'e')+'</span>'+
+        '<span class="dot">'+Number(e.stunden||0).toFixed(2)+' h</span>'+
+        (e.grund?'<span class="dot">'+esc(e.grund)+'</span>':'')+'</div></div>';
+    }).join('')+'</div>'):'<div class="empty">Niemand hat auf dieses Projekt gebucht.</div>');
+
+  var tageHtml='<div class="cc-sec">Tagesverlauf ('+dt.tage.length+')</div>'+
+    (dt.tage.length?('<div class="list">'+dt.tage.map(function(t){
+      return '<div class="lcard"><div class="top"><div class="nm">'+esc(t.wochentag)+', '+esc(deDate(t.datum))+'</div>'+
+        '<span class="src-tag">'+Number(t.stunden||0).toFixed(2)+' h</span></div>'+
+        t.zeilen.map(function(z){
+          var arb=(z.taetigkeiten||[]).map(function(x){
+            var det=[]; for(var kk in (x.details||{})) if(x.details[kk]!=='') det.push(kk+' '+x.details[kk]);
+            return x.bezeichnung+(det.length?(' ('+det.join(' · ')+')'):'');
+          }).concat(z.arbeiten||[]).join(' · ');
+          return '<div class="meta" style="margin-top:6px"><span>'+esc(z.techniker)+'</span>'+
+            (z.gewerk?'<span class="dot">'+esc(z.gewerk)+'</span>':'')+
+            (z.abwesenheit?'<span class="dot">abwesend: '+esc(z.abwesenheit)+'</span>':'')+
+            (arb?'<span class="dot">'+esc(arb.slice(0,110))+(arb.length>110?'…':'')+'</span>':'')+
+            (z.notiz?'<span class="dot">📝 '+esc(z.notiz.slice(0,80))+(z.notiz.length>80?'…':'')+'</span>':'')+
+            '</div>';
+        }).join('')+'</div>';
+    }).join('')+'</div>'):'<div class="empty">In dieser Woche wurde auf dieses Projekt nichts gebucht.</div>');
+
+  var fotoHtml='<div class="cc-sec">Fotos</div><div class="lcard"><div class="meta"><span>'+
+    (dt.fotos_vorhanden
+      ? (dt.fotos.length+' Foto'+(dt.fotos.length===1?'':'s')+' erfasst'+(dt.fotos.length>6?(' — 6 kommen ins PDF, '+(dt.fotos.length-6)+' werden verwiesen'):''))
+      : 'Für diesen Zeitraum liegen keine Fotos vor. Das steht auch so im Bericht.')+
+    '</span></div></div>';
+
+  var matHtml=dt.material_vorhanden
+    ? ('<div class="cc-sec">Material ('+dt.material.length+')</div><div class="lcard"><div class="meta"><span>'+
+        esc(dt.material.slice(0,6).map(function(m){ return m.bezeichnung+(m.menge!=null?(' ('+m.menge+')'):''); }).join(' · '))+
+        (dt.material.length>6?' …':'')+'</span></div></div>')
+    : '';
+
+  var hinweise=(dt.hinweise||[]);
+  var hinweisHtml=hinweise.length?('<div class="cc-sec">Hinweise zur Datenlage</div><div class="lcard">'+
+    hinweise.map(function(h){ return '<div class="meta"><span>• '+esc(h)+'</span></div>'; }).join('')+'</div>'):'';
+
+  var warnung=offen.length?('<div class="lcard" style="border-color:var(--gold-line);margin-top:10px"><div class="meta"><span>'+
+    '⚠ '+offen.length+' Techniker '+(offen.length===1?'hat':'haben')+' die Woche nicht eingereicht. Der Bericht sagt das ausdrücklich — versenden ist trotzdem möglich.'+
+    '</span></div></div>'):'';
+
+  var aktionen='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0">'+
+      '<button class="chip on" id="wb-pdf">PDF erzeugen</button>'+
+      '<button class="chip" id="wb-send-open">✉️ Versenden…</button>'+
+    '</div><div id="wb-pdfbox"></div>';
+
+  $('wb-vorschau').innerHTML='<div class="cc-sec">Vorschau</div>'+kopfHtml+summenHtml+warnung+
+    estHtml+tageHtml+matHtml+fotoHtml+hinweisHtml+aktionen;
+  $('wb-pdf').onclick=wbPdf;
+  $('wb-send-open').onclick=wbVersandForm;
+}
+
+// ── PDF: erzeugen, ansehen, herunterladen ──────────────────────────────────
+function wbFreeBlob(){ if(_wbBlobUrl){ try{ URL.revokeObjectURL(_wbBlobUrl); }catch(e){} _wbBlobUrl=null; } }
+function wbB64ToBlob(b64){
+  var bin=atob(b64), len=bin.length, arr=new Uint8Array(len);
+  for(var i=0;i<len;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:'application/pdf'});
+}
+function wbPdf(){
+  var s=_wbSel; if(!s) return;
+  var btn=$('wb-pdf'); if(btn){ btn.disabled=true; btn.textContent='Erzeuge…'; }
+  wbFreeBlob();
+  $('wb-pdfbox').innerHTML='';
+  wbApi('pdf',{projekt_id:s.projekt_id,jahr:s.jahr,woche:s.woche}).then(function(d){
+    if(btn){ btn.disabled=false; btn.textContent='PDF erzeugen'; }
+    if(!$('wb-pdfbox')) return;
+    if(!d||d.error||!d.pdf_base64){ toast((d&&d.error)||'PDF fehlgeschlagen'); return; }
+    var blob=wbB64ToBlob(d.pdf_base64);
+    _wbBlobUrl=URL.createObjectURL(blob);
+    // Öffnen bewusst als echter <a target="_blank">, den der Nutzer antippt —
+    // ein window.open() nach dem asynchronen Laden fängt der Popup-Blocker ab.
+    $('wb-pdfbox').innerHTML='<div class="lcard"><div class="top">'+
+        '<div class="nm">'+esc(d.filename)+'</div>'+
+        pmPill(Math.round(blob.size/1024)+' KB','var(--gold)')+'</div>'+
+      '<div class="meta"><span>'+esc(d.bericht.bericht_nr||'')+'</span>'+
+        '<span class="dot">'+(d.fotos_im_pdf||0)+' Foto(s) eingebettet</span>'+
+        (d.aus_snapshot?'<span class="dot">aus eingefrorenem Stand</span>':'')+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+        '<a class="chip on" href="'+_wbBlobUrl+'" target="_blank" rel="noopener" style="text-decoration:none">📄 Ansehen</a>'+
+        '<a class="chip" href="'+_wbBlobUrl+'" download="'+esc(d.filename)+'" style="text-decoration:none">⬇ Herunterladen</a>'+
+      '</div></div>';
+    toast('✓ PDF erzeugt');
+  }).catch(function(){
+    if(btn){ btn.disabled=false; btn.textContent='PDF erzeugen'; }
+    toast('Verbindungsfehler');
+  });
+}
+
+// ── Versand ────────────────────────────────────────────────────────────────
+function wbVersandForm(){
+  var s=_wbSel; if(!s||!_wbDaten) return;
+  var vor=(_wbDaten.kopf&&_wbDaten.kopf.ansprech_email)||'';
+  var offen=(_wbDaten.einreichstatus||[]).filter(function(e){ return e.status!=='eingereicht'; });
+  $('wb-versand').innerHTML='<div class="cc-sec">Versand</div>'+
+    '<div class="lcard">'+
+      '<div class="meta" style="margin-bottom:10px"><span>Der Bericht geht als PDF an die Empfänger und wird dabei '+
+        '<strong>eingefroren</strong>: spätere Korrekturen an Tageszeilen ändern ihn nicht mehr.</span></div>'+
+      (offen.length?('<div class="meta" style="margin-bottom:10px"><span style="color:var(--gold)">⚠ '+offen.length+
+        ' Techniker noch nicht eingereicht: '+esc(offen.map(function(e){return e.techniker;}).join(', '))+'</span></div>'):'')+
+      '<label class="cc-sec" style="margin-top:0">Empfänger (mehrere mit Komma)</label>'+
+      '<input id="wb-empf" class="field" style="width:100%" type="text" inputmode="email" autocapitalize="off" '+
+        'placeholder="bauleiter@firma.ch" value="'+esc(vor)+'"/>'+
+      (vor?'<div class="meta" style="margin-top:6px"><span>vorbelegt aus der Projekt-Ansprechperson</span></div>'
+          :'<div class="meta" style="margin-top:6px"><span>Beim Projekt ist keine Ansprechperson mit E-Mail hinterlegt — bitte Adresse eintragen.</span></div>')+
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
+        '<button class="chip on" id="wb-send">✉️ Jetzt versenden</button>'+
+        '<button class="chip" id="wb-send-abort">Abbrechen</button>'+
+      '</div>'+
+      '<div id="wb-send-out"></div>'+
+    '</div>';
+  $('wb-send-abort').onclick=function(){ $('wb-versand').innerHTML=''; };
+  $('wb-send').onclick=wbSend;
+  var inp=$('wb-empf'); if(inp) inp.focus();
+}
+
+function wbSend(){
+  var s=_wbSel; if(!s) return;
+  var raw=(($('wb-empf')||{}).value||'').trim();
+  if(!raw){ toast('Bitte mindestens eine Empfängeradresse eintragen'); return; }
+  var btn=$('wb-send'); if(btn){ btn.disabled=true; btn.textContent='Sendet…'; }
+  wbApi('versenden',{projekt_id:s.projekt_id,jahr:s.jahr,woche:s.woche,empfaenger:raw}).then(function(d){
+    if(btn){ btn.disabled=false; btn.textContent='✉️ Jetzt versenden'; }
+    if(!$('wb-send-out')) return;
+    d=d||{};
+    if(d.error && !d.versendet){
+      $('wb-send-out').innerHTML='<div class="meta" style="margin-top:10px"><span style="color:#ff8f8f">✗ '+esc(d.error)+'</span></div>';
+      toast('Versand fehlgeschlagen');
+      return;
+    }
+    var extra=(d.protokoll_hinweis?('<div class="meta" style="margin-top:6px"><span>'+esc(d.protokoll_hinweis)+'</span></div>'):'');
+    $('wb-send-out').innerHTML='<div class="meta" style="margin-top:10px"><span style="color:#3dd68c">✓ Versendet an '+
+      esc((d.empfaenger||[]).join(', '))+'</span></div>'+
+      '<div class="meta" style="margin-top:4px"><span>'+esc(d.bericht&&d.bericht.bericht_nr||'')+
+      ' · eingefroren · '+(d.fotos_im_pdf||0)+' Foto(s) im PDF</span></div>'+extra;
+    toast('✓ Wochenbericht versendet');
+    wbListe();
+  }).catch(function(){
+    if(btn){ btn.disabled=false; btn.textContent='✉️ Jetzt versenden'; }
+    toast('Verbindungsfehler');
+  });
+}
+
+// ── Bisherige Berichte des gewählten Projekts ──────────────────────────────
+function wbListe(){
+  var s=_wbSel||wbAuswahl(); if(!s) return;
+  $('wb-liste').innerHTML='<div class="cc-sec">Bisherige Berichte</div>'+skeletonCards(2);
+  wbApi('liste',{projekt_id:s.projekt_id,jahr:s.jahr,woche:s.woche}).then(function(d){
+    if(!$('wb-liste')) return;
+    if(!d||d.error){ $('wb-liste').innerHTML='<div class="cc-sec">Bisherige Berichte</div><div class="empty">'+esc((d&&d.error)||'Fehler')+'</div>'; return; }
+    var b=d.berichte||[];
+    $('wb-liste').innerHTML='<div class="cc-sec">Bisherige Berichte ('+b.length+')</div>'+
+      (b.length?('<div class="list">'+b.map(function(x){
+        return '<div class="lcard"><div class="top"><div class="nm">KW '+esc(x.woche)+' / '+esc(x.jahr)+'</div>'+
+          pmPill(x.status,x.status==='versendet'?'#3dd68c':'var(--gold)')+'</div>'+
+          '<div class="meta"><span>'+esc(x.bericht_nr||'—')+'</span>'+
+          (x.versendet_am?'<span class="dot">'+esc(deDateTime(x.versendet_am))+'</span>':'')+
+          ((x.empfaenger&&x.empfaenger.length)?'<span class="dot">'+esc(x.empfaenger.join(', '))+'</span>':'')+
+          '</div></div>';
+      }).join('')+'</div>'):'<div class="empty">Für dieses Projekt wurde noch kein Wochenbericht erzeugt.</div>');
+  }).catch(function(){ var el=$('wb-liste'); if(el) el.innerHTML='<div class="cc-sec">Bisherige Berichte</div><div class="empty">Verbindungsfehler.</div>'; });
 }
 
 // ══ TÄTIGKEITSKATALOG (Runde B ZIEL 1c) — Katalogpflege ══
