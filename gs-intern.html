@@ -2319,8 +2319,31 @@ function wbApi(action, params){
     // Problem → das ist eine Aussage, keine abgelaufene Sitzung; die gehoert dem
     // Nutzer angezeigt und darf ihn nicht ausloggen.
     if(r.status===401){ handleForbidden(); throw new Error('unauthorized'); }
-    return r.json();
+    // Erst Text holen, dann selbst parsen. Ein blindes r.json() macht aus jeder
+    // Nicht-JSON-Antwort einen Parse-Fehler, der im .catch() als
+    // "Verbindungsfehler." landet — und genau das hat die echte Ursache
+    // verschluckt, als /api/wochenbericht beim Modul-Laden abstuerzte und Vercel
+    // text/plain ("A server error has occurred") zurueckgab. Ab hier kommt der
+    // Serverfehler als Klartext im Cockpit an: vorschau, pdf, versenden, liste
+    // rendern alle d.error.
+    return r.text().then(function(t){
+      var d=null;
+      try{ d=JSON.parse(t); }catch(e){}
+      if(d && typeof d==='object') return d;
+      return {error:wbServerfehler(r,t), serverfehler:true};
+    });
   });
+}
+
+// Nicht-JSON-Antwort in einen lesbaren Satz uebersetzen. HTML-Fehlerseiten
+// werden entschaerft (Tags raus), damit nichts davon ins DOM gelangt und der
+// Kern der Meldung sichtbar bleibt.
+function wbServerfehler(r,t){
+  var typ=String(r.headers.get('content-type')||'ohne Typ').split(';')[0];
+  var roh=String(t||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+  var kern=roh?roh.slice(0,200):'Antwort ohne Inhalt';
+  if(r.status>=500) return 'Serverfehler '+r.status+' — die API-Funktion ist abgestuerzt, bevor sie antworten konnte. Antwort: '+kern;
+  return 'Unerwartete Antwort (HTTP '+r.status+', '+typ+'): '+kern;
 }
 
 // ISO-8601-Kalenderwoche eines Datums. Muss mit isoWocheVonDatum() in
