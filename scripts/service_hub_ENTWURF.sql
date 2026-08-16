@@ -1,6 +1,18 @@
+-- ############################################################
+-- #  E N T W U R F  —  N I C H T   A U S F U E H R E N       #
+-- ############################################################
+-- Diese Datei entstand, BEVOR klar war, dass es eine Spezifikation der
+-- Serviceabteilung gibt. Sie ist aus dem Code abgeleitet und enthaelt
+-- Annahmen (15 Status, Partner-Mitglieder, Objekt/Anlage, Sync-Metadaten),
+-- die NICHT aus einer Spezifikation stammen.
+--
+-- Bis die Spezifikation vorliegt, gilt scripts/service_minimal.sql.
+-- Diese Datei bleibt nur als Materialsammlung liegen.
+-- ############################################################
+
 -- ============================================================
--- George Solutions — Service Operations Hub
--- scripts/service_hub.sql | MANUELL im Supabase SQL Editor ausfuehren.
+-- George Solutions — Service Operations Hub (Entwurf)
+-- MANUELL im Supabase SQL Editor ausfuehren.
 -- Idempotent. Rein ADDITIV: keine Tabelle wird geloescht, keine Spalte
 -- entfernt, keine bestehende Zeile veraendert.
 -- ============================================================
