@@ -96,6 +96,9 @@ const seiten = textStreams(wb);
 ok(seiten.length >= 2, `mehrseitig (${seiten.length} Seiten)`);
 ok(seiten.every((st) => st.includes('george-solutions.ch')), 'Firmenzeile aus gs_branding auf jeder Seite');
 ok(seiten.every((st, i) => st.includes(`Seite ${i + 1} von ${seiten.length}`)), 'Seitenzahl auf jeder Seite, richtig gezählt');
+// Eine einzeln ausgedruckte Seite muss zuordenbar bleiben.
+ok(seiten.every((st, i) => st.includes(`WB-PROBE \\267 Seite ${i + 1} von`)), 'Berichtsnummer steht im Fuss jeder Seite, neben der Seitenzahl');
+ok(seiten.every((st) => /BT \/F2 6\.8 Tf/.test(st)), 'Fusskennung kleiner gesetzt als die Firmenzeile (7.5)');
 ok(seiten.slice(1).every((st) => st.includes('WB-PROBE')), 'Folgeseiten tragen die Berichtsnummer im Kopf');
 
 console.log('\n── Berichtstyp in der Akzentfarbe ───────────────────────');
@@ -122,6 +125,15 @@ const ohne = bau(false), mit = bau(true);
 ok(textStreams(ohne).length === textStreams(mit).length, 'Ausgleich kostet keine zusätzliche Seite');
 ok(tiefstes(mit) < tiefstes(ohne) - 40, `letzte Seite trägt mehr (y ${tiefstes(ohne).toFixed(0)} → ${tiefstes(mit).toFixed(0)})`);
 ok(tiefstes(bau(true)) === tiefstes(mit), 'Ausgleich ist deterministisch');
+// Der Ausgleich darf die VORDEREN Seiten nicht ausdünnen. Ohne diese Bedingung
+// landete WB-NIE-2026-31 bei 0.66/0.72: rechnerisch ausgewogen, aber Seite 1
+// brach nach einer einzigen Tageszeile ab.
+const ersteSeiteEnde = (buf) => {
+  const st = textStreams(buf)[0];
+  const ys = [...st.matchAll(/ (\d+\.\d+) Td/g)].map((m) => +m[1]).filter((v) => v > 100);
+  return ys.length ? Math.min(...ys) : 999;
+};
+ok(ersteSeiteEnde(mit) < 300, `Seite 1 bleibt gut gefüllt (endet bei y ${ersteSeiteEnde(mit).toFixed(0)})`);
 
 console.log(fail ? `\n✗ ${fail} FEHLER · ${pass} Prüfungen bestanden` : `\n✓ ALLE ${pass} Prüfungen bestanden`);
 process.exit(fail ? 1 : 0);
