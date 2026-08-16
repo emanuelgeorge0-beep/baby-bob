@@ -17,6 +17,7 @@ const U = {
   projA:     '55555555-5555-4555-8555-555555555555',
   projB:     '66666666-6666-4666-8666-666666666666',
   svcA:      '77777777-7777-4777-8777-777777777777',
+  svcC:      '77777777-7777-4777-8777-77777777777c',
   svcB:      '88888888-8888-4888-8888-888888888888',
   sw1:       '99999999-9999-4999-8999-999999999999',
   mastertech:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',   // gs_techniker.id des Master (Multirole)
@@ -36,6 +37,8 @@ const PROJ = {
 const SVC = {
   [U.svcA]: { id: U.svcA, partner_user_id: U.partA, status: 'angenommen', techs: [U.tech1row], objekt: 'Haus A', quelle: 'manuell' },
   [U.svcB]: { id: U.svcB, partner_user_id: U.partB, status: 'neu',        techs: [],           objekt: 'Haus B', quelle: 'manuell' },
+  // In Arbeit, damit der Abschluss samt Pflichtpruefung pruefbar ist.
+  [U.svcC]: { id: U.svcC, partner_user_id: U.partA, status: 'in_arbeit',  techs: [U.tech1row], objekt: 'Haus C', quelle: 'manuell' },
 };
 
 const ok  = (body) => ({ ok: true,  status: 200, json: async () => body, text: async () => JSON.stringify(body) });
@@ -98,6 +101,10 @@ global.fetch = async (url, opts = {}) => {
     return ok(Object.values(SVC).filter((s) => s.techs.includes(tid)).map((s) => ({ service_auftrag_id: s.id })));
   }
   if (url.includes('gs_service_techniker?') && url.includes('service_auftrag_id=eq.')) return ok([]);
+  // Pflicht-Abschluss liest die Tageszeilen des Auftrags. Leere Liste = nichts
+  // erfasst = Abschluss muss blockiert werden. (Ein FEHLER beim Lesen darf
+  // dagegen NICHT blockieren — das ist der Fail-open-Zweig im Server.)
+  if (url.includes('gs_tagesrapporte?') && url.includes('service_auftrag_id=eq.')) return ok([]);
   if (url.includes('gs_projekt_medien?') && method === 'GET') return ok([]);
   if (url.includes('gs_projekt_stockwerk?') && method === 'GET') return ok([]);
   if (url.includes('/storage/v1/object/upload/sign/')) return ok({ url: '/object/upload/sign/projektdateien/x?token=abc' });
@@ -152,7 +159,13 @@ async function suite() {
   check('partner erstellt Service-Auftrag → ok',    isOk(await call('tok-partA', 'svc_create', { objekt: 'Neu', beschreibung: 'x', quelle: 'sprache' })));
   check('techniker erstellt Auftrag → 403',         is403(await call('tok-tech1', 'svc_create', { objekt: 'Neu' })));
   check('partner Statuswechsel → 403',              is403(await call('tok-partA', 'svc_status', { id: U.svcA, status: 'erledigt' })));
-  check('techniker zugew. angenommen→erledigt → ok',isOk(await call('tok-tech1', 'svc_status', { id: U.svcA, status: 'erledigt' })));
+  // Fuenf Status: der Sprung angenommen→erledigt existiert nicht mehr, der Weg
+  // fuehrt ueber in_arbeit. Und 'erledigt' verlangt erfasste Arbeit.
+  check('techniker angenommen→erledigt (Sprung) → nein', !isOk(await call('tok-tech1', 'svc_status', { id: U.svcA, status: 'erledigt' })));
+  check('techniker angenommen→in_arbeit → ok',      isOk(await call('tok-tech1', 'svc_status', { id: U.svcA, status: 'in_arbeit' })));
+  const abschluss = await call('tok-tech1', 'svc_status', { id: U.svcC, status: 'erledigt' });
+  check('Abschluss ohne Arbeit blockiert + begruendet',
+    !!(abschluss.json && abschluss.json.error && (abschluss.json.abschluss_offen || []).length));
   check('techniker FREMD Statuswechsel → 403',      is403(await call('tok-tech1', 'svc_status', { id: U.svcB, status: 'erledigt' })));
   check('master neu→angenommen (svcB) → ok',        isOk(await call('tok-master', 'svc_status', { id: U.svcB, status: 'angenommen' })));
   check('master neu→erledigt (ungültig) → Fehler',  isErr(await call('tok-master', 'svc_status', { id: U.svcB, status: 'erledigt' }), 'nicht erlaubt'));

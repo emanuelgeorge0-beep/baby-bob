@@ -719,7 +719,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','wochenberichte','taetigkeitenkatalog'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','wochenberichte','taetigkeitenkatalog','service'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -743,6 +743,7 @@ function go(v){
   else if(v==='wochenrapporte') renderWochenrapporte();
   else if(v==='wochenberichte') renderWochenberichte();
   else if(v==='taetigkeitenkatalog') renderTaetigkeitenkatalog();
+  else if(v==='service') renderService();
 }
 function router(){ go(curView); }
 
@@ -1208,6 +1209,7 @@ function renderMehr(){
     {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
     {v:'wochenrapporte',ic:'📆',t:'Wochenrapporte',d:'Alle Techniker, alle Projekte – Stunden, Spesen, Material, Fotos pro KW'},
     {v:'wochenberichte',ic:'📄',t:'Wochenbericht',d:'Projekt × KW für den Bauleiter — Tagesverlauf, Tätigkeiten, Fotos. Vorschau, PDF, Versand'},
+    {v:'service',ic:'🛠️',t:'Serviceaufträge',d:'Disposition: neue Aufträge annehmen, Techniker zuweisen, Status verfolgen, Servicebericht erzeugen'},
     {v:'taetigkeitenkatalog',ic:'🗂️',t:'Tätigkeitskatalog',d:'Katalog für die Tätigkeitsauswahl im Wochenrapport pflegen (anlegen, umbenennen, sortieren, deaktivieren)'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
     {v:'lizenz',ic:'🔑',t:'Kunden & Lizenzen',d:'Pro Partner-Account Features freischalten – serverseitig durchgesetzt'},
@@ -2374,6 +2376,264 @@ function wbLetzteWochen(n){
   var out=[], d=new Date();
   for(var i=0;i<n;i++){ var k=wbIsoWeek(d); out.push(k); d.setDate(d.getDate()-7); }
   return out;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SERVICEAUFTRÄGE — Disposition
+// ══════════════════════════════════════════════════════════════════════════
+// Fünf Status, ein Weg: neu → angenommen → in_arbeit → erledigt (abgelehnt als
+// Ausstieg). Die Oberfläche zeigt NIE alle Übergänge, sondern nur den, der aus
+// dem aktuellen Zustand möglich ist — sonst muss der Disponent die Regeln
+// auswendig können.
+var SVC_STATUS=[
+  {k:'neu',        t:'Neu',        f:'var(--gold)'},
+  {k:'angenommen', t:'Angenommen', f:'var(--info)'},
+  {k:'in_arbeit',  t:'In Arbeit',  f:'var(--warn)'},
+  {k:'erledigt',   t:'Erledigt',   f:'var(--ok)'},
+  {k:'abgelehnt',  t:'Abgelehnt',  f:'var(--bad)'}
+];
+function svcMeta(k){ for(var i=0;i<SVC_STATUS.length;i++) if(SVC_STATUS[i].k===k) return SVC_STATUS[i];
+  return {k:k,t:k||'—',f:'var(--muted)'}; }
+// Erlaubte Folgeschritte des Masters — Spiegel von SVC_UEBERGAENGE im Server.
+// Der Server bleibt die Wahrheit; das hier ist nur die Anzeige.
+var SVC_NEXT={neu:['angenommen','abgelehnt'],angenommen:['in_arbeit','abgelehnt'],in_arbeit:['erledigt'],erledigt:[],abgelehnt:[]};
+var _svcListe=[], _svcFilter='offen', _svcId=null, _svcTechPool=null;
+
+function svcNr(a){ return a.auftragsnummer || ('SA-'+String(a.id||'').slice(0,8)); }
+
+function renderService(){
+  $('view').innerHTML='<h2><span class="acc">🛠️</span> Serviceaufträge</h2>'+backRow()+
+    '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+
+      'Disposition: annehmen, Techniker zuweisen, Fortschritt verfolgen, Servicebericht erzeugen.</div>'+
+    '<div id="svc-filter"></div><div id="svc-liste">'+skeletonCards(3)+'</div>';
+  wireBack();
+  svcLoad();
+}
+function svcLoad(){
+  api('svc_liste').then(function(d){
+    if(!$('svc-liste')) return;
+    if(d&&d.notMigrated){ $('svc-liste').innerHTML=migRow('Service-Tabellen nicht migriert.'); return; }
+    _svcListe=(d&&d.auftraege)||[];
+    svcPaint();
+  }).catch(function(){ var el=$('svc-liste'); if(el) el.innerHTML='<div class="empty">Serviceaufträge konnten nicht geladen werden.</div>'; });
+}
+function svcZaehler(){
+  var z={offen:0,alle:_svcListe.length};
+  SVC_STATUS.forEach(function(s){ z[s.k]=0; });
+  _svcListe.forEach(function(a){ if(z[a.status]!=null) z[a.status]++;
+    if(a.status!=='erledigt'&&a.status!=='abgelehnt') z.offen++; });
+  return z;
+}
+function svcPaint(){
+  var z=svcZaehler();
+  var chips=[{k:'offen',t:'Offen'},{k:'alle',t:'Alle'}].concat(SVC_STATUS.map(function(s){return {k:s.k,t:s.t};}));
+  $('svc-filter').innerHTML='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">'+
+    chips.map(function(c){
+      return '<span class="chip'+(_svcFilter===c.k?' on':'')+'" data-f="'+c.k+'">'+esc(c.t)+' '+(z[c.k]||0)+'</span>';
+    }).join('')+'</div>';
+  Array.prototype.forEach.call($('svc-filter').querySelectorAll('[data-f]'),function(c){
+    c.onclick=function(){ _svcFilter=c.getAttribute('data-f'); svcPaint(); };
+  });
+
+  var liste=_svcListe.filter(function(a){
+    if(_svcFilter==='alle') return true;
+    if(_svcFilter==='offen') return a.status!=='erledigt'&&a.status!=='abgelehnt';
+    return a.status===_svcFilter;
+  });
+  if(!liste.length){
+    $('svc-liste').innerHTML='<div class="empty">'+
+      (_svcFilter==='offen'?'Aktuell sind keine offenen Serviceaufträge vorhanden.'
+                           :'In dieser Ansicht liegt kein Auftrag.')+'</div>';
+    return;
+  }
+  $('svc-liste').innerHTML='<div class="list">'+liste.map(function(a){
+    var m=svcMeta(a.status);
+    var tech=(a.techniker_namen||[]).length?('👷 '+a.techniker_namen.join(', ')):'<span style="color:var(--bad)">kein Techniker</span>';
+    return '<div class="lcard" data-svc="'+esc(a.id)+'" style="cursor:pointer">'+
+      '<div class="top"><div class="nm">'+esc(a.objekt||'Serviceauftrag')+'</div>'+pmPill(m.t,m.f)+'</div>'+
+      '<div class="meta"><span>'+esc(svcNr(a))+'</span>'+
+        '<span class="dot">'+tech+'</span>'+
+        (a.stunden?'<span class="dot">'+esc(String(a.stunden))+' h</span>':'')+
+        '<span class="dot">'+esc(String(a.created_at||'').slice(0,10))+'</span></div>'+
+      (a.beschreibung?'<div class="meta" style="margin-top:6px;color:var(--muted2)">'+esc(String(a.beschreibung).slice(0,140))+'</div>':'')+
+      '</div>';
+  }).join('')+'</div>';
+  Array.prototype.forEach.call($('svc-liste').querySelectorAll('[data-svc]'),function(c){
+    c.onclick=function(){ svcOpen(c.getAttribute('data-svc')); };
+  });
+}
+
+function svcOpen(id){
+  _svcId=id;
+  $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="svc-back">‹ Serviceaufträge</span></div><div class="empty">Lädt…</div>';
+  $('svc-back').onclick=renderService;
+  api('svc_detail',{id:id}).then(function(d){
+    if(d&&d.error){ $('view').innerHTML='<div style="margin-bottom:14px"><span class="chip" id="svc-back">‹ Serviceaufträge</span></div><div class="empty">'+esc(d.error)+'</div>';
+      $('svc-back').onclick=renderService; return; }
+    svcPaintDetail(d);
+  }).catch(function(){ toast('Auftrag konnte nicht geladen werden'); });
+}
+
+function svcPaintDetail(d){
+  var a=d.auftrag, m=svcMeta(a.status);
+  var kopf='<div style="margin-bottom:14px"><span class="chip" id="svc-back">‹ Serviceaufträge</span></div>'+
+    '<h2 style="margin-bottom:4px"><span class="acc">🛠️</span> '+esc(a.objekt||'Serviceauftrag')+'</h2>'+
+    '<div class="meta" style="margin-bottom:10px">'+pmPill(m.t,m.f)+
+      '<span class="dot">'+esc(svcNr(a))+'</span>'+
+      '<span class="dot">'+esc(String(a.quelle||'manuell'))+'</span>'+
+      (d.stunden?'<span class="dot">'+esc(String(d.stunden))+' h erfasst</span>':'')+'</div>';
+
+  // ── Kontextabhängige Aktionen: nur was jetzt möglich ist ──
+  var next=SVC_NEXT[a.status]||[];
+  var actions=next.map(function(k){
+    var mm=svcMeta(k);
+    return '<button class="chip'+(k==='abgelehnt'?'':' on')+'" data-to="'+k+'">'+
+      (k==='angenommen'?'✓ Annehmen':k==='in_arbeit'?'▶ Arbeit starten':k==='erledigt'?'✓ Abschliessen':'✕ Ablehnen')+'</button>';
+  }).join('');
+  var sperre='';
+  if((d.abschluss_offen||[]).length){
+    sperre='<div class="meta" style="margin-top:8px;color:var(--warn)">⚠ '+esc(d.abschluss_offen.join(' '))+'</div>';
+  }
+  var aktionSec=pmSec('Nächster Schritt',
+    '<div class="lcard"><div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      (actions||'<span style="color:var(--muted)">Dieser Auftrag ist abgeschlossen.</span>')+
+      '<button class="chip" id="svc-pdf">📄 Servicebericht</button>'+
+      '<button class="chip" id="svc-wa">💬 Per WhatsApp teilen</button>'+
+    '</div>'+sperre+'</div>');
+
+  // ── Auftragstext ──
+  var textSec=pmSec('Auftrag',
+    '<div class="lcard"><div class="meta" style="white-space:pre-wrap;color:var(--txt)">'+
+      esc(a.beschreibung||'Keine Beschreibung erfasst.')+'</div>'+
+      (a.ablehn_grund?'<div class="meta" style="margin-top:8px;color:var(--bad)">Ablehnung: '+esc(a.ablehn_grund)+'</div>':'')+
+    '</div>','<button class="chip" id="svc-edit" style="font-size:11px">bearbeiten</button>');
+
+  // ── Techniker ──
+  var techInner=(d.techniker||[]).length
+    ? '<div class="list">'+d.techniker.map(function(t){
+        return pmTechCardHtml(t,{actionHtml:'<div class="meta" style="margin-top:9px;gap:8px">'+
+          contactBtns(t.telefon,t.email)+
+          (t.zuweisung_id?'<span class="chip" data-untech="'+esc(t.zuweisung_id)+'" style="font-size:11px">entfernen</span>':'')+'</div>'});
+      }).join('')+'</div>'
+    : '<div class="empty" style="padding:12px">Noch kein Techniker zugewiesen. Ohne Zuweisung sieht kein Techniker diesen Auftrag.</div>';
+  var techSec=pmSec('Techniker',techInner,'<button class="chip" id="svc-tech-add" style="font-size:11px">＋ zuweisen</button>');
+
+  // ── Erfasste Arbeit ──
+  var rapInner=(d.rapporte||[]).length
+    ? '<div class="list">'+d.rapporte.map(function(r){
+        return '<div class="lcard"><div class="top"><div class="nm">'+esc(String(r.datum||'').slice(0,10))+'</div>'+
+          pmPill((Number(r.gesamtstunden)||0).toFixed(2)+' h','var(--gold)')+'</div>'+
+          '<div class="meta">'+esc((r.arbeiten||[]).join(' · ')||'—')+'</div>'+
+          (r.besonderheiten?'<div class="meta" style="color:var(--muted2)">'+esc(r.besonderheiten)+'</div>':'')+'</div>';
+      }).join('')+'</div>'
+    : '<div class="empty" style="padding:12px">Noch keine Arbeitszeit erfasst. Der Techniker bucht sie im Wochenblatt auf diesen Auftrag.</div>';
+  var rapSec=pmSec('Erfasste Arbeit ('+((d.rapporte||[]).length)+')',rapInner);
+
+  // ── Fotos ──
+  var fotoInner=(d.medien||[]).length
+    ? '<div class="gal">'+d.medien.map(function(x){
+        return '<div class="it">'+(x.url?'<img src="'+esc(x.url)+'" alt="">':'<div class="empty">Bild</div>')+'</div>';
+      }).join('')+'</div>'
+    : '<div class="empty" style="padding:12px">Noch keine Fotos. Der Techniker lädt sie mobil hoch.</div>';
+  var fotoSec=pmSec('Fotos ('+((d.medien||[]).length)+')',fotoInner);
+
+  $('view').innerHTML=kopf+aktionSec+textSec+techSec+rapSec+fotoSec;
+  $('svc-back').onclick=renderService;
+
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-to]'),function(b){
+    b.onclick=function(){ svcSetStatus(a.id,b.getAttribute('data-to')); };
+  });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-untech]'),function(b){
+    b.onclick=function(){ svcUnassign(b.getAttribute('data-untech')); };
+  });
+  var ta=$('svc-tech-add'); if(ta) ta.onclick=function(){ svcTechSheet(a.id); };
+  var ed=$('svc-edit'); if(ed) ed.onclick=function(){ svcEditSheet(a); };
+  var pdf=$('svc-pdf'); if(pdf) pdf.onclick=function(){ svcPdf(a); };
+  var wa=$('svc-wa'); if(wa) wa.onclick=function(){ svcWhatsApp(a,d); };
+}
+
+function svcSetStatus(id,ziel){
+  var grund=null;
+  if(ziel==='abgelehnt'){ grund=prompt('Grund der Ablehnung (erscheint beim Partner):',''); if(grund===null) return; }
+  api('svc_status',{id:id,status:ziel,grund:grund}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; }
+    toast('Status: '+svcMeta(ziel).t);
+    svcOpen(id);
+  }).catch(function(){ toast('Statuswechsel fehlgeschlagen'); });
+}
+
+function svcTechSheet(id){
+  var lade=_svcTechPool?Promise.resolve({techniker:_svcTechPool}):api('pm_techniker');
+  lade.then(function(d){
+    _svcTechPool=(d&&d.techniker)||[];
+    if(!_svcTechPool.length){ toast('Keine Techniker im Pool'); return; }
+    openSheet('<div class="cc-sec" style="margin-top:0">Techniker zuweisen</div>'+
+      '<div class="list">'+_svcTechPool.map(function(t){
+        return '<div class="lcard" data-pick="'+esc(t.id)+'" style="cursor:pointer"><div class="top"><div class="nm">'+esc(t.name||'Techniker')+'</div>'+
+          pmPill(t.qualifikation||t.qualification||'—','var(--line)')+'</div></div>';
+      }).join('')+'</div>');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pick]'),function(c){
+      c.onclick=function(){
+        api('svc_assign',{service_auftrag_id:id,techniker_id:c.getAttribute('data-pick')}).then(function(r){
+          closeSheet();
+          if(r&&r.error){ toast(r.error); return; }
+          toast('Techniker zugewiesen'); svcOpen(id);
+        }).catch(function(){ toast('Zuweisung fehlgeschlagen'); });
+      };
+    });
+  });
+}
+// svc_unassign löscht über die Zeilen-id der Zuweisung; die liefert svc_detail
+// als techniker[].zuweisung_id mit.
+function svcUnassign(zuweisungId){
+  api('svc_unassign',{id:zuweisungId}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; }
+    toast('Zuweisung entfernt'); svcOpen(_svcId);
+  }).catch(function(){ toast('Entfernen fehlgeschlagen'); });
+}
+
+function svcEditSheet(a){
+  openSheet('<div class="cc-sec" style="margin-top:0">Auftrag bearbeiten</div>'+
+    '<label class="cc-sec">Objekt / Adresse</label>'+
+    '<input id="svc-e-objekt" class="field" style="width:100%;margin-bottom:12px" value="'+esc(a.objekt||'')+'">'+
+    '<label class="cc-sec">Beschreibung</label>'+
+    '<textarea id="svc-e-besch" class="field" style="width:100%;min-height:120px;margin-bottom:14px">'+esc(a.beschreibung||'')+'</textarea>'+
+    '<button class="btn btn-gold" id="svc-e-save">Speichern</button>');
+  $('svc-e-save').onclick=function(){
+    api('svc_update',{id:a.id,objekt:$('svc-e-objekt').value,beschreibung:$('svc-e-besch').value}).then(function(r){
+      if(r&&r.error){ toast(r.error); return; }
+      closeSheet(); toast('Gespeichert'); svcOpen(a.id);
+    }).catch(function(){ toast('Speichern fehlgeschlagen'); });
+  };
+}
+
+function svcPdf(a){
+  toast('Servicebericht wird erzeugt…');
+  api('svc_bericht',{id:a.id}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; }
+    if(!r||!r.pdf_base64){ toast('Kein PDF erhalten'); return; }
+    var bin=atob(r.pdf_base64), arr=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    var url=URL.createObjectURL(new Blob([arr],{type:'application/pdf'}));
+    var link=document.createElement('a'); link.href=url; link.download=r.dateiname||'servicebericht.pdf';
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    setTimeout(function(){ URL.revokeObjectURL(url); },4000);
+    toast('Servicebericht '+(r.nummer||''));
+  }).catch(function(){ toast('Servicebericht fehlgeschlagen'); });
+}
+
+// WhatsApp: fertige Nachricht, kein Anhang. wa.me ist ein Deep Link — der
+// Empfänger bekommt Text, kein Dokument. Ein sicherer Auftragslink braucht
+// eine Token-Spalte; die ist nicht migriert, deshalb steht sie hier nicht drin.
+function svcWhatsApp(a,d){
+  var tech=(d.techniker||[]).map(function(t){return t.name;}).filter(Boolean).join(', ');
+  var txt='George Solutions – Serviceauftrag\n\n'+
+    'Auftrag: '+svcNr(a)+'\n\n'+
+    'Objekt:\n'+(a.objekt||'—')+'\n\n'+
+    'Problem:\n'+(a.beschreibung||'—')+'\n\n'+
+    'Status: '+svcMeta(a.status).t+'\n'+
+    (tech?'Techniker: '+tech+'\n':'');
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank','noopener');
 }
 
 var _wbProjekte=[], _wbSel=null, _wbDaten=null, _wbBlobUrl=null;

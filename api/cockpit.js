@@ -74,9 +74,9 @@ const PM_ACTIONS = new Set([
   // Partner-Schreibrechte werden IN den Handlern per scope.role verweigert (read-only).
   'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
   'medien_sign_upload', 'medien_register',   // Video-Direktupload (umgeht Body-Limit)
-  'svc_liste', 'svc_detail', 'svc_status',
+  'svc_liste', 'svc_detail', 'svc_status', 'svc_bericht',
   // PM-only (Master + Partner-Ersteller / Master-only intern):
-  'svc_create', 'stockwerk_del', 'svc_assign', 'svc_unassign',
+  'svc_create', 'svc_update', 'stockwerk_del', 'svc_assign', 'svc_unassign',
 ]);
 
 // ── Weitere Partner-Actions, je eigenem Entitlement (nicht 'projektmanagement') ──
@@ -103,7 +103,7 @@ const TECHNIKER_ACTIONS = new Set([
   // zugewiesene Service-Aufträge, markiert erledigt. Zugriff über die verifizierte Kette.
   'medien_list', 'medien_upload', 'medien_del', 'stockwerk_list', 'stockwerk_add',
   'medien_sign_upload', 'medien_register',
-  'svc_liste', 'svc_detail', 'svc_status',
+  'svc_liste', 'svc_detail', 'svc_status', 'svc_bericht',
 ]);
 
 // Zugriffskontext bestimmen (MEHRFACHROLLEN-fähig):
@@ -332,6 +332,8 @@ export default async function handler(req, res) {
       case 'svc_liste':        return res.status(200).json(await svcListe(scope));
       case 'svc_detail':       return res.status(200).json(await svcDetail(req.body, scope));
       case 'svc_create':       return res.status(200).json(await svcCreate(req.body, scope));
+      case 'svc_update':       return res.status(200).json(await svcUpdate(req.body, scope));
+      case 'svc_bericht':      return res.status(200).json(await svcBericht(req.body, scope));
       case 'svc_status':       return res.status(200).json(await svcStatus(req.body, scope));
       case 'svc_assign':       return res.status(200).json(await svcAssign(req.body, scope));
       case 'svc_unassign':     return res.status(200).json(await svcUnassign(req.body, scope));
@@ -3778,8 +3780,39 @@ async function svcListe(scope) {
     if (!ids.length) return { auftraege: [] };
     filter = `&id=in.(${ids.join(',')})`;
   }
-  try { return { auftraege: await sbGet(`gs_service_auftrag?select=*&order=created_at.desc${filter}`) }; }
+  let auftraege;
+  try { auftraege = await sbGet(`gs_service_auftrag?select=*&order=created_at.desc${filter}`); }
   catch (e) { if (isNoTable(e)) return { notMigrated: true, auftraege: [] }; throw e; }
+  if (!auftraege.length) return { auftraege };
+
+  // Zuweisungen und Aufwand in EINEM Zug nachladen, nicht je Zeile. Die
+  // Disposition braucht auf den ersten Blick: wer ist dran und ist schon
+  // Arbeit erfasst — sonst muss man jeden Auftrag einzeln öffnen.
+  const ids = auftraege.map((a) => a.id);
+  const [asg, rap] = await Promise.all([
+    sbGet(`gs_service_techniker?service_auftrag_id=in.(${ids.join(',')})&select=service_auftrag_id,techniker_id`).catch(() => []),
+    sbGet(`gs_tagesrapporte?service_auftrag_id=in.(${ids.join(',')})&select=service_auftrag_id,gesamtstunden`).catch(() => []),
+  ]);
+  const techIds = [...new Set((asg || []).map((x) => x.techniker_id).filter(Boolean))];
+  const namen = {};
+  if (techIds.length) {
+    const ts = await sbGet(`gs_techniker?id=in.(${techIds.join(',')})&select=id,name`).catch(() => []);
+    for (const t of ts || []) namen[t.id] = t.name;
+  }
+  const proAuftrag = {};
+  for (const x of asg || []) {
+    (proAuftrag[x.service_auftrag_id] = proAuftrag[x.service_auftrag_id] || []).push(namen[x.techniker_id] || 'Techniker');
+  }
+  const stunden = {};
+  for (const r of rap || []) stunden[r.service_auftrag_id] = (stunden[r.service_auftrag_id] || 0) + num(r.gesamtstunden);
+
+  return {
+    auftraege: auftraege.map((a) => ({
+      ...a,
+      techniker_namen: proAuftrag[a.id] || [],
+      stunden: Math.round((stunden[a.id] || 0) * 100) / 100,
+    })),
+  };
 }
 async function svcDetail(b, scope) {
   const sid = await assertServiceAccess(b.id, scope, false);
@@ -3788,11 +3821,16 @@ async function svcDetail(b, scope) {
   if (!auftrag) return { error: 'Auftrag nicht gefunden' };
   let techniker = [], rapporte = [], medien = [];
   try {
-    const asg = await sbGet(`gs_service_techniker?service_auftrag_id=eq.${sid}&select=techniker_id`).catch(() => []);
+    const asg = await sbGet(`gs_service_techniker?service_auftrag_id=eq.${sid}&select=id,techniker_id`).catch(() => []);
     const ids = [...new Set((asg || []).map((a) => a.techniker_id).filter(Boolean))];
     if (ids.length) {
+      // Die Zuweisungs-ZEILE mitgeben: svc_unassign löscht über sie. Ohne das
+      // müsste der Client die Techniker-id schicken und der Server sie erst
+      // wieder in eine Zeilen-id auflösen.
+      const zuwVon = {};
+      for (const x of asg || []) if (x.techniker_id) zuwVon[x.techniker_id] = x.id;
       const ts = await sbGet(`gs_techniker?id=in.(${ids.join(',')})&select=*`).catch(() => []);
-      techniker = ts.map((t) => ({ id: t.id, ...pmTechCard(t) }));
+      techniker = ts.map((t) => ({ id: t.id, zuweisung_id: zuwVon[t.id] || null, ...pmTechCard(t) }));
     }
   } catch (_) {}
   try { rapporte = await sbGet(`gs_tagesrapporte?service_auftrag_id=eq.${sid}&select=*&order=datum.desc`).catch(() => []); } catch (_) {}
@@ -3800,8 +3838,35 @@ async function svcDetail(b, scope) {
     const mr = await sbGet(`gs_projekt_medien?service_auftrag_id=eq.${sid}&select=*&order=created_at.desc`).catch(() => []);
     medien = await Promise.all((mr || []).map(signMedien));
   } catch (_) {}
-  return { auftrag, techniker, rapporte, medien };
+  // Was fehlt noch bis zum Abschluss — dieselbe Prüfung, die svcStatus fährt.
+  // Der Client soll die Sperre ANZEIGEN können, statt sie erst beim Klick zu
+  // erfahren. Für den Partner ist sie irrelevant (er schliesst nichts ab).
+  let abschluss_offen = [];
+  if (scope.role !== 'partner' && auftrag.status === 'in_arbeit') {
+    abschluss_offen = await svcAbschlussHindernisse(sid);
+  }
+  const stunden = Math.round((rapporte || []).reduce((s, r) => s + num(r.gesamtstunden), 0) * 100) / 100;
+  return { auftrag, techniker, rapporte, medien, stunden, abschluss_offen };
 }
+// Auftragsnummer SA-{JAHR}-{4-stellig}. Zieht denselben race-festen Zähler wie
+// die Rapportnummer (INSERT … ON CONFLICT DO UPDATE … RETURNING) unter dem
+// Schlüssel 'SERVICE'. Der Keyspace teilt sich mit den Kundenkürzeln — die sind
+// dreistellig, ein siebenstelliges 'SERVICE' kann also nie kollidieren.
+// Schlägt der Zähler fehl (nicht migriert), bleibt die Nummer leer statt den
+// Auftrag scheitern zu lassen: ein Auftrag ohne Nummer ist ärgerlich,
+// ein verlorener Auftrag ist schlimmer.
+const SVC_NUMMER_KUERZEL = 'SERVICE';
+async function zieheServiceNummer() {
+  const jahr = new Date().getFullYear();
+  try {
+    const r = await sbWrite('POST', 'rpc/gs_rapport_nr_next', { p_kuerzel: SVC_NUMMER_KUERZEL, p_jahr: jahr });
+    const nr = Array.isArray(r) ? r[0] : r;
+    const n = Number(typeof nr === 'object' && nr ? nr.gs_rapport_nr_next : nr);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return `SA-${jahr}-${String(n).padStart(4, '0')}`;
+  } catch (_) { return null; }
+}
+
 async function svcCreate(b, scope) {
   if (scope.role === 'techniker') throw new Forbidden();             // Techniker erstellt keine Aufträge
   const objekt = String(b.objekt || '').trim().slice(0, 200);
@@ -3814,12 +3879,54 @@ async function svcCreate(b, scope) {
     // Partner = Ersteller (serverseitig gesetzt). Master darf optional einem Partner zuordnen.
     partner_user_id: scope.role === 'partner' ? scope.partnerId : (b.partner_user_id ? uuid(b.partner_user_id) : null),
   };
-  try { const r = await sbWrite('POST', 'gs_service_auftrag', row); return { ok: true, auftrag: Array.isArray(r) ? r[0] : r }; }
-  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+  const nr = await zieheServiceNummer();
+  if (nr) row.auftragsnummer = nr;
+  try {
+    const r = await sbWrite('POST', 'gs_service_auftrag', row);
+    const auftrag = Array.isArray(r) ? r[0] : r;
+    return { ok: true, auftrag };
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
-// Status-Automat: neu→angenommen/abgelehnt, angenommen→erledigt/abgelehnt.
-// master: alle erlaubten Übergänge. techniker(zugewiesen): nur angenommen→erledigt. partner: keine.
-const SVC_UEBERGAENGE = { neu: ['angenommen', 'abgelehnt'], angenommen: ['erledigt', 'abgelehnt'], abgelehnt: [], erledigt: [] };
+
+// ── Status-Automat (fünf Status) ───────────────────────────────────────────
+//   neu        → angenommen | abgelehnt
+//   angenommen → in_arbeit  | abgelehnt
+//   in_arbeit  → erledigt
+//   erledigt / abgelehnt sind Endzustände.
+// Rollen: Master darf alle Übergänge. Ein zugewiesener Techniker darf den
+// Auftrag annehmen, starten und abschliessen — das ist sein ganzer Arbeitstag,
+// dafür soll er nicht auf das Büro warten. Partner darf keinen Übergang.
+const SVC_UEBERGAENGE = {
+  neu: ['angenommen', 'abgelehnt'],
+  angenommen: ['in_arbeit', 'abgelehnt'],
+  in_arbeit: ['erledigt'],
+  abgelehnt: [],
+  erledigt: [],
+};
+const SVC_TECHNIKER_UEBERGAENGE = { neu: ['angenommen'], angenommen: ['in_arbeit'], in_arbeit: ['erledigt'] };
+
+// Pflicht-Abschluss: 'erledigt' ist keine Schaltfläche, sondern ein Nachweis.
+// Ohne erfasste Arbeit gibt es keinen Abschluss — sonst entsteht ein
+// abgeschlossener Auftrag, zu dem niemand sagen kann, was getan wurde, und der
+// Servicebericht wäre eine leere Seite.
+//
+// Geprüft wird gegen das, was das heutige Schema hergibt: mindestens eine
+// Tageszeile auf diesem Auftrag mit Arbeitszeit oder beschriebener Tätigkeit.
+// Die Liste ist bewusst EINE Funktion — kommen später Pflicht-Fotos oder eine
+// Pflicht-Unterschrift dazu, wächst sie hier und nirgends sonst.
+async function svcAbschlussHindernisse(sid) {
+  const fehlt = [];
+  const rap = await sbGet(
+    `gs_tagesrapporte?service_auftrag_id=eq.${sid}&select=id,gesamtstunden,arbeiten,besonderheiten,taetigkeit`,
+  ).catch(() => null);
+  if (rap === null) return fehlt;                    // nicht lesbar → nicht blockieren
+  const brauchbar = (rap || []).filter((r) => num(r.gesamtstunden) > 0
+    || (Array.isArray(r.arbeiten) && r.arbeiten.filter(Boolean).length)
+    || String(r.besonderheiten || '').trim());
+  if (!brauchbar.length) fehlt.push('Es ist noch keine Arbeitszeit oder Tätigkeit erfasst.');
+  return fehlt;
+}
+
 async function svcStatus(b, scope) {
   if (scope.role === 'partner') throw new Forbidden();
   const sid = uuid(b.id);
@@ -3829,11 +3936,15 @@ async function svcStatus(b, scope) {
   const ziel = String(b.status || '');
   if (scope.role === 'techniker') {
     await assertServiceAccess(sid, scope, false);                   // muss zugewiesen sein
-    if (!(a.status === 'angenommen' && ziel === 'erledigt')) throw new Forbidden();
+    if (!(SVC_TECHNIKER_UEBERGAENGE[a.status] || []).includes(ziel)) throw new Forbidden();
   } else if (scope.role !== 'master') {
     throw new Forbidden();
   } else if (!(SVC_UEBERGAENGE[a.status] || []).includes(ziel)) {
     return { error: `Übergang ${a.status} → ${ziel} nicht erlaubt` };
+  }
+  if (ziel === 'erledigt') {
+    const fehlt = await svcAbschlussHindernisse(sid);
+    if (fehlt.length) return { error: fehlt.join(' '), abschluss_offen: fehlt };
   }
   const now = new Date().toISOString();
   const patch = { status: ziel, updated_at: now };
@@ -3843,6 +3954,50 @@ async function svcStatus(b, scope) {
   try { const r = await sbWrite('PATCH', `gs_service_auftrag?id=eq.${sid}`, patch); return { ok: true, auftrag: Array.isArray(r) ? r[0] : r }; }
   catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
+
+// Auftragstext nachbessern. Master immer; Partner nur den eigenen und nur
+// solange er noch nicht angenommen ist — danach arbeitet das Büro damit.
+async function svcUpdate(b, scope) {
+  if (scope.role === 'techniker') throw new Forbidden();
+  const sid = await assertServiceAccess(b.id, scope, false);
+  const rows = await sbGet(`gs_service_auftrag?id=eq.${sid}&select=status&limit=1`).catch(() => []);
+  if (!rows[0]) throw new Forbidden();
+  if (scope.role === 'partner' && rows[0].status !== 'neu') {
+    return { error: 'Der Auftrag ist bereits in Bearbeitung und kann nicht mehr geändert werden.' };
+  }
+  const patch = { updated_at: new Date().toISOString() };
+  if (b.objekt !== undefined) {
+    const o = String(b.objekt || '').trim().slice(0, 200);
+    if (!o) return { error: 'Objekt darf nicht leer sein.' };
+    patch.objekt = o;
+  }
+  if (b.beschreibung !== undefined) patch.beschreibung = b.beschreibung ? String(b.beschreibung).slice(0, 4000) : null;
+  try { const r = await sbWrite('PATCH', `gs_service_auftrag?id=eq.${sid}`, patch); return { ok: true, auftrag: Array.isArray(r) ? r[0] : r }; }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+}
+// Servicebericht als PDF. Zugriff über dieselbe Kette wie svc_detail: Master
+// alles, Partner nur eigene, Techniker nur zugewiesene. Rückgabe base64 —
+// derselbe Weg wie pmExportPdf, damit der Client nichts Neues lernen muss.
+async function svcBericht(b, scope) {
+  const sid = await assertServiceAccess(b.id, scope, false);
+  try {
+    const { erzeugeServicebericht } = await import('../lib/servicebericht.js');
+    const r = await erzeugeServicebericht(sid);
+    return {
+      ok: true,
+      nummer: r.nummer,
+      dateiname: `${r.nummer}.pdf`,
+      fotos_im_pdf: r.fotos_im_pdf,
+      branding: r.branding,
+      pdf_base64: r.pdf.toString('base64'),
+    };
+  } catch (e) {
+    if (isNoTable(e)) return { notMigrated: true };
+    console.error('svc_bericht:', e && e.message);
+    return { error: 'Der Servicebericht konnte nicht erzeugt werden: ' + ((e && e.message) || 'unbekannter Fehler') };
+  }
+}
+
 // Techniker-Zuweisung — Master-only.
 async function svcAssign(b, scope) {
   if (scope.role !== 'master') throw new Forbidden();

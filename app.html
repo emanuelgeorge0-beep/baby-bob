@@ -954,6 +954,7 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .tc-st.neu{background:rgba(90,167,255,.14);color:#5aa7ff;}
 #tech-cockpit .tc-st.erledigt,#tech-cockpit .tc-st.abgeschlossen{background:rgba(255,255,255,.06);color:#8a97a8;}
 #tech-cockpit .tc-st.abgelehnt,#tech-cockpit .tc-st.pausiert{background:rgba(245,185,66,.16);color:#f5b942;}
+#tech-cockpit .tc-st.in_arbeit{background:rgba(201,169,97,.18);color:#C9A961;}
 #tech-cockpit .tc-btnrow{display:flex;gap:9px;margin:14px 0;flex-wrap:wrap;}
 #tech-cockpit .tc-btn{flex:1;min-width:130px;border:none;border-radius:12px;padding:13px 16px;font-weight:800;font-size:14px;cursor:pointer;text-align:center;}
 #tech-cockpit .tc-btn.gold{background:linear-gradient(135deg,#d8b96e,#b8954d);color:#0a0e14;}
@@ -7468,6 +7469,7 @@ var PD_MODULES=[
   {tab:'inbox',       label:'📨 Inbox',       core:true, badge:true},
   {tab:'projekte',    label:'Projekte',       feature:'projektmanagement'},
   {tab:'pm',          label:'🏗️ Projektmanagement', feature:'projektmanagement'},
+  {tab:'service',     label:'🛠️ Service',    feature:'projektmanagement'},
   {tab:'disposition', label:'🧭 Disposition', feature:'disposition', mount:true},
   {tab:'rapporte',    label:'Rapporte',       feature:'reporting'},
   {tab:'material',    label:'📦 Material',    feature:'material', mount:true},
@@ -7903,6 +7905,150 @@ function pdLoadBadge(){
     var n=d.unread||0;b.textContent=n;b.style.display=n>0?'inline-block':'none';
   });
 }
+// ══════════════════════════════════════════════════════════════════════════
+// SERVICE (Partner) — Auftrag erfassen, verfolgen, Bericht holen
+// ══════════════════════════════════════════════════════════════════════════
+// Der Partner ist bewusst schreibarm: er erfasst den Auftrag und liest danach
+// mit. Status setzen, Techniker zuweisen und abschliessen macht George
+// Solutions — serverseitig erzwungen (svc_status lehnt Partner ab).
+var PD_SVC_ST={neu:{t:'Neu',c:'#FFD700'},angenommen:{t:'Angenommen',c:'#5aa7ff'},
+  in_arbeit:{t:'In Arbeit',c:'#f5b942'},erledigt:{t:'Abgeschlossen',c:'#3ecf8e'},abgelehnt:{t:'Abgelehnt',c:'#ff5d5d'}};
+function pdSvcMeta(k){ return PD_SVC_ST[k]||{t:k||'—',c:'rgba(232,237,245,.5)'}; }
+function pdSvcNr(a){ return a.auftragsnummer || ('SA-'+String(a.id||'').slice(0,8)); }
+var _pdSvcFilter='alle';
+
+function pdSvcListe(){
+  var c=document.getElementById('pd-content'); if(!c) return;
+  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  pmApi('svc_liste').then(function(d){
+    if(d&&d.notMigrated){ c.innerHTML='<div class="admin-empty">Service ist noch nicht eingerichtet.</div>'; return; }
+    if(d&&d.error){ c.innerHTML='<div class="admin-empty">'+gsEsc(d.error)+'</div>'; return; }
+    var alle=(d&&d.auftraege)||[];
+    var liste=alle.filter(function(a){
+      if(_pdSvcFilter==='alle') return true;
+      if(_pdSvcFilter==='offen') return a.status!=='erledigt'&&a.status!=='abgelehnt';
+      return a.status===_pdSvcFilter;
+    });
+    var offen=alle.filter(function(a){return a.status!=='erledigt'&&a.status!=='abgelehnt';}).length;
+    var chips=[{k:'alle',t:'Alle '+alle.length},{k:'offen',t:'Offen '+offen},
+      {k:'erledigt',t:'Abgeschlossen '+alle.filter(function(a){return a.status==='erledigt';}).length}];
+    var html='<button class="admin-add-btn" id="pd-svc-neu">＋ Neuer Serviceauftrag</button>'+
+      '<div style="display:flex;gap:7px;flex-wrap:wrap;margin:12px 0">'+
+        chips.map(function(x){ return '<span class="ob-chip'+(_pdSvcFilter===x.k?' sel':'')+'" data-sf="'+x.k+'">'+gsEsc(x.t)+'</span>'; }).join('')+
+      '</div>';
+    if(!liste.length){
+      html+='<div class="admin-empty">'+(alle.length
+        ? 'In dieser Ansicht liegt kein Auftrag.'
+        : 'Noch keine Serviceaufträge. Erstellen Sie Ihren ersten Auftrag.')+'</div>';
+    }else{
+      html+=liste.map(function(a){
+        var m=pdSvcMeta(a.status);
+        return '<div class="pd-item" style="cursor:pointer" data-svc="'+gsEsc(a.id)+'">'+
+          '<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(a.objekt||'Serviceauftrag')+'</div>'+
+            '<span class="pd-st" style="border-color:'+m.c+';color:'+m.c+'">'+gsEsc(m.t)+'</span></div>'+
+          '<div class="pd-item-meta">'+gsEsc(pdSvcNr(a))+
+            ((a.techniker_namen||[]).length?' · 👷 '+gsEsc(a.techniker_namen.join(', ')):'')+
+            (a.stunden?' · '+gsEsc(String(a.stunden))+' h':'')+
+            ' · '+gsEsc(String(a.created_at||'').slice(0,10))+'</div></div>';
+      }).join('');
+    }
+    c.innerHTML=html;
+    document.getElementById('pd-svc-neu').onclick=pdSvcNeuForm;
+    Array.prototype.forEach.call(c.querySelectorAll('[data-sf]'),function(x){
+      x.onclick=function(){ _pdSvcFilter=x.getAttribute('data-sf'); pdSvcListe(); };
+    });
+    Array.prototype.forEach.call(c.querySelectorAll('[data-svc]'),function(x){
+      x.onclick=function(){ pdSvcOpen(x.getAttribute('data-svc')); };
+    });
+  }).catch(function(){ c.innerHTML='<div class="admin-empty">Serviceaufträge konnten nicht geladen werden.</div>'; });
+}
+
+// Erfassung: zwei Felder, sonst nichts. Alles Weitere (Termin, Priorität,
+// Kategorie) braucht Spalten, die es im Schema noch nicht gibt — lieber ein
+// Formular, das in 30 Sekunden durch ist, als Pflichtfelder ins Leere.
+function pdSvcNeuForm(){
+  var c=document.getElementById('pd-content'); if(!c) return;
+  c.innerHTML='<button class="admin-act" id="pd-svc-back">‹ Zurück</button>'+
+    '<div class="admin-section" style="margin-top:12px">Neuer Serviceauftrag</div>'+
+    '<label class="ob-lbl">Objekt / Adresse</label>'+
+    '<input id="pd-svc-objekt" class="gs-inp" placeholder="z. B. Langstrasse 149, 8004 Zürich">'+
+    '<label class="ob-lbl" style="margin-top:12px">Was ist das Problem?</label>'+
+    '<textarea id="pd-svc-besch" class="gs-inp" style="min-height:140px" placeholder="Kurz beschreiben: was, wo, seit wann."></textarea>'+
+    '<div id="pd-svc-msg" style="margin-top:10px"></div>'+
+    '<button class="gs-btn-primary" id="pd-svc-send" style="margin-top:14px">Auftrag senden</button>';
+  document.getElementById('pd-svc-back').onclick=pdSvcListe;
+  document.getElementById('pd-svc-send').onclick=function(){
+    var o=document.getElementById('pd-svc-objekt').value.trim();
+    var b=document.getElementById('pd-svc-besch').value.trim();
+    if(!o){ setMsg('pd-svc-msg','Bitte Objekt oder Adresse angeben.','err'); return; }
+    var btn=document.getElementById('pd-svc-send'); btn.disabled=true; btn.textContent='Sendet…';
+    pmApi('svc_create',{objekt:o,beschreibung:b,quelle:'manuell'}).then(function(r){
+      btn.disabled=false; btn.textContent='Auftrag senden';
+      if(r&&r.error){ setMsg('pd-svc-msg',r.error,'err'); return; }
+      if(r&&r.notMigrated){ setMsg('pd-svc-msg','Service ist noch nicht eingerichtet.','err'); return; }
+      toast('Auftrag '+((r.auftrag&&(r.auftrag.auftragsnummer||''))||'')+' gesendet');
+      pdSvcListe();
+    }).catch(function(){ btn.disabled=false; btn.textContent='Auftrag senden';
+      setMsg('pd-svc-msg','Senden fehlgeschlagen. Bitte erneut versuchen.','err'); });
+  };
+}
+
+function pdSvcOpen(id){
+  var c=document.getElementById('pd-content'); if(!c) return;
+  c.innerHTML='<div class="admin-empty">Lädt…</div>';
+  pmApi('svc_detail',{id:id}).then(function(d){
+    if(d&&d.error){ c.innerHTML='<button class="admin-act" id="pd-svc-back">‹ Zurück</button>'+
+      '<div class="admin-empty">'+gsEsc(d.error)+'</div>';
+      document.getElementById('pd-svc-back').onclick=pdSvcListe; return; }
+    var a=d.auftrag, m=pdSvcMeta(a.status);
+    var html='<button class="admin-act" id="pd-svc-back">‹ Zurück</button>'+
+      '<div class="pd-item" style="margin-top:12px">'+
+        '<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(a.objekt||'Serviceauftrag')+'</div>'+
+        '<span class="pd-st" style="border-color:'+m.c+';color:'+m.c+'">'+gsEsc(m.t)+'</span></div>'+
+        '<div class="pd-item-meta">'+gsEsc(pdSvcNr(a))+' · erfasst '+gsEsc(String(a.created_at||'').slice(0,10))+'</div>'+
+      '</div>';
+    html+='<div class="admin-section">Auftrag</div>'+
+      '<div class="pd-item"><div style="white-space:pre-wrap">'+gsEsc(a.beschreibung||'Keine Beschreibung erfasst.')+'</div></div>';
+    if(a.ablehn_grund){
+      html+='<div class="admin-section">Abgelehnt</div><div class="pd-item" style="color:#ff5d5d">'+gsEsc(a.ablehn_grund)+'</div>';
+    }
+    html+='<div class="admin-section">Techniker</div>';
+    html+=(d.techniker||[]).length
+      ? (d.techniker||[]).map(function(t){ return '<div class="pd-item"><div class="pd-item-tit">👷 '+gsEsc(t.name||'Techniker')+'</div></div>'; }).join('')
+      : '<div class="admin-empty">Noch kein Techniker zugeteilt.</div>';
+    html+='<div class="admin-section">Erfasste Arbeit'+(d.stunden?' · '+gsEsc(String(d.stunden))+' h':'')+'</div>';
+    html+=(d.rapporte||[]).length
+      ? (d.rapporte||[]).map(function(r){
+          return '<div class="pd-item"><div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(String(r.datum||'').slice(0,10))+'</div>'+
+            '<span class="pd-st">'+(Number(r.gesamtstunden)||0).toFixed(2)+' h</span></div>'+
+            '<div class="pd-item-meta">'+gsEsc((r.arbeiten||[]).join(' · ')||'—')+'</div></div>'; }).join('')
+      : '<div class="admin-empty">Noch keine Arbeitszeit erfasst.</div>';
+    html+='<div class="admin-section">Fotos ('+((d.medien||[]).length)+')</div>';
+    html+=(d.medien||[]).length
+      ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px">'+
+        (d.medien||[]).map(function(x){ return x.url?'<img src="'+gsEsc(x.url)+'" style="width:100%;border-radius:10px" alt="">':''; }).join('')+'</div>'
+      : '<div class="admin-empty">Noch keine Fotos.</div>';
+    html+='<button class="admin-act ok" id="pd-svc-pdf" style="margin-top:16px">📄 Servicebericht als PDF</button>';
+    c.innerHTML=html;
+    document.getElementById('pd-svc-back').onclick=pdSvcListe;
+    document.getElementById('pd-svc-pdf').onclick=function(){ pdSvcPdf(a); };
+  }).catch(function(){ c.innerHTML='<div class="admin-empty">Auftrag konnte nicht geladen werden.</div>'; });
+}
+
+function pdSvcPdf(a){
+  toast('Servicebericht wird erzeugt…');
+  pmApi('svc_bericht',{id:a.id}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; }
+    if(!r||!r.pdf_base64){ toast('Kein PDF erhalten'); return; }
+    var bin=atob(r.pdf_base64), arr=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    var url=URL.createObjectURL(new Blob([arr],{type:'application/pdf'}));
+    var link=document.createElement('a'); link.href=url; link.download=r.dateiname||'servicebericht.pdf';
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    setTimeout(function(){ URL.revokeObjectURL(url); },4000);
+  }).catch(function(){ toast('Servicebericht fehlgeschlagen'); });
+}
+
 function pdTab(tab){
   pdActiveTab=tab;
   PD_MODULES.forEach(function(m){ var el=document.getElementById('pdt-'+m.tab); if(el) el.classList.toggle('act',m.tab===tab); });
@@ -7927,6 +8073,7 @@ function pdTab(tab){
   if(mod&&mod.mount){ pdRenderMount(c,mod); return; }
   if(tab==='settings'){ pdRenderSettings(c); return; }
   if(tab==='blockaden'){ pdBlockadenLoad(); return; }
+  if(tab==='service'){ pdSvcListe(); return; }
   if(tab==='inbox'){
     gsAuthApi('nachrichten',{action:'inbox'}).then(function(d){
       var ns=d.nachrichten||[];
@@ -9625,7 +9772,7 @@ function tcRenderService(){
   techApi('svc_liste').then(function(d){
     var ss=(d&&d.auftraege)||[];
     if(!ss.length){ tcH('<div class="tc-sec">Service-Aufträge</div><div class="tc-empty">Keine zugewiesenen Service-Aufträge.</div>'); return; }
-    var rows=ss.map(function(s){ return '<div class="tc-item" onclick="tcOpenService(\''+tcEsc(s.id)+'\')"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div class="ti-t">'+tcEsc(s.objekt||'Service')+'</div><div class="ti-m">'+tcEsc((s.beschreibung||'').slice(0,80)||'—')+'</div></div>'+tcStBadge(s.status)+'</div></div>'; }).join('');
+    var rows=ss.map(function(s){ return '<div class="tc-item" onclick="tcOpenService(\''+tcEsc(s.id)+'\')"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div class="ti-t">'+tcEsc(s.objekt||'Service')+'</div><div class="ti-m">'+tcEsc(s.auftragsnummer||('SA-'+String(s.id||'').slice(0,8)))+' · '+tcEsc((s.beschreibung||'').slice(0,60)||'—')+'</div></div>'+tcStBadge(s.status)+'</div></div>'; }).join('');
     tcH('<div class="tc-sec">Service-Aufträge ('+ss.length+')</div><div class="tc-list">'+rows+'</div>');
   }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
 }
@@ -9635,20 +9782,47 @@ function tcOpenService(id){
   techApi('svc_detail',{id:id}).then(function(d){
     if(!d||d.error||!d.auftrag){ tcH('<button class="tc-back" onclick="tcGo(\'service\')">‹ Zurück</button><div class="tc-empty">'+tcEsc((d&&d.error)||'Nicht gefunden')+'</div>'); return; }
     var s=d.auftrag, rap=d.rapporte||[];
-    var doneBtn=(s.status==='angenommen')?'<button class="tc-btn gold" onclick="tcSvcDone(\''+tcEsc(id)+'\')">✓ Als erledigt markieren</button>':'';
+    // Genau EIN naechster Schritt, passend zum Status. Der Techniker soll nicht
+    // waehlen muessen, welcher Uebergang gerade erlaubt ist — der Server kennt
+    // die Regel (SVC_TECHNIKER_UEBERGAENGE), hier steht nur ihr Spiegel.
+    var schritt='';
+    if(s.status==='neu') schritt='<button class="tc-btn gold" onclick="tcSvcStatus(\''+tcEsc(id)+'\',\'angenommen\')">✓ Auftrag annehmen</button>';
+    else if(s.status==='angenommen') schritt='<button class="tc-btn gold" onclick="tcSvcStatus(\''+tcEsc(id)+'\',\'in_arbeit\')">▶ Arbeit starten</button>';
+    else if(s.status==='in_arbeit') schritt='<button class="tc-btn gold" onclick="tcSvcStatus(\''+tcEsc(id)+'\',\'erledigt\')">✓ Arbeit abschliessen</button>';
+    // Pflicht-Abschluss sichtbar machen, bevor der Knopf gedrueckt wird.
+    var sperre=(d.abschluss_offen&&d.abschluss_offen.length)
+      ? '<div class="tc-hint" style="color:#f5b942">⚠ '+tcEsc(d.abschluss_offen.join(' '))+'</div>' : '';
+    // Quick Actions: Navigation und Teilen brauchen nur die Adresse, die im
+    // Auftrag steht — kein zusaetzliches Feld, kein zusaetzlicher Klick.
+    var adr=String(s.objekt||'').trim();
+    var quick='<div class="tc-btnrow">'+
+      (adr?'<a class="tc-btn ghost" href="https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(adr)+'" target="_blank" rel="noopener">🧭 Navigation</a>':'')+
+      (adr?'<a class="tc-btn ghost" href="https://wa.me/?text='+encodeURIComponent('Serviceauftrag '+(s.auftragsnummer||'')+'\n'+adr+'\n'+(s.beschreibung||''))+'" target="_blank" rel="noopener">💬 Teilen</a>':'')+
+      '</div>';
     var head='<button class="tc-back" onclick="tcGo(\'service\')">‹ Service-Aufträge</button>'+
       '<div class="tc-sec">'+tcEsc(s.objekt||'Service')+' '+tcStBadge(s.status)+'</div>'+
+      '<div class="ti-m" style="color:#8a97a8">'+tcEsc(s.auftragsnummer||('SA-'+String(s.id||'').slice(0,8)))+
+        (d.stunden?(' · '+tcEsc(String(d.stunden))+' h erfasst'):'')+'</div>'+
       (s.beschreibung?('<div class="ti-m" style="color:#8a97a8">'+tcEsc(s.beschreibung)+'</div>'):'')+
+      quick+
       '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcGoWocheNeueZeile(\'service\',\''+tcEsc(id)+'\')">＋ Rapport buchen</button><button class="tc-btn ghost" onclick="tcMediaForm(\'service\',\''+tcEsc(id)+'\')">📷 Foto / Video</button></div>'+
-      (doneBtn?('<div class="tc-btnrow">'+doneBtn+'</div>'):'');
+      (schritt?('<div class="tc-btnrow">'+schritt+'</div>'):'')+sperre;
     var rlist=rap.length?('<div class="tc-list">'+rap.map(function(r){ return '<div class="tc-item" style="cursor:default"><div class="ti-t">'+tcEsc(r.datum||'')+' · '+tcEsc((r.gesamtstunden!=null?r.gesamtstunden:0))+' h</div><div class="ti-m">'+tcEsc(((r.arbeiten||[]).join(', ')||(r.besonderheiten||'—')))+'</div></div>'; }).join('')+'</div>'):'<div class="tc-empty">Noch keine Rapporte.</div>';
     tcH(head+'<div class="tc-sec">Rapporte</div>'+rlist+'<div id="tc-gal-slot"></div>');
     tcLoadGallery('service',id);
   }).catch(function(){ tcH('<div class="tc-empty">Verbindungsfehler.</div>'); });
 }
-function tcSvcDone(id){
-  techApi('svc_status',{id:id,status:'erledigt'}).then(function(d){ if(d&&d.error){ tcToast(d.error); return; } tcToast('Als erledigt markiert'); tcOpenService(id); });
+// Ein Statuswechsel, alle Uebergaenge. Der Server weist ab, was nicht erlaubt
+// ist — inklusive Abschluss ohne erfasste Arbeit; dessen Meldung nennt den Grund.
+var TC_SVC_TEXT={angenommen:'Auftrag angenommen',in_arbeit:'Arbeit gestartet',erledigt:'Auftrag abgeschlossen'};
+function tcSvcStatus(id,ziel){
+  techApi('svc_status',{id:id,status:ziel}).then(function(d){
+    if(d&&d.error){ tcToast(d.error); return; }
+    tcToast(TC_SVC_TEXT[ziel]||'Status geändert'); tcOpenService(id);
+  }).catch(function(){ tcToast('Statuswechsel fehlgeschlagen'); });
 }
+// Altname bleibt, falls irgendwo noch ein Aufruf haengt.
+function tcSvcDone(id){ tcSvcStatus(id,'erledigt'); }
 
 function tcLines(v){ return String(v||'').split('\n').map(function(x){return x.trim();}).filter(Boolean); }
 
