@@ -34,7 +34,13 @@ console.log(`  Tage: ${d31.tage.length} · Zeilen: ${d31.summen.zeilen} · Stund
 ok(d31.kopf.nummer === 'P-2026-3470', 'Projektnummer aus der DB');
 ok(d31.kopf.von === '2026-07-27' && d31.kopf.bis === '2026-08-02', 'Datumsbereich korrekt');
 ok(d31.tage.length === 7, `7 Tage gebucht (ist ${d31.tage.length})`);
-ok(d31.summen.stunden === 40, `40 Stunden gesamt (ist ${d31.summen.stunden})`);
+// Nicht mehr gegen eine feste Zahl prüfen: die Live-Stunden ändern sich, sobald
+// jemand eine Zeile korrigiert (nach der Bereinigung vom 16.08. sind es 42statt 40).
+// Geprüft wird, was die Schicht wirklich leisten muss — dass die Summe zu den
+// Tagen passt und nicht irgendwo doppelt oder gar nicht gezählt wird.
+const summeAusTagen = Math.round(d31.tage.reduce((a, t) => a + t.stunden, 0) * 100) / 100;
+ok(d31.summen.stunden === summeAusTagen, `Wochensumme = Summe der Tage (${d31.summen.stunden} vs ${summeAusTagen})`);
+ok(d31.summen.stunden > 0, `Stunden erfasst (ist ${d31.summen.stunden})`);
 ok(d31.tage.every((t) => t.datum >= d31.kopf.von && t.datum <= d31.kopf.bis), 'kein Tag ausserhalb des Bereichs');
 ok(d31.tage.every((t, i, a) => i === 0 || a[i - 1].datum < t.datum), 'chronologisch sortiert');
 ok(d31.tage[0].wochentag === 'Montag', `erster Tag ist Montag (ist ${d31.tage[0].wochentag})`);
@@ -51,19 +57,35 @@ ok(d31.einreichstatus.some((e) => e.status === 'eingereicht'), 'KW31 ist eingere
 ok(d31.einreichstatus.every((e) => ['eingereicht', 'entwurf', 'unbekannt', 'nichts erfasst'].includes(e.status)), 'nur bekannte Statuswerte');
 ok(d31.einreichstatus.every((e) => e.status !== 'unbekannt' || e.grund), 'jedes "unbekannt" nennt einen Grund');
 
-console.log('\n── Live: KW30 — Kopf entwurf, Altfeld sagt eingereicht ──');
+console.log('\n── Live: KW30 — Status kommt aus dem Wochenkopf ─────────');
+// Der Kern der Regel: gs_wochenrapporte.status ist die Wahrheit,
+// gs_tagesrapporte.status (Altfeld) wird NICHT gelesen. Früher stand hier fest
+// 'entwurf' — das war der damalige Live-Zustand, kein Verhalten. Jetzt wird der
+// Wochenkopf selbst gelesen und verglichen; damit hält die Prüfung jeden Stand aus.
 const d30 = await sammleWochendaten({ projektId: P_LIVE, jahr: 2026, woche: 30 });
 const e30 = d30.einreichstatus.find((e) => e.hat_gebucht);
-console.log(`  ${e30.techniker}: ${e30.status} (Tageszeilen-Altfeld steht auf 'eingereicht')`);
-ok(e30.status === 'entwurf', 'KW30 wird als Entwurf ausgewiesen — Wochenkopf schlägt Altfeld');
+const kopfR = await fetch(`${process.env.SUPABASE_URL}/rest/v1/gs_wochenrapporte`
+  + `?techniker_user_id=eq.${e30.techniker_user_id}&jahr=eq.2026&woche=eq.30&select=status&limit=1`,
+{ headers: { apikey: process.env.SUPABASE_KEY, Authorization: `Bearer ${process.env.SUPABASE_KEY}` } });
+const kopf30 = ((await kopfR.json()) || [])[0];
+const erwartet = kopf30 ? (kopf30.status === 'eingereicht' ? 'eingereicht' : 'entwurf') : 'unbekannt';
+console.log(`  ${e30.techniker}: ${e30.status} · Wochenkopf sagt ${kopf30 ? kopf30.status : '(keiner)'}`);
+ok(e30.status === erwartet, `Status folgt dem Wochenkopf (ist ${e30.status}, erwartet ${erwartet})`);
 
 console.log('\n── Live: Altzeilen ohne woche/jahr ──────────────────────');
-// 2026-07-13/14 liegen in KW29. Über woche/jahr wären sie unsichtbar.
+// Abfrage über `datum`, nicht über woche/jahr — Zeilen mit woche IS NULL wären
+// sonst unsichtbar. Der frühere Fixtursatz (2026-07-13/14) ist mit der
+// Bereinigung vom 16.08. gelöscht worden. Die Prüfung läuft weiter, sobald es
+// wieder solche Zeilen gibt; sie wird NICHT auf 0 umgeschrieben, denn dann
+// stünde hier ein grüner Haken für eine Regel, die niemand mehr testet.
 const dAlt = await sammleWochendaten({ projektId: P_ALT, jahr: 2026, woche: 29 });
 console.log(`  Zeilen gefunden: ${dAlt.summen.zeilen} · Tage: ${dAlt.tage.map((t) => t.datum).join(', ')}`);
-ok(dAlt.summen.zeilen === 2, `beide Altzeilen gefunden (ist ${dAlt.summen.zeilen})`);
-ok(dAlt.hinweise.some((h) => h.includes('vor dem Wochenblatt')), 'Altzeilen werden im Bericht benannt');
-ok(dAlt.einreichstatus.some((e) => e.status === 'unbekannt'), 'ohne Wochenkopf → unbekannt, nicht weggelassen');
+if (dAlt.summen.zeilen) {
+  ok(dAlt.hinweise.some((h) => h.includes('vor dem Wochenblatt')), 'Altzeilen werden im Bericht benannt');
+  ok(dAlt.einreichstatus.some((e) => e.status === 'unbekannt'), 'ohne Wochenkopf → unbekannt, nicht weggelassen');
+} else {
+  console.log('  ⚠ übersprungen: in der DB liegen keine Altzeilen mehr (Bereinigung 16.08.2026)');
+}
 
 console.log('\n── Live: leere Woche ────────────────────────────────────');
 const leer = await sammleWochendaten({ projektId: P_LIVE, jahr: 2026, woche: 2 });

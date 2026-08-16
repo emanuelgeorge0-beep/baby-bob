@@ -42,10 +42,13 @@ const post = async (t, body) => {
 };
 
 const angelegt = { taet: [], medien: [], storage: [], berichte: [] };
+// Ausserhalb des try, weil der finally-Block ihn zum Vergleich braucht —
+// ein `const` im try-Block ist dort nicht sichtbar.
+let vorher = null;
 
 try {
   // ── Ausgangszustand festhalten ───────────────────────────────────────────
-  const vorher = {
+  vorher = {
     taet: (await g('gs_tagesrapport_taetigkeitenkatalog?select=id')).length,
     medien: (await g('gs_projekt_medien?select=id')).length,
     rapporte: (await g('gs_tagesrapporte?select=id')).length,
@@ -212,7 +215,10 @@ try {
   ok(rest.taet === 0, `gs_tagesrapport_taetigkeitenkatalog wieder leer (${rest.taet})`);
   ok(rest.medien === 0, `gs_projekt_medien wieder leer (${rest.medien})`);
   ok(rest.berichte === 0, `gs_wochenberichte wieder leer (${rest.berichte})`);
-  ok(rest.rapporte === 23, `gs_tagesrapporte unangetastet (${rest.rapporte})`);
+  // Gegen den Stand VOR dem Lauf prüfen, nicht gegen eine eingefrorene Zahl.
+  // '23' war der Live-Bestand am Tag, an dem der Test geschrieben wurde; nach
+  // jeder Bereinigung wäre er falsch, ohne dass am Verhalten etwas dran wäre.
+  ok(rest.rapporte === vorher.rapporte, `gs_tagesrapporte unangetastet (${rest.rapporte} von ${vorher.rapporte})`);
   ok(reste.length === 0, `keine Testdateien im Storage (${reste.length})`);
 
   console.log(`\n${fail === 0 ? '✓ ALLE' : '✗ ' + fail + ' FEHLER ·'} ${pass} Prüfungen bestanden`);
