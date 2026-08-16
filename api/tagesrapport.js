@@ -59,7 +59,10 @@ async function list(res, user, role, body) {
   if (body.woche) f.push(`woche=eq.${body.woche}`);
   if (role === 'techniker') f.push(`techniker_user_id=eq.${user.id}`);
   else if (role === 'gs_partner') {
-    const ids = await partnerProjektIds(user.id);
+    // Nur nicht-gelöschte Projekte: Soft-Delete setzt geloescht_at, status bleibt
+    // 'aktiv' — ohne diesen Filter tauchen Rapporte gelöschter Projekte weiter auf.
+    // Bewusst NUR hier, nicht in partnerProjektIds(): das ist die Zugriffsprüfung.
+    const ids = await partnerProjektIds(user.id, true);
     if (!ids.length) return res.status(200).json({ rapporte: [] });
     f.push(`projekt_id=in.(${ids.join(',')})`);
   } else if (role !== 'gs_admin') return res.status(403).json({ error: 'Keine Berechtigung' });
@@ -252,9 +255,12 @@ async function suggestArbeiten(userId, projektId) {
   for (const r of Array.isArray(rows) ? rows : []) for (const a of r.arbeiten || []) freq[a] = (freq[a] || 0) + 1;
   return Object.keys(freq).sort((a, b) => freq[b] - freq[a]).slice(0, 4);
 }
-async function partnerProjektIds(userId) {
-  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?partner_user_id=eq.${userId}&select=id`, { headers: SB }));
-  return (Array.isArray(rows) ? rows : []).map((r) => r.id);
+// nurAktive=true → gelöschte Projekte (geloescht_at gesetzt) fallen raus. Nur für
+// Listen; die Zugriffsprüfung canAccess() ruft ohne Flag, damit ein gelöschtes
+// Projekt keine bestehende Berechtigung still verändert.
+async function partnerProjektIds(userId, nurAktive) {
+  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?partner_user_id=eq.${userId}&select=id,geloescht_at`, { headers: SB }));
+  return (Array.isArray(rows) ? rows : []).filter((r) => !(nurAktive && r.geloescht_at)).map((r) => r.id);
 }
 async function canAccess(user, role, r) {
   if (role === 'gs_admin') return true;

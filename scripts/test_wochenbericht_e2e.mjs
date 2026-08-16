@@ -163,7 +163,8 @@ try {
   ok(s.includes('Tagesverlauf'), 'Tagesblöcke im Dokument');
   ok(s.includes('Montag') && s.includes('Freitag'), 'Wochentage benannt');
   ok(/DN \d/.test(s), 'Tätigkeiten mit DN-Detailfeld im Dokument');
-  ok(s.includes('Einreichstatus'), 'Einreichstatus im Dokument');
+  ok(s.includes('Aufwand je Techniker'), 'Aufwand je Techniker im Dokument');
+  ok(!/[Ee]ntwurf/.test(s), 'kein interner Status ("entwurf") im Kunden-PDF');
   ok(!s.includes('?) Tj'), 'keine unlesbaren Zeichen');
   ok(s.includes('0.788 0.663 0.380 RG'), 'goldene Trennlinie #C9A961 (Regel 6)');
   ok(!s.includes('0.039 0.039 0.043'), 'kein Command-Center-Schwarz (Regel 6)');

@@ -48,30 +48,40 @@ export default async function handler(req, res) {
   }
 }
 
+// Zuweisungs-Embed: BEIDE Spalten holen. Kanonisch ist techniker_id →
+// gs_techniker.id (so schreibt das Cockpit, s. api/cockpit.js pmTechnikerAdd);
+// techniker_user_id ist die alte, meist leere Spalte — sie bleibt im Embed, weil
+// die Zugriffsprüfung für Techniker weiter darauf steht.
+const PT_EMBED = 'gs_projekt_techniker(techniker_id,techniker_user_id)';
+// Soft-Delete (Runde 8a): gelöschte Projekte behalten status='aktiv', nur
+// geloescht_at ist gesetzt. Gleiche JS-Filterung wie ohneGeloeschte() im
+// Cockpit — kein Query-Filter, damit die Liste auch ohne die Spalte lädt.
+const ohneGeloeschte = (rows) => (Array.isArray(rows) ? rows : []).filter((p) => !p.geloescht_at);
+
 async function list(res, user, role) {
   let url;
   if (role === 'gs_admin') {
-    url = `${SUPABASE_URL}/rest/v1/gs_projekte?select=*,gs_projekt_techniker(techniker_user_id)&order=created_at.desc`;
+    url = `${SUPABASE_URL}/rest/v1/gs_projekte?select=*,${PT_EMBED}&order=created_at.desc`;
   } else if (role === 'gs_partner') {
-    url = `${SUPABASE_URL}/rest/v1/gs_projekte?partner_user_id=eq.${user.id}&select=*,gs_projekt_techniker(techniker_user_id)&order=created_at.desc`;
+    url = `${SUPABASE_URL}/rest/v1/gs_projekte?partner_user_id=eq.${user.id}&select=*,${PT_EMBED}&order=created_at.desc`;
   } else if (role === 'techniker') {
     // Projects the techniker is assigned to.
     const a = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekt_techniker?techniker_user_id=eq.${user.id}&select=projekt_id`, { headers: SB }));
     const ids = (Array.isArray(a) ? a : []).map((x) => x.projekt_id);
     if (!ids.length) return res.status(200).json({ projekte: [] });
-    url = `${SUPABASE_URL}/rest/v1/gs_projekte?id=in.(${ids.join(',')})&select=*,gs_projekt_techniker(techniker_user_id)&order=created_at.desc`;
+    url = `${SUPABASE_URL}/rest/v1/gs_projekte?id=in.(${ids.join(',')})&select=*,${PT_EMBED}&order=created_at.desc`;
   } else {
     return res.status(403).json({ error: 'Keine Berechtigung' });
   }
   const rows = await sbJson(await fetch(url, { headers: SB }));
-  return res.status(200).json({ projekte: await withTechNames(Array.isArray(rows) ? rows : []) });
+  return res.status(200).json({ projekte: await withTechNames(ohneGeloeschte(rows)) });
 }
 
 async function getOne(res, user, role, body) {
   const { id } = body || {};
   if (!id) return res.status(400).json({ error: 'id erforderlich' });
-  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?id=eq.${id}&select=*,gs_projekt_techniker(techniker_user_id)`, { headers: SB }));
-  const p = (Array.isArray(rows) ? rows : [])[0];
+  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_projekte?id=eq.${id}&select=*,${PT_EMBED}`, { headers: SB }));
+  const p = ohneGeloeschte(rows)[0];
   if (!p) return res.status(404).json({ error: 'Projekt nicht gefunden' });
   // Access check
   if (role === 'gs_partner' && p.partner_user_id !== user.id) return res.status(403).json({ error: 'Keine Berechtigung' });
@@ -145,22 +155,48 @@ async function replaceAssignments(projektId, userIds) {
   await fetch(`${SUPABASE_URL}/rest/v1/gs_projekt_techniker?projekt_id=eq.${projektId}`, { method: 'DELETE', headers: SB });
   const clean = [...new Set(userIds.filter(Boolean))];
   if (!clean.length) return;
+  // Beide Spalten setzen: techniker_id ist die kanonische Kette (alles Neue liest
+  // darüber), techniker_user_id bleibt für die bestehende Techniker-Zugriffsprüfung.
+  const techRows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?user_id=in.(${clean.join(',')})&select=id,user_id`, { headers: SB }));
+  const idByUser = {};
+  for (const t of Array.isArray(techRows) ? techRows : []) idByUser[t.user_id] = t.id;
   await fetch(`${SUPABASE_URL}/rest/v1/gs_projekt_techniker`, { method: 'POST', headers: { ...SB, Prefer: 'return=minimal' },
-    body: JSON.stringify(clean.map((uid) => ({ projekt_id: projektId, techniker_user_id: uid }))) });
+    body: JSON.stringify(clean.map((uid) => ({ projekt_id: projektId, techniker_user_id: uid, techniker_id: idByUser[uid] || null }))) });
 }
 
+// Zuweisungen zu Namen auflösen — über BEIDE Wege, kanonisch zuerst.
+// Vorher lief das ausschliesslich über techniker_user_id; da das Cockpit per
+// techniker_id zuweist, ist diese Spalte in fast allen Zeilen NULL und die
+// Liste kam leer zurück ("Zugeteilte Techniker 0" im Partner-Cockpit).
 async function withTechNames(projekte) {
-  const ids = [...new Set(projekte.flatMap((p) => (p.gs_projekt_techniker || []).map((t) => t.techniker_user_id)))];
-  let nameMap = {};
-  if (ids.length) {
-    const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?user_id=in.(${ids.join(',')})&select=user_id,name`, { headers: SB }));
-    for (const r of Array.isArray(rows) ? rows : []) nameMap[r.user_id] = r.name;
-  }
-  return projekte.map((p) => ({
-    ...p,
-    techniker: (p.gs_projekt_techniker || []).map((t) => ({ user_id: t.techniker_user_id, name: nameMap[t.techniker_user_id] || 'Techniker' })),
-    gs_projekt_techniker: undefined,
-  }));
+  const zuw = projekte.flatMap((p) => p.gs_projekt_techniker || []);
+  const techIds = [...new Set(zuw.map((t) => t.techniker_id).filter(Boolean))];
+  const userIds = [...new Set(zuw.map((t) => t.techniker_user_id).filter(Boolean))];
+  const byId = {}, byUser = {};
+  const laden = async (filter) => {
+    const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_techniker?${filter}&select=id,user_id,name`, { headers: SB }));
+    for (const r of Array.isArray(rows) ? rows : []) { byId[r.id] = r; if (r.user_id) byUser[r.user_id] = r; }
+  };
+  if (techIds.length) await laden(`id=in.(${techIds.join(',')})`);
+  if (userIds.length) await laden(`user_id=in.(${userIds.join(',')})`);
+
+  return projekte.map((p) => {
+    const gesehen = new Set();
+    const techniker = [];
+    for (const t of p.gs_projekt_techniker || []) {
+      const rec = (t.techniker_id && byId[t.techniker_id]) || (t.techniker_user_id && byUser[t.techniker_user_id]) || null;
+      // Eine Person kann über beide Spalten hängen → einmal zählen.
+      const key = (rec && rec.id) || t.techniker_id || t.techniker_user_id;
+      if (!key || gesehen.has(key)) continue;
+      gesehen.add(key);
+      techniker.push({
+        id: (rec && rec.id) || t.techniker_id || null,
+        user_id: (rec && rec.user_id) || t.techniker_user_id || null,
+        name: (rec && rec.name) || 'Techniker',
+      });
+    }
+    return { ...p, techniker, gs_projekt_techniker: undefined };
+  });
 }
 
 async function nextProjektnummer() {

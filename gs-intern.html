@@ -1519,7 +1519,12 @@ function paintProjektDetail(d){
     ((p.projektadresse||p.projektleiter)?'<div class="meta" style="margin-bottom:10px">'+
       (p.projektadresse?'<span>📍 '+esc(p.projektadresse)+'</span>':'')+
       (p.projektleiter?'<span class="dot">👷 PL: '+esc(p.projektleiter)+'</span>':'')+'</div>':'')+
-    '<button class="chip" id="pm-edit" style="margin-bottom:6px">✏️ Projekt bearbeiten</button>';
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
+      '<button class="chip" id="pm-edit">✏️ Projekt bearbeiten</button>'+
+      // Direkter Weg vom Projekt zum Bauleiter-Dokument: öffnet den Wochenbericht
+      // mit diesem Projekt vorbelegt (KW = laufende Woche, wie im Picker-Default).
+      '<button class="chip" id="pm-wb">📄 Wochenbericht</button>'+
+    '</div>';
 
   // Ansprechperson (Projekt-Kontakt vor Ort)
   var apInner;
@@ -1719,6 +1724,7 @@ function paintProjektDetail(d){
   zsLoad(_pmProjektId);
   medienLoad(_pmProjektId);
   $('pm-edit').onclick=function(){ openProjektEdit(p); };
+  var wbb=$('pm-wb'); if(wbb) wbb.onclick=function(){ wbOeffnenFuerProjekt(p.id); };
   var dbe=$('pm-db-edit'); if(dbe) dbe.onclick=openDatenblatt;
   $('pm-kunde-set').onclick=openKundeZuordnen;
   var ta=$('pm-tech-add'); if(ta) ta.onclick=openTechAssign;
@@ -2371,6 +2377,15 @@ function wbLetzteWochen(n){
 }
 
 var _wbProjekte=[], _wbSel=null, _wbDaten=null, _wbBlobUrl=null;
+// Vorbelegung aus dem Projektdetail ("📄 Wochenbericht"-Knopf). Bewusst getrennt
+// von _wbSel: _wbSel bedeutet "Bericht wurde erzeugt" und hängt an Vorschau,
+// PDF und Versand — eine blosse Vorauswahl darf das nicht auslösen.
+var _wbVorwahl=null;
+function wbOeffnenFuerProjekt(projektId){
+  _wbVorwahl=projektId||null;
+  _wbSel=null; _wbDaten=null;
+  go('wochenberichte');
+}
 
 function renderWochenberichte(){
   $('view').innerHTML='<h2><span class="acc">📄</span> Wochenbericht</h2>'+backRow()+
@@ -2395,7 +2410,10 @@ function wbPaintPicker(){
   if(!$('wb-picker')) return;
   if(!_wbProjekte.length){ $('wb-picker').innerHTML='<div class="empty">Noch keine Projekte angelegt.</div>'; return; }
   var wochen=wbLetzteWochen(16);
-  var vorauswahlP=(_wbSel&&_wbSel.projekt_id)||_wbProjekte[0].id;
+  // Reihenfolge: erzeugter Bericht → Vorbelegung aus dem Projektdetail → erstes Projekt.
+  var vorwahlDa=_wbVorwahl&&_wbProjekte.some(function(p){ return p.id===_wbVorwahl; });
+  var vorauswahlP=(_wbSel&&_wbSel.projekt_id)||(vorwahlDa?_wbVorwahl:_wbProjekte[0].id);
+  _wbVorwahl=null;   // nur einmal wirksam, sonst klebt die Auswahl am Modul
   var vorauswahlK=(_wbSel?(_wbSel.jahr+'-'+_wbSel.woche):(wochen[0].jahr+'-'+wochen[0].woche));
   $('wb-picker').innerHTML=
     '<div class="lcard">'+

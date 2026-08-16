@@ -185,10 +185,14 @@ function canWrite(role, isAdmin, ids, projektId) {
 
 async function listProjekte(res, user, role, isAdmin) {
   const ids = await projektIdsForUser(user, role, isAdmin);
-  let url = `${SUPABASE_URL}/rest/v1/gs_projekte?select=id,name,projektnummer,standort,status&order=created_at.desc`;
+  // geloescht_at mitlesen und JS-seitig filtern: gelöschte Projekte behalten
+  // status='aktiv' (Soft-Delete, scripts/runde8a.sql), fallen also durch jeden
+  // reinen Status-Filter. Gleiches Muster wie ohneGeloeschte() im Cockpit.
+  let url = `${SUPABASE_URL}/rest/v1/gs_projekte?select=id,name,projektnummer,standort,status,geloescht_at&order=created_at.desc`;
   if (ids !== null) { if (!ids.length) return res.status(200).json({ projekte: [] }); url += `&id=in.(${ids.join(',')})`; }
   const rows = await sbJson(await fetch(url, { headers: SB }));
-  return res.status(200).json({ projekte: Array.isArray(rows) ? rows : [] });
+  const projekte = (Array.isArray(rows) ? rows : []).filter((p) => !p.geloescht_at).map(({ geloescht_at, ...p }) => p);
+  return res.status(200).json({ projekte });
 }
 
 // Vollständiger Baum eines Projekts inkl. berechnetem Fortschritt pro Haus.

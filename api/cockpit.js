@@ -2773,7 +2773,7 @@ async function saveTechTag(b, scope) {
     ueberzeit_25: (b.uz25 != null && b.uz25 !== '') ? num(b.uz25) : 0,
     ueberzeit_50: (b.uz50 != null && b.uz50 !== '') ? num(b.uz50) : 0,
     ueberzeit_100: (b.uz100 != null && b.uz100 !== '') ? num(b.uz100) : 0,
-    start_zeit, end_zeit, pause_minuten, stunden_manuell, projektnummer_erfasst,
+    pause_minuten, stunden_manuell, projektnummer_erfasst,
     taetigkeit: GEWERK_OPTIONS.has(b.taetigkeit) ? b.taetigkeit : null,
     spesen: (b.spesen != null && b.spesen !== '') ? num(b.spesen) : 0,
     arbeiten: toStrArr(b.arbeiten),
@@ -2799,6 +2799,22 @@ async function saveTechTag(b, scope) {
   // „leeren" — das bleibt möglich, sobald die Materialerfassung gebaut wird.
   if (b.material !== undefined) row.material = toStrArr(b.material);
   if (b.material_positionen !== undefined) row.material_positionen = matPositionen(b.material_positionen);
+
+  // START/ENDE — gleiche Wache wie beim Material, aber eine Stufe schärfer.
+  //
+  // Vorher standen start_zeit/end_zeit unbedingt im row-Objekt. Das Wochenblatt
+  // sendet die Felder IMMER mit (tcCollectRow → '.f-start'.value || ''), also
+  // schrieb jeder Autosave bei leerem Eingabefeld hart null zurück und löschte
+  // damit bereits erfasste Zeiten. Genau so ist KW30/NIE entstanden: Montag mit
+  // Zeiten, Di–Fr ohne, obwohl überall 8.00 Std stehen.
+  //
+  // Deshalb gilt hier: leer ODER nicht gesendet = „nicht anfassen". Ein PATCH
+  // ohne (bzw. mit leeren) Zeitfeldern lässt die gespeicherten Werte stehen; ein
+  // INSERT ohne den Schlüssel nimmt den DB-Default (NULL). Zeiten korrigieren
+  // geht weiterhin durch Senden eines gültigen HH:MM, Leeren nur über die
+  // Master-Korrektur (pmWochenrapportUpdate).
+  if (start_zeit) row.start_zeit = start_zeit;
+  if (end_zeit) row.end_zeit = end_zeit;
 
   const notMigratedErr = (e) => /column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '');
 

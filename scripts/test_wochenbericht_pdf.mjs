@@ -61,7 +61,10 @@ const s31 = pdf31.toString('latin1');
 ok(s31.includes('Wochenbericht'), 'Titel im Dokument');
 ok(s31.includes('WB-P-2026-3470-2026-31'), 'Berichtsnummer im Dokument');
 ok(s31.includes('Tagesverlauf'), 'Tagesverlauf-Abschnitt');
-ok(s31.includes('Einreichstatus'), 'Einreichstatus-Abschnitt');
+ok(s31.includes('Aufwand je Techniker'), 'Aufwand-je-Techniker-Abschnitt');
+// Der interne Bearbeitungsstand des Wochenrapports gehört nicht ins Kundendokument.
+ok(!/[Ee]ntwurf/.test(s31), 'kein interner Status ("entwurf") im Kunden-PDF');
+ok(!s31.includes('Einreichstatus'), 'kein Einreichstatus-Abschnitt im Kunden-PDF');
 ok(s31.includes('/Filter/DCTDecode'), 'Logo als JPEG eingebettet (Regel 6)');
 ok(s31.includes('0.788 0.663 0.380 RG'), 'goldene Trennlinie #C9A961 (Regel 6)');
 // Regel 6: helles Dokument. Keine dunkle Flächenfüllung.

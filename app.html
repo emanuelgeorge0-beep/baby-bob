@@ -7791,7 +7791,7 @@ function pdStatusBadge(status){
 }
 function pdLoadCards(){
   var el=document.getElementById('pd-cards');if(!el)return;
-  var proj=0,tech=0,rapH=0,rapW=0,offen=0,sysOk=true;
+  var proj=0,tech=0,rapG=0,rapW=0,offen=0,sysOk=true,rapErr='';
   pdWxPlace=null;   // pro Laden neu aus Projekten ableiten (kein Rest von anderem Partner)
   var heute=new Date().toISOString().slice(0,10);
   var wStart=new Date(Date.now()-6*864e5).toISOString().slice(0,10);
@@ -7800,15 +7800,30 @@ function pdLoadCards(){
       var ps=(d.projekte||[]).filter(function(p){return p.status!=='abgeschlossen';});
       proj=ps.length;
       var set={};
-      ps.forEach(function(p){(p.gs_projekt_techniker||[]).forEach(function(t){ if(t&&t.techniker_user_id) set[t.techniker_user_id]=1; });});
+      // Aus p.techniker zählen (Server löst beide Zuweisungs-Spalten zu Namen auf
+      // und liefert eine bereits entdoppelte Liste). Der alte Weg las das rohe
+      // Embed p.gs_projekt_techniker, das der Server gar nicht mehr mitschickt.
+      ps.forEach(function(p){(p.techniker||[]).forEach(function(t){
+        var k=t&&(t.id||t.user_id); if(k) set[k]=1; });});
       tech=Object.keys(set).length;
       // Wetter-Ort: erster Projekt-Standort (DACH), sonst Fallback Zürich (s. pdGeocode).
       for(var i=0;i<ps.length;i++){ if(ps[i].standort){ pdWxPlace=ps[i].standort; break; } }
     }).catch(function(){ sysOk=false; }),   // projekte ist für gs_partner immer erlaubt → guter Konnektivitäts-Indikator
+    // Kachel zeigt die GESAMTZAHL der Rapporte des Partners (vorher nur die von
+    // "heute" — bei Projekten ohne heutige Buchung sah das aus wie 0 Rapporte).
+    // Fehler werden nicht mehr verschluckt: gsAuthApi liefert 403/Entitlement als
+    // {error,locked} im Body, echte Netzfehler landen im catch. Beides muss
+    // sichtbar sein, sonst ist "keine Berechtigung" von "keine Daten" nicht zu
+    // unterscheiden.
     gsAuthApi('tagesrapport',{action:'list'}).then(function(d){
-      (d.rapporte||[]).forEach(function(r){ var dt=(r.datum||'').slice(0,10);
-        if(dt===heute)rapH++; if(dt>=wStart&&dt<=heute)rapW++; });
-    }).catch(function(){}),
+      if(d&&d.error){ rapErr=d.locked?'nicht freigeschaltet':d.error;
+        console.error('[Partner-Cockpit] Rapporte:',d.error,d.locked?('(gesperrt: '+d.locked+')'):''); return; }
+      var rs=d&&d.rapporte?d.rapporte:[];
+      rapG=rs.length;
+      rs.forEach(function(r){ var dt=(r.datum||'').slice(0,10);
+        if(dt>=wStart&&dt<=heute)rapW++; });
+    }).catch(function(e){ rapErr='nicht erreichbar';
+      console.error('[Partner-Cockpit] Rapporte konnten nicht geladen werden:',e); }),
     gsAuthApi('rechnung',{action:'list'}).then(function(d){
       offen=(d.rechnungen||[]).filter(function(r){return r.status!=='bezahlt';}).length;
     }).catch(function(){})
@@ -7816,7 +7831,8 @@ function pdLoadCards(){
     el.innerHTML=
       pdTile({ic:'🏗️',k:'Aktive Projekte',v:proj,cls:'gold',feature:'projektmanagement',tab:'projekte'})
      +pdTile({ic:'🛠️',k:'Zugeteilte Techniker',v:tech,sfx:'auf '+proj+' Projekt'+(proj===1?'':'en'),feature:'projektmanagement',tab:'projekte'})
-     +pdTile({ic:'📋',k:'Rapporte',v:rapH,sfx:'heute · '+rapW+' diese Woche',feature:'reporting',tab:'rapporte'})
+     +pdTile({ic:'📋',k:'Rapporte',v:rapErr?'⚠':rapG,cls:rapErr?'warn':'',
+              sfx:rapErr?rapErr:('gesamt · '+rapW+' diese Woche'),feature:'reporting',tab:'rapporte'})
      +pdTile({ic:'📦',k:'Materiallisten',v:'›',cls:'gold',sfx:'Listen ansehen',feature:'material',tab:'material'})
      +pdTile({ic:'🧾',k:'Rechnungen',v:offen,cls:offen>0?'warn':'',sfx:offen>0?'offen':'alle bezahlt',tab:'rechnungen'})
      +pdTile({ic:'📊',k:'Controlling',v:'›',cls:'gold',sfx:'Auswertung öffnen',feature:'controlling',tab:'controlling'})
@@ -7938,7 +7954,7 @@ function pdTab(tab){
       var ps=d.projekte||[];
       pdProjekte=ps;
       c.innerHTML=ps.length?ps.map(function(p){
-        var nT=(p.gs_projekt_techniker||[]).length;
+        var nT=(p.techniker||[]).length;
         return '<div class="pd-item" style="cursor:pointer;" onclick="pdOpenProjekt(\''+p.id+'\')">'
           +'<div class="pd-item-top"><div class="pd-item-tit">'+gsEsc(p.name)+'</div>'
           +'<div style="display:flex;align-items:center;gap:8px;">'+pdStatusBadge(p.status)
