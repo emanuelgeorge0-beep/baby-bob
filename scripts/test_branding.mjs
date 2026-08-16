@@ -85,5 +85,43 @@ const mitStil = buildPdf({ style: 'brief', branding: marke, title: 'Probe', bloc
 ok(!ohneStil.includes('0.043 0.043 0.047 rg'), 'ohne style bleibt alles wie bisher');
 ok(mitStil.includes('0.043 0.043 0.047 rg'), 'mit style="brief" kommt der Kopfbalken');
 
+console.log('\n── Fusszeile und Seitenzahl auf JEDER Seite ─────────────');
+// Je Seite ein Content-Stream (Bild-Streams tragen kein BT). Geprüft wird nicht
+// "kommt irgendwo vor", sondern "kommt auf jeder einzelnen Seite vor" — sonst
+// fällt ein Fehler auf Seite 1 nicht auf, solange die letzte Seite stimmt.
+const textStreams = (buf) => [...buf.toString('latin1').matchAll(/stream\n([\s\S]*?)\nendstream/g)]
+  .map((m) => m[1]).filter((t) => /BT /.test(t));
+const wb = buildWochenberichtPdf(daten, { logo: marke.logo, fotos: [], berichtNr: 'WB-PROBE', branding: marke });
+const seiten = textStreams(wb);
+ok(seiten.length >= 2, `mehrseitig (${seiten.length} Seiten)`);
+ok(seiten.every((st) => st.includes('george-solutions.ch')), 'Firmenzeile aus gs_branding auf jeder Seite');
+ok(seiten.every((st, i) => st.includes(`Seite ${i + 1} von ${seiten.length}`)), 'Seitenzahl auf jeder Seite, richtig gezählt');
+ok(seiten.slice(1).every((st) => st.includes('WB-PROBE')), 'Folgeseiten tragen die Berichtsnummer im Kopf');
+
+console.log('\n── Berichtstyp in der Akzentfarbe ───────────────────────');
+const kopfOps = seiten[0];
+ok(/0\.788 0\.663 0\.380 rg BT \/F1 18 Tf/.test(kopfOps), '"Wochenbericht" steht in Gold, nicht in Weiss');
+ok(/0\.72 0\.72 0\.72 rg BT \/F2 8\.5 Tf/.test(kopfOps), 'Nummer/KW darunter bleiben gedämpftes Weiss');
+
+console.log('\n── Seitenausgleich ─────────────────────────────────────');
+// Ein Dokument, dessen Rest ohne Ausgleich als Handvoll Zeilen auf der letzten
+// Seite landet. Der Ausgleich muss den Bruch nach oben ziehen, ohne eine
+// zusätzliche Seite zu erzeugen.
+const probeBloecke = [];
+for (let i = 1; i <= 9; i++) {
+  probeBloecke.push({ t: 'h2', text: `Abschnitt ${i}` });
+  probeBloecke.push({ t: 'table', size: 8.5, cols: [{ w: 100, label: 'A' }, { w: 100, label: 'B' }], rows: [['x' + i, 'y' + i]] });
+}
+const bau = (bal) => buildPdf({ style: 'brief', balance: bal, branding: marke, title: 'Probe', footer: 'PR-1', blocks: probeBloecke });
+const tiefstes = (buf) => {
+  const st = textStreams(buf).slice(-1)[0];
+  const ys = [...st.matchAll(/ (\d+\.\d+) Td/g)].map((m) => +m[1]).filter((v) => v > 100);
+  return ys.length ? Math.min(...ys) : 999;
+};
+const ohne = bau(false), mit = bau(true);
+ok(textStreams(ohne).length === textStreams(mit).length, 'Ausgleich kostet keine zusätzliche Seite');
+ok(tiefstes(mit) < tiefstes(ohne) - 40, `letzte Seite trägt mehr (y ${tiefstes(ohne).toFixed(0)} → ${tiefstes(mit).toFixed(0)})`);
+ok(tiefstes(bau(true)) === tiefstes(mit), 'Ausgleich ist deterministisch');
+
 console.log(fail ? `\n✗ ${fail} FEHLER · ${pass} Prüfungen bestanden` : `\n✓ ALLE ${pass} Prüfungen bestanden`);
 process.exit(fail ? 1 : 0);
