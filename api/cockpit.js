@@ -2123,23 +2123,51 @@ async function getPmTechniker() {
   return { techniker };
 }
 
+// Auth-User-ID zu einer gs_techniker-Zeile. Fehlt sie (Demo-Techniker ohne
+// Login) oder schlägt der Griff fehl → null, nie ein Abbruch: eine Zuweisung
+// ohne user_id ist weiterhin gültig, sie ist nur im Gewerke-/Projectflow-Modul
+// nicht sichtbar.
+async function technikerUserId(technikerId) {
+  try {
+    const rows = await sbGet(`gs_techniker?id=eq.${technikerId}&select=user_id&limit=1`);
+    return (rows && rows[0] && rows[0].user_id) || null;
+  } catch (_) { return null; }
+}
+
+// gs_projekt_techniker hat ZWEI Techniker-Spalten: techniker_id (→ gs_techniker.id,
+// gelesen von api/cockpit.js) und techniker_user_id (auth uid, gelesen von
+// api/projekte.js:69,89, api/gewerke.js:173, api/projectflow.js:123). Wer nur eine
+// schreibt, macht dieselbe Zuweisung je nach Modul mal sichtbar und mal nicht.
+// Deshalb werden hier BEIDE gesetzt — ohne Umbenennung, ohne Migration.
 async function assignTech(b, scope) {
   await requireOwnedProjekt(b.projekt_id, scope);
+  const tid = uuid(b.techniker_id);
   const row = {
     projekt_id: uuid(b.projekt_id),
-    techniker_id: uuid(b.techniker_id),
+    techniker_id: tid,
+    techniker_user_id: await technikerUserId(tid),
     taetigkeit: b.taetigkeit ? String(b.taetigkeit).slice(0, 120) : null,
   };
   if (b.stundensatz != null && b.stundensatz !== '') row.stundensatz = num(b.stundensatz);
+  const post = async (p) => {
+    const r = await sbWrite('POST', 'gs_projekt_techniker', p);
+    return Array.isArray(r) ? r[0] : r;
+  };
   try {
-    const r = await sbWrite('POST', 'gs_projekt_techniker', row);
-    return { ok: true, row: Array.isArray(r) ? r[0] : r };
+    return { ok: true, row: await post(row) };
   } catch (e) {
+    const msg = (e && e.message) || '';
     if (isNoTable(e)) return { notMigrated: true };
+    // Neu erreichbar, seit techniker_user_id mitgeschrieben wird: der partielle
+    // Unique-Index uq_pt_projekt_user (projekt_id, techniker_user_id) greift jetzt.
+    // Derselbe Techniker zweimal aufs selbe Projekt → klare Ansage statt 500.
+    if (/duplicate key|23505/i.test(msg)) {
+      return { error: 'Dieser Techniker ist dem Projekt bereits zugewiesen.' };
+    }
     // stundensatz-Spalte fehlt noch → ohne Tarif zuweisen (kein 500).
-    if ('stundensatz' in row && /column|does not exist|PGRST204/i.test((e && e.message) || '')) {
+    if ('stundensatz' in row && /column|does not exist|PGRST204/i.test(msg)) {
       const { stundensatz, ...base } = row;
-      try { const r = await sbWrite('POST', 'gs_projekt_techniker', base); return { ok: true, row: Array.isArray(r) ? r[0] : r, tarifNotMigrated: true }; }
+      try { return { ok: true, row: await post(base), tarifNotMigrated: true }; }
       catch (e2) { if (isNoTable(e2)) return { notMigrated: true }; throw e2; }
     }
     throw e;

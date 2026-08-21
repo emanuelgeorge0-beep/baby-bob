@@ -449,6 +449,10 @@
   .tcard .nm{font-weight:700;font-size:14.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .tcard .rt{font-size:12px;font-weight:800;color:var(--gold);white-space:nowrap;}
   .tcard .ql{font-size:12px;color:var(--muted);margin-top:2px;}
+  /* Identitaetszeile: nur im Zuweisungs-Picker. Zwei gleichnamige Techniker
+     sind sonst nicht unterscheidbar (live: zweimal "Emanuel George"). */
+  .tcard .idz{font-size:11.5px;color:var(--muted2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tcard .idz .nologin{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:50px;font-size:10.5px;font-weight:700;background:rgba(245,185,66,.16);color:var(--warn);}
   .tcard .hk{font-size:11px;letter-spacing:-1px;vertical-align:middle;opacity:.92;}
   .tcard .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;}
   .tcard .tag{font-size:10.5px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);}
@@ -1487,10 +1491,21 @@ function pmTechCardHtml(t,opts){
   if(opts.tarif!=null) right='<span class="tarif-chip">'+esc(t.stundensatz!=null?t.stundensatz+' CHF/h':opts.tarif)+'</span>';
   else if(rating) right='<span class="rt">'+rating+'</span>';
   var actionRow=opts.actionHtml||'';
+  // opts.ident: E-Mail + Login-Hinweis direkt unter den Namen. Nur der
+  // Zuweisungs-Picker setzt das — dort MUSS man zwei gleichnamige Techniker
+  // auseinanderhalten koennen. Ein Techniker ohne user_id sieht das Projekt
+  // spaeter nicht (api/cockpit.js:157 loest auth.uid -> gs_techniker.id auf),
+  // deshalb steht das VOR der Zuweisung auf der Karte, nicht erst danach.
+  var ident='';
+  if(opts.ident){
+    ident='<div class="idz">'+esc(t.email||'keine E-Mail hinterlegt')+
+      (t.user_id?'':'<span class="nologin">kein Login</span>')+'</div>';
+  }
   return '<div class="tcard'+(opts.pick?' pick':'')+(opts.sel?' sel':'')+'"'+(opts.dataTid?(' data-tid="'+esc(opts.dataTid)+'"'):'')+'>'+
     '<div class="av">'+esc(t.photo_emoji||'👷')+'</div>'+
     '<div class="mn">'+
       '<div class="tp"><span class="nm">'+esc(t.name||'Techniker')+' <span class="hk">'+pmHerkunftFlags(t.herkunft)+'</span></span>'+right+'</div>'+
+      ident+
       (t.qualification?'<div class="ql">'+esc(t.qualification)+'</div>':'')+
       (t.taetigkeit?'<div class="ql">🔧 '+esc(t.taetigkeit)+'</div>':'')+
       (tags?'<div class="tags">'+tags+'</div>':'')+
@@ -4414,7 +4429,7 @@ function openTechAssign(){
     var techs=d.techniker||[];
     if(!techs.length){ toast('Keine Techniker im Pool'); return; }
     _taPick=null;
-    var cards=techs.map(function(t){ return pmTechCardHtml(t,{pick:true,dataTid:t.id}); }).join('');
+    var cards=techs.map(function(t){ return pmTechCardHtml(t,{pick:true,ident:true,dataTid:t.id}); }).join('');
     var tarifOpts=[{v:65,t:'65 CHF/h'},{v:70,t:'70 CHF/h'},{v:72,t:'72 CHF/h'}];
     openSheet('<h3>Techniker zuweisen</h3>'+
       '<div class="sec-t">Techniker wählen</div>'+
@@ -4436,6 +4451,7 @@ function openTechAssign(){
       if(!_taPick){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Bitte Techniker antippen'; return; }
       api('pm_tech_assign',{projekt_id:_pmProjektId,techniker_id:_taPick,taetigkeit:($('ta-taet')||{}).value,stundensatz:($('ta-tarif')||{}).value}).then(function(r){
         if(r&&r.notMigrated){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Tabelle noch nicht migriert.'; return; }
+        if(r&&r.error){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent=r.error; return; }
         closeSheet(); loadProjekt(); toast(r&&r.tarifNotMigrated?'Zugewiesen (Tarif: SQL ausstehend)':'Zugewiesen');
       }).catch(function(){ $('ta-msg').className='login-msg err'; $('ta-msg').textContent='Fehler'; });
     };
