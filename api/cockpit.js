@@ -2884,22 +2884,30 @@ async function saveTechTag(b, scope) {
   }
 
   // Neue Zeile. UNIQUE(projekt/service, techniker, datum) kann kollidieren, wenn
-  // für diesen Tag/Projekt schon eine Zeile existiert → dann in-place aktualisieren
-  // statt Fehler (matcht "Zeile antippen = bearbeiten" ohne dass der Client die id kennt).
+  // für diesen Tag/Projekt schon eine Zeile existiert.
+  //
+  // Früher wurde die bestehende Zeile in dem Fall still überschrieben und ihre id
+  // an den Client zurückgegeben. Der Client hat diese fremde id auf die neue
+  // Bildschirmzeile gestempelt — ab da zeigten zwei sichtbare Einträge auf
+  // denselben Satz und haben sich bei jedem Autosave gegenseitig ausradiert.
+  // Erfasste Arbeit ist damit spurlos verschwunden.
+  //
+  // Jetzt wird der Konflikt gemeldet, statt fremde Daten anzufassen — dasselbe
+  // Verhalten wie im PATCH-Zweig oben, der das immer schon richtig gemacht hat.
   try {
     const r = await sbWrite('POST', 'gs_tagesrapporte', row);
     return await finishSave(r);
   } catch (e) {
     if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
-      const filter = row.service_auftrag_id
-        ? `service_auftrag_id=eq.${row.service_auftrag_id}&techniker_user_id=eq.${scope.technikerUserId}&datum=eq.${datum}`
-        : `projekt_id=eq.${row.projekt_id}&techniker_user_id=eq.${scope.technikerUserId}&datum=eq.${datum}`;
-      const existing = await sbGet(`gs_tagesrapporte?${filter}&select=id`).catch(() => []);
-      if (existing && existing[0]) {
-        const r2 = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${existing[0].id}`, row);
-        return await finishSave(r2);
+      // Klartext für den Techniker: was kollidiert, dass nichts überschrieben
+      // wurde, und was er tun kann. Keine ids, keine Tabellen-/Spaltennamen.
+      if (row.service_auftrag_id) {
+        return { error: 'Für diesen Serviceauftrag besteht an diesem Tag bereits ein Eintrag. Er wurde nicht überschrieben — bitte den bestehenden Eintrag ergänzen oder einen anderen Auftrag wählen.' };
       }
-      return { error: 'Für diesen Tag existiert bereits ein Rapport.' };
+      if (row.projekt_id) {
+        return { error: 'Für dieses Projekt besteht an diesem Tag bereits ein Eintrag. Er wurde nicht überschrieben — bitte den bestehenden Eintrag ergänzen oder ein anderes Projekt wählen.' };
+      }
+      return { error: 'Für diesen Tag besteht bereits ein Eintrag. Er wurde nicht überschrieben.' };
     }
     if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht vollständig migriert – scripts/wochenrapport_migration.sql und scripts/wochenrapport_ueberzeit.sql ausführen.' };
     throw e;

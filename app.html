@@ -1151,6 +1151,12 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
 #tech-cockpit .rc-status.saving{color:#5aa7ff;}
 #tech-cockpit .rc-status.saved{color:#3ecf8e;}
 #tech-cockpit .rc-status.error{color:#ff5d5d;cursor:help;}
+/* Fehlertext bleibt STEHEN, bis der naechste Speicherversuch klappt. Das ⚠ oben
+   traegt die Meldung nur im title-Attribut — auf dem Handy gibt es kein Hover,
+   und der Toast ist nach zwei Sekunden weg. Genau so hat der Techniker bisher
+   nicht gemerkt, dass sein Eintrag gar nicht gespeichert wurde. */
+#tech-cockpit .rc-fehler{display:none;margin-top:8px;padding:9px 11px;border:1px solid rgba(255,93,93,.45);border-radius:8px;background:rgba(255,93,93,.10);color:#ff8f8f;font-size:12.5px;line-height:1.45;}
+#tech-cockpit .rc-fehler.on{display:block;}
 #tech-cockpit .rc-gewerk{flex:1 1 108px;min-width:90px;}
 #tech-cockpit .rc-std{flex:0 0 62px;}
 #tech-cockpit .rc-std .tc-field,#tech-cockpit .rc-uzgroup .tc-field{padding:8px 8px;text-align:center;}
@@ -10475,10 +10481,20 @@ function tcPrefillChange(){
     tcApplyPrefillToRow(rowEl);
   });
 }
-function tcApplyPrefillToRow(rowEl){
+/* ohneZiel=true bei einem Zusatzeintrag ueber "＋ weiterer Eintrag": dort waere
+   die Projekt-Vorbelegung schaedlich. Ein zweiter Eintrag am selben Tag auf
+   DASSELBE Projekt ist nicht speicherbar (ein Tag + ein Projekt + ein Techniker
+   = ein Eintrag), er wird vom Server abgelehnt. Der Techniker fuegt eine zweite
+   Zeile aber gerade deshalb hinzu, weil er auf ein ANDERES Ziel bucht — die
+   Vorbelegung hat ihm also nur eine Kollision untergeschoben, die er selbst
+   wieder wegklicken musste. Das Gewerk bleibt vorbelegt: es gehoert nicht zur
+   Eindeutigkeit und ist ueber den Tag hinweg meist dasselbe. */
+function tcApplyPrefillToRow(rowEl,ohneZiel){
   if(!rowEl) return;
-  var zielSel=rowEl.querySelector('.rc-ziel');
-  if(zielSel && !zielSel.value && tcWocheDefault.ziel){ zielSel.value=tcWocheDefault.ziel; tcRowZielChange(zielSel); }
+  if(!ohneZiel){
+    var zielSel=rowEl.querySelector('.rc-ziel');
+    if(zielSel && !zielSel.value && tcWocheDefault.ziel){ zielSel.value=tcWocheDefault.ziel; tcRowZielChange(zielSel); }
+  }
   if(tcWocheDefault.gewerk && !rowEl.querySelector('.rc-gewerk-chips .tc-chip.sel')){
     var chip=rowEl.querySelector('.rc-gewerk-chips .tc-chip[data-v="'+tcWocheDefault.gewerk+'"]');
     if(chip) tcRowGewerkPick(chip);
@@ -11023,6 +11039,7 @@ function tcRowHtml(date,idx,z,isLast){
       '<span class="rc-status" title="">●</span>'+
     '</div>'+
     '<div class="rc-placeholder" style="'+placeholderDisp+'">Zuerst Projekt/Auftrag oder Abwesenheit wählen — Felder werden erst danach aktiv.</div>'+
+    '<div class="rc-fehler"></div>'+
     '<div class="rc-grund-wrap" style="'+grundDisp+'">'+
       '<div class="tc-lbl">Grund / Dauer (bei A: inkl. Krankheit)</div>'+
       '<input class="tc-field rc-grund" placeholder="Grund / Dauer" value="'+tcEsc((z&&z.abwesenheit_grund)||'')+'" oninput="tcRowInput(this)"/>'+
@@ -11105,12 +11122,12 @@ function tcAddRow(date){
   tcRowSeq[date]=idx+1;
   var oldPlus=lastRow.querySelector('.rc-plus'); if(oldPlus) oldPlus.remove();
   var neu=lastRow.nextElementSibling;
-  tcApplyPrefillToRow(neu);
+  tcApplyPrefillToRow(neu,true);   // Projekt bewusst NICHT vorbelegen, siehe tcApplyPrefillToRow
   tcHaptik(6);
-  // ZIEL 1 — Rückgängig. Die Zeile ist beim Anlegen noch nicht gespeichert;
-  // hat der Vorbelegungs-Automat inzwischen ein Ziel gesetzt und damit den
-  // Autosave ausgelöst, trägt sie eine data-id — dann muss auch der Server
-  // aufräumen, sonst bliebe eine Karteileiche in der Woche stehen.
+  // ZIEL 1 — Rückgängig. Die Zeile ist beim Anlegen noch nicht gespeichert (ohne
+  // Ziel speichert der Autosave gar nicht). Hat der Techniker in der Zwischenzeit
+  // ein Ziel gewählt und damit den Autosave ausgelöst, trägt sie eine data-id —
+  // dann muss auch der Server aufräumen, sonst bliebe eine Karteileiche stehen.
   tcUndoShow('Eintrag hinzugefügt',function(){
     if(!neu||!neu.isConnected) return;
     var id=neu.getAttribute('data-id');
@@ -11235,6 +11252,14 @@ function tcRowStatus(rowEl,state,msg){
     tcHaptik(6);
   }
 }
+/* Sichtbarer, bleibender Fehlertext an der Zeile. Ohne msg wird er geraeumt —
+   das passiert bei jedem neuen Speicherversuch, damit nie eine alte Meldung
+   ueber einer inzwischen gespeicherten Zeile stehen bleibt. */
+function tcRowFehler(rowEl,msg){
+  var el=rowEl&&rowEl.querySelector('.rc-fehler'); if(!el) return;
+  el.textContent=msg||'';
+  el.classList.toggle('on',!!msg);
+}
 function tcCollectRow(rowEl){
   var datum=rowEl.getAttribute('data-date');
   var zielVal=(rowEl.querySelector('.rc-ziel')||{}).value||'';
@@ -11281,22 +11306,37 @@ function tcCollectRow(rowEl){
 }
 function tcSaveRowEl(rowEl){
   var body=tcCollectRow(rowEl);
-  if(body===null){ tcRowStatus(rowEl,'idle'); return; }
+  if(body===null){ tcRowStatus(rowEl,'idle'); tcRowFehler(rowEl,''); return; }
   var existingId=rowEl.getAttribute('data-id');
   if(existingId) body.id=existingId;
   tcRowStatus(rowEl,'saving');
+  tcRowFehler(rowEl,'');
   var wasNew=!existingId;
   techApi('tech_tag_save',body).then(function(d){
-    if(d&&d.error){ tcRowStatus(rowEl,'error',d.error); tcToast(d.error); return; }
+    if(d&&d.error){ tcRowStatus(rowEl,'error',d.error); tcRowFehler(rowEl,d.error); tcToast(d.error); return; }
     var saved=d.row;
     if(saved&&saved.id){
+      // Die id nur stempeln, wenn diese Zeile wirklich neu angelegt wurde oder
+      // der Server dieselbe id zurueckgibt, die sie schon traegt. Kaeme eine
+      // FREMDE id zurueck, zeigten zwei sichtbare Eintraege auf denselben Satz
+      // und wuerden sich beim naechsten Autosave gegenseitig ueberschreiben.
+      // Der Server tut das seit Fix 1 nicht mehr — der Riegel bleibt trotzdem,
+      // weil der Schaden still und nicht reparierbar waere.
+      if(!(wasNew||saved.id===existingId)){
+        var w='Nicht gespeichert — die Antwort gehoert zu einem anderen Eintrag. Bitte die Woche neu laden.';
+        tcRowStatus(rowEl,'error',w); tcRowFehler(rowEl,w); tcToast(w);
+        return;
+      }
       rowEl.setAttribute('data-id',saved.id);
       tcMergeSavedRow(saved);
       if(wasNew) tcRefreshRowChrome(rowEl,saved);
     }
     tcRowStatus(rowEl,'saved');
     tcRecalcTotals();
-  }).catch(function(){ tcRowStatus(rowEl,'error'); tcToast('Verbindungsfehler beim Speichern'); });
+  }).catch(function(){
+    var v='Verbindungsfehler beim Speichern — dieser Eintrag ist NICHT gespeichert.';
+    tcRowStatus(rowEl,'error',v); tcRowFehler(rowEl,v); tcToast(v);
+  });
 }
 function tcMergeSavedRow(z){
   if(!z||!z.id) return;
