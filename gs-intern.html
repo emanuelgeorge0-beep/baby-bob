@@ -2122,15 +2122,55 @@ var WR_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'U
 function renderWochenrapporte(){
   $('view').innerHTML='<h2><span class="acc">📆</span> Wochenrapporte</h2>'+backRow()+
     '<div class="usub" id="wr-count" style="color:var(--muted);font-size:13px;margin-bottom:10px">Lädt…</div>'+
+    '<div id="wr-filter" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>'+
     '<div class="list" id="wr-list">'+skeletonCards(4)+'</div>';
   wireBack();
   api('pm_wochenrapporte_liste',{}).then(function(d){
     if(d&&d.notMigrated){ $('wr-list').innerHTML=migRow('scripts/wochenrapport_migration.sql im Supabase SQL Editor ausführen.'); $('wr-count').textContent=''; return; }
     var ws=(d&&d.wochen)||[];
-    $('wr-count').textContent=ws.length+' Wochenrapport'+(ws.length===1?'':'e');
-    if(!ws.length){ $('wr-list').innerHTML='<div class="empty">Noch keine Wochenrapporte erfasst.</div>'; return; }
-    _wrListe=ws;
-    $('wr-list').innerHTML=ws.map(function(w,i){
+    _wrAlle=ws;
+    if(!ws.length){ $('wr-count').textContent='0 Wochenrapporte'; $('wr-list').innerHTML='<div class="empty">Noch keine Wochenrapporte erfasst.</div>'; return; }
+    wrPaint();
+  }).catch(function(){ $('wr-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+
+// ── Statusfilter ──────────────────────────────────────────────────────────
+// Gefiltert wird auf dem bereits geladenen Bestand, nicht per neuer Abfrage:
+// die Liste ist auf 200 Wochen gedeckelt und liegt ohnehin komplett vor.
+// 'teilweise' zaehlt zu OFFEN — solange eine Zeile offen ist, ist an der Woche
+// noch etwas zu tun. Wochen ganz ohne Tageszeilen ('leer') haben nichts zu
+// verrechnen und erscheinen nur unter "Alle"; die Chip-Zahlen machen sichtbar,
+// dass sie existieren, statt sie stillschweigend verschwinden zu lassen.
+function wrGruppe(w){
+  var a=w.abrechnung||'leer';
+  if(a==='verrechnet') return 'verrechnet';
+  if(a==='leer') return 'leer';
+  return 'offen';                       // 'offen' und 'teilweise'
+}
+function wrPaint(){
+  var alle=_wrAlle||[];
+  var zahl={alle:alle.length,offen:0,verrechnet:0,leer:0};
+  alle.forEach(function(w){ zahl[wrGruppe(w)]++; });
+  var chips=[['alle','Alle'],['offen','Offen'],['verrechnet','Verrechnet']];
+  if(zahl.leer) chips.push(['leer','Ohne Zeilen']);
+  var fb=$('wr-filter');
+  if(fb) fb.innerHTML=chips.map(function(c){
+    return '<button class="chip'+(_wrFilter===c[0]?' on':'')+'" data-wrfil="'+c[0]+'">'+esc(c[1])+' ('+zahl[c[0]]+')</button>';
+  }).join('');
+  if(fb) Array.prototype.forEach.call(fb.querySelectorAll('[data-wrfil]'),function(b){
+    b.onclick=function(){ _wrFilter=b.getAttribute('data-wrfil'); wrPaint(); };
+  });
+
+  var ws=(_wrFilter==='alle')?alle:alle.filter(function(w){ return wrGruppe(w)===_wrFilter; });
+  _wrListe=ws;                          // Indizes der Knoepfe zeigen auf die GEFILTERTE Liste
+  // Erzeugte PDFs gehoeren zu den ALTEN Indizes und deren Boxen sind gleich weg.
+  // Ohne revoke bliebe jedes Blob bis zum Seitenwechsel im Speicher liegen.
+  Object.keys(_wrPdfUrls).forEach(function(k){ try{ URL.revokeObjectURL(_wrPdfUrls[k]); }catch(e){} });
+  _wrPdfUrls={};
+  $('wr-count').textContent=ws.length+' von '+alle.length+' Wochenrapport'+(alle.length===1?'':'en');
+  if(!ws.length){ $('wr-list').innerHTML='<div class="empty">Kein Wochenrapport mit diesem Status.</div>'; return; }
+
+  $('wr-list').innerHTML=ws.map(function(w,i){
       var stPill=pmPill(w.status==='eingereicht'?'eingereicht':'entwurf', w.status==='eingereicht'?'#3dd68c':'var(--gold)');
       var projekte=w.projekte||[];
       var abr=w.abrechnung||'leer';
@@ -2159,10 +2199,9 @@ function renderWochenrapporte(){
     }).join('');
     Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
     Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf'))); }; });
-    Array.prototype.forEach.call($('view').querySelectorAll('[data-wrabr]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); var t=b.getAttribute('data-wrabr').split(':'); wrAbrechnung(Number(t[0]),t[1],b); }; });
-  }).catch(function(){ $('wr-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-wrabr]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); var t=b.getAttribute('data-wrabr').split(':'); wrAbrechnung(Number(t[0]),t[1],b); }; });
 }
-var _wrListe=[], _wrPdfUrls={};
+var _wrListe=[], _wrAlle=[], _wrPdfUrls={}, _wrFilter='alle';
 
 // ── Abrechnungsstatus einer ganzen Woche umschalten (Master) ──────────────
 // Geschrieben wird gs_tagesrapporte.abrechnung_status ueber die bestehende
