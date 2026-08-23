@@ -2190,6 +2190,7 @@ function wrPaint(){
           (projekte.length
             ? '<button class="chip" data-wrpdf="'+i+'">📄 Wochenbericht'+(projekte.length>1?' ('+projekte.length+' Projekte)':'')+'</button>'
             : '<span class="chip" style="opacity:.45;cursor:default" title="Ohne gebuchtes Projekt gibt es keinen Wochenbericht">📄 Wochenbericht</span>')+
+          (projekte.length ? '<button class="chip" data-wrfoto="'+i+'">📷 Fotodokumentation</button>' : '')+
           (abr==='leer' ? ''
             : abr==='verrechnet'
               ? '<button class="chip" data-wrabr="'+i+':offen">↩ Auf offen zurücksetzen</button>'
@@ -2198,7 +2199,8 @@ function wrPaint(){
         '<div class="wr-pdfbox" data-pdfbox="'+i+'"></div></div>';
     }).join('');
     Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
-    Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf'))); }; });
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf')),'bericht'); }; });
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-wrfoto]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrfoto')),'fotodoku'); }; });
   Array.prototype.forEach.call($('view').querySelectorAll('[data-wrabr]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); var t=b.getAttribute('data-wrabr').split(':'); wrAbrechnung(Number(t[0]),t[1],b); }; });
 }
 var _wrListe=[], _wrAlle=[], _wrPdfUrls={}, _wrFilter='alle';
@@ -2228,18 +2230,80 @@ function wrAbrechnung(i, ziel, btn){
 // dieser Woche gebucht? Genau EINES  -> direkt erzeugen. MEHRERE -> auswaehlen
 // lassen, statt stillschweigend das erste zu nehmen. hauptprojekt_id wird
 // bewusst nicht benutzt, sie ist oft NULL und deckt Mehrfachbaustellen nicht ab.
-function wrBerichtKlick(i){
+function wrBerichtKlick(i, art){
   var w=_wrListe[i]; if(!w) return;
   var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
   var ps=w.projekte||[];
   if(!ps.length){ toast('In dieser Woche ist kein Projekt gebucht.'); return; }
-  if(ps.length===1){ wrBerichtErzeugen(i, ps[0]); return; }
+  if(ps.length===1){ wrDokStart(i, ps[0], art); return; }
   box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="nm" style="margin-bottom:8px">Für welches Projekt?</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
       ps.map(function(p,k){ return '<button class="chip" data-wrpick="'+i+':'+k+'">'+esc((p.projektnummer||'')+(p.name?(' · '+p.name):''))+'</button>'; }).join('')+
     '</div></div>';
   Array.prototype.forEach.call(box.querySelectorAll('[data-wrpick]'),function(b){
-    b.onclick=function(){ var t=b.getAttribute('data-wrpick').split(':'); wrBerichtErzeugen(Number(t[0]), _wrListe[Number(t[0])].projekte[Number(t[1])]); };
+    b.onclick=function(){ var t=b.getAttribute('data-wrpick').split(':'); wrDokStart(Number(t[0]), _wrListe[Number(t[0])].projekte[Number(t[1])], art); };
+  });
+}
+
+// Wochenbericht geht direkt aufs PDF. Die Fotodokumentation zeigt erst die
+// Vorschau: welche Bilder, an welchem Tag, wie viele davon ins Dokument passen.
+// Kein Editor, keine Umsortierung - die Reihenfolge ist der Tagesverlauf.
+function wrDokStart(i, projekt, art){
+  if(art!=='fotodoku'){ wrBerichtErzeugen(i, projekt); return; }
+  var w=_wrListe[i]; var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!w||!box) return;
+  box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>Lade Vorschau…</span></div></div>';
+  wbApi('fotodoku_vorschau',{projekt_id:projekt.id,jahr:w.jahr,woche:w.woche}).then(function(d){
+    if(!box.isConnected) return;
+    if(!d||d.error||!d.vorschau){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((d&&d.error)||'Vorschau fehlgeschlagen')+'</span></div></div>'; return; }
+    var v=d.vorschau;
+    if(!v.gesamt){
+      box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="nm">Fotodokumentation</div>'+
+        '<div class="meta"><span>Für KW '+esc(w.woche)+' liegen zu diesem Projekt keine Fotos vor.</span></div></div>';
+      return;
+    }
+    var zeilen=(v.tage||[]).map(function(t){
+      return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">'+
+        '<span>'+esc(t.wochentag)+', '+esc(deDate(t.datum))+'</span>'+
+        '<span style="color:var(--muted)">'+t.abgebildet+' von '+t.anzahl+'</span></div>';
+    }).join('');
+    if(v.ohne_tag&&v.ohne_tag.anzahl) zeilen+='<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">'+
+      '<span>Ohne Tageszuordnung</span><span style="color:var(--muted)">'+v.ohne_tag.abgebildet+' von '+v.ohne_tag.anzahl+'</span></div>';
+    var rest=v.gesamt-((v.tage||[]).reduce(function(a,t){return a+t.abgebildet;},0)+((v.ohne_tag||{}).abgebildet||0));
+    box.innerHTML='<div class="lcard" style="margin-top:8px">'+
+      '<div class="top"><div class="nm">Fotodokumentation — Vorschau</div>'+pmPill(v.gesamt+' Foto(s)','var(--gold)')+'</div>'+
+      '<div style="margin:8px 0 4px">'+zeilen+'</div>'+
+      (rest>0?'<div class="meta" style="margin-top:6px"><span>'+rest+' Foto(s) über dem Deckel von '+v.deckel+' — nicht im Dokument.</span></div>':'')+
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+        '<button class="chip on" id="wr-fd-go">PDF erzeugen</button>'+
+        '<button class="chip" id="wr-fd-ab">Abbrechen</button>'+
+      '</div><div id="wr-fd-out"></div></div>';
+    $('wr-fd-ab').onclick=function(){ box.innerHTML=''; };
+    $('wr-fd-go').onclick=function(){ wrFotodokuPdf(i, projekt); };
+  }).catch(function(e){
+    if(box.isConnected) box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((e&&e.message)||'Verbindungsfehler')+'</span></div></div>';
+  });
+}
+
+function wrFotodokuPdf(i, projekt){
+  var w=_wrListe[i]; var out=$('wr-fd-out'); if(!w||!out) return;
+  var go=$('wr-fd-go'); if(go){ go.disabled=true; go.textContent='Erzeuge…'; }
+  if(_wrPdfUrls[i]){ try{ URL.revokeObjectURL(_wrPdfUrls[i]); }catch(e){} delete _wrPdfUrls[i]; }
+  wbApi('fotodoku',{projekt_id:projekt.id,jahr:w.jahr,woche:w.woche}).then(function(d){
+    if(go){ go.disabled=false; go.textContent='PDF erzeugen'; }
+    if(!out.isConnected) return;
+    if(!d||d.error||!d.pdf_base64){ out.innerHTML='<div class="meta" style="margin-top:8px"><span>'+esc((d&&d.error)||'PDF fehlgeschlagen')+'</span></div>'; return; }
+    var blob=wbB64ToBlob(d.pdf_base64);
+    _wrPdfUrls[i]=URL.createObjectURL(blob);
+    out.innerHTML='<div class="meta" style="margin-top:10px"><span>'+esc(d.filename)+'</span>'+
+        '<span class="dot">'+Math.round(blob.size/1024)+' KB</span>'+
+        '<span class="dot">'+(d.abgebildet||0)+' von '+(d.erfasst||0)+' abgebildet</span></div>'+
+      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'+
+        '<a class="chip on" href="'+_wrPdfUrls[i]+'" target="_blank" rel="noopener" style="text-decoration:none">📷 Ansehen</a>'+
+        '<a class="chip" href="'+_wrPdfUrls[i]+'" download="'+esc(d.filename)+'" style="text-decoration:none">⬇ Herunterladen</a>'+
+      '</div>';
+  }).catch(function(e){
+    if(go){ go.disabled=false; go.textContent='PDF erzeugen'; }
+    if(out.isConnected) out.innerHTML='<div class="meta" style="margin-top:8px"><span>'+esc((e&&e.message)||'Verbindungsfehler')+'</span></div>';
   });
 }
 

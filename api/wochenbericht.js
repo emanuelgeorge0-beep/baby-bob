@@ -17,6 +17,7 @@
 import { sendResendEmail, wochenberichtEmailHtml } from '../lib/mail.js';
 import {
   sammleWochendaten, erzeugeBericht, versendeBericht, isoWocheVonDatum,
+  erzeugeFotodoku, fotodokuVorschau,
 } from '../lib/wochenbericht.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -95,6 +96,26 @@ export default async function handler(req, res) {
           protokolliert: r.protokolliert, protokoll_hinweis: r.protokoll_hinweis,
           hinweise: r.daten ? r.daten.hinweise : [],
           error: r.error,
+        });
+      }
+      // ── Fotodokumentation ──────────────────────────────────────────────
+      // Eigenes Dokument, gleicher Motor: beide bauen auf sammleWochendaten
+      // auf, es gibt keine zweite Medienabfrage. 'fotodoku_vorschau' liefert
+      // nur die Liste (keine Bytes), damit vor dem Erzeugen sichtbar ist, was
+      // hineinkommt — ohne Editor und ohne Umsortieren.
+      case 'fotodoku_vorschau': {
+        const v = await fotodokuVorschau({ projektId, jahr, woche });
+        return res.status(200).json({ ok: true, vorschau: v });
+      }
+      case 'fotodoku': {
+        const r = await erzeugeFotodoku({ projektId, jahr, woche });
+        return res.status(200).json({
+          ok: true,
+          filename: `Fotodokumentation_${r.nr}.pdf`.replace(/[^\w.-]+/g, '_'),
+          pdf_base64: Buffer.from(r.pdf).toString('base64'),
+          abgebildet: r.abgebildet,
+          erfasst: (r.daten.fotos || []).length + (r.daten.fotos_ohne_tag || []).length,
+          hinweise: r.daten.hinweise,
         });
       }
       case 'liste': {
