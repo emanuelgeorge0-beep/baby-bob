@@ -723,7 +723,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','wochenberichte','taetigkeitenkatalog','service'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','wochenberichte','wochenpaket','taetigkeitenkatalog','service'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -745,6 +745,7 @@ function go(v){
   else if(v==='lizenz') renderLizenz();
   else if(v==='subanfragen') renderSubAnfragen();
   else if(v==='wochenrapporte') renderWochenrapporte();
+  else if(v==='wochenpaket') renderWochenpaket();
   else if(v==='wochenberichte') renderWochenberichte();
   else if(v==='taetigkeitenkatalog') renderTaetigkeitenkatalog();
   else if(v==='service') renderService();
@@ -1213,6 +1214,7 @@ function renderMehr(){
     {v:'projekte',ic:'🏗️',t:'Projektmanagement',d:'Projekte, Kunden, Techniker, Material & Blockaden – alles an einem Ort'},
     {v:'wochenrapporte',ic:'📆',t:'Wochenrapporte',d:'Alle Techniker, alle Projekte – Stunden, Spesen, Material, Fotos pro KW'},
     {v:'wochenberichte',ic:'📄',t:'Wochenbericht',d:'Projekt × KW für den Bauleiter — Tagesverlauf, Tätigkeiten, Fotos. Vorschau, PDF, Versand'},
+    {v:'wochenpaket',ic:'📦',t:'Wochenpaket',d:'Kunde × KW — Wochenberichte, Fotodokumentationen und Stundenblätter auf einmal erzeugen und herunterladen'},
     {v:'service',ic:'🛠️',t:'Serviceaufträge',d:'Disposition: neue Aufträge annehmen, Techniker zuweisen, Status verfolgen, Servicebericht erzeugen'},
     {v:'taetigkeitenkatalog',ic:'🗂️',t:'Tätigkeitskatalog',d:'Katalog für die Tätigkeitsauswahl im Wochenrapport pflegen (anlegen, umbenennen, sortieren, deaktivieren)'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
@@ -2639,6 +2641,142 @@ function wbLetzteWochen(n){
   var out=[], d=new Date();
   for(var i=0;i<n;i++){ var k=wbIsoWeek(d); out.push(k); d.setDate(d.getDate()-7); }
   return out;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// WOCHENPAKET — Kunde × KW, alle Dokumente auf einmal
+// ══════════════════════════════════════════════════════════════════════════
+// Die Auswahl loest nicht von selbst auf drei Dokumente auf: Wochenbericht und
+// Fotodokumentation haengen am PROJEKT, das Stundenblatt am TECHNIKER. Die
+// Maske sagt deshalb ERST, was sie gefunden hat und wie viele PDFs daraus
+// werden - und erzeugt danach auf Knopfdruck alles.
+//
+// Erzeugt wird nacheinander, nicht parallel: jedes PDF bindet auf dem Server
+// Bilder ein, und ein Schwung gleichzeitiger Anfragen bringt nur Timeouts.
+var _wpKunden=[], _wpVorschau=null, _wpUrls=[], _wpLaeuft=false;
+
+function renderWochenpaket(){
+  $('view').innerHTML='<h2><span class="acc">📦</span> Wochenpaket</h2>'+backRow()+
+    '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+
+      'Kunde und Kalenderwoche wählen — daraus entstehen alle Dokumente dieser Woche: '+
+      'je Projekt ein Wochenbericht und eine Fotodokumentation, je Techniker ein Stundenblatt. '+
+      'Kein Versand, nur erzeugen und herunterladen.</div>'+
+    '<div id="wp-picker">'+skeletonCards(1)+'</div><div id="wp-out"></div>';
+  wireBack();
+  wpFreeUrls();
+  _wpVorschau=null;
+  api('pm_kunden').then(function(d){
+    if(!$('wp-picker')) return;
+    _wpKunden=(d&&d.kunden)||[];
+    wpPaintPicker();
+  }).catch(function(){ var e=$('wp-picker'); if(e) e.innerHTML='<div class="empty">Kunden konnten nicht geladen werden.</div>'; });
+}
+
+function wpFreeUrls(){ _wpUrls.forEach(function(u){ try{ URL.revokeObjectURL(u); }catch(e){} }); _wpUrls=[]; }
+
+function wpPaintPicker(){
+  var wochen=wbLetzteWochen(16);
+  // "Ohne Kunde" ist kein Sonderfall, sondern der Normalfall im Bestand:
+  // die Mehrheit der Projekte traegt kein kunde_id. Ohne diesen Eintrag
+  // waere die Maske fuer die meisten Projekte blind.
+  var opts='<option value="ohne">— Projekte ohne Kunde —</option>'+
+    _wpKunden.map(function(k){ return '<option value="'+esc(k.id)+'">'+esc(k.firma||'Kunde')+'</option>'; }).join('');
+  $('wp-picker').innerHTML=
+    '<div class="lcard">'+
+      '<label class="cc-sec" style="margin-top:0">Kunde</label>'+
+      '<select id="wp-kunde" class="field" style="width:100%;margin-bottom:12px">'+opts+'</select>'+
+      '<label class="cc-sec">Kalenderwoche</label>'+
+      '<select id="wp-kw" class="field" style="width:100%;margin-bottom:12px">'+
+        wochen.map(function(w,i){ return '<option value="'+w.jahr+'-'+w.woche+'"'+(i===0?' selected':'')+'>KW '+w.woche+' / '+w.jahr+'</option>'; }).join('')+
+      '</select>'+
+      '<button class="chip on" id="wp-go">Woche prüfen</button>'+
+    '</div>';
+  $('wp-go').onclick=wpVorschau;
+}
+
+function wpVorschau(){
+  var kv=($('wp-kunde')||{}).value, kw=(($('wp-kw')||{}).value||'').split('-');
+  if(!kv||kw.length!==2) return;
+  var btn=$('wp-go'); btn.disabled=true; btn.textContent='Prüfe…';
+  wpFreeUrls();
+  $('wp-out').innerHTML='<div class="lcard" style="margin-top:12px"><div class="meta"><span>Lade…</span></div></div>';
+  wbApi('sammel_vorschau',{kunde_id:kv,jahr:Number(kw[0]),woche:Number(kw[1])}).then(function(d){
+    btn.disabled=false; btn.textContent='Woche prüfen';
+    if(!$('wp-out')) return;
+    if(!d||d.error){ $('wp-out').innerHTML='<div class="lcard" style="margin-top:12px"><div class="meta"><span>'+esc((d&&d.error)||'Fehlgeschlagen')+'</span></div></div>'; return; }
+    _wpVorschau=d;
+    if(!d.pdf_anzahl){
+      $('wp-out').innerHTML='<div class="lcard" style="margin-top:12px"><div class="nm">'+esc(d.kunde||'—')+' · KW '+d.woche+'/'+d.jahr+'</div>'+
+        '<div class="meta"><span>In dieser Woche wurde auf keines dieser Projekte gebucht.</span></div></div>';
+      return;
+    }
+    var zeilen=d.projekte.map(function(p){
+      return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">'+
+        '<span>📄 Wochenbericht + 📷 Fotodokumentation<br><span style="color:var(--muted);font-size:12px">'+esc((p.projektnummer||'')+' '+(p.name||''))+'</span></span>'+
+        '<span style="color:var(--muted);white-space:nowrap">'+Number(p.stunden||0).toFixed(1)+' h</span></div>';
+    }).join('')+d.rapporte.map(function(r){
+      return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">'+
+        '<span>🧾 Stundenblatt<br><span style="color:var(--muted);font-size:12px">'+esc(r.techniker+' · '+(r.rapport_nr||''))+'</span></span>'+
+        '<span style="color:var(--muted);white-space:nowrap">'+Number(r.stunden||0).toFixed(1)+' h</span></div>';
+    }).join('');
+    $('wp-out').innerHTML='<div class="lcard" style="margin-top:12px">'+
+      '<div class="top"><div class="nm">'+esc(d.kunde||'—')+' · KW '+d.woche+'/'+d.jahr+'</div>'+pmPill(d.pdf_anzahl+' PDF'+(d.pdf_anzahl===1?'':'s'),'var(--gold)')+'</div>'+
+      '<div class="meta" style="margin-bottom:8px"><span>'+d.projekte.length+' Projekt(e), '+d.rapporte.length+' Stundenblatt/Blätter</span>'+
+        '<span class="dot">'+esc(deDate(d.von))+' – '+esc(deDate(d.bis))+'</span></div>'+
+      zeilen+
+      (d.zeilen_ohne_wochenrapport?'<div class="meta" style="margin-top:8px"><span>'+d.zeilen_ohne_wochenrapport+' Tageszeile(n) hängen an keinem Wochenrapport (Altzeile) und bekommen kein Stundenblatt.</span></div>':'')+
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
+        '<button class="chip on" id="wp-all">Alle '+d.pdf_anzahl+' erzeugen</button>'+
+      '</div><div id="wp-files"></div></div>';
+    $('wp-all').onclick=wpAlleErzeugen;
+  }).catch(function(e){
+    btn.disabled=false; btn.textContent='Woche prüfen';
+    if($('wp-out')) $('wp-out').innerHTML='<div class="lcard" style="margin-top:12px"><div class="meta"><span>'+esc((e&&e.message)||'Verbindungsfehler')+'</span></div></div>';
+  });
+}
+
+function wpAlleErzeugen(){
+  var d=_wpVorschau; if(!d||_wpLaeuft) return;
+  _wpLaeuft=true;
+  var btn=$('wp-all'); if(btn){ btn.disabled=true; }
+  wpFreeUrls();
+  var jobs=[];
+  d.projekte.forEach(function(p){
+    jobs.push({art:'pdf',       titel:'Wochenbericht · '+((p.projektnummer||'')+' '+(p.name||'')).trim(), body:{projekt_id:p.id,jahr:d.jahr,woche:d.woche}});
+    jobs.push({art:'fotodoku',  titel:'Fotodokumentation · '+((p.projektnummer||'')+' '+(p.name||'')).trim(), body:{projekt_id:p.id,jahr:d.jahr,woche:d.woche}});
+  });
+  d.rapporte.forEach(function(r){
+    jobs.push({art:'wochenrapport_pdf', titel:'Stundenblatt · '+r.techniker, body:{wochenrapport_id:r.id}});
+  });
+  $('wp-files').innerHTML='<div style="margin-top:12px" id="wp-rows"></div>';
+  jobs.forEach(function(j,i){
+    document.getElementById('wp-rows').insertAdjacentHTML('beforeend',
+      '<div id="wp-r'+i+'" style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)">'+
+      '<span>'+esc(j.titel)+'</span><span style="color:var(--muted)" id="wp-s'+i+'">wartet…</span></div>');
+  });
+  // Nacheinander, nicht parallel: jedes PDF bettet serverseitig Bilder ein.
+  var kette=Promise.resolve(), ok=0;
+  jobs.forEach(function(j,i){
+    kette=kette.then(function(){
+      var st=$('wp-s'+i); if(st) st.textContent='erzeuge…';
+      return wbApi(j.art,j.body).then(function(r){
+        var st2=$('wp-s'+i); if(!st2) return;
+        if(!r||r.error||!r.pdf_base64){ st2.innerHTML='<span style="color:#f0a132">'+esc((r&&r.error)||'fehlgeschlagen')+'</span>'; return; }
+        var blob=wbB64ToBlob(r.pdf_base64), url=URL.createObjectURL(blob);
+        _wpUrls.push(url); ok++;
+        st2.innerHTML='<a class="chip" href="'+url+'" download="'+esc(r.filename)+'" style="text-decoration:none">⬇ '+Math.round(blob.size/1024)+' KB</a>';
+      }).catch(function(){ var st3=$('wp-s'+i); if(st3) st3.innerHTML='<span style="color:#f0a132">Verbindungsfehler</span>'; });
+    });
+  });
+  kette.then(function(){
+    _wpLaeuft=false;
+    if(btn){ btn.disabled=false; btn.textContent='Erneut erzeugen'; }
+    var rows=$('wp-rows');
+    if(rows) rows.insertAdjacentHTML('beforeend',
+      '<div style="margin-top:10px;color:var(--muted);font-size:12px">'+ok+' von '+jobs.length+' erzeugt. '+
+      'Die Downloads liegen in den Zeilen oben — jeder Klick speichert eine Datei.</div>');
+    toast(ok+' von '+jobs.length+' PDF(s) erzeugt');
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════════════

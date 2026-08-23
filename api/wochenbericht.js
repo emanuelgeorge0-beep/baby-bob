@@ -18,6 +18,7 @@ import { sendResendEmail, wochenberichtEmailHtml } from '../lib/mail.js';
 import {
   sammleWochendaten, erzeugeBericht, versendeBericht, isoWocheVonDatum,
   erzeugeFotodoku, fotodokuVorschau,
+  erzeugeWochenrapport, isoWochenBereich,
 } from '../lib/wochenbericht.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -47,6 +48,36 @@ export default async function handler(req, res) {
     // abgeleitet wird (bequemer fürs Cockpit, gleiche Wahrheit).
     const { jahr, woche, fehler } = zeitraum(b);
     if (b.action !== 'liste' && fehler) return res.status(400).json({ error: fehler });
+
+    // ── Sammelmaske: Kunde x KW ────────────────────────────────────────────
+    // Diese beiden Aktionen haengen NICHT an einem Projekt und stehen deshalb
+    // vor der projekt_id-Pruefung. Beide sind Master-Sache: die Sammelvorschau
+    // zaehlt ueber alle Projekte eines Kunden, das Stundenblatt gehoert einem
+    // Techniker. Ein Partner haette an beidem nichts verloren.
+    if (b.action === 'sammel_vorschau' || b.action === 'wochenrapport_pdf') {
+      if (role !== 'gs_admin' && role !== 'master') {
+        return res.status(403).json({ error: 'Nur Master/Admin.' });
+      }
+      if (b.action === 'sammel_vorschau') {
+        const kundeId = String(b.kunde_id || '').trim();
+        // 'ohne' ist kein Notbehelf, sondern der Normalfall im Bestand: 13 von
+        // 18 Projekten tragen kein kunde_id. Ohne diesen Fall waere die Maske
+        // fuer den groesseren Teil der Projekte blind.
+        if (kundeId !== 'ohne' && !UUID_RE.test(kundeId)) return res.status(400).json({ error: 'kunde_id (UUID) oder "ohne" erforderlich' });
+        return res.status(200).json({ ok: true, ...(await sammelVorschau(kundeId, jahr, woche)) });
+      }
+      const wrId = String(b.wochenrapport_id || '').trim();
+      if (!UUID_RE.test(wrId)) return res.status(400).json({ error: 'wochenrapport_id (UUID) erforderlich' });
+      const r = await erzeugeWochenrapport({ wochenrapportId: wrId });
+      if (!r) return res.status(404).json({ error: 'Wochenrapport nicht gefunden' });
+      return res.status(200).json({
+        ok: true,
+        filename: `Wochenrapport_${r.nr}.pdf`.replace(/[^\w.-]+/g, '_'),
+        pdf_base64: Buffer.from(r.pdf).toString('base64'),
+        stunden: r.daten.summen.stunden,
+        techniker: r.daten.kopf.techniker,
+      });
+    }
 
     const projektId = String(b.projekt_id || '').trim();
     if (!UUID_RE.test(projektId)) return res.status(400).json({ error: 'projekt_id (UUID) erforderlich' });
@@ -184,4 +215,84 @@ async function getRole(userId) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/user_roles?user_id=eq.${userId}&select=role&limit=1`, { headers: SB });
   if (!r.ok) return 'bob_user';
   return (await r.json())[0]?.role || 'bob_user';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sammelmaske — was faellt fuer Kunde x KW an?
+// ═══════════════════════════════════════════════════════════════════════════
+// Die Auswahl "Kunde + KW" loest nicht von selbst auf drei Dokumente auf:
+// Wochenbericht und Fotodokumentation haengen am PROJEKT, der Wochenrapport am
+// TECHNIKER. Diese Funktion zaehlt beides aus den Tageszeilen aus, damit die
+// Maske VOR dem Erzeugen sagen kann, wie viele PDFs es werden.
+//
+// Massgeblich sind die Tageszeilen, nicht die Projektliste des Kunden: ein
+// Projekt ohne Buchung in dieser Woche erzeugt kein Dokument.
+async function sammelVorschau(kundeId, jahr, woche) {
+  const { von, bis } = isoWochenBereich(jahr, woche);
+  const ohneKunde = kundeId === 'ohne';
+  const kd = ohneKunde ? [] : await sbGet(`gs_kunden?id=eq.${kundeId}&select=id,firma&limit=1`).catch(() => []);
+  const kundeName = ohneKunde ? 'Ohne Kunde' : ((kd[0] || {}).firma || null);
+  const projekte = await sbGet(
+    `gs_projekte?kunde_id=${ohneKunde ? 'is.null' : `eq.${kundeId}`}&select=id,name,projektnummer`,
+  ).catch(() => []);
+  if (!projekte.length) {
+    return { kunde: kundeName, jahr, woche, von, bis, projekte: [], rapporte: [], pdf_anzahl: 0 };
+  }
+  const ids = projekte.map((p) => p.id);
+  const zeilen = await sbGet(
+    `gs_tagesrapporte?projekt_id=in.(${ids.join(',')})&datum=gte.${von}&datum=lte.${bis}`
+    + '&select=projekt_id,techniker_user_id,wochenrapport_id,gesamtstunden',
+  ).catch(() => []);
+
+  const jeProjekt = {}, jeRapport = {};
+  for (const z of zeilen) {
+    if (z.projekt_id) {
+      const p = jeProjekt[z.projekt_id] || (jeProjekt[z.projekt_id] = { zeilen: 0, stunden: 0 });
+      p.zeilen += 1; p.stunden += Number(z.gesamtstunden || 0);
+    }
+    // Ohne wochenrapport_id gibt es kein Stundenblatt — Altzeilen aus der Zeit
+    // vor dem Wochenblatt haben keinen Kopf und werden hier benannt, nicht
+    // stillschweigend uebergangen.
+    if (z.wochenrapport_id) {
+      const r = jeRapport[z.wochenrapport_id] || (jeRapport[z.wochenrapport_id] = { zeilen: 0, stunden: 0 });
+      r.zeilen += 1; r.stunden += Number(z.gesamtstunden || 0);
+    }
+  }
+  const ohneKopf = zeilen.filter((z) => !z.wochenrapport_id).length;
+
+  const rapportIds = Object.keys(jeRapport);
+  let rapporte = [];
+  if (rapportIds.length) {
+    const koepfe = await sbGet(`gs_wochenrapporte?id=in.(${rapportIds.join(',')})&select=id,rapport_nr,jahr,woche,techniker_user_id,status`).catch(() => []);
+    const uids = [...new Set(koepfe.map((k) => k.techniker_user_id).filter(Boolean))];
+    const namen = {};
+    if (uids.length) {
+      const t = await sbGet(`gs_techniker?user_id=in.(${uids.join(',')})&select=user_id,name`).catch(() => []);
+      for (const x of t) namen[x.user_id] = x.name;
+    }
+    rapporte = koepfe.map((k) => ({
+      id: k.id, rapport_nr: k.rapport_nr, status: k.status,
+      techniker: namen[k.techniker_user_id] || 'Techniker',
+      stunden: Math.round((jeRapport[k.id].stunden) * 100) / 100,
+    })).sort((a, b) => String(a.techniker).localeCompare(String(b.techniker)));
+  }
+
+  const mitBuchung = projekte
+    .filter((p) => jeProjekt[p.id])
+    .map((p) => ({
+      id: p.id, name: p.name, projektnummer: p.projektnummer,
+      zeilen: jeProjekt[p.id].zeilen,
+      stunden: Math.round(jeProjekt[p.id].stunden * 100) / 100,
+    }))
+    .sort((a, b) => String(a.projektnummer || '').localeCompare(String(b.projektnummer || '')));
+
+  return {
+    kunde: kundeName,
+    jahr, woche, von, bis,
+    projekte: mitBuchung,
+    rapporte,
+    // 2 PDFs je Projekt (Bericht + Fotodoku) + 1 je Wochenrapport
+    pdf_anzahl: mitBuchung.length * 2 + rapporte.length,
+    zeilen_ohne_wochenrapport: ohneKopf,
+  };
 }
