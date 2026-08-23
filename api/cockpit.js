@@ -3140,12 +3140,24 @@ async function pmWochenrapporteListe() {
   }
   const wrIds = rows.map((r) => r.id);
   let sums = {};
+  const projIdsJeWoche = {};                    // wochenrapport_id → Set(projekt_id)
   if (wrIds.length) {
-    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,gesamtstunden,spesen`).catch(() => []);
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,gesamtstunden,spesen,projekt_id`).catch(() => []);
     for (const z of zeilen) {
       const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, spesen: 0 });
       s.stunden += Number(z.gesamtstunden || 0); s.spesen += Number(z.spesen || 0);
+      // Die Projekte kommen aus den TAGESZEILEN, nicht aus hauptprojekt_id.
+      // hauptprojekt_id ist oft NULL und deckt eine Woche mit mehreren
+      // Baustellen ohnehin nicht ab. Damit kann das Cockpit den Wochenbericht
+      // anbieten, ohne dass jemand vorher das Projekt kennen muss.
+      if (z.projekt_id) (projIdsJeWoche[z.wochenrapport_id] || (projIdsJeWoche[z.wochenrapport_id] = new Set())).add(z.projekt_id);
     }
+  }
+  const alleProjIds = [...new Set(Object.values(projIdsJeWoche).flatMap((set) => [...set]))];
+  let projMap = {};
+  if (alleProjIds.length) {
+    const pr = await sbGet(`gs_projekte?id=in.(${alleProjIds.join(',')})&select=id,name,projektnummer`).catch(() => []);
+    for (const p of pr) projMap[p.id] = p;
   }
   return {
     wochen: rows.map((r) => ({
@@ -3153,6 +3165,9 @@ async function pmWochenrapporteListe() {
       techniker_name: nameMap[r.techniker_user_id] || 'Techniker',
       total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
       total_spesen: Math.round(((sums[r.id] || {}).spesen || 0) * 100) / 100,
+      projekte: [...(projIdsJeWoche[r.id] || [])]
+        .map((pid) => projMap[pid] || { id: pid, name: null, projektnummer: null })
+        .sort((a, b) => String(a.projektnummer || '').localeCompare(String(b.projektnummer || ''))),
     })),
   };
 }

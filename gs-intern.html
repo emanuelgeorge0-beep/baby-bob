@@ -2129,15 +2129,79 @@ function renderWochenrapporte(){
     var ws=(d&&d.wochen)||[];
     $('wr-count').textContent=ws.length+' Wochenrapport'+(ws.length===1?'':'e');
     if(!ws.length){ $('wr-list').innerHTML='<div class="empty">Noch keine Wochenrapporte erfasst.</div>'; return; }
-    $('wr-list').innerHTML=ws.map(function(w){
+    _wrListe=ws;
+    $('wr-list').innerHTML=ws.map(function(w,i){
       var stPill=pmPill(w.status==='eingereicht'?'eingereicht':'entwurf', w.status==='eingereicht'?'#3dd68c':'var(--gold)');
-      return '<div class="lcard" data-openwr="'+esc(w.id)+'"><div class="top"><div class="nm">'+esc(w.techniker_name||'Techniker')+' · KW '+esc(w.woche)+' · '+esc(w.jahr)+'</div>'+stPill+'</div>'+
-        '<div class="meta"><span>'+esc(w.rapport_nr||'—')+'</span><span class="dot">'+Number(w.total_stunden||0).toFixed(1)+' h</span>'+
-        (w.total_spesen?('<span class="dot">CHF '+Number(w.total_spesen).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</span>'):'')+'</div></div>';
+      var projekte=w.projekte||[];
+      // Die Projekte stehen mit auf der Karte: sie sind die Antwort auf "welchen
+      // Wochenbericht denn?" und ersparen den Umweg ueber das Projektdetail.
+      var projText=projekte.length
+        ? projekte.map(function(p){ return (p.projektnummer||'')+(p.name?(' '+p.name):''); }).join(' · ')
+        : 'kein Projekt gebucht';
+      return '<div class="lcard"><div class="top"><div class="nm" data-openwr="'+esc(w.id)+'" style="cursor:pointer">'+esc(w.techniker_name||'Techniker')+' · KW '+esc(w.woche)+' · '+esc(w.jahr)+'</div>'+stPill+'</div>'+
+        '<div class="meta" data-openwr="'+esc(w.id)+'" style="cursor:pointer"><span>'+esc(w.rapport_nr||'—')+'</span><span class="dot">'+Number(w.total_stunden||0).toFixed(1)+' h</span>'+
+        (w.total_spesen?('<span class="dot">CHF '+Number(w.total_spesen).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</span>'):'')+
+        '<span class="dot">'+esc(projText)+'</span></div>'+
+        '<div class="wr-actions" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+          (projekte.length
+            ? '<button class="chip" data-wrpdf="'+i+'">📄 Wochenbericht'+(projekte.length>1?' ('+projekte.length+' Projekte)':'')+'</button>'
+            : '<span class="chip" style="opacity:.45;cursor:default" title="Ohne gebuchtes Projekt gibt es keinen Wochenbericht">📄 Wochenbericht</span>')+
+        '</div>'+
+        '<div class="wr-pdfbox" data-pdfbox="'+i+'"></div></div>';
     }).join('');
     Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf'))); }; });
   }).catch(function(){ $('wr-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
 }
+var _wrListe=[], _wrPdfUrls={};
+
+// ── Wochenbericht direkt aus der Wochenrapport-Liste ──────────────────────
+// Ein Wochenrapport ist Techniker x Woche, ein Wochenbericht Projekt x Woche.
+// Die Bruecke sind die Tageszeilen: welche Projekte hat dieser Techniker in
+// dieser Woche gebucht? Genau EINES  -> direkt erzeugen. MEHRERE -> auswaehlen
+// lassen, statt stillschweigend das erste zu nehmen. hauptprojekt_id wird
+// bewusst nicht benutzt, sie ist oft NULL und deckt Mehrfachbaustellen nicht ab.
+function wrBerichtKlick(i){
+  var w=_wrListe[i]; if(!w) return;
+  var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
+  var ps=w.projekte||[];
+  if(!ps.length){ toast('In dieser Woche ist kein Projekt gebucht.'); return; }
+  if(ps.length===1){ wrBerichtErzeugen(i, ps[0]); return; }
+  box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="nm" style="margin-bottom:8px">Für welches Projekt?</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      ps.map(function(p,k){ return '<button class="chip" data-wrpick="'+i+':'+k+'">'+esc((p.projektnummer||'')+(p.name?(' · '+p.name):''))+'</button>'; }).join('')+
+    '</div></div>';
+  Array.prototype.forEach.call(box.querySelectorAll('[data-wrpick]'),function(b){
+    b.onclick=function(){ var t=b.getAttribute('data-wrpick').split(':'); wrBerichtErzeugen(Number(t[0]), _wrListe[Number(t[0])].projekte[Number(t[1])]); };
+  });
+}
+
+function wrBerichtErzeugen(i, projekt){
+  var w=_wrListe[i]; if(!w||!projekt) return;
+  var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
+  if(_wrPdfUrls[i]){ try{ URL.revokeObjectURL(_wrPdfUrls[i]); }catch(e){} delete _wrPdfUrls[i]; }
+  box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>Erzeuge Wochenbericht…</span></div></div>';
+  wbApi('pdf',{projekt_id:projekt.id,jahr:w.jahr,woche:w.woche}).then(function(d){
+    if(!box.isConnected) return;
+    if(!d||d.error||!d.pdf_base64){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((d&&d.error)||'PDF fehlgeschlagen')+'</span></div></div>'; return; }
+    var blob=wbB64ToBlob(d.pdf_base64);
+    _wrPdfUrls[i]=URL.createObjectURL(blob);
+    // Ansehen/Herunterladen als echte <a>, die der Nutzer antippt — ein
+    // window.open() nach dem asynchronen Laden faengt der Popup-Blocker ab.
+    box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="top"><div class="nm">'+esc(d.filename||'Wochenbericht.pdf')+'</div>'+
+        pmPill(Math.round(blob.size/1024)+' KB','var(--gold)')+'</div>'+
+      '<div class="meta"><span>'+esc((d.bericht&&d.bericht.bericht_nr)||'')+'</span>'+
+        '<span class="dot">'+(d.fotos_im_pdf||0)+' Foto(s) eingebettet</span>'+
+        (d.aus_snapshot?'<span class="dot">aus eingefrorenem Stand</span>':'')+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+        '<a class="chip on" href="'+_wrPdfUrls[i]+'" target="_blank" rel="noopener" style="text-decoration:none">📄 Ansehen</a>'+
+        '<a class="chip" href="'+_wrPdfUrls[i]+'" download="'+esc(d.filename||'Wochenbericht.pdf')+'" style="text-decoration:none">⬇ Herunterladen</a>'+
+      '</div></div>';
+  }).catch(function(e){
+    if(box.isConnected) box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((e&&e.message)||'Verbindungsfehler')+'</span></div></div>';
+  });
+}
+
 var _wrId=null, _wrZeilen=[], _wrTechCache=null, _wrProjCache=null;
 var WR_GEWERK=['Sanitär','Heizung','Klima','Lüftung','Divers'];
 function openWochenrapport(id){
