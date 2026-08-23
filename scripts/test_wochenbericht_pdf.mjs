@@ -105,7 +105,14 @@ const JAHR_PROBE = 2099;  // weit weg von echten Daten
 const r1 = await erzeugeBericht({ projektId: P_LIVE, jahr: JAHR_PROBE, woche: 31 });
 aufraeumen.push(r1.bericht.id);
 console.log(`  Kopf ${r1.bericht.id.slice(0, 8)} · Nr ${r1.bericht.bericht_nr} · ${r1.pdf.length} Bytes`);
-ok(r1.bericht.bericht_nr === 'WB-P-2026-3470-2099-31', `Nummer aus Fallback-Kette (ist ${r1.bericht.bericht_nr})`);
+// berichtNummer() nimmt das KUERZEL, wenn es eines gibt, und faellt erst
+// danach auf die Projektnummer zurueck (lib/wochenbericht.js, berichtNummer:
+// `String(kuerzel || nummer || 'GSO')`). Das Testprojekt P_LIVE hat inzwischen
+// kuerzel = 'NIE' — die Fallback-Kette wird also gar nicht mehr erreicht.
+// Die alte Erwartung 'WB-P-2026-3470-2099-31' stammt aus der Zeit, als das
+// Projekt noch kein Kuerzel trug; sie hat den Wechsel nicht mitbekommen und
+// schlug seither fehl, ohne dass am Code etwas kaputt war.
+ok(r1.bericht.bericht_nr === `WB-NIE-${JAHR_PROBE}-31`, `Nummer aus dem Projektkuerzel (ist ${r1.bericht.bericht_nr})`);
 ok(r1.bericht.status === 'entwurf', 'neuer Kopf ist Entwurf');
 ok(r1.aus_snapshot === false, 'frisch eingesammelt, nicht aus Snapshot');
 pdfOk(r1.pdf, 'erzeugeBericht');
