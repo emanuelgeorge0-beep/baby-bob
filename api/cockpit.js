@@ -3495,6 +3495,25 @@ async function pmDateiUpload(b, scope) {
     return { error: 'Upload fehlgeschlagen' };
   }
   const url = await sbSignUrl(PM_DATEI_BUCKET, path);
+  // AUFFANGNETZ — Bilder zusätzlich in gs_projekt_medien registrieren.
+  // Ohne diese Zeile ist ein hier hochgeladenes Foto für den Wochenbericht
+  // unsichtbar: der Bericht liest ausschliesslich gs_projekt_medien, während
+  // die Projektdateien-Kachel direkt aus dem Storage listet (listOneFolder).
+  // tagesrapport_id bleibt bewusst NULL — dieser Upload kennt keinen Tag.
+  // Der Bericht zeigt solche Fotos im Abschnitt "ohne Tageszuordnung".
+  // Nur Kategorie 'bilder': Pläne bleiben draussen, auch wenn sie Bilder sind.
+  if (kat === 'bilder' && /^image\//.test(contentType)) {
+    await sbWrite('POST', 'gs_projekt_medien', {
+      projekt_id: projektId, service_auftrag_id: null, tagesrapport_id: null,
+      medientyp: 'foto', bucket: PM_DATEI_BUCKET, path,
+      dateiname: sbDisplayName(safe), mime: contentType, groesse: buf.length,
+      hochgeladen_von: scope.userId || null,
+    }, 'return=minimal').catch((e) => {
+      // Der Upload ist gelungen; eine fehlende Registrierung darf ihn nicht
+      // zurücknehmen. Sichtbar bleibt die Datei in der Projektgalerie.
+      console.error('pm datei medien-register fail', (e && e.message) || e);
+    });
+  }
   return { ok: true, datei: { name: sbDisplayName(path.split('/').pop()), path, kategorie: kat, contentType, size: buf.length, url } };
 }
 
@@ -3544,6 +3563,11 @@ async function pmDateiDel(b, scope) {
   if (!path.startsWith(`${projektId}/`)) throw new Error('Ungültiger Pfad');
   const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
   if (!r.ok) return { error: 'Löschen fehlgeschlagen' };
+  // Gegenstück zum Auffangnetz im Upload: die Datei ist weg, also darf auch
+  // die Medienzeile nicht stehenbleiben — sonst zeigt der Wochenbericht ein
+  // Foto an, dessen Bytes es nicht mehr gibt (ladeFotoBytes → null → Lücke).
+  await sbWrite('DELETE', `gs_projekt_medien?path=eq.${encodeURIComponent(path)}`, {}, 'return=minimal')
+    .catch((e) => { console.error('pm datei medien-del fail', (e && e.message) || e); });
   return { ok: true };
 }
 
