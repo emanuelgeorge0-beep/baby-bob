@@ -2395,21 +2395,74 @@ function wrRowEdit(zid){
     '<div class="cc-sec" style="margin-top:0">Zeile ändern — '+esc(deDate(z.datum))+'</div>'+
     '<div class="wr-editgrid">'+
       '<label>Gewerk<select id="wr-e-gewerk"><option value="">—</option>'+gewerkOpts+'</select></label>'+
-      '<label>Stunden<input type="number" step="0.5" id="wr-e-std" value="'+esc(z.gesamtstunden||0)+'"></label>'+
+      '<label>Start<input type="time" id="wr-e-von" value="'+esc(hhmm(z.start_zeit))+'"></label>'+
+      '<label>Ende<input type="time" id="wr-e-bis" value="'+esc(hhmm(z.end_zeit))+'"></label>'+
+      '<label>Pause (Min)<input type="number" step="5" min="0" id="wr-e-pause" value="'+esc(z.pause_minuten==null?'':z.pause_minuten)+'"></label>'+
+      '<label>Stunden<input type="number" step="0.25" id="wr-e-std" value="'+esc(z.gesamtstunden||0)+'"></label>'+
       '<label>Spesen (CHF)<input type="number" step="0.05" id="wr-e-spesen" value="'+esc(z.spesen||0)+'"></label>'+
     '</div>'+
+    '<div id="wr-e-probe" class="usub" style="color:var(--muted);font-size:12px;margin-top:8px"></div>'+
     '<label style="display:block;margin-top:8px">Tätigkeit (eine Zeile je Punkt)<textarea id="wr-e-arb" style="width:100%;min-height:60px">'+esc((z.arbeiten||[]).join('\n'))+'</textarea></label>'+
     '<div style="display:flex;gap:8px;margin-top:10px">'+
       '<button class="chip" onclick="wrPanel(\'\')">Abbrechen</button>'+
       '<button class="chip" style="border-color:var(--gold);color:var(--gold)" onclick="wrRowEditSave(\''+esc(zid)+'\')">Speichern</button>'+
     '</div>'
   );
+  ['wr-e-von','wr-e-bis','wr-e-pause','wr-e-std'].forEach(function(id){
+    var el=$(id); if(el) el.oninput=wrEditProbe;
+  });
+  var rb=$('wr-e-rechnen'); if(rb) rb.onclick=function(){
+    var d=wrEditDelta(); if(d==null){ toast('Start und Ende nötig'); return; }
+    var f=$('wr-e-std'); if(f){ f.value=d.toFixed(2); wrEditProbe(); }
+  };
+  wrEditProbe();
+}
+
+// hh:mm aus einem TIME-Wert der DB ('07:00:00') — leer bleibt leer.
+function hhmm(v){ return v?String(v).slice(0,5):''; }
+
+// Stunden, die sich aus Start/Ende/Pause ergeben. null, wenn Zeiten fehlen.
+function wrEditDelta(){
+  var von=($('wr-e-von')||{}).value||'', bis=($('wr-e-bis')||{}).value||'';
+  if(!von||!bis) return null;
+  var a=von.split(':'), b=bis.split(':');
+  var min=(Number(b[0])*60+Number(b[1]))-(Number(a[0])*60+Number(a[1]));
+  if(min<0) min+=24*60;                                   // ueber Mitternacht
+  var pause=Number(($('wr-e-pause')||{}).value||0)||0;
+  return Math.max(0,(min-pause)/60);
+}
+
+// Die Probe zeigt live, ob die eingetragenen Stunden zu den Zeiten passen.
+// Sie korrigiert NICHTS von selbst: die Stunden sind die abgerechnete Groesse,
+// die Zeiten die Dokumentation. Welche von beiden richtig ist, weiss nur der
+// Master. Sichtbar gemacht wird die Abweichung trotzdem - genau sie hat die
+// KW-30-Zeilen auseinanderlaufen lassen.
+function wrEditProbe(){
+  var box=$('wr-e-probe'); if(!box) return;
+  var d=wrEditDelta(), std=Number(($('wr-e-std')||{}).value||0)||0;
+  if(d==null){ box.innerHTML='Ohne Start/Ende zaehlen allein die Stunden. Der Bericht zeigt in der Zeitspalte „—".'; return; }
+  var diff=Math.round((std-d)*100)/100;
+  box.innerHTML=(Math.abs(diff)<0.005)
+    ? '<span style="color:#3dd68c">✓ Zeiten und Stunden stimmen überein ('+d.toFixed(2)+' h).</span>'
+    : '<span style="color:#f0a132">Zeiten ergeben '+d.toFixed(2)+' h, eingetragen sind '+std.toFixed(2)+' h ('+(diff>0?'+':'')+diff.toFixed(2)+' h). '+
+      'Wird als „abweichend von Start/Ende" gespeichert.</span> <button class="chip" id="wr-e-rechnen" style="margin-left:6px">Stunden aus Zeiten rechnen</button>';
+  var rb=$('wr-e-rechnen'); if(rb) rb.onclick=function(){
+    var dd=wrEditDelta(); var f=$('wr-e-std'); if(dd!=null&&f){ f.value=dd.toFixed(2); wrEditProbe(); }
+  };
 }
 function wrRowEditSave(zid){
+  var d=wrEditDelta(), std=Number(($('wr-e-std')||{}).value||0)||0;
   var patch={
     taetigkeit:($('wr-e-gewerk')||{}).value||'',
+    start_zeit:($('wr-e-von')||{}).value||null,
+    end_zeit:($('wr-e-bis')||{}).value||null,
+    pause_minuten:($('wr-e-pause')||{}).value||'',
     gesamtstunden:($('wr-e-std')||{}).value||0,
     spesen:($('wr-e-spesen')||{}).value||0,
+    // stunden_manuell ist kein Wunsch, sondern eine Tatsache: true genau dann,
+    // wenn die Stunden NICHT aus Start/Ende/Pause folgen. Ohne Zeiten sind sie
+    // per Definition von Hand gesetzt.
+    stunden_manuell:(d==null)?true:(Math.abs(std-d)>=0.005),
     arbeiten:(($('wr-e-arb')||{}).value||'').split('\n').map(function(s){return s.trim();}).filter(Boolean),
   };
   api('pm_wochenrapport_update',{id:zid,patch:patch}).then(function(d){

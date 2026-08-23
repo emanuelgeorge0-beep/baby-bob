@@ -3285,6 +3285,10 @@ async function pmWochenrapportUpdate(b, scope) {
     else if (k === 'taetigkeit') row[k] = GEWERK_OPTIONS.has(patch[k]) ? patch[k] : null;
     else if (['gesamtstunden', 'pause_minuten', 'spesen', 'ueberzeit_25', 'ueberzeit_50', 'ueberzeit_100'].includes(k)) row[k] = (patch[k] != null && patch[k] !== '') ? num(patch[k]) : null;
     else if (k === 'stunden_manuell') row[k] = !!patch[k];
+    // TIME-Spalten: ein Leerstring ist KEINE Zeit. Ohne diesen Zweig landet ''
+    // ueber den String-Fall auf der Spalte und Postgres bricht mit
+    // "invalid input syntax for type time" ab. Leer heisst hier: geloescht.
+    else if (['start_zeit', 'end_zeit', 'datum'].includes(k)) row[k] = (patch[k] === '' || patch[k] == null) ? null : String(patch[k]).slice(0, 20);
     else row[k] = patch[k] != null ? String(patch[k]).slice(0, 2000) : null;
   }
   if (!Object.keys(row).length) return { error: 'Keine gültigen Felder zum Ändern' };
