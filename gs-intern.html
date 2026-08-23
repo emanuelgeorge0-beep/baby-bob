@@ -2133,12 +2133,16 @@ function renderWochenrapporte(){
     $('wr-list').innerHTML=ws.map(function(w,i){
       var stPill=pmPill(w.status==='eingereicht'?'eingereicht':'entwurf', w.status==='eingereicht'?'#3dd68c':'var(--gold)');
       var projekte=w.projekte||[];
+      var abr=w.abrechnung||'leer';
+      var abrPill=abr==='verrechnet'?pmPill('verrechnet','#3dd68c')
+                 :abr==='teilweise' ?pmPill(w.zeilen_verrechnet+'/'+(w.zeilen_offen+w.zeilen_verrechnet)+' verrechnet','#f0a132')
+                 :abr==='offen'     ?pmPill('offen','var(--muted)') : '';
       // Die Projekte stehen mit auf der Karte: sie sind die Antwort auf "welchen
       // Wochenbericht denn?" und ersparen den Umweg ueber das Projektdetail.
       var projText=projekte.length
         ? projekte.map(function(p){ return (p.projektnummer||'')+(p.name?(' '+p.name):''); }).join(' · ')
         : 'kein Projekt gebucht';
-      return '<div class="lcard"><div class="top"><div class="nm" data-openwr="'+esc(w.id)+'" style="cursor:pointer">'+esc(w.techniker_name||'Techniker')+' · KW '+esc(w.woche)+' · '+esc(w.jahr)+'</div>'+stPill+'</div>'+
+      return '<div class="lcard"><div class="top"><div class="nm" data-openwr="'+esc(w.id)+'" style="cursor:pointer">'+esc(w.techniker_name||'Techniker')+' · KW '+esc(w.woche)+' · '+esc(w.jahr)+'</div>'+abrPill+stPill+'</div>'+
         '<div class="meta" data-openwr="'+esc(w.id)+'" style="cursor:pointer"><span>'+esc(w.rapport_nr||'—')+'</span><span class="dot">'+Number(w.total_stunden||0).toFixed(1)+' h</span>'+
         (w.total_spesen?('<span class="dot">CHF '+Number(w.total_spesen).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</span>'):'')+
         '<span class="dot">'+esc(projText)+'</span></div>'+
@@ -2146,14 +2150,38 @@ function renderWochenrapporte(){
           (projekte.length
             ? '<button class="chip" data-wrpdf="'+i+'">📄 Wochenbericht'+(projekte.length>1?' ('+projekte.length+' Projekte)':'')+'</button>'
             : '<span class="chip" style="opacity:.45;cursor:default" title="Ohne gebuchtes Projekt gibt es keinen Wochenbericht">📄 Wochenbericht</span>')+
+          (abr==='leer' ? ''
+            : abr==='verrechnet'
+              ? '<button class="chip" data-wrabr="'+i+':offen">↩ Auf offen zurücksetzen</button>'
+              : '<button class="chip on" data-wrabr="'+i+':verrechnet">✓ Als verrechnet markieren'+(abr==='teilweise'?' ('+w.zeilen_offen+' offen)':'')+'</button>')+
         '</div>'+
         '<div class="wr-pdfbox" data-pdfbox="'+i+'"></div></div>';
     }).join('');
     Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
     Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf'))); }; });
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-wrabr]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); var t=b.getAttribute('data-wrabr').split(':'); wrAbrechnung(Number(t[0]),t[1],b); }; });
   }).catch(function(){ $('wr-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
 }
 var _wrListe=[], _wrPdfUrls={};
+
+// ── Abrechnungsstatus einer ganzen Woche umschalten (Master) ──────────────
+// Geschrieben wird gs_tagesrapporte.abrechnung_status ueber die bestehende
+// Aktion pm_rapport_verrechnet, die dafuer jetzt auch wochenrapport_id
+// annimmt — die Tageszeilen loest der Server auf.
+// gs_tagesrapporte.status und gs_wochenrapporte.status bleiben unberuehrt:
+// 'eingereicht' ist der Bearbeitungsstand des Technikers, 'verrechnet' die
+// Aussage der Buchhaltung. Zwei Achsen, die nichts miteinander zu tun haben.
+function wrAbrechnung(i, ziel, btn){
+  var w=_wrListe[i]; if(!w) return;
+  if(ziel==='offen' && !confirm('Woche KW '+w.woche+' wieder als offen markieren? Die Zeilen gelten dann als nicht verrechnet.')) return;
+  var alt=btn.textContent; btn.disabled=true; btn.textContent='…';
+  api('pm_rapport_verrechnet',{wochenrapport_id:w.id,status:ziel}).then(function(d){
+    if(d&&d.notMigrated){ btn.disabled=false; btn.textContent=alt; toast('Spalte abrechnung_status fehlt — scripts/projekt_detail_scharf.sql ausführen.'); return; }
+    if(!d||d.error){ btn.disabled=false; btn.textContent=alt; toast((d&&d.error)||'Fehlgeschlagen'); return; }
+    toast(d.count+' Tageszeile'+(d.count===1?'':'n')+' → '+ziel);
+    renderWochenrapporte();          // Liste neu, damit Pille und Filter stimmen
+  }).catch(function(){ btn.disabled=false; btn.textContent=alt; toast('Verbindungsfehler'); });
+}
 
 // ── Wochenbericht direkt aus der Wochenrapport-Liste ──────────────────────
 // Ein Wochenrapport ist Techniker x Woche, ein Wochenbericht Projekt x Woche.

@@ -3142,10 +3142,11 @@ async function pmWochenrapporteListe() {
   let sums = {};
   const projIdsJeWoche = {};                    // wochenrapport_id → Set(projekt_id)
   if (wrIds.length) {
-    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,gesamtstunden,spesen,projekt_id`).catch(() => []);
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,gesamtstunden,spesen,projekt_id,abrechnung_status`).catch(() => []);
     for (const z of zeilen) {
-      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, spesen: 0 });
+      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, spesen: 0, offen: 0, verrechnet: 0 });
       s.stunden += Number(z.gesamtstunden || 0); s.spesen += Number(z.spesen || 0);
+      if ((z.abrechnung_status || 'offen') === 'verrechnet') s.verrechnet += 1; else s.offen += 1;
       // Die Projekte kommen aus den TAGESZEILEN, nicht aus hauptprojekt_id.
       // hauptprojekt_id ist oft NULL und deckt eine Woche mit mehreren
       // Baustellen ohnehin nicht ab. Damit kann das Cockpit den Wochenbericht
@@ -3165,6 +3166,19 @@ async function pmWochenrapporteListe() {
       techniker_name: nameMap[r.techniker_user_id] || 'Techniker',
       total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
       total_spesen: Math.round(((sums[r.id] || {}).spesen || 0) * 100) / 100,
+      // Abrechnung ist eine Eigenschaft der TAGESZEILEN, nicht des Wochenkopfs.
+      // Die Woche gilt erst als verrechnet, wenn keine offene Zeile mehr da ist;
+      // 'teilweise' macht einen halb abgerechneten Stand sichtbar, statt ihn auf
+      // 'offen' oder 'verrechnet' zu runden. Ohne Zeilen: 'leer'.
+      abrechnung: (() => {
+        const s = sums[r.id] || { offen: 0, verrechnet: 0 };
+        if (!s.offen && !s.verrechnet) return 'leer';
+        if (!s.offen) return 'verrechnet';
+        if (!s.verrechnet) return 'offen';
+        return 'teilweise';
+      })(),
+      zeilen_offen: (sums[r.id] || {}).offen || 0,
+      zeilen_verrechnet: (sums[r.id] || {}).verrechnet || 0,
       projekte: [...(projIdsJeWoche[r.id] || [])]
         .map((pid) => projMap[pid] || { id: pid, name: null, projektnummer: null })
         .sort((a, b) => String(a.projektnummer || '').localeCompare(String(b.projektnummer || ''))),
@@ -3465,7 +3479,22 @@ async function delPmRow(table, id, scope) {
 // ── Abrechnungs-Status pro Arbeitsrapport (offen | verrechnet) ─────────────
 // Nimmt ein oder mehrere Rapport-ids (z. B. eine ganze Kalenderwoche auf einmal).
 async function setRapportAbrechnung(b, scope) {
-  const ids = (Array.isArray(b.ids) ? b.ids : [b.id]).filter(Boolean).map(uuid);
+  // Drei Anrufer, ein Schreibpfad:
+  //   • Projektdetail  → ids[] (eine Woche eines Projekts)
+  //   • Einzelzeile    → id
+  //   • Wochenrapport-Liste → wochenrapport_id; die Tageszeilen werden hier
+  //     aufgeloest, damit das Cockpit sie nicht alle uebertragen muss.
+  let ids = (Array.isArray(b.ids) ? b.ids : [b.id]).filter(Boolean).map(uuid);
+  if (!ids.length && b.wochenrapport_id) {
+    // Eine ganze Woche auf einmal umzuschalten ist Master-Sache. Die UI liegt
+    // ohnehin nur im Master-Cockpit; das hier ist der serverseitige Riegel,
+    // damit die Regel nicht an der Platzierung eines Knopfes haengt.
+    if (scope && scope.partnerId) throw new Forbidden();
+    const wr = uuid(b.wochenrapport_id);
+    const rows = await sbGet(`gs_tagesrapporte?wochenrapport_id=eq.${wr}&select=id`).catch(() => []);
+    ids = rows.map((r) => r.id).filter(Boolean);
+    if (!ids.length) return { ok: true, status: b.status === 'verrechnet' ? 'verrechnet' : 'offen', count: 0 };
+  }
   if (!ids.length) throw new Error('ids nötig');
   // Partner: jeder betroffene Rapport muss zu einem EIGENEN Projekt gehören.
   if (scope && scope.partnerId) {
