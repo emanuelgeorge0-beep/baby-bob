@@ -468,6 +468,15 @@
   .gal .it .del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.62);border:none;color:#fff;width:22px;height:22px;border-radius:50%;font-size:13px;cursor:pointer;line-height:1;}
   .gal .it .dl-file{position:absolute;top:4px;left:4px;background:rgba(0,0,0,.62);color:var(--gold);width:22px;height:22px;border-radius:50%;font-size:12px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;}
   .gal .it .cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff;font-size:9.5px;padding:10px 5px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* Auswahl + Tagesbindung (Fotos ordnen). Oberflaeche bleibt dunkel. */
+  .gal .it.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-soft) inset;}
+  .gal .it .pm-pick{position:absolute;top:4px;left:30px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .gal .it .pm-pick input{accent-color:var(--gold);width:13px;height:13px;cursor:pointer;margin:0;}
+  .gal .it .pm-tag{position:absolute;left:4px;bottom:20px;font-size:9px;padding:2px 5px;border-radius:7px;background:rgba(0,0,0,.66);color:var(--muted);border:1px solid var(--line);line-height:1.3;}
+  .gal .it .pm-tag.on{color:var(--gold);border-color:var(--gold-line);}
+  .pm-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 12px;margin:2px 2px 8px;border:1px dashed var(--gold-line);border-radius:12px;background:var(--gold-soft);font-size:12px;}
+  .pm-bulk.hint{border-style:dashed;border-color:var(--line);background:transparent;color:var(--muted);}
+  .pm-bulk strong{color:var(--gold);font-size:12px;}
   .kw-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 2px 7px;}
   .kw-row .kw-t{font-size:12px;font-weight:700;color:var(--txt);}
   .kw-row .kw-s{font-size:11px;color:var(--muted);}
@@ -1758,18 +1767,45 @@ function pmSetVerrechnet(ids,status){
 // f.medien_id ist gesetzt, wenn zu der Datei eine Zeile in gs_projekt_medien
 // existiert (das sind die Bilder). Nur die tragen einen aenderbaren
 // Anzeigenamen — und nur die landen in der Fotodokumentation.
+// Ausgewaehlte Bilder (medien_id). Die Auswahl ueberlebt ein Nachladen der
+// Kachel, damit ein Zuordnen nicht jedes Mal von vorn beginnt.
+var _pmSel={};
+function pmSelIds(){ return Object.keys(_pmSel).filter(function(k){ return _pmSel[k]; }); }
 function pmDateiItemHtml(f){
   var ic=pmFileIcon(f.contentType,f.name);
   var dl=f.url?(f.url+(f.url.indexOf('?')>-1?'&':'?')+'download='+encodeURIComponent(f.name)):'#';
   var body = ic==='img'&&f.url
     ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener"><img src="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"/></a>'
     : '<a href="'+esc(f.url||'#')+'" target="_blank" rel="noopener" class="doc"><span class="ic">'+(ic==='img'?'🖼️':ic)+'</span><span>'+esc(f.name)+'</span></a>';
-  var ren=f.medien_id?('<button class="del" data-renfile="'+esc(f.path)+'" data-renname="'+esc(f.name)+'" title="Umbenennen" style="right:auto;left:6px">✏️</button>'):'';
-  return '<div class="it">'+body+'<span class="cap">'+esc(f.name)+'</span>'+
+  var ren=f.medien_id?('<button class="del" data-renfile="'+esc(f.path)+'" data-renname="'+esc(f.name)+'" title="Umbenennen" style="right:auto;left:6px;top:30px">✏️</button>'):'';
+  // Auswahlkaestchen nur, wo es eine Medienzeile gibt — nur die tragen eine
+  // Tageszuordnung und nur die kennt die Fotodokumentation.
+  var pick=f.medien_id
+    ? '<label class="pm-pick" title="Auswählen"><input type="checkbox" data-pick="'+esc(f.medien_id)+'"'+(_pmSel[f.medien_id]?' checked':'')+'></label>'
+    : '';
+  // Tagesbindung sichtbar machen: ohne sie ist ein Bild Auffangposten JEDER
+  // Wochendokumentation seines Projekts.
+  var tag=f.medien_id
+    ? (f.tag_datum
+        ? '<span class="pm-tag on" title="Zugeordnet">'+esc(deDate(f.tag_datum))+'</span>'
+        : '<span class="pm-tag" title="Ohne Tageszuordnung — erscheint in jeder Wochendokumentation">ohne Tag</span>')
+    : '';
+  return '<div class="it'+(_pmSel[f.medien_id]?' sel':'')+'">'+body+pick+tag+'<span class="cap">'+esc(f.name)+'</span>'+
     '<a class="dl-file" href="'+esc(dl)+'" download="'+esc(f.name)+'" title="Herunterladen">⬇</a>'+
     ren+'<button class="del" data-delfile="'+esc(f.path)+'" title="Löschen">×</button></div>';
 }
 function pmDateiInnerHtml(dateien){
+  var n=pmSelIds().length;
+  var leiste=n
+    ? '<div class="pm-bulk">'+
+        '<strong>'+n+' Bild'+(n>1?'er':'')+' ausgewählt</strong>'+
+        '<button class="chip" id="pm-bulk-tag">📅 Tag zuordnen</button>'+
+        '<button class="chip" id="pm-bulk-untag">✕ Zuordnung lösen</button>'+
+        '<button class="chip" id="pm-bulk-kat">📂 Kategorie</button>'+
+        '<button class="chip" id="pm-bulk-proj">🏗️ Baustelle</button>'+
+        '<button class="chip" id="pm-bulk-none">Auswahl aufheben</button>'+
+      '</div>'
+    : '<div class="pm-bulk hint">Bilder anhaken, um sie einem Tag zuzuordnen oder zu verschieben.</div>';
   function katBlock(kat,label,icon){
     var fs=(dateien||[]).filter(function(f){ return (f.kategorie||'dateien')===kat; });
     var inner=fs.length?('<div class="gal">'+fs.map(pmDateiItemHtml).join('')+'</div>'):'<div class="empty" style="padding:8px 12px">–</div>';
@@ -1777,12 +1813,131 @@ function pmDateiInnerHtml(dateien){
       '<strong style="font-size:12px">'+icon+' '+label+' ('+fs.length+')</strong>'+
       '<button class="chip" style="font-size:11px" onclick="openDateiUpload(\''+kat+'\')">＋ hochladen</button></div>'+inner+'</div>';
   }
-  return katBlock('bilder','Bilder','🖼️')+katBlock('plaene','Pläne','📐')+katBlock('dateien','Dateien','📄');
+  return leiste+katBlock('bilder','Bilder','🖼️')+katBlock('plaene','Pläne','📐')+katBlock('dateien','Dateien','📄');
 }
 function pmDateiWire(root){
   if(!root) return;
   Array.prototype.forEach.call(root.querySelectorAll('[data-delfile]'),function(b){ b.onclick=function(){ pmDeleteDatei(b.getAttribute('data-delfile')); }; });
   Array.prototype.forEach.call(root.querySelectorAll('[data-renfile]'),function(b){ b.onclick=function(){ pmRenameDatei(b.getAttribute('data-renfile'),b.getAttribute('data-renname')); }; });
+  Array.prototype.forEach.call(root.querySelectorAll('[data-pick]'),function(c){
+    c.onchange=function(){
+      var id=c.getAttribute('data-pick');
+      if(c.checked) _pmSel[id]=true; else delete _pmSel[id];
+      pmDateienReload();                       // Leiste und Markierung nachziehen
+    };
+  });
+  var g=function(id){ return root.querySelector('#'+id)||$(id); };
+  var bn=g('pm-bulk-none');  if(bn) bn.onclick=function(){ _pmSel={}; pmDateienReload(); };
+  var bt=g('pm-bulk-tag');   if(bt) bt.onclick=pmTagZuordnenPanel;
+  var bu=g('pm-bulk-untag'); if(bu) bu.onclick=function(){ pmMedienTagSetzen(null); };
+  var bk=g('pm-bulk-kat');   if(bk) bk.onclick=pmKategorieWechselnPanel;
+  var bp=g('pm-bulk-proj');  if(bp) bp.onclick=pmBaustelleWechselnPanel;
+}
+
+// ── ZIEL 1: Tageszuordnung ────────────────────────────────────────────────
+// Angeboten werden ausschliesslich Tageszeilen DIESES Projekts. Es wird nichts
+// geraten: created_at ist der Hochladezeitpunkt, nicht der Aufnahmetag — alle
+// 21 Bilder der Nidelbadstrasse tragen den 24.08. Der Master waehlt.
+function pmTagZuordnenPanel(){
+  var ids=pmSelIds(); if(!ids.length){ toast('Kein Bild ausgewählt'); return; }
+  pmPanel('<div class="cc-sec" style="margin-top:0">Tag zuordnen</div><div class="empty" style="padding:12px">Lädt Tage…</div>');
+  api('pm_tage_liste',{projekt_id:_pmProjektId}).then(function(d){
+    if(d&&d.notMigrated){ pmPanel('<div class="empty" style="padding:12px">Tageszeilen noch nicht migriert.</div>'); return; }
+    var tage=(d&&d.tage)||[];
+    if(!tage.length){
+      pmPanel('<div class="cc-sec" style="margin-top:0">Tag zuordnen</div>'+
+        '<div class="empty" style="padding:12px">Auf dieser Baustelle ist noch kein Tag erfasst. '+
+        'Erst wenn eine Tageszeile existiert, kann ein Bild ihr zugeordnet werden.</div>'+
+        '<div style="margin-top:10px"><button class="chip" onclick="pmPanel(\'\')">Schliessen</button></div>');
+      return;
+    }
+    var opts=tage.map(function(t){
+      var lbl=deDate(t.datum)+' · '+t.baustelle+(t.stunden?(' · '+t.stunden.toFixed(2)+' h'):'')+(t.gewerk?(' · '+t.gewerk):'')+(t.techniker?(' · '+t.techniker):'');
+      return '<option value="'+esc(t.id)+'">'+esc(lbl)+'</option>';
+    }).join('');
+    pmPanel(
+      '<div class="cc-sec" style="margin-top:0">Tag zuordnen — '+ids.length+' Bild'+(ids.length>1?'er':'')+'</div>'+
+      '<label style="display:block">Tageszeile<select id="pm-tagwahl" style="width:100%">'+opts+'</select></label>'+
+      '<div class="usub" style="color:var(--muted);font-size:12px;margin-top:6px">'+
+        'Zugeordnete Bilder erscheinen nur noch in der Wochendokumentation dieser Woche.</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="chip" onclick="pmPanel(\'\')">Abbrechen</button>'+
+        '<button class="chip" style="border-color:var(--gold);color:var(--gold)" id="pm-tag-go">Zuordnen</button>'+
+      '</div>');
+    var go=$('pm-tag-go'); if(go) go.onclick=function(){ pmMedienTagSetzen(($('pm-tagwahl')||{}).value||null); };
+  }).catch(function(){ pmPanel('<div class="empty" style="padding:12px">Ladefehler.</div>'); });
+}
+function pmMedienTagSetzen(tagId){
+  var ids=pmSelIds(); if(!ids.length){ toast('Kein Bild ausgewählt'); return; }
+  api('pm_medien_tag',{projekt_id:_pmProjektId,medien_ids:ids,tagesrapport_id:tagId||null}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; }
+    pmPanel(''); _pmSel={}; pmDateienReload();
+    toast(tagId?(r.anzahl+' Bild(er) zugeordnet'):(r.anzahl+' Zuordnung(en) gelöst'));
+  }).catch(function(){ toast('Fehler'); });
+}
+
+// ── ZIEL 2a: Kategorie wechseln ───────────────────────────────────────────
+function pmKategorieWechselnPanel(){
+  var ids=pmSelIds(); if(!ids.length){ toast('Kein Bild ausgewählt'); return; }
+  pmPanel(
+    '<div class="cc-sec" style="margin-top:0">Kategorie wechseln — '+ids.length+' Bild'+(ids.length>1?'er':'')+'</div>'+
+    '<label style="display:block">Ziel<select id="pm-katwahl" style="width:100%">'+
+      '<option value="bilder">🖼️ Bilder</option><option value="plaene">📐 Pläne</option><option value="dateien">📄 Dateien</option>'+
+    '</select></label>'+
+    '<div class="usub" style="color:var(--muted);font-size:12px;margin-top:6px">'+
+      'Die Datei wird verschoben, nicht kopiert. Nur Bilder erscheinen in der Fotodokumentation.</div>'+
+    '<div style="display:flex;gap:8px;margin-top:10px">'+
+      '<button class="chip" onclick="pmPanel(\'\')">Abbrechen</button>'+
+      '<button class="chip" style="border-color:var(--gold);color:var(--gold)" id="pm-kat-go">Verschieben</button>'+
+    '</div>');
+  var go=$('pm-kat-go'); if(go) go.onclick=function(){
+    api('pm_medien_kategorie',{projekt_id:_pmProjektId,medien_ids:ids,kategorie:($('pm-katwahl')||{}).value||'bilder'}).then(function(r){
+      if(r&&r.error){ toast(r.error); return; }
+      pmPanel(''); _pmSel={}; pmDateienReload();
+      toast(r.bewegt+' verschoben'+(r.fehler?(' · '+r.fehler+' fehlgeschlagen'):''));
+    }).catch(function(){ toast('Fehler'); });
+  };
+}
+
+// ── ZIEL 2b: Baustelle wechseln ───────────────────────────────────────────
+function pmBaustelleWechselnPanel(){
+  var ids=pmSelIds(); if(!ids.length){ toast('Kein Bild ausgewählt'); return; }
+  pmPanel('<div class="cc-sec" style="margin-top:0">Baustelle wechseln</div><div class="empty" style="padding:12px">Lädt Projekte…</div>');
+  api('pm_projekte',{}).then(function(d){
+    var projs=(d&&d.projekte||[]).filter(function(p){ return p.id!==_pmProjektId; });
+    if(!projs.length){ pmPanel('<div class="empty" style="padding:12px">Kein anderes Projekt vorhanden.</div>'); return; }
+    var opts=projs.map(function(p){
+      return '<option value="'+esc(p.id)+'">'+esc((p.projektnummer?(p.projektnummer+' · '):'')+(p.name||'Projekt'))+'</option>';
+    }).join('');
+    pmPanel(
+      '<div class="cc-sec" style="margin-top:0">Baustelle wechseln — '+ids.length+' Bild'+(ids.length>1?'er':'')+'</div>'+
+      '<label style="display:block">Ziel<select id="pm-projwahl" style="width:100%">'+opts+'</select></label>'+
+      '<div class="usub" style="color:var(--muted);font-size:12px;margin-top:6px">'+
+        'Datei und Eintrag ziehen mit. Eine bestehende Tageszuordnung wird gelöst — sie gehört zur alten Baustelle.</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="chip" onclick="pmPanel(\'\')">Abbrechen</button>'+
+        '<button class="chip" style="border-color:var(--gold);color:var(--gold)" id="pm-proj-go">Verschieben</button>'+
+      '</div>');
+    var go=$('pm-proj-go'); if(go) go.onclick=function(){
+      api('pm_medien_projekt',{projekt_id:_pmProjektId,medien_ids:ids,ziel_projekt_id:($('pm-projwahl')||{}).value}).then(function(r){
+        if(r&&r.error){ toast(r.error); return; }
+        pmPanel(''); _pmSel={}; pmDateienReload();
+        toast(r.bewegt+' verschoben'+(r.hinweis?(' · '+r.hinweis):'')+(r.fehler?(' · '+r.fehler+' fehlgeschlagen'):''));
+      }).catch(function(){ toast('Fehler'); });
+    };
+  }).catch(function(){ pmPanel('<div class="empty" style="padding:12px">Ladefehler.</div>'); });
+}
+
+// Einfaches Panel unter der Dateikachel (dunkle Oberflaeche, wie der Rest).
+function pmPanel(html){
+  var box=$('pm-datei-panel');
+  if(!box){
+    var anker=$('pm-datei-box'); if(!anker) return;
+    box=document.createElement('div'); box.id='pm-datei-panel';
+    box.style.cssText='margin:10px 0 4px';
+    anker.parentNode.insertBefore(box,anker);
+  }
+  box.innerHTML=html?('<div class="lcard" style="padding:12px">'+html+'</div>'):'';
 }
 // Kachel allein neu laden. Kein loadProjekt() — die ganze Seite neu zu zeichnen
 // war der Grund, weshalb der Master nach dem Hochladen nichts Neues sah.
@@ -2291,7 +2446,7 @@ function wrPaint(){
         '<div class="wr-pdfbox" data-pdfbox="'+i+'"></div></div>';
     }).join('');
     Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
-    Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf')),'bericht'); }; });
+    Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf'))); }; });
   // ZIEL 4: Die Fotodokumentation fragt NICHT mehr nach einem Projekt. Sie nimmt
   // die ganze Woche ueber alle Projekte dieses Wochenrapports; die
   // Einschraenkung auf ein Projekt bietet die Vorschau als Zusatz an.
@@ -2325,23 +2480,148 @@ function wrAbrechnung(i, ziel, btn){
 // dieser Woche gebucht? Genau EINES  -> direkt erzeugen. MEHRERE -> auswaehlen
 // lassen, statt stillschweigend das erste zu nehmen. hauptprojekt_id wird
 // bewusst nicht benutzt, sie ist oft NULL und deckt Mehrfachbaustellen nicht ab.
-function wrBerichtKlick(i, art){
+// ═══════════════════════════════════════════════════════════════════════════
+// ZIEL 5 — Sammelerzeugung des Wochenberichts aus der Wochenrapport-Liste
+// ═══════════════════════════════════════════════════════════════════════════
+// Bis hierher rief dieser Knopf wrBerichtErzeugen() — eine Funktion, die es im
+// ganzen Repo nicht gibt. Der Knopf war also nie benutzbar, weder bei einem
+// noch bei mehreren Projekten. Jetzt zeigt er die Projekte der Woche zur
+// Auswahl (alle vorausgewaehlt) und erzeugt fuer jedes einen Wochenbericht.
+//
+// Der Umweg ueber die Sammelmaske (Kunde x KW) entfaellt. Der taugt hier auch
+// nicht: die Projekte einer Woche koennen zu verschiedenen Kunden gehoeren
+// oder zu gar keinem — 13 von 18 Projekten tragen kein kunde_id.
+//
+// 'verrechnet' sperrt nichts. Die Rechnung ist gestellt, das Dokument dahinter
+// bleibt abrufbar; der Status wird nur angezeigt.
+var _wrSammel={};                      // i -> { [projektId]: true }
+var _wrSammelLaeuft={};
+
+function wrBerichtKlick(i){
   var w=_wrListe[i]; if(!w) return;
   var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
-  var ps=w.projekte||[];
-  if(!ps.length){ toast('In dieser Woche ist kein Projekt gebucht.'); return; }
-  if(ps.length===1){ wrDokStart(i, ps[0], art); return; }
-  box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="nm" style="margin-bottom:8px">Für welches Projekt?</div>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-      ps.map(function(p,k){ return '<button class="chip" data-wrpick="'+i+':'+k+'">'+esc((p.projektnummer||'')+(p.name?(' · '+p.name):''))+'</button>'; }).join('')+
-    '</div></div>';
-  Array.prototype.forEach.call(box.querySelectorAll('[data-wrpick]'),function(b){
-    b.onclick=function(){ var t=b.getAttribute('data-wrpick').split(':'); wrDokStart(Number(t[0]), _wrListe[Number(t[0])].projekte[Number(t[1])], art); };
+  box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>Lade Projekte der Woche…</span></div></div>';
+  wbApi('wochen_projekte',{wochenrapport_id:w.id}).then(function(d){
+    if(!box.isConnected) return;
+    if(!d||d.error){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((d&&d.error)||'Ladefehler')+'</span></div></div>'; return; }
+    var ps=d.projekte||[];
+    if(!ps.length){
+      box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="nm">Wochenbericht</div>'+
+        '<div class="meta" style="margin-top:6px"><span>'+esc(d.grund||'In dieser Woche ist kein Projekt gebucht.')+'</span></div></div>';
+      return;
+    }
+    if(!_wrSammel[i]){ _wrSammel[i]={}; ps.forEach(function(p){ _wrSammel[i][p.id]=true; }); }
+    wrSammelPaint(i,d);
+  }).catch(function(){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>Verbindungsfehler.</span></div></div>'; });
+}
+
+function wrSammelPaint(i,d){
+  var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
+  var ps=d.projekte||[], sel=_wrSammel[i]||{};
+  var n=ps.filter(function(p){ return sel[p.id]; }).length;
+  var pill=function(a){
+    var c=a==='verrechnet'?'#3dd68c':(a==='teilweise'?'var(--gold)':'var(--muted)');
+    return '<span style="font-size:10px;color:'+c+'">'+esc(a)+'</span>';
+  };
+  box.innerHTML='<div class="lcard" style="margin-top:8px">'+
+    '<div class="nm" style="margin-bottom:6px">Wochenbericht KW '+esc(d.woche)+'/'+esc(d.jahr)+'</div>'+
+    '<div class="meta" style="margin-bottom:8px"><span>'+ps.length+' Projekt'+(ps.length>1?'e':'')+'</span>'+
+      '<span class="dot">'+Number(d.summen.stunden||0).toFixed(2)+' h</span>'+
+      '<span class="dot">CHF '+Number(d.summen.spesen||0).toFixed(2)+' Spesen</span></div>'+
+    '<div style="display:flex;flex-direction:column;gap:5px">'+
+      ps.map(function(p){
+        return '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer">'+
+          '<input type="checkbox" data-wrsam="'+esc(String(i))+'|'+esc(p.id)+'"'+(sel[p.id]?' checked':'')+' style="accent-color:var(--gold)">'+
+          '<span style="flex:1">'+esc((p.projektnummer?(p.projektnummer+' · '):'')+(p.name||'Projekt'))+'</span>'+
+          '<span style="color:var(--muted);font-size:11px">'+Number(p.stunden||0).toFixed(2)+' h</span>'+pill(p.abrechnung)+
+        '</label>';
+      }).join('')+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+      '<button class="chip" data-wrsamall="'+i+':1">Alle</button>'+
+      '<button class="chip" data-wrsamall="'+i+':0">Keines</button>'+
+      '<button class="chip" style="border-color:var(--gold);color:var(--gold)" data-wrsamgo="'+i+'"'+(n?'':' disabled')+'>'+
+        '📄 '+(n===ps.length?('Alle '+ps.length+' erzeugen'):(n+' erzeugen'))+'</button>'+
+    '</div>'+
+    '<div data-wrsamrows="'+i+'"></div></div>';
+
+  Array.prototype.forEach.call(box.querySelectorAll('[data-wrsam]'),function(c){
+    c.onchange=function(){
+      var t=c.getAttribute('data-wrsam').split('|');
+      if(c.checked) _wrSammel[i][t[1]]=true; else delete _wrSammel[i][t[1]];
+      wrSammelPaint(i,d);
+    };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-wrsamall]'),function(b){
+    b.onclick=function(){
+      var an=b.getAttribute('data-wrsamall').split(':')[1]==='1';
+      _wrSammel[i]={}; if(an) ps.forEach(function(p){ _wrSammel[i][p.id]=true; });
+      wrSammelPaint(i,d);
+    };
+  });
+  var go=box.querySelector('[data-wrsamgo]');
+  if(go) go.onclick=function(){ wrSammelErzeugen(i,d); };
+}
+
+// Nacheinander, nicht parallel: jedes PDF bettet serverseitig Bilder ein.
+// Muster wie im Wochenpaket (wpAlleErzeugen).
+function wrSammelErzeugen(i,d){
+  if(_wrSammelLaeuft[i]) return;
+  var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
+  var rows=box.querySelector('[data-wrsamrows="'+i+'"]'); if(!rows) return;
+  var ps=(d.projekte||[]).filter(function(p){ return (_wrSammel[i]||{})[p.id]; });
+  if(!ps.length){ toast('Kein Projekt ausgewählt'); return; }
+  _wrSammelLaeuft[i]=true;
+  var go=box.querySelector('[data-wrsamgo]'); if(go) go.disabled=true;
+
+  rows.innerHTML='<div style="margin-top:10px">'+ps.map(function(p,k){
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px">'+
+      '<span>'+esc((p.projektnummer?(p.projektnummer+' · '):'')+(p.name||'Projekt'))+'</span>'+
+      '<span style="color:var(--muted)" data-wrsamst="'+i+':'+k+'">wartet…</span></div>';
+  }).join('')+'</div>';
+
+  var kette=Promise.resolve(), fertig=0;
+  ps.forEach(function(p,k){
+    kette=kette.then(function(){
+      var st=box.querySelector('[data-wrsamst="'+i+':'+k+'"]');
+      if(st) st.textContent='erzeuge…';
+      return wbApi('pdf',{projekt_id:p.id,jahr:d.jahr,woche:d.woche}).then(function(r){
+        var st2=box.querySelector('[data-wrsamst="'+i+':'+k+'"]'); if(!st2) return;
+        if(!r||r.error||!r.pdf_base64){
+          st2.innerHTML='<span style="color:#f0a132">'+esc((r&&r.error)||'Kein PDF erhalten')+'</span>'; return;
+        }
+        var blob=wbB64ToBlob(r.pdf_base64), url=URL.createObjectURL(blob);
+        _wrPdfUrls['sam'+i+'_'+k]=url; fertig++;
+        st2.innerHTML='<a class="chip" href="'+url+'" download="'+esc(r.filename)+'" style="text-decoration:none">⬇ '+Math.round(blob.size/1024)+' KB</a>'+
+          ' <button class="chip" data-wrsammail="'+i+':'+k+'" style="font-size:11px">✉ Versenden</button>';
+        var mb=box.querySelector('[data-wrsammail="'+i+':'+k+'"]');
+        if(mb) mb.onclick=function(){ wrSammelVersand(p,d); };
+      }).catch(function(){
+        var st3=box.querySelector('[data-wrsamst="'+i+':'+k+'"]');
+        if(st3) st3.innerHTML='<span style="color:#f0a132">Verbindungsfehler</span>';
+      });
+    });
+  });
+  kette.then(function(){
+    _wrSammelLaeuft[i]=false;
+    var g2=box.querySelector('[data-wrsamgo]'); if(g2){ g2.disabled=false; g2.textContent='📄 Erneut erzeugen'; }
+    toast(fertig+' von '+ps.length+' Bericht(en) erzeugt');
   });
 }
 
-// Wochenbericht geht direkt aufs PDF.
-function wrDokStart(i, projekt){ wrBerichtErzeugen(i, projekt); }
+// Versand je Projekt ueber den bestehenden Weg (action 'versenden'). Er friert
+// den Bericht ein und protokolliert ihn — deshalb bewusst je Projekt bestaetigt
+// und nicht als Stapel im Hintergrund.
+function wrSammelVersand(p,d){
+  var wohin=window.prompt('Empfänger (Komma getrennt, leer = hinterlegte Adressen des Projekts):','');
+  if(wohin===null) return;
+  var empf=String(wohin).split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+  toast('Versende…');
+  wbApi('versenden',Object.assign({projekt_id:p.id,jahr:d.jahr,woche:d.woche},empf.length?{empfaenger:empf}:{})).then(function(r){
+    if(!r||r.error){ toast((r&&r.error)||'Versand fehlgeschlagen'); return; }
+    toast(r.versendet?('✓ Versendet an '+((r.empfaenger||[]).join(', ')||'hinterlegte Adressen')):'Nicht versendet');
+  }).catch(function(){ toast('Verbindungsfehler'); });
+}
 
 // ── Fotodokumentation: ganze Woche, alle Projekte ─────────────────────────
 // Erst die Vorschau (welcher Tag, welches Projekt, wie viele Bilder), dann

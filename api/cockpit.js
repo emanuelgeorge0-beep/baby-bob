@@ -69,6 +69,7 @@ const PM_ACTIONS = new Set([
   'pm_material_add', 'pm_material_upd', 'pm_material_del', 'pm_rapport_verrechnet',
   'pm_datei_upload', 'pm_datei_list', 'pm_datei_del', 'pm_datei_rename',
   'pm_tag_projektwahl',
+  'pm_tage_liste', 'pm_medien_tag', 'pm_medien_kategorie', 'pm_medien_projekt',
   'pm_export_material', 'pm_export_rapporte', 'pm_export_rechnungen',
   'pm_datenblatt_save',
   // Feature B (Medien/Stockwerk) + C (Service) — Multi-Rollen (Master + Partner);
@@ -288,6 +289,10 @@ export default async function handler(req, res) {
       case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body, scope));
       case 'pm_datei_rename':  return res.status(200).json(await pmDateiRename(req.body, scope));
       case 'pm_tag_projektwahl': return res.status(200).json(await pmTagProjektwahl(req.body, scope));
+      case 'pm_tage_liste':      return res.status(200).json(await pmTageListe(req.body, scope));
+      case 'pm_medien_tag':      return res.status(200).json(await pmMedienTag(req.body, scope));
+      case 'pm_medien_kategorie':return res.status(200).json(await pmMedienKategorie(req.body, scope));
+      case 'pm_medien_projekt':  return res.status(200).json(await pmMedienProjekt(req.body, scope));
       case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id, scope));
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
@@ -3810,6 +3815,172 @@ async function pmDateiUpload(b, scope) {
   return { ok: true, datei: { name: sbDisplayName(path.split('/').pop()), path, kategorie: kat, contentType, size: buf.length, url } };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ZIEL 1 + 2 — Fotos ordnen: Tag zuordnen, Kategorie wechseln, Projekt wechseln
+// ═══════════════════════════════════════════════════════════════════════════
+// Bis hierher konnte ein Foto keinem Kalendertag zugeordnet werden. Folge:
+// jedes Foto ohne tagesrapport_id ist Auffangposten JEDER Wochendokumentation
+// seines Projekts — dieselben zehn Bilder standen in KW 29, 30 und 31.
+// Sobald ein Foto an einer Tageszeile haengt, faellt es aus dem Auffangnetz
+// heraus und erscheint nur noch in der Woche dieser Zeile.
+
+// Die auswaehlbaren Tageszeilen eines Projekts. Datum + Baustelle + Techniker,
+// damit der Master zwei Zeilen desselben Tages auseinanderhalten kann.
+async function pmTageListe(b, scope) {
+  const projektId = uuid(b.projekt_id);
+  await requireOwnedProjekt(projektId, scope);
+  let zeilen = [];
+  try {
+    zeilen = await sbGet(
+      `gs_tagesrapporte?projekt_id=eq.${projektId}`
+      + '&select=id,datum,gesamtstunden,taetigkeit,techniker_user_id,jahr,woche&order=datum.desc',
+    );
+  } catch (e) { if (isNoTable(e)) return { notMigrated: true, tage: [] }; throw e; }
+
+  const uids = [...new Set(zeilen.map((z) => z.techniker_user_id).filter(Boolean))];
+  const namen = {};
+  if (uids.length) {
+    const t = await sbGet(`gs_techniker?user_id=in.(${uids.join(',')})&select=user_id,name`).catch(() => []);
+    for (const x of t) namen[x.user_id] = x.name;
+  }
+  const p = await sbGet(`gs_projekte?id=eq.${projektId}&select=name,projektnummer&limit=1`).catch(() => []);
+  const baustelle = [(p[0] || {}).projektnummer, (p[0] || {}).name].filter(Boolean).join(' · ') || 'Baustelle';
+
+  return {
+    baustelle,
+    tage: zeilen.map((z) => ({
+      id: z.id, datum: z.datum, jahr: z.jahr, woche: z.woche,
+      stunden: Number(z.gesamtstunden || 0),
+      gewerk: z.taetigkeit || null,
+      techniker: namen[z.techniker_user_id] || null,
+      baustelle,
+    })),
+  };
+}
+
+// Die angefragten Medienzeilen holen und pruefen, dass sie alle zum Projekt
+// gehoeren. Verhindert, dass ueber eine mitgeschickte Fremd-id ein Foto eines
+// anderen Projekts angefasst wird.
+async function medienDesProjekts(b, scope) {
+  const projektId = uuid(b.projekt_id);
+  await requireOwnedProjekt(projektId, scope);
+  const ids = (Array.isArray(b.medien_ids) ? b.medien_ids : []).slice(0, 200).map(uuid);
+  if (!ids.length) throw new Error('Kein Bild ausgewählt');
+  let rows = [];
+  try { rows = await sbGet(`gs_projekt_medien?id=in.(${ids.join(',')})&select=*`); }
+  catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
+  const fremd = rows.filter((m) => m.projekt_id !== projektId);
+  if (fremd.length) throw new Forbidden();
+  return { projektId, rows };
+}
+
+// ZIEL 1 — Tageszuordnung setzen oder loesen. tagesrapport_id null = loesen.
+async function pmMedienTag(b, scope) {
+  const t = await medienDesProjekts(b, scope);
+  if (t.notMigrated) return t;
+  const { projektId, rows } = t;
+
+  let zielId = null;
+  if (b.tagesrapport_id) {
+    zielId = uuid(b.tagesrapport_id);
+    const z = await sbGet(`gs_tagesrapporte?id=eq.${zielId}&select=id,projekt_id,datum&limit=1`).catch(() => []);
+    if (!z[0]) return { error: 'Der gewählte Tag wurde nicht gefunden.' };
+    // Ein Foto darf nur an einem Tag dieses Projekts haengen. Sonst zeigte der
+    // Wochenbericht des einen Projekts ein Bild, das im anderen liegt.
+    if (z[0].projekt_id !== projektId) return { error: 'Dieser Tag gehört zu einer anderen Baustelle.' };
+  }
+  await sbWrite('PATCH', `gs_projekt_medien?id=in.(${rows.map((m) => m.id).join(',')})`,
+    { tagesrapport_id: zielId }, 'return=minimal');
+  return { ok: true, anzahl: rows.length, zugeordnet: !!zielId };
+}
+
+// Storage-Objekt verschieben. Der Pfad ist der Schluessel zur Datei — er aendert
+// sich hier bewusst, deshalb muss die Medienzeile im selben Zug mitziehen.
+// 'move' statt Kopie+Loeschen: Supabase erledigt das in einem Schritt, eine
+// halbe Verschiebung kann so nicht entstehen.
+async function sbStorageMove(bucket, von, nach) {
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/move`, {
+    method: 'POST', headers: SB,
+    body: JSON.stringify({ bucketId: bucket, sourceKey: von, destinationKey: nach }),
+  });
+  if (r.ok) return { ok: true };
+  return { ok: false, status: r.status, text: await r.text().catch(() => '') };
+}
+
+// Pfad neu zusammensetzen: <projekt>/<kategorie>/<zeitstempel>-<name>
+function medienPfadNeu(path, projektId, kategorie) {
+  const datei = String(path).split('/').pop();
+  return `${projektId}/${kategorie}/${datei}`;
+}
+
+// ZIEL 2a — Kategorie wechseln (Bilder <-> Plaene <-> Dateien). Verschieben
+// statt doppelt ablegen: IMG_7143 und IMG_7144 liegen heute in zwei Kategorien
+// als zwei getrennte Kopien, weil es bisher nur "nochmal hochladen" gab.
+async function pmMedienKategorie(b, scope) {
+  const t = await medienDesProjekts(b, scope);
+  if (t.notMigrated) return t;
+  const { projektId, rows } = t;
+  const kat = pmKategorie(b.kategorie);
+
+  let bewegt = 0; const fehler = [];
+  for (const m of rows) {
+    const ziel = medienPfadNeu(m.path, projektId, kat);
+    if (ziel === m.path) continue;                       // liegt schon dort
+    const mv = await sbStorageMove(m.bucket || PM_DATEI_BUCKET, m.path, ziel);
+    if (!mv.ok) { fehler.push(m.dateiname || 'Datei'); console.error('medien kategorie move', mv.status, mv.text); continue; }
+    try {
+      await sbWrite('PATCH', `gs_projekt_medien?id=eq.${m.id}`, { path: ziel }, 'return=minimal');
+      bewegt++;
+    } catch (e) {
+      // Datei ist verschoben, Zeile nicht — zurueckschieben, sonst zeigt die
+      // Medienzeile auf einen Pfad, unter dem nichts mehr liegt.
+      await sbStorageMove(m.bucket || PM_DATEI_BUCKET, ziel, m.path).catch(() => {});
+      fehler.push(m.dateiname || 'Datei');
+      console.error('medien kategorie patch', (e && e.message) || e);
+    }
+  }
+  if (fehler.length && !bewegt) return { error: `Verschieben fehlgeschlagen (${fehler.length} Datei(en)).` };
+  return { ok: true, bewegt, fehler: fehler.length };
+}
+
+// ZIEL 2b — Projekt wechseln. Datei UND Medienzeile ziehen mit. Behebt
+// zugleich, dass die Cockpit-Galerie beim Umhaengen einer Tageszeile auf dem
+// alten Projekt stehenblieb: projekt_id war dort nie mitgezogen worden.
+async function pmMedienProjekt(b, scope) {
+  const t = await medienDesProjekts(b, scope);
+  if (t.notMigrated) return t;
+  const { rows } = t;
+  const zielProjekt = uuid(b.ziel_projekt_id);
+  await requireOwnedProjekt(zielProjekt, scope);
+  if (zielProjekt === t.projektId) return { error: 'Das Bild liegt bereits auf dieser Baustelle.' };
+
+  let bewegt = 0, geloest = 0; const fehler = [];
+  for (const m of rows) {
+    const kat = (String(m.path).split('/')[1] || 'bilder');
+    const ziel = medienPfadNeu(m.path, zielProjekt, PM_KATEGORIEN.includes(kat) ? kat : 'bilder');
+    const mv = await sbStorageMove(m.bucket || PM_DATEI_BUCKET, m.path, ziel);
+    if (!mv.ok) { fehler.push(m.dateiname || 'Datei'); console.error('medien projekt move', mv.status, mv.text); continue; }
+    // Eine Tageszuordnung zeigt auf eine Zeile des ALTEN Projekts und waere
+    // nach dem Wechsel falsch. Sie wird geloest, nicht mitgeschleppt — und
+    // dem Master gemeldet, statt still zu verschwinden.
+    const patch = { path: ziel, projekt_id: zielProjekt };
+    if (m.tagesrapport_id) { patch.tagesrapport_id = null; geloest++; }
+    try {
+      await sbWrite('PATCH', `gs_projekt_medien?id=eq.${m.id}`, patch, 'return=minimal');
+      bewegt++;
+    } catch (e) {
+      await sbStorageMove(m.bucket || PM_DATEI_BUCKET, ziel, m.path).catch(() => {});
+      fehler.push(m.dateiname || 'Datei');
+      console.error('medien projekt patch', (e && e.message) || e);
+    }
+  }
+  if (fehler.length && !bewegt) return { error: `Verschieben fehlgeschlagen (${fehler.length} Datei(en)).` };
+  return {
+    ok: true, bewegt, fehler: fehler.length,
+    hinweis: geloest ? `${geloest} Tageszuordnung(en) wurden gelöst — der bisherige Tag gehört zur alten Baustelle.` : null,
+  };
+}
+
 async function pmDateiList(projektId, scope) {
   await requireOwnedProjekt(projektId, scope);
   const dateien = await listProjektDateien(uuid(projektId)).catch(() => []);
@@ -3854,13 +4025,32 @@ async function listProjektDateien(projektId) {
   // Medienzeile (Plaene, Dokumente) tragen keine medien_id und bieten im
   // Cockpit deshalb kein Umbenennen an.
   const med = await sbGet(
-    `gs_projekt_medien?projekt_id=eq.${projektId}&select=id,path,dateiname`,
+    `gs_projekt_medien?projekt_id=eq.${projektId}&select=id,path,dateiname,tagesrapport_id`,
   ).catch(() => []);
   const jePfad = {};
   for (const m of Array.isArray(med) ? med : []) if (m.path) jePfad[m.path] = m;
+
+  // Datum der zugeordneten Tageszeile mitliefern, damit die Galerie zeigen
+  // kann, welches Bild schon einen Tag traegt und welches noch im Auffangnetz
+  // haengt. Ohne diese Anzeige waere die Zuordnung unsichtbar und der Master
+  // wuesste nach dem Zuordnen nicht, was er getan hat.
+  const trIds = [...new Set(Object.values(jePfad).map((m) => m.tagesrapport_id).filter(Boolean))];
+  const tagVon = {};
+  if (trIds.length) {
+    const tr = await sbGet(`gs_tagesrapporte?id=in.(${trIds.join(',')})&select=id,datum`).catch(() => []);
+    for (const z of tr) tagVon[z.id] = z.datum;
+  }
+
   return all.map((d) => {
     const m = jePfad[d.path];
-    return m ? { ...d, name: m.dateiname || d.name, medien_id: m.id } : { ...d, medien_id: null };
+    if (!m) return { ...d, medien_id: null, tagesrapport_id: null, tag_datum: null };
+    return {
+      ...d,
+      name: m.dateiname || d.name,
+      medien_id: m.id,
+      tagesrapport_id: m.tagesrapport_id || null,
+      tag_datum: m.tagesrapport_id ? (tagVon[m.tagesrapport_id] || null) : null,
+    };
   });
 }
 

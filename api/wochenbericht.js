@@ -100,6 +100,21 @@ export default async function handler(req, res) {
       });
     }
 
+    // ── ZIEL 5: Sammelerzeugung direkt aus der Wochenrapport-Liste ─────────
+    // Bisher fuehrte der einzige Weg zu "alle Projekte einer Woche" ueber die
+    // Sammelmaske (Kunde x KW). Die traegt nicht, wenn die Projekte einer Woche
+    // zu verschiedenen Kunden gehoeren oder gar keinen haben — 13 von 18
+    // Projekten tragen kein kunde_id. Bezug ist hier der WOCHENRAPPORT
+    // (Techniker x KW), also genau die Zeile, vor der der Master steht.
+    if (b.action === 'wochen_projekte') {
+      if (role !== 'gs_admin' && role !== 'master') {
+        return res.status(403).json({ error: 'Nur Master/Admin.' });
+      }
+      const wrId = String(b.wochenrapport_id || '').trim();
+      if (!UUID_RE.test(wrId)) return res.status(400).json({ error: 'wochenrapport_id (UUID) erforderlich' });
+      return res.status(200).json({ ok: true, ...(await wochenProjekte(wrId)) });
+    }
+
     if (b.action === 'sammel_vorschau' || b.action === 'wochenrapport_pdf') {
       if (role !== 'gs_admin' && role !== 'master') {
         return res.status(403).json({ error: 'Nur Master/Admin.' });
@@ -253,6 +268,75 @@ async function getRole(userId) {
 //
 // Massgeblich sind die Tageszeilen, nicht die Projektliste des Kunden: ein
 // Projekt ohne Buchung in dieser Woche erzeugt kein Dokument.
+// Die Projekte EINER Woche eines Technikers, mit ihren Summen. Grundlage der
+// Sammelerzeugung aus der Wochenrapport-Liste.
+//
+// Der Abrechnungsstatus wird MITGELIEFERT, aber er sperrt nichts: ein
+// verrechneter Rapport muss weiterhin als Bericht abrufbar sein — die
+// Rechnung ist gestellt, das Dokument dahinter bleibt.
+//
+// Wochen ganz ohne Projekt (reine Abwesenheitswochen wie Ferien) liefern eine
+// leere Projektliste plus den Grund. Ein Wochenbericht ist Projekt x KW; ohne
+// Projekt gibt es nichts zu berichten, und das gehoert gesagt statt als
+// leeres Ergebnis serviert.
+export async function wochenProjekte(wochenrapportId) {
+  const kopf = (await sbGet(`gs_wochenrapporte?id=eq.${wochenrapportId}&select=id,jahr,woche,techniker_user_id,rapport_nr&limit=1`))[0];
+  if (!kopf) return { jahr: null, woche: null, projekte: [], grund: 'Wochenrapport nicht gefunden.' };
+
+  const zeilen = await sbGet(
+    `gs_tagesrapporte?wochenrapport_id=eq.${wochenrapportId}`
+    + '&select=id,datum,projekt_id,gesamtstunden,spesen,abwesenheit,abrechnung_status&order=datum.asc',
+  ).catch(() => []);
+
+  // Spesen je KALENDERTAG, nicht je Zeile — dieselbe Regel wie ueberall sonst.
+  const spesenTag = {};
+  for (const z of zeilen) {
+    if (!z.datum) continue;
+    const v = Number(z.spesen || 0);
+    if (!(z.datum in spesenTag) || v > spesenTag[z.datum]) spesenTag[z.datum] = v;
+  }
+  const spesenWoche = Math.round(Object.values(spesenTag).reduce((a, v) => a + v, 0) * 100) / 100;
+  const stundenWoche = Math.round(zeilen.reduce((a, z) => a + Number(z.gesamtstunden || 0), 0) * 100) / 100;
+
+  const jeProjekt = {};
+  for (const z of zeilen) {
+    if (!z.projekt_id) continue;
+    const p = jeProjekt[z.projekt_id] || (jeProjekt[z.projekt_id] = { zeilen: 0, stunden: 0, offen: 0, verrechnet: 0 });
+    p.zeilen += 1;
+    p.stunden += Number(z.gesamtstunden || 0);
+    if ((z.abrechnung_status || 'offen') === 'verrechnet') p.verrechnet += 1; else p.offen += 1;
+  }
+  const ids = Object.keys(jeProjekt);
+  const stamm = ids.length
+    ? await sbGet(`gs_projekte?id=in.(${ids.join(',')})&select=id,name,projektnummer,kunde_id`).catch(() => [])
+    : [];
+  const nachId = {};
+  for (const p of stamm) nachId[p.id] = p;
+
+  const projekte = ids.map((id) => ({
+    id,
+    name: (nachId[id] || {}).name || 'Projekt',
+    projektnummer: (nachId[id] || {}).projektnummer || null,
+    zeilen: jeProjekt[id].zeilen,
+    stunden: Math.round(jeProjekt[id].stunden * 100) / 100,
+    abrechnung: jeProjekt[id].offen === 0 ? 'verrechnet' : (jeProjekt[id].verrechnet ? 'teilweise' : 'offen'),
+  })).sort((a, b) => String(a.projektnummer || '').localeCompare(String(b.projektnummer || '')));
+
+  let grund = null;
+  if (!projekte.length) {
+    const nurAbwesend = zeilen.length > 0 && zeilen.every((z) => z.abwesenheit);
+    grund = nurAbwesend
+      ? 'Diese Woche trägt ausschliesslich Abwesenheiten und keine Baustelle. Ein Wochenbericht ist Projekt × Kalenderwoche — ohne Projekt gibt es nichts zu berichten.'
+      : (zeilen.length ? 'Keine der Tageszeilen dieser Woche hängt an einer Baustelle.' : 'Diese Woche hat keine Tageszeilen.');
+  }
+
+  return {
+    wochenrapport_id: kopf.id, jahr: kopf.jahr, woche: kopf.woche, rapport_nr: kopf.rapport_nr || null,
+    projekte, grund,
+    summen: { stunden: stundenWoche, spesen: spesenWoche, zeilen: zeilen.length },
+  };
+}
+
 async function sammelVorschau(kundeId, jahr, woche) {
   const { von, bis } = isoWochenBereich(jahr, woche);
   const ohneKunde = kundeId === 'ohne';
