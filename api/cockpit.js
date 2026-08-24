@@ -67,7 +67,7 @@ const PM_ACTIONS = new Set([
   'pm_projekte', 'pm_projekt', 'pm_projekt_save', 'pm_kunden', 'pm_kunde_save',
   'pm_techniker', 'pm_tech_assign', 'pm_tech_unassign', 'pm_taetigkeit_add', 'pm_taetigkeit_del',
   'pm_material_add', 'pm_material_upd', 'pm_material_del', 'pm_rapport_verrechnet',
-  'pm_datei_upload', 'pm_datei_list', 'pm_datei_del',
+  'pm_datei_upload', 'pm_datei_list', 'pm_datei_del', 'pm_datei_rename',
   'pm_export_material', 'pm_export_rapporte', 'pm_export_rechnungen',
   'pm_datenblatt_save',
   // Feature B (Medien/Stockwerk) + C (Service) — Multi-Rollen (Master + Partner);
@@ -285,6 +285,7 @@ export default async function handler(req, res) {
       case 'pm_datei_upload':  return res.status(200).json(await pmDateiUpload(req.body, scope));
       case 'pm_datei_list':    return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
       case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body, scope));
+      case 'pm_datei_rename':  return res.status(200).json(await pmDateiRename(req.body, scope));
       case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id, scope));
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
@@ -3549,6 +3550,21 @@ async function setRapportAbrechnung(b, scope) {
 
 // ── Projektdateien / Fotos (Storage-Bucket 'projektdateien') ───────────────
 const PM_DATEI_BUCKET = 'projektdateien';
+// Storage-Objekt loeschen. Eigener Helfer statt `headers: SB`, weil SB ein
+// 'Content-Type: application/json' traegt: Supabase Storage laeuft auf Fastify,
+// und Fastify weist eine Anfrage MIT diesem Header und OHNE Koerper hart ab —
+// 400 "Body cannot be empty when content-type is set to 'application/json'".
+// Der Aufrufer sah davon nur "Loeschen fehlgeschlagen"; die Datei blieb liegen,
+// die Medienzeile ebenfalls (sie wird erst nach dem Storage-Erfolg entfernt).
+// 404 gilt als Erfolg: das Ziel ist weg, mehr wollte der Aufrufer nicht.
+async function sbStorageDel(bucket, path) {
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+    method: 'DELETE',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (r.ok || r.status === 404) return { ok: true, status: r.status };
+  return { ok: false, status: r.status, text: await r.text().catch(() => '') };
+}
 // Drei Kategorien (Unterordner je Projekt). Unbekannt/leer → 'dateien'.
 const PM_KATEGORIEN = ['bilder', 'plaene', 'dateien'];
 function pmKategorie(v) { const k = String(v || '').toLowerCase(); return PM_KATEGORIEN.includes(k) ? k : 'dateien'; }
@@ -3632,7 +3648,49 @@ async function listProjektDateien(projektId) {
   const perKat = await Promise.all(PM_KATEGORIEN.map((k) => listOneFolder(`${projektId}/${k}/`, k)));
   const all = [...legacy, ...perKat.flat()];
   all.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
-  return all;
+
+  // Anzeigenamen aus gs_projekt_medien ueberlagern. Der Storage kennt nur den
+  // Pfad, und der ist unveraenderlich — 'IMG_7233.jpeg' bleibt dort fuer immer
+  // stehen. Der Anzeigename lebt in der Medienzeile und darf umbenannt werden
+  // (pmDateiRename); die Fotodokumentation liest denselben Wert. Dateien ohne
+  // Medienzeile (Plaene, Dokumente) tragen keine medien_id und bieten im
+  // Cockpit deshalb kein Umbenennen an.
+  const med = await sbGet(
+    `gs_projekt_medien?projekt_id=eq.${projektId}&select=id,path,dateiname`,
+  ).catch(() => []);
+  const jePfad = {};
+  for (const m of Array.isArray(med) ? med : []) if (m.path) jePfad[m.path] = m;
+  return all.map((d) => {
+    const m = jePfad[d.path];
+    return m ? { ...d, name: m.dateiname || d.name, medien_id: m.id } : { ...d, medien_id: null };
+  });
+}
+
+// Anzeigenamen eines Fotos aendern. Der Speicherpfad bleibt unangetastet — er
+// ist der Schluessel zur Datei und zu jeder bereits ausgelieferten signierten
+// URL. Geaendert wird ausschliesslich gs_projekt_medien.dateiname, und genau
+// den zeigen Projektkachel und Fotodokumentation an.
+async function pmDateiRename(b, scope) {
+  const projektId = uuid(b.projekt_id);
+  await requireOwnedProjekt(projektId, scope);
+  const path = String(b.path || '');
+  if (!path.startsWith(`${projektId}/`)) throw new Error('Ungültiger Pfad');
+  const name = String(b.name || '').trim().replace(/[\r\n\t]+/g, ' ').slice(0, 120);
+  if (!name) return { error: 'Name darf nicht leer sein' };
+  let rows;
+  try {
+    rows = await sbWrite('PATCH', `gs_projekt_medien?path=eq.${encodeURIComponent(path)}`,
+      { dateiname: name });
+  } catch (e) {
+    if (isNoTable(e)) return { notMigrated: true };
+    throw e;
+  }
+  const n = Array.isArray(rows) ? rows.length : (rows ? 1 : 0);
+  // Kein Treffer heisst: zu dieser Datei existiert keine Medienzeile. Das ist
+  // bei Plaenen und Dokumenten der Normalfall und kein Fehler des Aufrufers —
+  // es gibt dort schlicht keinen Ort, an dem ein Anzeigename leben koennte.
+  if (!n) return { error: 'Diese Datei trägt keinen änderbaren Namen (nur Bilder).' };
+  return { ok: true, name };
 }
 
 async function pmDateiDel(b, scope) {
@@ -3640,8 +3698,11 @@ async function pmDateiDel(b, scope) {
   await requireOwnedProjekt(projektId, scope);
   const path = String(b.path || '');
   if (!path.startsWith(`${projektId}/`)) throw new Error('Ungültiger Pfad');
-  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
-  if (!r.ok) return { error: 'Löschen fehlgeschlagen' };
+  const del = await sbStorageDel(PM_DATEI_BUCKET, path);
+  if (!del.ok) {
+    console.error('pm datei del fail', del.status, del.text);
+    return { error: `Löschen fehlgeschlagen (Storage ${del.status})` };
+  }
   // Gegenstück zum Auffangnetz im Upload: die Datei ist weg, also darf auch
   // die Medienzeile nicht stehenbleiben — sonst zeigt der Wochenbericht ein
   // Foto an, dessen Bytes es nicht mehr gibt (ladeFotoBytes → null → Lücke).
@@ -3818,7 +3879,7 @@ async function medienDel(b, scope) {
   else throw new Forbidden();
   if (scope.role === 'techniker' && m.hochgeladen_von !== scope.technikerUserId) throw new Forbidden();
   for (const p of [m.path, m.thumbnail_path].filter(Boolean)) {
-    await fetch(`${SUPABASE_URL}/storage/v1/object/${m.bucket || PM_DATEI_BUCKET}/${p}`, { method: 'DELETE', headers: SB }).catch(() => {});
+    await sbStorageDel(m.bucket || PM_DATEI_BUCKET, p).catch(() => {});
   }
   await sbWrite('DELETE', `gs_projekt_medien?id=eq.${id}`, {}, 'return=minimal');
   return { ok: true };

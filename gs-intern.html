@@ -1577,26 +1577,13 @@ function paintProjektDetail(d){
   var techSec=pmSec('Techniker',techInner, d.mig.techniker?'<button class="chip" id="pm-tech-add" style="font-size:11px">＋ zuweisen</button>':'');
 
   // ── Projektdateien: drei Kategorien (Bilder/Pläne/Dateien), Bucket 'projektdateien' ──
-  var dateien=d.dateien||[];
-  function pmDateiItem(f){
-    var ic=pmFileIcon(f.contentType,f.name);
-    var dl=f.url?(f.url+(f.url.indexOf('?')>-1?'&':'?')+'download='+encodeURIComponent(f.name)):'#';
-    var body = ic==='img'&&f.url
-      ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener"><img src="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"/></a>'
-      : '<a href="'+esc(f.url||'#')+'" target="_blank" rel="noopener" class="doc"><span class="ic">'+(ic==='img'?'🖼️':ic)+'</span><span>'+esc(f.name)+'</span></a>';
-    return '<div class="it">'+body+'<span class="cap">'+esc(f.name)+'</span>'+
-      '<a class="dl-file" href="'+esc(dl)+'" download="'+esc(f.name)+'" title="Herunterladen">⬇</a>'+
-      '<button class="del" data-delfile="'+esc(f.path)+'" title="Löschen">×</button></div>';
-  }
-  function pmKatBlock(kat,label,icon){
-    var fs=dateien.filter(function(f){ return (f.kategorie||'dateien')===kat; });
-    var inner=fs.length?('<div class="gal">'+fs.map(pmDateiItem).join('')+'</div>'):'<div class="empty" style="padding:8px 12px">–</div>';
-    return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin:2px 2px 6px">'+
-      '<strong style="font-size:12px">'+icon+' '+label+' ('+fs.length+')</strong>'+
-      '<button class="chip" style="font-size:11px" onclick="openDateiUpload(\''+kat+'\')">＋ hochladen</button></div>'+inner+'</div>';
-  }
-  var dateiInner=pmKatBlock('bilder','Bilder','🖼️')+pmKatBlock('plaene','Pläne','📐')+pmKatBlock('dateien','Dateien','📄');
-  var dateiSec=pmSec('Dateien & Fotos ('+dateien.length+')',dateiInner,'');
+  // Die Kachel steckt in einem eigenen Kasten (#pm-datei-box) und wird nach
+  // Upload/Löschen/Umbenennen gezielt nachgeladen, statt die ganze Projektseite
+  // neu zu zeichnen — dabei sprang die Ansicht und der Master musste sie
+  // verlassen und neu betreten, um seine frisch hochgeladenen Bilder zu sehen.
+  var dateiSec='<div class="cc-sec" id="pm-datei-head" style="display:flex;justify-content:space-between;align-items:center">'+
+    esc('Dateien & Fotos ('+(d.dateien||[]).length+')')+'</div>'+
+    '<div id="pm-datei-box">'+pmDateiInnerHtml(d.dateien||[])+'</div>';
 
   // ── Arbeitsrapporte (bestehende gs_tagesrapporte), pro KW gruppiert + Abrechnungsstatus ──
   var rapSec;
@@ -1757,7 +1744,7 @@ function paintProjektDetail(d){
   Array.prototype.forEach.call($('view').querySelectorAll('[data-untech]'),function(b){ b.onclick=function(){ pmUnassignTech(b.getAttribute('data-untech')); }; });
   Array.prototype.forEach.call($('view').querySelectorAll('[data-deltaet]'),function(b){ b.onclick=function(){ pmDel('pm_taetigkeit_del',b.getAttribute('data-deltaet')); }; });
   Array.prototype.forEach.call($('view').querySelectorAll('[data-delmat]'),function(b){ b.onclick=function(){ pmDel('pm_material_del',b.getAttribute('data-delmat')); }; });
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-delfile]'),function(b){ b.onclick=function(){ pmDeleteDatei(b.getAttribute('data-delfile')); }; });
+  pmDateiWire($('pm-datei-box'));
   Array.prototype.forEach.call($('view').querySelectorAll('[data-verr]'),function(b){ b.onclick=function(){ pmSetVerrechnet(b.getAttribute('data-verr').split(','),b.getAttribute('data-vs')); }; });
 }
 // ── Rapport-Abrechnung (KW) offen/verrechnet umschalten ──
@@ -1767,6 +1754,63 @@ function pmSetVerrechnet(ids,status){
     loadProjekt(); toast(status==='verrechnet'?'Als verrechnet markiert':'Auf offen gesetzt');
   }).catch(function(){ toast('Fehler'); });
 }
+// ── Projektdateien-Kachel: rendern, verdrahten, nachladen ──────────────────
+// f.medien_id ist gesetzt, wenn zu der Datei eine Zeile in gs_projekt_medien
+// existiert (das sind die Bilder). Nur die tragen einen aenderbaren
+// Anzeigenamen — und nur die landen in der Fotodokumentation.
+function pmDateiItemHtml(f){
+  var ic=pmFileIcon(f.contentType,f.name);
+  var dl=f.url?(f.url+(f.url.indexOf('?')>-1?'&':'?')+'download='+encodeURIComponent(f.name)):'#';
+  var body = ic==='img'&&f.url
+    ? '<a href="'+esc(f.url)+'" target="_blank" rel="noopener"><img src="'+esc(f.url)+'" alt="'+esc(f.name)+'" loading="lazy"/></a>'
+    : '<a href="'+esc(f.url||'#')+'" target="_blank" rel="noopener" class="doc"><span class="ic">'+(ic==='img'?'🖼️':ic)+'</span><span>'+esc(f.name)+'</span></a>';
+  var ren=f.medien_id?('<button class="del" data-renfile="'+esc(f.path)+'" data-renname="'+esc(f.name)+'" title="Umbenennen" style="right:auto;left:6px">✏️</button>'):'';
+  return '<div class="it">'+body+'<span class="cap">'+esc(f.name)+'</span>'+
+    '<a class="dl-file" href="'+esc(dl)+'" download="'+esc(f.name)+'" title="Herunterladen">⬇</a>'+
+    ren+'<button class="del" data-delfile="'+esc(f.path)+'" title="Löschen">×</button></div>';
+}
+function pmDateiInnerHtml(dateien){
+  function katBlock(kat,label,icon){
+    var fs=(dateien||[]).filter(function(f){ return (f.kategorie||'dateien')===kat; });
+    var inner=fs.length?('<div class="gal">'+fs.map(pmDateiItemHtml).join('')+'</div>'):'<div class="empty" style="padding:8px 12px">–</div>';
+    return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin:2px 2px 6px">'+
+      '<strong style="font-size:12px">'+icon+' '+label+' ('+fs.length+')</strong>'+
+      '<button class="chip" style="font-size:11px" onclick="openDateiUpload(\''+kat+'\')">＋ hochladen</button></div>'+inner+'</div>';
+  }
+  return katBlock('bilder','Bilder','🖼️')+katBlock('plaene','Pläne','📐')+katBlock('dateien','Dateien','📄');
+}
+function pmDateiWire(root){
+  if(!root) return;
+  Array.prototype.forEach.call(root.querySelectorAll('[data-delfile]'),function(b){ b.onclick=function(){ pmDeleteDatei(b.getAttribute('data-delfile')); }; });
+  Array.prototype.forEach.call(root.querySelectorAll('[data-renfile]'),function(b){ b.onclick=function(){ pmRenameDatei(b.getAttribute('data-renfile'),b.getAttribute('data-renname')); }; });
+}
+// Kachel allein neu laden. Kein loadProjekt() — die ganze Seite neu zu zeichnen
+// war der Grund, weshalb der Master nach dem Hochladen nichts Neues sah.
+function pmDateienReload(){
+  var pid=_pmProjektId;
+  return api('pm_datei_list',{projekt_id:pid}).then(function(r){
+    if(!r || r.error) return;
+    var dateien=r.dateien||[];
+    if(_pmData) _pmData.dateien=dateien;
+    if(_pmProjektId!==pid) return;                 // Master ist inzwischen woanders
+    var box=$('pm-datei-box'); if(!box) return;
+    box.innerHTML=pmDateiInnerHtml(dateien);
+    pmDateiWire(box);
+    var head=$('pm-datei-head'); if(head) head.textContent='Dateien & Fotos ('+dateien.length+')';
+  }).catch(function(){});
+}
+function pmRenameDatei(path,alt){
+  var neu=window.prompt('Anzeigename des Bildes (der Speicherpfad bleibt unverändert):',alt||'');
+  if(neu===null) return;
+  neu=String(neu).trim();
+  if(!neu){ toast('Name darf nicht leer sein'); return; }
+  if(neu===alt) return;
+  api('pm_datei_rename',{projekt_id:_pmProjektId,path:path,name:neu}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; }
+    pmDateienReload(); toast('Umbenannt');
+  }).catch(function(){ toast('Fehler'); });
+}
+
 // ── Datei-Upload (Fotos/Pläne) → Storage-Bucket 'projektdateien' ──
 function openDateiUpload(kategorie){
   kategorie=(['bilder','plaene','dateien'].indexOf(kategorie)>-1)?kategorie:'dateien';
@@ -1830,15 +1874,22 @@ function pmUploadFiles(files,kategorie){
       });
     });
   });
-  chain.then(function(){
-    loadProjekt();
+  // Auch der Fehlerweg laedt nach: bricht eine Datei mittendrin ab, sind die
+  // vorher hochgeladenen trotzdem da und muessen sichtbar werden.
+  function fertig(){
+    pmDateienReload();
+    if(_pmProjektId) medienLoad(_pmProjektId);
     var sp=gespart>262144?(' · '+Math.round(gespart/1048576*10)/10+' MB gespart'):'';
     toast(okCount?(okCount+' hochgeladen'+sp+(errMsg?' · '+errMsg:'')):(errMsg||'Kein Upload'));
-  });
+  }
+  chain.then(fertig,fertig);
 }
 function pmDeleteDatei(path){
   api('pm_datei_del',{projekt_id:_pmProjektId,path:path}).then(function(r){
-    if(r&&r.error){ toast(r.error); return; } loadProjekt(); toast('Gelöscht');
+    if(r&&r.error){ toast(r.error); return; }
+    pmDateienReload();
+    if(_pmProjektId) medienLoad(_pmProjektId);
+    toast('Gelöscht');
   }).catch(function(){ toast('Fehler'); });
 }
 // PDF-Export eines Abschnitts (Material/Rapporte/Rechnungen) → base64 → Download.

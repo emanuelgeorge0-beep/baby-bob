@@ -111,8 +111,13 @@ async function planDelete(res, user, role, body) {
   if (!projekt_id || !path) return res.status(400).json({ error: 'projekt_id + path erforderlich' });
   if (!String(path).startsWith(`${projekt_id}/`)) return res.status(400).json({ error: 'Ungültiger Pfad' });
   if (!(await hasProjectAccess(user, role, projekt_id))) return res.status(403).json({ error: 'Kein Zugriff auf dieses Projekt' });
-  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PLANS_BUCKET}/${path}`, { method: 'DELETE', headers: SB });
-  if (!r.ok) return res.status(500).json({ error: 'Löschen fehlgeschlagen' });
+  // Ohne Content-Type: SB traegt 'application/json', und Supabase Storage (Fastify)
+  // weist eine koerperlose Anfrage mit diesem Header mit 400 ab. Gleiche Ursache
+  // wie in api/cockpit.js sbStorageDel.
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${PLANS_BUCKET}/${path}`, {
+    method: 'DELETE', headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!r.ok && r.status !== 404) return res.status(500).json({ error: 'Löschen fehlgeschlagen' });
   return res.status(200).json({ ok: true });
 }
 
