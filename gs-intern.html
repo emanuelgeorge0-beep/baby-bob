@@ -2554,6 +2554,12 @@ function wrRowEdit(zid){
       '<label>Spesen (CHF)<input type="number" step="0.05" id="wr-e-spesen" value="'+esc(z.spesen||0)+'"></label>'+
     '</div>'+
     '<div id="wr-e-probe" class="usub" style="color:var(--muted);font-size:12px;margin-top:8px"></div>'+
+    // C2 — die Baustelle gehoert in DIESE Maske. Sie stand bisher nur unter
+    // "Verschieben" (wrRowMove), zusammen mit dem Technikerwechsel; wer die
+    // Baustelle einer Zeile aendern wollte, suchte sie hier und fand sie nicht.
+    '<label style="display:block;margin-top:8px">Baustelle'+
+      '<select id="wr-e-proj" style="width:100%"><option value="">Lädt…</option></select></label>'+
+    '<div id="wr-e-projhint" class="usub" style="color:var(--muted);font-size:12px;margin-top:4px"></div>'+
     '<label style="display:block;margin-top:8px">Tätigkeit (eine Zeile je Punkt)<textarea id="wr-e-arb" style="width:100%;min-height:60px">'+esc((z.arbeiten||[]).join('\n'))+'</textarea></label>'+
     '<div style="display:flex;gap:8px;margin-top:10px">'+
       '<button class="chip" onclick="wrPanel(\'\')">Abbrechen</button>'+
@@ -2568,6 +2574,50 @@ function wrRowEdit(zid){
     var f=$('wr-e-std'); if(f){ f.value=d.toFixed(2); wrEditProbe(); }
   };
   wrEditProbe();
+  wrProjWahlLaden(zid);
+}
+
+// Baustellen-Auswahl fuer die Bearbeitungsmaske. Zwei Gruppen: die Projekte des
+// Kunden zuerst, alle uebrigen darunter — der Master soll nicht blockiert sein,
+// wenn eine Baustelle einem anderen Kunden gehoert. _wrProjWahl merkt sich den
+// Ausgangswert, damit beim Speichern nur ein ECHTER Wechsel verschoben wird.
+var _wrProjWahl=null;
+function wrProjWahlLaden(zid){
+  _wrProjWahl=null;
+  api('pm_tag_projektwahl',{id:zid}).then(function(d){
+    var sel=$('wr-e-proj'), hint=$('wr-e-projhint');
+    if(!sel) return;
+    if(!d||d.error){ sel.innerHTML='<option value="">— nicht ladbar —</option>'; if(hint) hint.textContent=(d&&d.error)||'Projekte nicht ladbar'; return; }
+    _wrProjWahl=d.aktuell||'';
+    if(d.ist_abwesenheit){
+      sel.innerHTML='<option value="">— Abwesenheit —</option>';
+      sel.disabled=true;
+      if(hint) hint.textContent='Abwesenheitszeilen tragen keine Baustelle.';
+      return;
+    }
+    if(d.ist_service){
+      sel.innerHTML='<option value="">— Serviceauftrag —</option>';
+      sel.disabled=true;
+      if(hint) hint.textContent='Diese Zeile hängt an einem Serviceauftrag, nicht an einer Baustelle.';
+      return;
+    }
+    function opts(list){
+      return list.map(function(p){
+        var lbl=(p.projektnummer?(p.projektnummer+' · '):'')+(p.name||'Projekt');
+        return '<option value="'+esc(p.id)+'"'+(p.id===_wrProjWahl?' selected':'')+'>'+esc(lbl)+'</option>';
+      }).join('');
+    }
+    var html='<option value="">— keine Baustelle —</option>';
+    if((d.nah||[]).length) html+='<optgroup label="'+esc(d.gruppe_label||'Projekte des Kunden')+'">'+opts(d.nah)+'</optgroup>';
+    if((d.fern||[]).length) html+='<optgroup label="Alle übrigen Projekte">'+opts(d.fern)+'</optgroup>';
+    sel.innerHTML=html;
+    sel.disabled=false;
+    if(hint) hint.textContent=d.kunde
+      ? ('Kunde dieser Zeile: '+(d.kunde.firma||'—')+'. Ein Wechsel hängt nur diese eine Tageszeile um.')
+      : 'Das heutige Projekt trägt keinen Kunden — oben stehen deshalb die Projekte ohne Kunde.';
+  }).catch(function(){
+    var sel=$('wr-e-proj'); if(sel) sel.innerHTML='<option value="">— nicht ladbar —</option>';
+  });
 }
 
 // hh:mm aus einem TIME-Wert der DB ('07:00:00') — leer bleibt leer.
@@ -2617,9 +2667,29 @@ function wrRowEditSave(zid){
     stunden_manuell:(d==null)?true:(Math.abs(std-d)>=0.005),
     arbeiten:(($('wr-e-arb')||{}).value||'').split('\n').map(function(s){return s.trim();}).filter(Boolean),
   };
-  api('pm_wochenrapport_update',{id:zid,patch:patch}).then(function(d){
-    if(d&&d.error){ toast(d.error); return; }
-    toast('✓ Zeile geändert'); wrPanel(''); openWochenrapport(_wrId);
+  // Die Baustelle wird ZUERST umgehaengt und erst danach der Rest gespeichert.
+  // Grund: nur das Umhaengen kann fachlich kollidieren (gleiche Baustelle,
+  // gleicher Techniker, gleicher Tag). Liefe es zuletzt, waeren Stunden und
+  // Spesen schon geschrieben, waehrend die Baustelle stehenbleibt — der Master
+  // saehe eine halb gespeicherte Zeile. So bleibt bei einem Konflikt alles
+  // unveraendert, und die Meldung sagt, was zu tun ist.
+  var sel=$('wr-e-proj');
+  var neuesProj=(sel && !sel.disabled) ? (sel.value||'') : null;
+  var wechsel=(neuesProj!==null && neuesProj!==(_wrProjWahl||''));
+
+  function feldSpeichern(vorlauf){
+    api('pm_wochenrapport_update',{id:zid,patch:patch}).then(function(d){
+      if(d&&d.error){ toast(d.error); return; }
+      var meldung=[vorlauf,(d&&d.hinweis)||''].filter(Boolean).join(' ');
+      toast(meldung?('✓ '+meldung):'✓ Zeile geändert');
+      wrPanel(''); openWochenrapport(_wrId);
+    }).catch(function(){ toast('Verbindungsfehler'); });
+  }
+
+  if(!wechsel){ feldSpeichern(''); return; }
+  api('pm_wochenrapport_move',{id:zid,projekt_id:neuesProj}).then(function(d){
+    if(d&&d.error){ toast(d.error); return; }   // Konflikt: nichts wurde geaendert
+    feldSpeichern('Baustelle umgehängt.'+((d&&d.hinweis)?(' '+d.hinweis):''));
   }).catch(function(){ toast('Verbindungsfehler'); });
 }
 function wrRowDel(zid){

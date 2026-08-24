@@ -97,7 +97,10 @@ async function today(res, user, role, body) {
   const datum = body.datum || isoDate(new Date());
   const f = [`techniker_user_id=eq.${user.id}`, `datum=eq.${datum}`];
   if (body.projekt_id) f.push(`projekt_id=eq.${body.projekt_id}`);
-  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?${f.join('&')}&select=${SELECT}&limit=1`, { headers: SB }));
+  // order ist Pflicht, nicht Kosmetik: ohne projekt_id kann ein Kalendertag
+  // mehrere Zeilen tragen, und `limit=1` ohne Sortierung greift dann eine
+  // beliebige heraus — genau die, mit der die Maske danach vorbefuellt wird.
+  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?${f.join('&')}&select=${SELECT}&order=created_at.asc&limit=1`, { headers: SB }));
   const existing = (Array.isArray(rows) ? rows : [])[0] || null;
   return res.status(200).json({ datum, rapport: existing, suggestions: await suggestArbeiten(user.id, body.projekt_id) });
 }
@@ -145,11 +148,43 @@ async function save(res, user, role, body) {
   };
   if (sigPath) row.unterschrift_url = sigPath;
 
+  // on_conflict=id ist der PRIMAERSCHLUESSEL, nicht der fachliche Schluessel.
+  // Ein Verstoss gegen UNIQUE(projekt_id, techniker_user_id, datum) wird davon
+  // NICHT aufgeloest — er kommt als 409 zurueck. Bis hierher fiel das in den
+  // generischen 500-Text und der Techniker las "Rapport konnte nicht
+  // gespeichert werden", ohne zu erfahren, was kollidiert.
+  //
+  // Der Konfliktschluessel bleibt bewusst id: `resolution=merge-duplicates` auf
+  // dem fachlichen Schluessel wuerde eine FREMDE bestehende Zeile stillschweigend
+  // ueberschreiben — genau der Datenverlust, gegen den api/cockpit.js
+  // saveTechTag abgesichert wurde. Gemeldet statt ueberschrieben.
   const up = await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?on_conflict=id`, {
     method: 'POST', headers: { ...SB, Prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify(row),
   });
-  const saved = (await sbJson(up))?.[0];
-  if (!up.ok || !saved) return res.status(500).json({ error: 'Rapport konnte nicht gespeichert werden' });
+  const upText = up.ok ? null : await up.text().catch(() => '');
+  const saved = up.ok ? (await sbJson(up))?.[0] : null;
+  if (!up.ok || !saved) {
+    // 23505 unique_violation / 23514 check_violation sind Aussagen, keine
+    // Stoerungen — sie gehoeren als Klartext an den Techniker, ohne ids,
+    // Tabellen- oder Spaltennamen. 409 ist der Status, den PostgREST fuer 23505
+    // liefert, 400 der fuer 23514.
+    const code = (upText || '').match(/"code"\s*:\s*"(\w+)"/)?.[1]
+      || (/duplicate key/i.test(upText || '') ? '23505' : null)
+      || (/violates check constraint/i.test(upText || '') ? '23514' : null);
+    if (code === '23505') {
+      return res.status(409).json({
+        error: 'Für dieses Projekt besteht an diesem Tag bereits ein Rapport. Er wurde nicht überschrieben — '
+          + 'bitte den bestehenden Rapport ergänzen oder ein anderes Projekt wählen.',
+      });
+    }
+    if (code === '23514') {
+      return res.status(400).json({
+        error: 'Dieser Eintrag darf nicht gleichzeitig eine Abwesenheit und ein Projekt tragen. Es wurde nichts gespeichert.',
+      });
+    }
+    console.error('tagesrapport save fail', up.status, (upText || '').slice(0, 300));
+    return res.status(500).json({ error: 'Rapport konnte nicht gespeichert werden' });
+  }
 
   // Block 1: weitere Positionen (mehrere Projekte pro Tag) → gs_rapport_positionen.
   // Best-effort: scheitert die Tabelle (Migration noch nicht ausgeführt), bleibt der Rapport gespeichert.

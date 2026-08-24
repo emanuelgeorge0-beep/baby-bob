@@ -68,6 +68,7 @@ const PM_ACTIONS = new Set([
   'pm_techniker', 'pm_tech_assign', 'pm_tech_unassign', 'pm_taetigkeit_add', 'pm_taetigkeit_del',
   'pm_material_add', 'pm_material_upd', 'pm_material_del', 'pm_rapport_verrechnet',
   'pm_datei_upload', 'pm_datei_list', 'pm_datei_del', 'pm_datei_rename',
+  'pm_tag_projektwahl',
   'pm_export_material', 'pm_export_rapporte', 'pm_export_rechnungen',
   'pm_datenblatt_save',
   // Feature B (Medien/Stockwerk) + C (Service) — Multi-Rollen (Master + Partner);
@@ -286,6 +287,7 @@ export default async function handler(req, res) {
       case 'pm_datei_list':    return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
       case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body, scope));
       case 'pm_datei_rename':  return res.status(200).json(await pmDateiRename(req.body, scope));
+      case 'pm_tag_projektwahl': return res.status(200).json(await pmTagProjektwahl(req.body, scope));
       case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id, scope));
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
@@ -2209,6 +2211,44 @@ function isoWeekJahr(datumStr) {
   return { woche, jahr: t.getUTCFullYear() };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PostgreSQL-Fehlercodes aus einem sbWrite-Fehler lesen
+// ═══════════════════════════════════════════════════════════════════════════
+// sbWrite wirft `METHOD path → <status>: <PostgREST-JSON>`. In dem JSON steht
+// "code":"23505" bzw. "23514". Bisher wurde ueberall per Regex auf den Text
+// "duplicate key" geprueft — das trifft 23505, aber NIE 23514 (CHECK-Verletzung).
+// Beide brauchen eine eigene Meldung, sonst landet die CHECK-Verletzung als
+// HTTP 500 beim Master und liest sich als "Verbindungsfehler".
+//   23505 unique_violation      — die Zeile gibt es schon
+//   23514 check_violation       — die Zeile widerspricht einer Regel der Tabelle
+function pgCode(e) {
+  const msg = (e && e.message) || '';
+  const m = msg.match(/"code"\s*:\s*"(\w+)"/);
+  if (m) return m[1];
+  if (/duplicate key/i.test(msg)) return '23505';       // Fallback: Klartext von Postgres
+  if (/violates check constraint/i.test(msg)) return '23514';
+  return null;
+}
+
+// Klartext fuer einen Konflikt auf gs_tagesrapporte. Nennt bewusst KEINE ids,
+// keine Tabellen- und keine Spaltennamen — der Master soll erfahren, was
+// fachlich kollidiert, nicht wie die Datenbank heisst.
+// `ziel` beschreibt, worauf geschrieben werden sollte.
+function tagKonfliktText(code, ziel) {
+  if (code === '23505') {
+    if (ziel && ziel.projektbezogen) {
+      return 'Für diese Baustelle besteht an diesem Tag bereits eine Zeile desselben Technikers. '
+        + 'Es wurde nichts überschrieben — bitte die bestehende Zeile ergänzen oder eine andere Baustelle wählen.';
+    }
+    return 'Für diesen Tag besteht bereits eine gleichartige Zeile. Es wurde nichts überschrieben.';
+  }
+  if (code === '23514') {
+    return 'Diese Zeile darf nicht gleichzeitig eine Abwesenheit und eine Baustelle tragen. '
+      + 'Es wurde nichts geändert — bitte zuerst die Abwesenheit entfernen.';
+  }
+  return null;
+}
+
 // Techniker darf nur auf ihm ZUGEWIESENE Projekte. Kette:
 // scope.technikerId (= gs_techniker.id) → gs_projekt_techniker.techniker_id=eq → projekt_id.
 // Ohne verknüpftes gs_techniker-Profil (technikerId null) → immer Forbidden.
@@ -3297,6 +3337,75 @@ async function pmWochenrapport(b) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Whitelist bewusst eng: Master darf Erfassungs-/Korrekturfelder ändern, aber
 // keine Fremdschlüssel/Systemfelder direkt umbiegen (dafür ist pmWochenrapportMove da).
+// ═══════════════════════════════════════════════════════════════════════════
+// Wochenrapport-Bindung einer Tageszeile sichern
+// ═══════════════════════════════════════════════════════════════════════════
+// Eine Tageszeile haengt ueber wochenrapport_id am Stundenblatt (Techniker x KW)
+// und traegt zusaetzlich ihre eigenen Spalten jahr/woche. Drei Invarianten:
+//
+//   1. jahr/woche der Zeile = ISO-Jahr/ISO-Woche ihres datum
+//   2. jahr/woche des Wochenrapports = dieselben Werte
+//   3. techniker_user_id der Zeile = techniker_user_id des Wochenrapports
+//
+// Bis hierher konnte pmWochenrapportUpdate das datum ueber eine Wochen- oder
+// Jahresgrenze schieben, ohne dass eine der drei mitgezogen wurde. Die Zeile
+// blieb am alten Stundenblatt haengen und verschwand zugleich aus der
+// Wochenansicht des Technikers — api/tagesrapport.js week() filtert ueber
+// jahr/woche, nicht ueber datum.
+//
+// ISO 8601 nach dem 4-Januar-Prinzip: KW 1 ist die Woche, die den 4. Januar
+// enthaelt. isoWeekJahr() rechnet ueber den Donnerstag derselben Woche und
+// liefert deshalb an der Jahresgrenze das ISO-Jahr, nicht das Kalenderjahr
+// (31.12.2029 -> KW 1/2030). Genau daran ist die alte Fassung von
+// mondayToFriday() einmal gescheitert; belegt in scripts/test_isowoche.mjs.
+//
+// Liefert die Felder, die zusaetzlich geschrieben werden muessen, plus einen
+// Hinweis fuer den Master, wenn sich die Zuordnung geaendert hat.
+async function wochenBindung(before, neuesDatum, neuerTechnikerUserId) {
+  const datum = neuesDatum || before.datum;
+  const technikerUserId = neuerTechnikerUserId || before.techniker_user_id;
+  const { jahr, woche } = isoWeekJahr(datum);
+  if (!jahr || !woche) return { felder: {}, hinweis: null };
+
+  const felder = { jahr, woche };
+  const unveraendert = before.jahr === jahr && before.woche === woche
+    && before.techniker_user_id === technikerUserId;
+  if (unveraendert && before.wochenrapport_id) return { felder, hinweis: null };
+
+  // Ohne Techniker gibt es kein Stundenblatt, an das die Zeile gehoeren koennte.
+  if (!technikerUserId) return { felder: { ...felder, wochenrapport_id: null }, hinweis: null };
+
+  let technikerId = null;
+  try {
+    const t = await sbGet(`gs_techniker?user_id=eq.${technikerUserId}&select=id&limit=1`);
+    if (t && t[0]) technikerId = t[0].id;
+  } catch (_) { /* Fallback: getOrCreateWochenrapport kommt auch ohne aus */ }
+
+  try {
+    const wr = await getOrCreateWochenrapport(
+      technikerUserId, technikerId, jahr, woche, before.projekt_id || null,
+    );
+    if (wr && wr.id) {
+      const gewechselt = wr.id !== before.wochenrapport_id;
+      return {
+        felder: { ...felder, wochenrapport_id: wr.id },
+        hinweis: gewechselt
+          ? `Die Zeile liegt jetzt in KW ${woche}/${jahr} und wurde dem passenden Stundenblatt zugeordnet.`
+          : null,
+      };
+    }
+  } catch (e) {
+    console.error('wochenBindung: Stundenblatt nicht bestimmbar', (e && e.message) || e);
+  }
+  // Lieber gar keine Bindung als eine falsche: eine stehengebliebene
+  // wochenrapport_id wuerde die Zeile auf einem fremden Stundenblatt ausweisen.
+  return {
+    felder: { ...felder, wochenrapport_id: null },
+    hinweis: `Die Zeile liegt jetzt in KW ${woche}/${jahr}. Für diese Woche liess sich kein Stundenblatt bestimmen — `
+      + 'die Zeile wurde vom bisherigen gelöst und steht ohne Stundenblatt da.',
+  };
+}
+
 const PM_TAG_UPDATE_FELDER = new Set([
   'datum', 'gesamtstunden', 'stunden_manuell', 'pause_minuten', 'start_zeit', 'end_zeit',
   'taetigkeit', 'projektnummer_erfasst', 'spesen', 'ueberzeit_25', 'ueberzeit_50', 'ueberzeit_100',
@@ -3324,12 +3433,32 @@ async function pmWochenrapportUpdate(b, scope) {
     else row[k] = patch[k] != null ? String(patch[k]).slice(0, 2000) : null;
   }
   if (!Object.keys(row).length) return { error: 'Keine gültigen Felder zum Ändern' };
+
+  // ZIEL 2 — Wandert das Datum ueber eine Wochen- oder Jahresgrenze, muessen
+  // jahr/woche der Zeile und ihr Stundenblatt mitwandern. Ohne das blieb die
+  // Zeile am alten Stundenblatt haengen UND verschwand aus der Wochenansicht
+  // des Technikers (die filtert ueber jahr/woche, nicht ueber datum).
+  let hinweis = null;
+  if (row.datum && row.datum !== before.datum) {
+    const b = await wochenBindung(before, row.datum, null);
+    Object.assign(row, b.felder);
+    hinweis = b.hinweis;
+  }
+
   await logWochenAenderung(scope, {
     wochenrapportId: before.wochenrapport_id, tagesrapportId: before.id,
     aktion: 'geaendert', feld: Object.keys(row).join(','), wertVorher,
   });
-  const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${id}`, row);
-  return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  try {
+    const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${id}`, row);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r, hinweis };
+  } catch (e) {
+    // 23505 und 23514 sind Aussagen, keine Stoerungen. Ohne diesen Zweig kam
+    // beides als HTTP 500 an und der Master las "Verbindungsfehler".
+    const text = tagKonfliktText(pgCode(e), { projektbezogen: !!before.projekt_id });
+    if (text) return { error: text };
+    throw e;
+  }
 }
 
 async function pmWochenrapportDelete(b, scope) {
@@ -3417,6 +3546,56 @@ async function pmWochenrapportKopfDelete(b, scope) {
 // KW/Jahr per getOrCreateWochenrapport geholt/angelegt (UNIQUE techniker+jahr+woche
 // erlaubt keinen gemeinsamen Kopf) — dieselbe Funktion wie im Techniker-Pfad, nur
 // mit explizit übergebener technikerUserId statt scope.
+// ═══════════════════════════════════════════════════════════════════════════
+// Projektauswahl fuer eine Tageszeile (C2)
+// ═══════════════════════════════════════════════════════════════════════════
+// Angeboten werden die Projekte DES KUNDEN, zu dem die Zeile heute gehoert.
+//
+// ANNAHME, ausdruecklich: 13 der 18 Projekte tragen kein kunde_id, darunter
+// P-2026-3470 — genau das Projekt der Wochen 29 bis 31. Fuer solche Zeilen
+// waere "die Projekte des Kunden" eine leere Liste und die Maske unbrauchbar.
+// Deshalb: traegt das heutige Projekt einen Kunden, sind dessen Projekte die
+// engere Auswahl; traegt es keinen, sind es die Projekte ohne Kunden. Alle
+// uebrigen stehen darunter in einer zweiten Gruppe und sind waehlbar — der
+// Master soll nicht blockiert sein, wenn eine Baustelle einem anderen Kunden
+// gehoert. Geloeschte Projekte (geloescht_at) erscheinen nirgends.
+async function pmTagProjektwahl(b, scope) {
+  const id = uuid(b.id);
+  const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=id,projekt_id,datum,abwesenheit,service_auftrag_id&limit=1`).catch(() => []);
+  const zeile = rows && rows[0];
+  if (!zeile) return { error: 'Zeile nicht gefunden' };
+
+  let kundeId = null;
+  if (zeile.projekt_id) {
+    const p = await sbGet(`gs_projekte?id=eq.${zeile.projekt_id}&select=kunde_id&limit=1`).catch(() => []);
+    kundeId = (p[0] || {}).kunde_id || null;
+  }
+
+  const scopeFilter = scope && scope.partnerId ? `&partner_user_id=eq.${scope.partnerId}` : '';
+  const alle = ohneGeloeschte(
+    await sbGet(`gs_projekte?select=id,name,projektnummer,kunde_id,geloescht_at,standort&order=projektnummer.asc${scopeFilter}`).catch(() => []),
+  );
+
+  let kunde = null;
+  if (kundeId) {
+    const k = await sbGet(`gs_kunden?id=eq.${kundeId}&select=id,firma&limit=1`).catch(() => []);
+    kunde = k[0] || null;
+  }
+
+  const gehoertDazu = (p) => (kundeId ? p.kunde_id === kundeId : !p.kunde_id);
+  const schlank = (p) => ({ id: p.id, name: p.name, projektnummer: p.projektnummer, standort: p.standort || null });
+
+  return {
+    aktuell: zeile.projekt_id || null,
+    ist_abwesenheit: !!zeile.abwesenheit,
+    ist_service: !!zeile.service_auftrag_id,
+    kunde,                                        // null = Zeile haengt an einem Projekt ohne Kunden
+    gruppe_label: kunde ? `Projekte von ${kunde.firma || 'diesem Kunden'}` : 'Projekte ohne Kunde',
+    nah: alle.filter(gehoertDazu).map(schlank),
+    fern: alle.filter((p) => !gehoertDazu(p)).map(schlank),
+  };
+}
+
 async function pmWochenrapportMove(b, scope) {
   const id = uuid(b.id);
   const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=*&limit=1`).catch(() => []);
@@ -3427,25 +3606,44 @@ async function pmWochenrapportMove(b, scope) {
   const neuesProjektId = b.projekt_id !== undefined ? (b.projekt_id ? uuid(b.projekt_id) : null) : before.projekt_id;
   const neuerServiceId = b.projekt_id !== undefined ? null : before.service_auftrag_id; // Zielwechsel ist immer Projekt ODER Service, nicht beides
 
+  // Abwesenheitszeilen tragen keine Baustelle — der CHECK der Tabelle laesst
+  // beides nicht gleichzeitig zu. Das hier abzufangen ist freundlicher, als den
+  // Schreibversuch in die 23514 laufen zu lassen: der Master erfaehrt vorher,
+  // was zu tun ist, statt nachher, was schiefging.
+  if (neuesProjektId && before.abwesenheit) {
+    return { error: 'Diese Zeile ist als Abwesenheit erfasst und kann keiner Baustelle zugeordnet werden. Bitte zuerst die Abwesenheit entfernen.' };
+  }
+  // Jede Zeile braucht genau ein Ziel: Baustelle, Serviceauftrag oder
+  // Abwesenheit. "Keine Baustelle" zu waehlen, ohne dass eines der beiden
+  // anderen einspringt, liefe in dieselbe CHECK-Verletzung — nur mit einer
+  // Meldung, die vom Abwesenheitsfall handelt und hier nicht passt.
+  if (!neuesProjektId && !neuerServiceId && !before.abwesenheit) {
+    return { error: 'Eine Tageszeile braucht ein Ziel. Bitte eine Baustelle wählen oder die Zeile stattdessen löschen.' };
+  }
+
   const row = { techniker_user_id: neuerTechnikerUserId, projekt_id: neuesProjektId, service_auftrag_id: neuerServiceId };
 
-  if (neuerTechnikerUserId !== before.techniker_user_id) {
-    let technikerId = null, name = 'Techniker';
-    try {
-      const t = await sbGet(`gs_techniker?user_id=eq.${neuerTechnikerUserId}&select=id,name&limit=1`);
-      if (t && t[0]) { technikerId = t[0].id; name = t[0].name || name; }
-    } catch (_) { /* egal */ }
-    const wr = await getOrCreateWochenrapport(neuerTechnikerUserId, technikerId, before.jahr, before.woche, neuesProjektId);
-    row.wochenrapport_id = wr ? wr.id : null;
-  }
+  // ZIEL 2 — Bindung an das Stundenblatt sichern. Bisher lief das nur beim
+  // Technikerwechsel und rechnete mit before.jahr/before.woche; bei Altzeilen
+  // sind die leer, dann entstand ein Stundenblatt fuer KW null/null. Jetzt
+  // kommen Jahr und Woche immer aus dem datum der Zeile.
+  const bind = await wochenBindung(before, before.datum, neuerTechnikerUserId);
+  Object.assign(row, bind.felder);
+  if (neuesProjektId && !bind.felder.wochenrapport_id) row.wochenrapport_id = before.wochenrapport_id;
 
   await logWochenAenderung(scope, {
     wochenrapportId: before.wochenrapport_id, tagesrapportId: before.id,
     aktion: 'verschoben', feld: 'techniker_user_id,projekt_id,service_auftrag_id',
     wertVorher: { techniker_user_id: before.techniker_user_id, projekt_id: before.projekt_id, service_auftrag_id: before.service_auftrag_id, wochenrapport_id: before.wochenrapport_id },
   });
-  const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${id}`, row);
-  return { ok: true, row: Array.isArray(r) ? r[0] : r };
+  try {
+    const r = await sbWrite('PATCH', `gs_tagesrapporte?id=eq.${id}`, row);
+    return { ok: true, row: Array.isArray(r) ? r[0] : r, hinweis: bind.hinweis };
+  } catch (e) {
+    const text = tagKonfliktText(pgCode(e), { projektbezogen: !!neuesProjektId });
+    if (text) return { error: text };
+    throw e;
+  }
 }
 
 async function addTaetigkeit(b, scope) {
