@@ -3014,6 +3014,32 @@ async function saveWochenUnterschrift(b, scope) {
 
 // Ein Wochenrapport (Kopf + Zeilen + Summen) für eine konkrete KW des eingeloggten
 // Technikers. Projekt-Namen werden für die Zeilen nachgeladen (Baustelle/Kunde-Anzeige).
+// ═══════════════════════════════════════════════════════════════════════════
+// Spesen je KALENDERTAG, nicht je Tageszeile
+// ═══════════════════════════════════════════════════════════════════════════
+// Regel des Betreibers: Stunden werden je Tag ADDIERT, Spesen fallen je Tag
+// EINMAL an — unabhaengig davon, auf wie vielen Baustellen gearbeitet wurde.
+//
+// gs_tagesrapporte fuehrt spesen aber je ZEILE, und das Wochenblatt bietet das
+// Spesenfeld auf jeder Zeile an. KW 34 traegt deshalb 8 x CHF 30 = 240.00,
+// obwohl an nur 5 Kalendertagen gearbeitet wurde (Soll 150.00).
+//
+// Genommen wird je Tag der HOECHSTE Wert. Nicht die Summe (das ist der Fehler),
+// nicht die erste Zeile (die Reihenfolge ist nicht zugesichert).
+// Zeilen ohne datum koennen nicht zugeordnet werden und zaehlen einzeln —
+// besser sichtbar zu viel als still verschluckt.
+function spesenJeTag(zeilen) {
+  const proTag = {};
+  let ohneDatum = 0;
+  for (const z of zeilen || []) {
+    const v = Number(z.spesen || 0);
+    if (!z.datum) { ohneDatum += v; continue; }
+    if (!(z.datum in proTag) || v > proTag[z.datum]) proTag[z.datum] = v;
+  }
+  const summe = Object.values(proTag).reduce((a, v) => a + v, 0) + ohneDatum;
+  return Math.round(summe * 100) / 100;
+}
+
 async function getTechWochenRapport(b, scope) {
   const jahr = parseInt(b.jahr, 10);
   const woche = parseInt(b.woche, 10);
@@ -3095,7 +3121,7 @@ async function getTechWochenRapport(b, scope) {
     total_uz25: sum('ueberzeit_25'),
     total_uz50: sum('ueberzeit_50'),
     total_uz100: sum('ueberzeit_100'),
-    total_spesen: sum('spesen'),
+    total_spesen: spesenJeTag(zeilen),
   };
 }
 
@@ -3112,17 +3138,20 @@ async function getTechWochenListe(scope) {
   const ids = rows.map((r) => r.id);
   let sums = {};
   if (ids.length) {
-    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${ids.join(',')})&select=wochenrapport_id,gesamtstunden,spesen`).catch(() => []);
+    // `datum` muss mit in den Select: ohne das laesst sich die Spesenregel
+    // (einmal je Kalendertag) gar nicht anwenden.
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${ids.join(',')})&select=wochenrapport_id,datum,gesamtstunden,spesen`).catch(() => []);
     for (const z of zeilen) {
-      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, spesen: 0 });
-      s.stunden += Number(z.gesamtstunden || 0); s.spesen += Number(z.spesen || 0);
+      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, zeilen: [] });
+      s.stunden += Number(z.gesamtstunden || 0);
+      s.zeilen.push(z);                       // Spesen erst am Ende je Tag verdichten
     }
   }
   return {
     wochen: rows.map((r) => ({
       ...r,
       total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
-      total_spesen: Math.round(((sums[r.id] || {}).spesen || 0) * 100) / 100,
+      total_spesen: spesenJeTag((sums[r.id] || {}).zeilen || []),
     })),
   };
 }
@@ -3142,10 +3171,12 @@ async function pmWochenrapporteListe() {
   let sums = {};
   const projIdsJeWoche = {};                    // wochenrapport_id → Set(projekt_id)
   if (wrIds.length) {
-    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,gesamtstunden,spesen,projekt_id,abrechnung_status`).catch(() => []);
+    // `datum` muss mit in den Select — siehe spesenJeTag().
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,datum,gesamtstunden,spesen,projekt_id,abrechnung_status`).catch(() => []);
     for (const z of zeilen) {
-      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, spesen: 0, offen: 0, verrechnet: 0 });
-      s.stunden += Number(z.gesamtstunden || 0); s.spesen += Number(z.spesen || 0);
+      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, zeilen: [], offen: 0, verrechnet: 0 });
+      s.stunden += Number(z.gesamtstunden || 0);
+      s.zeilen.push(z);
       if ((z.abrechnung_status || 'offen') === 'verrechnet') s.verrechnet += 1; else s.offen += 1;
       // Die Projekte kommen aus den TAGESZEILEN, nicht aus hauptprojekt_id.
       // hauptprojekt_id ist oft NULL und deckt eine Woche mit mehreren
@@ -3165,7 +3196,7 @@ async function pmWochenrapporteListe() {
       ...r,
       techniker_name: nameMap[r.techniker_user_id] || 'Techniker',
       total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
-      total_spesen: Math.round(((sums[r.id] || {}).spesen || 0) * 100) / 100,
+      total_spesen: spesenJeTag((sums[r.id] || {}).zeilen || []),
       // Abrechnung ist eine Eigenschaft der TAGESZEILEN, nicht des Wochenkopfs.
       // Die Woche gilt erst als verrechnet, wenn keine offene Zeile mehr da ist;
       // 'teilweise' macht einen halb abgerechneten Stand sichtbar, statt ihn auf
@@ -3252,7 +3283,7 @@ async function pmWochenrapport(b) {
     total_uz25: sum('ueberzeit_25'),
     total_uz50: sum('ueberzeit_50'),
     total_uz100: sum('ueberzeit_100'),
-    total_spesen: sum('spesen'),
+    total_spesen: spesenJeTag(zeilen),
   };
 }
 

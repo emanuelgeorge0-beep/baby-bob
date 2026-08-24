@@ -11229,7 +11229,25 @@ function tcRecalcTotals(){
   set('tc-tot-uz25', sum('f-uz25').toFixed(2)+' h');
   set('tc-tot-uz50', sum('f-uz50').toFixed(2)+' h');
   set('tc-tot-uz100', sum('f-uz100').toFixed(2)+' h');
-  set('tc-tot-spesen', 'CHF '+sum('f-spesen').toFixed(2));
+  // Spesen NICHT ueber sum(): sie fallen je Kalendertag einmal an, nicht je
+  // Zeile. Ein Tag mit zwei Baustellen hat zwei .f-spesen-Felder — beide zu
+  // addieren ergab CHF 240 fuer eine Woche mit 5 Arbeitstagen. rowEl traegt
+  // data-date, daran wird je Tag der hoechste Wert genommen.
+  function spesenProTag(){
+    var proTag={};
+    Array.prototype.forEach.call(document.querySelectorAll('#tc-content .tc-row[data-row]'),function(rowEl){
+      var zielVal=(rowEl.querySelector('.rc-ziel')||{}).value||'';
+      if(!zielVal) return;
+      var d=rowEl.getAttribute('data-date')||'';
+      var e=rowEl.querySelector('.f-spesen');
+      var v=e?(Number(e.value)||0):0;
+      if(!d){ proTag['_'+Math.random()]=v; return; }   // ohne Datum: einzeln zaehlen
+      if(!(d in proTag) || v>proTag[d]) proTag[d]=v;
+    });
+    var t=0; for(var k in proTag) t+=proTag[k];
+    return Math.round(t*100)/100;
+  }
+  set('tc-tot-spesen', 'CHF '+spesenProTag().toFixed(2));
 }
 
 /* ── Autosave pro Zeile (debounced, kein Save-Klick nötig) ── */

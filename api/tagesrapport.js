@@ -185,18 +185,38 @@ async function week(res, user, role, body) {
   if (role !== 'techniker' && role !== 'gs_admin') return res.status(403).json({ error: 'Nur für Techniker' });
   const jahr = body.jahr || new Date().getFullYear();
   const kw = body.woche || isoWeek(isoDate(new Date()));
-  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?techniker_user_id=eq.${user.id}&jahr=eq.${jahr}&woche=eq.${kw}&select=datum,status,gesamtstunden,projekt_id`, { headers: SB }));
+  // Ein Kalendertag kann MEHRERE Tageszeilen tragen — je Baustelle eine.
+  // Bis hierher stand hier `byDate[r.datum] = r`: eine Zuweisung, bei der nur
+  // die zuletzt gelesene Zeile ueberlebte. Welche das war, war undefiniert, weil
+  // die Abfrage kein `order` hatte. Montag 17.08.2026 (60060 Zuerich 2.00 h +
+  // 60829 Thalwil 6.00 h) zeigte deshalb 2.00 statt 8.00 h, und der Fehler lief
+  // ueber tsLoadWeek (app.html:6818) bis in die angezeigte Lohnsumme.
+  // Jetzt wird je Kalendertag akkumuliert. Vorbild: hasOverdue() weiter unten.
+  const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?techniker_user_id=eq.${user.id}&jahr=eq.${jahr}&woche=eq.${kw}&select=datum,status,gesamtstunden,ueberzeit_25,ueberzeit_50,ueberzeit_100,projekt_id&order=datum.asc,created_at.asc`, { headers: SB }));
   const byDate = {};
-  for (const r of Array.isArray(rows) ? rows : []) byDate[r.datum] = r;
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const t = byDate[r.datum] || (byDate[r.datum] = { stunden: 0, ueberzeit: 0, zeilen: 0, alleEingereicht: true });
+    t.stunden += Number(r.gesamtstunden || 0);
+    t.ueberzeit += Number(r.ueberzeit_25 || 0) + Number(r.ueberzeit_50 || 0) + Number(r.ueberzeit_100 || 0);
+    t.zeilen += 1;
+    // Ein Tag gilt erst als eingereicht, wenn ALLE seine Zeilen es sind. Vorher
+    // entschied eine zufaellige Zeile darueber, was die Ampel zeigte.
+    if (r.status !== 'eingereicht') t.alleEingereicht = false;
+  }
   const dates = mondayToFriday(jahr, kw);
   const todayStr = isoDate(new Date());
   const days = dates.map((d) => {
-    const r = byDate[d];
+    const t = byDate[d];
     let status = 'offen';
-    if (r) status = r.status === 'eingereicht' ? 'eingereicht' : 'entwurf';
+    if (t) status = t.alleEingereicht ? 'eingereicht' : 'entwurf';
     else if (d < todayStr) status = 'ueberfaellig';
     else if (d === todayStr) status = 'ausstehend';
-    return { datum: d, status, stunden: r?.gesamtstunden || 0 };
+    return {
+      datum: d, status,
+      stunden: t ? Math.round(t.stunden * 100) / 100 : 0,
+      ueberzeit: t ? Math.round(t.ueberzeit * 100) / 100 : 0,
+      zeilen: t ? t.zeilen : 0,
+    };
   });
   return res.status(200).json({ jahr, woche: kw, days, eingereicht: days.filter((d) => d.status === 'eingereicht').length, total: 5 });
 }
@@ -210,11 +230,25 @@ async function statusOverview(res, role) {
   const out = await Promise.all(list.map(async (t) => {
     const rows = await sbJson(await fetch(`${SUPABASE_URL}/rest/v1/gs_tagesrapporte?techniker_user_id=eq.${t.user_id}&jahr=eq.${jahr}&woche=eq.${kw}&select=datum,status`, { headers: SB }));
     const arr2 = Array.isArray(rows) ? rows : [];
-    const todayR = arr2.find((r) => r.datum === todayStr);
+    // Auch hier gilt: ein Tag hat womoeglich mehrere Zeilen. `.find()` griff
+    // eine davon heraus — bei zwei Baustellen, davon eine eingereicht und eine
+    // im Entwurf, war die Ampelfarbe Zufall. Gruen ist ein Tag erst, wenn ALLE
+    // seine Zeilen eingereicht sind.
+    const heuteZeilen = arr2.filter((r) => r.datum === todayStr);
+    const heuteFertig = heuteZeilen.length > 0 && heuteZeilen.every((r) => r.status === 'eingereicht');
     let ampel = 'gelb';
-    if (todayR?.status === 'eingereicht') ampel = 'gruen';
-    else if (arr2.some((r) => r.datum < todayStr && r.status !== 'eingereicht') || (!todayR && hasOverdue(arr2, todayStr, jahr, kw))) ampel = 'rot';
-    return { user_id: t.user_id, name: t.name, ampel, week_submitted: arr2.filter((r) => r.status === 'eingereicht').length };
+    if (heuteFertig) ampel = 'gruen';
+    else if (arr2.some((r) => r.datum < todayStr && r.status !== 'eingereicht') || (!heuteZeilen.length && hasOverdue(arr2, todayStr, jahr, kw))) ampel = 'rot';
+    // week_submitted zaehlte ZEILEN, wird aber als "x/5 Tage" angezeigt
+    // (app.html:6369) — zwei Baustellen am Montag ergaben "6/5 Tage". Gezaehlt
+    // werden jetzt die Kalendertage, an denen alle Zeilen eingereicht sind.
+    const jeTag = {};
+    for (const r of arr2) {
+      if (!(r.datum in jeTag)) jeTag[r.datum] = true;
+      if (r.status !== 'eingereicht') jeTag[r.datum] = false;
+    }
+    const tageEingereicht = Object.values(jeTag).filter(Boolean).length;
+    return { user_id: t.user_id, name: t.name, ampel, week_submitted: tageEingereicht };
   }));
   return res.status(200).json({ techniker: out, datum: todayStr, woche: kw });
 }
