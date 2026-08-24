@@ -54,6 +54,52 @@ export default async function handler(req, res) {
     // vor der projekt_id-Pruefung. Beide sind Master-Sache: die Sammelvorschau
     // zaehlt ueber alle Projekte eines Kunden, das Stundenblatt gehoert einem
     // Techniker. Ein Partner haette an beidem nichts verloren.
+    // ── Fotodokumentation ──────────────────────────────────────────────────
+    // Steht VOR der projekt_id-Pruefung: seit Ziel 4 ist die Fotodokumentation
+    // wochenbezogen und laeuft ueber ALLE Projekte einer Woche
+    // (wochenrapport_id). Ein einzelnes Projekt ist nur noch ein Zusatzfilter.
+    //
+    // Geliefert werden signierte URLs, KEIN base64: ein PDF mit zehn Fotos war
+    // 6.72 MB, als base64 8.96 MB — Vercel deckelt den Antwortkoerper bei
+    // 4.5 MB. Die Teile liegen unter projektdateien/fotodoku/.
+    if (b.action === 'fotodoku' || b.action === 'fotodoku_vorschau') {
+      const wrId = String(b.wochenrapport_id || '').trim();
+      const pId = String(b.projekt_id || '').trim();
+      if (!UUID_RE.test(wrId) && !UUID_RE.test(pId)) {
+        return res.status(400).json({ error: 'wochenrapport_id oder projekt_id (UUID) erforderlich' });
+      }
+      // Rechte: der projektlose Weg (ganze Woche) ist Master-Sache, weil er
+      // ueber mehrere Projekte hinweg sammelt. Mit projekt_id bleibt die
+      // bestehende Projektpruefung massgeblich.
+      if (!UUID_RE.test(pId)) {
+        if (role !== 'gs_admin' && role !== 'master') return res.status(403).json({ error: 'Die wochenweite Fotodokumentation ist Master/Admin vorbehalten.' });
+      } else if (!(await darfProjekt(pId, user.id, role))) {
+        return res.status(403).json({ error: 'Keine Berechtigung für dieses Projekt' });
+      }
+      const args = {
+        wochenrapportId: UUID_RE.test(wrId) ? wrId : null,
+        projektId: UUID_RE.test(pId) ? pId : null,
+        jahr, woche,
+        nurProjekt: UUID_RE.test(String(b.nur_projekt || '')) ? String(b.nur_projekt) : null,
+        nurTage: Array.isArray(b.nur_tage) && b.nur_tage.length ? b.nur_tage.map(String) : null,
+      };
+      if (b.action === 'fotodoku_vorschau') {
+        return res.status(200).json({ ok: true, vorschau: await fotodokuVorschau(args) });
+      }
+      const r = await erzeugeFotodoku(args);
+      return res.status(200).json({
+        ok: true,
+        nr: r.nr,
+        erfasst: r.erfasst,
+        abgebildet: r.abgebildet,
+        teile: r.dokumente.length,
+        dokumente: r.dokumente.map((d) => ({
+          teil: d.teil, von: d.von, filename: d.filename,
+          bytes: d.bytes, seiten: d.seiten, bilder: d.bilder, url: d.url,
+        })),
+      });
+    }
+
     if (b.action === 'sammel_vorschau' || b.action === 'wochenrapport_pdf') {
       if (role !== 'gs_admin' && role !== 'master') {
         return res.status(403).json({ error: 'Nur Master/Admin.' });
@@ -127,26 +173,6 @@ export default async function handler(req, res) {
           protokolliert: r.protokolliert, protokoll_hinweis: r.protokoll_hinweis,
           hinweise: r.daten ? r.daten.hinweise : [],
           error: r.error,
-        });
-      }
-      // ── Fotodokumentation ──────────────────────────────────────────────
-      // Eigenes Dokument, gleicher Motor: beide bauen auf sammleWochendaten
-      // auf, es gibt keine zweite Medienabfrage. 'fotodoku_vorschau' liefert
-      // nur die Liste (keine Bytes), damit vor dem Erzeugen sichtbar ist, was
-      // hineinkommt — ohne Editor und ohne Umsortieren.
-      case 'fotodoku_vorschau': {
-        const v = await fotodokuVorschau({ projektId, jahr, woche });
-        return res.status(200).json({ ok: true, vorschau: v });
-      }
-      case 'fotodoku': {
-        const r = await erzeugeFotodoku({ projektId, jahr, woche });
-        return res.status(200).json({
-          ok: true,
-          filename: `Fotodokumentation_${r.nr}.pdf`.replace(/[^\w.-]+/g, '_'),
-          pdf_base64: Buffer.from(r.pdf).toString('base64'),
-          abgebildet: r.abgebildet,
-          erfasst: (r.daten.fotos || []).length + (r.daten.fotos_ohne_tag || []).length,
-          hinweise: r.daten.hinweise,
         });
       }
       case 'liste': {

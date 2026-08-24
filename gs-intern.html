@@ -1777,25 +1777,64 @@ function openDateiUpload(kategorie){
   inp.onchange=function(){ var files=Array.prototype.slice.call(inp.files||[]); if(files.length) pmUploadFiles(files,kategorie); };
   inp.click();
 }
+// Bilder werden VOR dem Hochladen verkleinert — lange Kante 1600 px, JPEG q 0.75.
+// Grund: die Fotodokumentation bettet die Originalbytes ein (lib/pdf.js reicht
+// JPEG unveraendert durch, /DCTDecode). Zehn unverkleinerte Handyfotos ergaben
+// ein PDF von 6.7 MB. Serverseitig laesst sich daran nichts machen — Node hat
+// keinen Bildcodec und neue Abhaengigkeiten sind ausgeschlossen. Der Browser
+// hat einen: Canvas. Dasselbe Verfahren laeuft im Technik-Cockpit seit je
+// (app.html fileToUploadData), nur mit groesseren Werten.
+// Nicht-Bilder (PDF, DWG) gehen unveraendert durch.
+var PM_BILD_MAXDIM=1600, PM_BILD_Q=0.75;
+function pmVerkleinern(f){
+  return new Promise(function(resolve){
+    if(!/^image\//.test(f.type||'')){                      // kein Bild -> roh
+      var rd0=new FileReader();
+      rd0.onload=function(){ resolve({data:String(rd0.result),typ:f.type||'',verkleinert:false}); };
+      rd0.onerror=function(){ resolve(null); };
+      rd0.readAsDataURL(f); return;
+    }
+    var url=URL.createObjectURL(f), img=new Image();
+    img.onload=function(){
+      URL.revokeObjectURL(url);
+      var w=img.naturalWidth||1, h=img.naturalHeight||1;
+      var sc=Math.min(1,PM_BILD_MAXDIM/Math.max(w,h));
+      var cw=Math.max(1,Math.round(w*sc)), ch=Math.max(1,Math.round(h*sc));
+      var c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      c.getContext('2d').drawImage(img,0,0,cw,ch);
+      resolve({data:c.toDataURL('image/jpeg',PM_BILD_Q),typ:'image/jpeg',verkleinert:true,von:w+'x'+h,nach:cw+'x'+ch});
+    };
+    img.onerror=function(){                                 // kein Decode -> roh
+      URL.revokeObjectURL(url);
+      var rd1=new FileReader();
+      rd1.onload=function(){ resolve({data:String(rd1.result),typ:f.type||'',verkleinert:false}); };
+      rd1.onerror=function(){ resolve(null); };
+      rd1.readAsDataURL(f);
+    };
+    img.src=url;
+  });
+}
+
 function pmUploadFiles(files,kategorie){
   toast('Lade '+files.length+' Datei'+(files.length>1?'en':'')+' hoch…');
-  var chain=Promise.resolve(), okCount=0, errMsg='';
+  var chain=Promise.resolve(), okCount=0, errMsg='', gespart=0;
   files.forEach(function(f){
     chain=chain.then(function(){
       if(f.size>12*1024*1024){ errMsg=f.name+' > 12 MB'; return; }
-      return new Promise(function(resolve){
-        var rd=new FileReader();
-        rd.onload=function(){
-          api('pm_datei_upload',{projekt_id:_pmProjektId,kategorie:kategorie,filename:f.name,contentType:f.type||'',data:String(rd.result)})
-            .then(function(r){ if(r&&r.ok) okCount++; else if(r&&r.error) errMsg=r.error; resolve(); })
-            .catch(function(){ errMsg='Upload fehlgeschlagen'; resolve(); });
-        };
-        rd.onerror=function(){ errMsg='Datei nicht lesbar'; resolve(); };
-        rd.readAsDataURL(f);
+      return pmVerkleinern(f).then(function(res){
+        if(!res){ errMsg='Datei nicht lesbar'; return; }
+        if(res.verkleinert) gespart+=Math.max(0,f.size-Math.round(res.data.length*0.75));
+        return api('pm_datei_upload',{projekt_id:_pmProjektId,kategorie:kategorie,filename:f.name,contentType:res.typ,data:res.data})
+          .then(function(r){ if(r&&r.ok) okCount++; else if(r&&r.error) errMsg=r.error; })
+          .catch(function(){ errMsg='Upload fehlgeschlagen'; });
       });
     });
   });
-  chain.then(function(){ loadProjekt(); toast(okCount?(okCount+' hochgeladen'+(errMsg?' · '+errMsg:'')):(errMsg||'Kein Upload')); });
+  chain.then(function(){
+    loadProjekt();
+    var sp=gespart>262144?(' · '+Math.round(gespart/1048576*10)/10+' MB gespart'):'';
+    toast(okCount?(okCount+' hochgeladen'+sp+(errMsg?' · '+errMsg:'')):(errMsg||'Kein Upload'));
+  });
 }
 function pmDeleteDatei(path){
   api('pm_datei_del',{projekt_id:_pmProjektId,path:path}).then(function(r){
@@ -2202,7 +2241,10 @@ function wrPaint(){
     }).join('');
     Array.prototype.forEach.call($('view').querySelectorAll('[data-openwr]'),function(c){ c.onclick=function(){ openWochenrapport(c.getAttribute('data-openwr')); }; });
     Array.prototype.forEach.call($('view').querySelectorAll('[data-wrpdf]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrpdf')),'bericht'); }; });
-  Array.prototype.forEach.call($('view').querySelectorAll('[data-wrfoto]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrBerichtKlick(Number(b.getAttribute('data-wrfoto')),'fotodoku'); }; });
+  // ZIEL 4: Die Fotodokumentation fragt NICHT mehr nach einem Projekt. Sie nimmt
+  // die ganze Woche ueber alle Projekte dieses Wochenrapports; die
+  // Einschraenkung auf ein Projekt bietet die Vorschau als Zusatz an.
+  Array.prototype.forEach.call($('view').querySelectorAll('[data-wrfoto]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); wrFotodokuStart(Number(b.getAttribute('data-wrfoto'))); }; });
   Array.prototype.forEach.call($('view').querySelectorAll('[data-wrabr]'),function(b){ b.onclick=function(ev){ ev.stopPropagation(); var t=b.getAttribute('data-wrabr').split(':'); wrAbrechnung(Number(t[0]),t[1],b); }; });
 }
 var _wrListe=[], _wrAlle=[], _wrPdfUrls={}, _wrFilter='alle';
@@ -2247,91 +2289,84 @@ function wrBerichtKlick(i, art){
   });
 }
 
-// Wochenbericht geht direkt aufs PDF. Die Fotodokumentation zeigt erst die
-// Vorschau: welche Bilder, an welchem Tag, wie viele davon ins Dokument passen.
-// Kein Editor, keine Umsortierung - die Reihenfolge ist der Tagesverlauf.
-function wrDokStart(i, projekt, art){
-  if(art!=='fotodoku'){ wrBerichtErzeugen(i, projekt); return; }
-  var w=_wrListe[i]; var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!w||!box) return;
+// Wochenbericht geht direkt aufs PDF.
+function wrDokStart(i, projekt){ wrBerichtErzeugen(i, projekt); }
+
+// ── Fotodokumentation: ganze Woche, alle Projekte ─────────────────────────
+// Erst die Vorschau (welcher Tag, welches Projekt, wie viele Bilder), dann
+// erzeugen. Kein Editor, keine Umsortierung. Die Einschraenkung auf ein
+// einzelnes Projekt ist ein Zusatzknopf in der Vorschau, keine Pflichtfrage.
+var _wrFdFilter={};
+function wrFotodokuStart(i, nurProjekt){
+  var w=_wrListe[i]; if(!w) return;
+  var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
+  _wrFdFilter[i]=nurProjekt||null;
   box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>Lade Vorschau…</span></div></div>';
-  wbApi('fotodoku_vorschau',{projekt_id:projekt.id,jahr:w.jahr,woche:w.woche}).then(function(d){
+  wbApi('fotodoku_vorschau',Object.assign({wochenrapport_id:w.id,jahr:w.jahr,woche:w.woche},nurProjekt?{nur_projekt:nurProjekt}:{})).then(function(d){
     if(!box.isConnected) return;
     if(!d||d.error||!d.vorschau){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((d&&d.error)||'Vorschau fehlgeschlagen')+'</span></div></div>'; return; }
-    var v=d.vorschau;
+    var v=d.vorschau, ps=v.projekte||[];
     if(!v.gesamt){
       box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="nm">Fotodokumentation</div>'+
-        '<div class="meta"><span>Für KW '+esc(w.woche)+' liegen zu diesem Projekt keine Fotos vor.</span></div></div>';
+        '<div class="meta"><span>Für KW '+esc(w.woche)+' liegen keine Fotos vor'+(nurProjekt?' (auf dieses Projekt gefiltert)':'')+'.</span></div>'+
+        (nurProjekt?'<div style="margin-top:8px"><button class="chip" data-fdall="1">Filter aufheben</button></div>':'')+'</div>';
+      var ab=box.querySelector('[data-fdall]'); if(ab) ab.onclick=function(){ wrFotodokuStart(i,null); };
       return;
     }
     var zeilen=(v.tage||[]).map(function(t){
       return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">'+
-        '<span>'+esc(t.wochentag)+', '+esc(deDate(t.datum))+'</span>'+
-        '<span style="color:var(--muted)">'+t.abgebildet+' von '+t.anzahl+'</span></div>';
+        '<span>'+esc(t.wochentag)+', '+esc(deDate(t.datum))+(t.projekt?('<br><span style="color:var(--muted);font-size:12px">'+esc(t.projekt)+'</span>'):'')+'</span>'+
+        '<span style="color:var(--muted);white-space:nowrap">'+t.abgebildet+' von '+t.anzahl+'</span></div>';
     }).join('');
     if(v.ohne_tag&&v.ohne_tag.anzahl) zeilen+='<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">'+
       '<span>Ohne Tageszuordnung</span><span style="color:var(--muted)">'+v.ohne_tag.abgebildet+' von '+v.ohne_tag.anzahl+'</span></div>';
-    var rest=v.gesamt-((v.tage||[]).reduce(function(a,t){return a+t.abgebildet;},0)+((v.ohne_tag||{}).abgebildet||0));
+    var filterZeile=(ps.length>1)
+      ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0"><span style="color:var(--muted);font-size:12px;align-self:center">Nur ein Projekt:</span>'+
+        ps.map(function(p){ return '<button class="chip'+(nurProjekt===p.id?' on':'')+'" data-fdp="'+esc(p.id)+'">'+esc(p.projektnummer||p.name||'Projekt')+'</button>'; }).join('')+
+        (nurProjekt?'<button class="chip" data-fdall="1">alle</button>':'')+'</div>'
+      : '';
     box.innerHTML='<div class="lcard" style="margin-top:8px">'+
       '<div class="top"><div class="nm">Fotodokumentation — Vorschau</div>'+pmPill(v.gesamt+' Foto(s)','var(--gold)')+'</div>'+
+      '<div class="meta"><span>'+ps.length+' Projekt(e) in dieser Woche</span></div>'+
+      filterZeile+
       '<div style="margin:8px 0 4px">'+zeilen+'</div>'+
-      (rest>0?'<div class="meta" style="margin-top:6px"><span>'+rest+' Foto(s) über dem Deckel von '+v.deckel+' — nicht im Dokument.</span></div>':'')+
       '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
         '<button class="chip on" id="wr-fd-go">PDF erzeugen</button>'+
         '<button class="chip" id="wr-fd-ab">Abbrechen</button>'+
       '</div><div id="wr-fd-out"></div></div>';
     $('wr-fd-ab').onclick=function(){ box.innerHTML=''; };
-    $('wr-fd-go').onclick=function(){ wrFotodokuPdf(i, projekt); };
+    $('wr-fd-go').onclick=function(){ wrFotodokuPdf(i); };
+    Array.prototype.forEach.call(box.querySelectorAll('[data-fdp]'),function(bt){ bt.onclick=function(){ wrFotodokuStart(i, bt.getAttribute('data-fdp')); }; });
+    var ab2=box.querySelector('[data-fdall]'); if(ab2) ab2.onclick=function(){ wrFotodokuStart(i,null); };
   }).catch(function(e){
     if(box.isConnected) box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((e&&e.message)||'Verbindungsfehler')+'</span></div></div>';
   });
 }
 
-function wrFotodokuPdf(i, projekt){
-  var w=_wrListe[i]; var out=$('wr-fd-out'); if(!w||!out) return;
+// Die Antwort traegt signierte URLs, kein base64 mehr — das PDF liegt im
+// Storage. Bei mehreren Teilen bekommt jedes seine eigene Zeile.
+function wrFotodokuPdf(i){
+  var w=_wrListe[i], out=$('wr-fd-out'); if(!w||!out) return;
   var go=$('wr-fd-go'); if(go){ go.disabled=true; go.textContent='Erzeuge…'; }
-  if(_wrPdfUrls[i]){ try{ URL.revokeObjectURL(_wrPdfUrls[i]); }catch(e){} delete _wrPdfUrls[i]; }
-  wbApi('fotodoku',{projekt_id:projekt.id,jahr:w.jahr,woche:w.woche}).then(function(d){
+  var nurProjekt=_wrFdFilter[i]||null;
+  wbApi('fotodoku',Object.assign({wochenrapport_id:w.id,jahr:w.jahr,woche:w.woche},nurProjekt?{nur_projekt:nurProjekt}:{})).then(function(d){
     if(go){ go.disabled=false; go.textContent='PDF erzeugen'; }
     if(!out.isConnected) return;
-    if(!d||d.error||!d.pdf_base64){ out.innerHTML='<div class="meta" style="margin-top:8px"><span>'+esc((d&&d.error)||'PDF fehlgeschlagen')+'</span></div>'; return; }
-    var blob=wbB64ToBlob(d.pdf_base64);
-    _wrPdfUrls[i]=URL.createObjectURL(blob);
-    out.innerHTML='<div class="meta" style="margin-top:10px"><span>'+esc(d.filename)+'</span>'+
-        '<span class="dot">'+Math.round(blob.size/1024)+' KB</span>'+
-        '<span class="dot">'+(d.abgebildet||0)+' von '+(d.erfasst||0)+' abgebildet</span></div>'+
-      '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'+
-        '<a class="chip on" href="'+_wrPdfUrls[i]+'" target="_blank" rel="noopener" style="text-decoration:none">📷 Ansehen</a>'+
-        '<a class="chip" href="'+_wrPdfUrls[i]+'" download="'+esc(d.filename)+'" style="text-decoration:none">⬇ Herunterladen</a>'+
-      '</div>';
+    if(!d||d.error||!d.dokumente){ out.innerHTML='<div class="meta" style="margin-top:8px"><span>'+esc((d&&d.error)||'PDF fehlgeschlagen')+'</span></div>'; return; }
+    out.innerHTML='<div class="meta" style="margin-top:10px"><span>'+d.abgebildet+' von '+d.erfasst+' Foto(s) abgebildet</span>'+
+        (d.teile>1?('<span class="dot">'+d.teile+' Teildokumente</span>'):'')+'</div>'+
+      d.dokumente.map(function(x){
+        return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)">'+
+          '<span>'+(x.von>1?('Teil '+x.teil+'/'+x.von+' · '):'')+x.bilder+' Bild(er) · '+x.seiten+' Seite(n) · '+Math.round(x.bytes/1024)+' KB</span>'+
+          (x.url
+            ? '<span style="display:flex;gap:6px"><a class="chip on" href="'+esc(x.url)+'" target="_blank" rel="noopener" style="text-decoration:none">Ansehen</a>'+
+              '<a class="chip" href="'+esc(x.url)+'" download="'+esc(x.filename)+'" style="text-decoration:none">⬇</a></span>'
+            : '<span style="color:#f0a132">Ablage fehlgeschlagen</span>')+
+        '</div>';
+      }).join('');
   }).catch(function(e){
     if(go){ go.disabled=false; go.textContent='PDF erzeugen'; }
     if(out.isConnected) out.innerHTML='<div class="meta" style="margin-top:8px"><span>'+esc((e&&e.message)||'Verbindungsfehler')+'</span></div>';
-  });
-}
-
-function wrBerichtErzeugen(i, projekt){
-  var w=_wrListe[i]; if(!w||!projekt) return;
-  var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
-  if(_wrPdfUrls[i]){ try{ URL.revokeObjectURL(_wrPdfUrls[i]); }catch(e){} delete _wrPdfUrls[i]; }
-  box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>Erzeuge Wochenbericht…</span></div></div>';
-  wbApi('pdf',{projekt_id:projekt.id,jahr:w.jahr,woche:w.woche}).then(function(d){
-    if(!box.isConnected) return;
-    if(!d||d.error||!d.pdf_base64){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((d&&d.error)||'PDF fehlgeschlagen')+'</span></div></div>'; return; }
-    var blob=wbB64ToBlob(d.pdf_base64);
-    _wrPdfUrls[i]=URL.createObjectURL(blob);
-    // Ansehen/Herunterladen als echte <a>, die der Nutzer antippt — ein
-    // window.open() nach dem asynchronen Laden faengt der Popup-Blocker ab.
-    box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="top"><div class="nm">'+esc(d.filename||'Wochenbericht.pdf')+'</div>'+
-        pmPill(Math.round(blob.size/1024)+' KB','var(--gold)')+'</div>'+
-      '<div class="meta"><span>'+esc((d.bericht&&d.bericht.bericht_nr)||'')+'</span>'+
-        '<span class="dot">'+(d.fotos_im_pdf||0)+' Foto(s) eingebettet</span>'+
-        (d.aus_snapshot?'<span class="dot">aus eingefrorenem Stand</span>':'')+'</div>'+
-      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
-        '<a class="chip on" href="'+_wrPdfUrls[i]+'" target="_blank" rel="noopener" style="text-decoration:none">📄 Ansehen</a>'+
-        '<a class="chip" href="'+_wrPdfUrls[i]+'" download="'+esc(d.filename||'Wochenbericht.pdf')+'" style="text-decoration:none">⬇ Herunterladen</a>'+
-      '</div></div>';
-  }).catch(function(e){
-    if(box.isConnected) box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((e&&e.message)||'Verbindungsfehler')+'</span></div></div>';
   });
 }
 
@@ -2761,7 +2796,20 @@ function wpAlleErzeugen(){
       var st=$('wp-s'+i); if(st) st.textContent='erzeuge…';
       return wbApi(j.art,j.body).then(function(r){
         var st2=$('wp-s'+i); if(!st2) return;
-        if(!r||r.error||!r.pdf_base64){ st2.innerHTML='<span style="color:#f0a132">'+esc((r&&r.error)||'fehlgeschlagen')+'</span>'; return; }
+        if(!r||r.error){ st2.innerHTML='<span style="color:#f0a132">'+esc((r&&r.error)||'fehlgeschlagen')+'</span>'; return; }
+        // Die Fotodokumentation liefert seit Ziel 3 signierte URLs aus dem
+        // Storage und ggf. MEHRERE Teile; Wochenbericht und Stundenblatt
+        // bleiben bei base64. Beide Formen werden hier bedient.
+        if(r.dokumente){
+          ok++;
+          st2.innerHTML=r.dokumente.map(function(x){
+            return x.url
+              ? '<a class="chip" href="'+esc(x.url)+'" download="'+esc(x.filename)+'" style="text-decoration:none">⬇ '+(x.von>1?(x.teil+'/'+x.von+' · '):'')+Math.round(x.bytes/1024)+' KB</a>'
+              : '<span style="color:#f0a132">Ablage fehlgeschlagen</span>';
+          }).join(' ');
+          return;
+        }
+        if(!r.pdf_base64){ st2.innerHTML='<span style="color:#f0a132">Kein PDF erhalten</span>'; return; }
         var blob=wbB64ToBlob(r.pdf_base64), url=URL.createObjectURL(blob);
         _wpUrls.push(url); ok++;
         st2.innerHTML='<a class="chip" href="'+url+'" download="'+esc(r.filename)+'" style="text-decoration:none">⬇ '+Math.round(blob.size/1024)+' KB</a>';
