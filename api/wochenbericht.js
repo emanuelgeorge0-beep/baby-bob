@@ -46,8 +46,17 @@ export default async function handler(req, res) {
   try {
     // Zeitraum: entweder jahr+woche direkt, oder ein Datum, aus dem die ISO-KW
     // abgeleitet wird (bequemer fürs Cockpit, gleiche Wahrheit).
+    //
+    // NICHT jede Aktion wird über einen Zeitraum adressiert. 'liste' hängt am
+    // Projekt, 'wochen_projekte' am Wochenrapport — und dessen Kopf TRÄGT Jahr
+    // und Woche selbst, wochenProjekte() liest sie von dort und gibt sie zurück.
+    // Solange die Pflichtprüfung auch für diese Aktion galt, scheiterte der
+    // Knopf „Wochenbericht" in der Wochenrapport-Liste mit „jahr erforderlich",
+    // bevor er den Wochenrapport überhaupt aufgeschlagen hatte. Die Angabe zu
+    // verlangen, wäre eine Pflicht ohne Verwendung.
+    const OHNE_ZEITRAUM = ['liste', 'wochen_projekte'];
     const { jahr, woche, fehler } = zeitraum(b);
-    if (b.action !== 'liste' && fehler) return res.status(400).json({ error: fehler });
+    if (!OHNE_ZEITRAUM.includes(b.action) && fehler) return res.status(400).json({ error: fehler });
 
     // ── Sammelmaske: Kunde x KW ────────────────────────────────────────────
     // Diese beiden Aktionen haengen NICHT an einem Projekt und stehen deshalb
