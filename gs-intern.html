@@ -2637,9 +2637,17 @@ function wrFotodokuStart(i, nurProjekt){
     if(!box.isConnected) return;
     if(!d||d.error||!d.vorschau){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>'+esc((d&&d.error)||'Vorschau fehlgeschlagen')+'</span></div></div>'; return; }
     var v=d.vorschau, ps=v.projekte||[];
+    var oz=v.ohne_zuordnung||{anzahl:0,projekte:[]};
+    var ozZeilen=(oz.projekte||[]).map(function(x){
+      return '<div style="padding:5px 0;border-bottom:1px solid var(--line)"><span>'+esc(x.projekt)+'</span>'+
+        '<br><span style="color:var(--muted);font-size:12px">'+esc(x.text||'')+'</span></div>';
+    }).join('');
     if(!v.gesamt){
       box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="nm">Fotodokumentation</div>'+
-        '<div class="meta"><span>Für KW '+esc(w.woche)+' liegen keine Fotos vor'+(nurProjekt?' (auf dieses Projekt gefiltert)':'')+'.</span></div>'+
+        '<div class="meta"><span>'+(oz.anzahl
+          ? ('Für KW '+esc(w.woche)+' ist kein Foto zugeordnet — '+oz.anzahl+' Foto(s) ohne Tageszuordnung.')
+          : ('Für KW '+esc(w.woche)+' liegen keine Fotos vor'+(nurProjekt?' (auf dieses Projekt gefiltert)':'')+'.'))+'</span></div>'+
+        (oz.anzahl?('<div style="margin:8px 0 4px">'+ozZeilen+'</div>'):'')+
         (nurProjekt?'<div style="margin-top:8px"><button class="chip" data-fdall="1">Filter aufheben</button></div>':'')+'</div>';
       var ab=box.querySelector('[data-fdall]'); if(ab) ab.onclick=function(){ wrFotodokuStart(i,null); };
       return;
@@ -2651,6 +2659,11 @@ function wrFotodokuStart(i, nurProjekt){
     }).join('');
     if(v.ohne_tag&&v.ohne_tag.anzahl) zeilen+='<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line)">'+
       '<span>Ohne Tageszuordnung</span><span style="color:var(--muted)">'+v.ohne_tag.abgebildet+' von '+v.ohne_tag.anzahl+'</span></div>';
+    // Was NICHT ins Dokument kommt, steht hier genauso deutlich wie das, was
+    // hineinkommt — sonst faellt die Wochenregel niemandem auf.
+    if(oz.anzahl) zeilen+='<div style="padding:5px 0;border-bottom:1px solid var(--line)">'+
+      '<div style="display:flex;justify-content:space-between;gap:12px"><span>Ohne Tageszuordnung — nicht im Dokument</span>'+
+      '<span style="color:#f0a132;white-space:nowrap">'+oz.anzahl+' Foto(s)</span></div>'+ozZeilen+'</div>';
     var filterZeile=(ps.length>1)
       ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0"><span style="color:var(--muted);font-size:12px;align-self:center">Nur ein Projekt:</span>'+
         ps.map(function(p){ return '<button class="chip'+(nurProjekt===p.id?' on':'')+'" data-fdp="'+esc(p.id)+'">'+esc(p.projektnummer||p.name||'Projekt')+'</button>'; }).join('')+
@@ -2684,7 +2697,9 @@ function wrFotodokuPdf(i){
     if(go){ go.disabled=false; go.textContent='PDF erzeugen'; }
     if(!out.isConnected) return;
     if(!d||d.error||!d.dokumente){ out.innerHTML='<div class="meta" style="margin-top:8px"><span>'+esc((d&&d.error)||'PDF fehlgeschlagen')+'</span></div>'; return; }
+    var ozn=(d.ohne_zuordnung&&d.ohne_zuordnung.anzahl)||0;
     out.innerHTML='<div class="meta" style="margin-top:10px"><span>'+d.abgebildet+' von '+d.erfasst+' Foto(s) abgebildet</span>'+
+        (ozn?('<span class="dot" style="color:#f0a132">'+ozn+' ohne Tageszuordnung, nicht im Dokument</span>'):'')+
         (d.teile>1?('<span class="dot">'+d.teile+' Teildokumente</span>'):'')+'</div>'+
       d.dokumente.map(function(x){
         return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)">'+

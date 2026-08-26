@@ -92,6 +92,9 @@ export default async function handler(req, res) {
         nr: r.nr,
         erfasst: r.erfasst,
         abgebildet: r.abgebildet,
+        // Fotos, die wegen der Wochenregel in keiner Woche erscheinen. Muss
+        // durch, sonst zaehlt die Oberflaeche eine Zahl, die es nicht gibt.
+        ohne_zuordnung: r.ohne_zuordnung,
         teile: r.dokumente.length,
         dokumente: r.dokumente.map((d) => ({
           teil: d.teil, von: d.von, filename: d.filename,

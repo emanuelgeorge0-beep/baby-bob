@@ -98,7 +98,16 @@ console.log('\n── Fotos / Material (live noch keine Daten) ─────�
 console.log(`  Fotos: ${d31.fotos.length} · Material: ${d31.material.length}`);
 ok(d31.fotos_vorhanden === (d31.fotos.length > 0), 'fotos_vorhanden stimmt mit der Liste überein');
 ok(d31.material_vorhanden === (d31.material.length > 0), 'material_vorhanden stimmt mit der Liste überein');
-ok(!d31.fotos.length ? d31.hinweise.some((h) => h.includes('keine Fotos')) : true, 'fehlende Fotos werden gekennzeichnet');
+// Seit der Wochenregel gibt es ZWEI wahre Saetze fuer "hier steht kein Bild":
+// gar keine Fotos am Projekt, oder Fotos ohne Tageszuordnung, die in keine
+// Woche fallen. Der zweite Fall darf NICHT "keine Fotos" behaupten.
+ok(!d31.fotos.length
+  ? d31.hinweise.some((h) => h.includes('keine Fotos') || h.includes('ohne Tageszuordnung'))
+  : true, 'fehlende Fotos werden gekennzeichnet');
+ok(d31.fotos_ohne_zuordnung && typeof d31.fotos_ohne_zuordnung.anzahl === 'number', 'Zahl der Fotos ohne Tageszuordnung wird geliefert');
+ok(!d31.fotos.length && d31.fotos_ohne_zuordnung.anzahl
+  ? d31.hinweise.some((h) => h.includes('ohne Tageszuordnung'))
+  : true, 'nicht gezeigte Fotos werden gemeldet, nicht verschwiegen');
 
 console.log('\n── Service: vorbereitet, ungebaut ───────────────────────');
 const svc = await sammleWochendaten({ quelle: 'service', serviceAuftragId: 'c3d376a5-f232-4986-9708-ecb36c18cd07', jahr: 2026, woche: 31 });
