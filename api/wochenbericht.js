@@ -11,6 +11,12 @@
 //               Versand protokollieren
 //   liste     — bisherige Berichte eines Projekts
 //
+//   sammel_pruefung  — EIN PDF aus mehreren Projekten einer KW, plus ein
+//                      Prüf-Kennzeichen, das der Versand vorzeigen muss
+//   sammel_versenden — dieses eine PDF versenden (nur mit gültigem Kennzeichen)
+//   versand_historie — alle Versandvorgänge aus versand_protokoll, serverseitig
+//                      auf die eigenen Projekte gescoped
+//
 // Alle DB-Zugriffe laufen über den Service-Key; die Rollenprüfung erzwingt
 // diese API in der Anwendungsschicht (RLS ist Defense-in-Depth, siehe
 // scripts/wochenbericht.sql).
@@ -21,6 +27,9 @@ import {
   erzeugeWochenrapport, isoWochenBereich,
   empfaengerFuer, EMPFAENGER_HERKUNFT_TEXT,
 } from '../lib/wochenbericht.js';
+import {
+  erzeugeSammelbericht, versendeSammelbericht, sammelPruefId, pruefIdGueltig,
+} from '../lib/sammelbericht.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -55,7 +64,7 @@ export default async function handler(req, res) {
     // Knopf „Wochenbericht" in der Wochenrapport-Liste mit „jahr erforderlich",
     // bevor er den Wochenrapport überhaupt aufgeschlagen hatte. Die Angabe zu
     // verlangen, wäre eine Pflicht ohne Verwendung.
-    const OHNE_ZEITRAUM = ['liste', 'wochen_projekte'];
+    const OHNE_ZEITRAUM = ['liste', 'wochen_projekte', 'versand_historie'];
     const { jahr, woche, fehler } = zeitraum(b);
     if (!OHNE_ZEITRAUM.includes(b.action) && fehler) return res.status(400).json({ error: fehler });
 
@@ -126,6 +135,102 @@ export default async function handler(req, res) {
       const wrId = String(b.wochenrapport_id || '').trim();
       if (!UUID_RE.test(wrId)) return res.status(400).json({ error: 'wochenrapport_id (UUID) erforderlich' });
       return res.status(200).json({ ok: true, ...(await wochenProjekte(wrId)) });
+    }
+
+    // ── SAMMELBERICHT: EIN PDF aus mehreren Projekten einer KW ────────────
+    // Steht neben dem bestehenden Weg, nicht an seiner Stelle: 'pdf' liefert
+    // weiterhin ein PDF je Projekt, und die Oberflaeche behaelt beide Knoepfe.
+    //
+    // Zwei Aktionen, in dieser Reihenfolge und nicht anders:
+    //   sammel_pruefung  baut das PDF und gibt ein Pruef-Kennzeichen aus
+    //   sammel_versenden verlangt genau dieses Kennzeichen
+    // Ohne Pruefung kein Versand — ein Dokument an mehrere Bauleiter, ueber
+    // mehrere Projekte hinweg, darf nicht ungesehen das Haus verlassen. Das
+    // Kennzeichen haengt an der AUSWAHL: wer ein Projekt dazunimmt, muss neu
+    // pruefen, sonst ginge etwas raus, das so nie auf dem Schirm stand.
+    if (b.action === 'sammel_pruefung' || b.action === 'sammel_versenden') {
+      if (role !== 'gs_admin' && role !== 'master') {
+        return res.status(403).json({ error: 'Der Sammelbericht ist Master/Admin vorbehalten.' });
+      }
+      const ids = (Array.isArray(b.projekt_ids) ? b.projekt_ids : [])
+        .map((x) => String(x || '').trim()).filter((x) => UUID_RE.test(x));
+      const eindeutig = [...new Set(ids)];
+      if (!eindeutig.length) return res.status(400).json({ error: 'projekt_ids (Liste von UUIDs) erforderlich — ein Sammelbericht braucht mindestens ein Projekt.' });
+      if (eindeutig.length > 40) return res.status(400).json({ error: 'Höchstens 40 Projekte je Sammelbericht.' });
+
+      // Kuerzel fuer die Nummer SB-{KUERZEL}-{JAHR}-{KW}. Bezug ist der
+      // Wochenrapport, aus dessen Liste der Sammelbericht aufgerufen wird —
+      // dieselbe Quelle, aus der auch die Projektauswahl stammt. Ohne
+      // Wochenrapport bleibt es beim neutralen 'SAMMEL'.
+      const kuerzel = await sammelKuerzel(String(b.wochenrapport_id || '').trim());
+
+      if (b.action === 'sammel_pruefung') {
+        const r = await erzeugeSammelbericht({ projektIds: eindeutig, jahr, woche, kuerzel, empfaenger: null });
+        return res.status(200).json({
+          ok: true,
+          nr: r.nr,
+          filename: `${r.nr}.pdf`.replace(/[^\w.-]+/g, '_'),
+          pdf_base64: Buffer.from(r.pdf).toString('base64'),
+          pruef_id: await sammelPruefId({ jahr, woche, projektIds: eindeutig, userId: user.id }),
+          jahr: r.sammel.jahr, woche: r.sammel.woche, von: r.sammel.von, bis: r.sammel.bis,
+          projekte: r.sammel.projekte.map((p) => ({
+            projekt_id: p.projekt_id, nummer: p.nummer, titel: p.titel,
+            bericht_nr: p.bericht_nr, aus_snapshot: p.aus_snapshot,
+            stunden: p.summen.stunden, spesen: p.summen.spesen, zeilen: p.summen.zeilen,
+          })),
+          summen: r.sammel.summen,
+          hinweise: r.sammel.hinweise,
+          empfaenger_vorschlag: r.empfaenger,
+          empfaenger_herkunft: r.empfaenger_herkunft,
+          empfaenger_herkunft_text: herkunftText(r.empfaenger_herkunft),
+          branding: r.branding,
+        });
+      }
+
+      const gueltig = await pruefIdGueltig({
+        pruefId: String(b.pruef_id || ''), jahr, woche, projektIds: eindeutig, userId: user.id,
+      });
+      if (!gueltig) {
+        return res.status(400).json({
+          error: 'Bitte zuerst die Prüf-Ansicht öffnen. Der Sammelbericht wird nur versendet, wenn genau diese Auswahl vorher angesehen wurde.',
+          pruefung_fehlt: true,
+        });
+      }
+
+      const r = await versendeSammelbericht({
+        projektIds: eindeutig, jahr, woche, userId: user.id, kuerzel,
+        empfaenger: b.empfaenger,
+        sendMail: sendResendEmail,
+        mailHtml: wochenberichtEmailHtml,
+        betreff: b.betreff,
+      });
+      return res.status(200).json({
+        ok: r.ok, versendet: r.versendet,
+        nr: r.nr, pdf_path: r.pdf_path,
+        empfaenger: r.empfaenger, empfaenger_herkunft: r.empfaenger_herkunft,
+        projekte: r.protokolle,
+        summen: r.sammel.summen,
+        protokolliert: r.protokolliert, protokoll_hinweis: r.protokoll_hinweis,
+        hinweise: r.sammel.hinweise,
+        error: r.error,
+      });
+    }
+
+    // ── VERSANDHISTORIE ────────────────────────────────────────────────────
+    // Bewusst KEINE Master-Sperre: ein Partner darf sehen, was zu SEINEN
+    // Projekten hinausgegangen ist. Die Trennung macht versandHistorie()
+    // serverseitig, nicht die Ansicht — ein Partner kommt ueber keinen Weg an
+    // fremde Vorgaenge, auch nicht mit einer fremden Projekt-ID im Body.
+    if (b.action === 'versand_historie') {
+      const r = await versandHistorie({
+        userId: user.id, role,
+        projektId: UUID_RE.test(String(b.projekt_id || '')) ? String(b.projekt_id) : null,
+        von: String(b.von || '').slice(0, 10) || null,
+        bis: String(b.bis || '').slice(0, 10) || null,
+        limit: Number(b.limit) || 300,
+      });
+      if (r.error) return res.status(r.status || 403).json({ error: r.error });
+      return res.status(200).json({ ok: true, ...r });
     }
 
     if (b.action === 'sammel_vorschau' || b.action === 'wochenrapport_pdf') {
@@ -434,5 +539,158 @@ async function sammelVorschau(kundeId, jahr, woche) {
     // 2 PDFs je Projekt (Bericht + Fotodoku) + 1 je Wochenrapport
     pdf_anzahl: mitBuchung.length * 2 + rapporte.length,
     zeilen_ohne_wochenrapport: ohneKopf,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sammelbericht — Hilfen
+// ═══════════════════════════════════════════════════════════════════════════
+// Kuerzel fuer SB-{KUERZEL}-{JAHR}-{KW}. Aus der Rapportnummer des
+// Wochenrapports (R-{KUERZEL}-{JAHR}-{NNNN}), weil der Sammelbericht genau
+// aus dessen Liste aufgerufen wird. Faellt sie aus, greift der Technikername,
+// zuletzt das neutrale 'SAMMEL'.
+async function sammelKuerzel(wochenrapportId) {
+  if (!UUID_RE.test(String(wochenrapportId || ''))) return null;
+  const k = (await sbSoft(`gs_wochenrapporte?id=eq.${wochenrapportId}&select=rapport_nr,techniker_user_id&limit=1`, []))[0];
+  if (!k) return null;
+  const teile = String(k.rapport_nr || '').split('-');
+  if (teile.length >= 4 && teile[1]) return teile[1];
+  if (k.techniker_user_id) {
+    const t = (await sbSoft(`gs_techniker?user_id=eq.${k.techniker_user_id}&select=name&limit=1`, []))[0];
+    const nm = String((t || {}).name || '').trim();
+    if (nm) return nm.split(/\s+/).map((w) => w[0]).join('').slice(0, 4);
+  }
+  return null;
+}
+
+// Klartext fuer die Empfaenger-Herkunft. Beim Sammelbericht koennen mehrere
+// Herkuenfte zusammenkommen (je Projekt eine) — sie werden einzeln uebersetzt
+// und wieder zusammengesetzt, statt roh durchgereicht zu werden.
+function herkunftText(herkunft) {
+  if (!herkunft) return null;
+  return String(herkunft).split(' + ')
+    .map((x) => EMPFAENGER_HERKUNFT_TEXT[x] || x)
+    .join(' + ');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VERSANDHISTORIE — was ist wann an wen hinausgegangen?
+// ═══════════════════════════════════════════════════════════════════════════
+// Datenquelle ist AUSSCHLIESSLICH gs_wochenberichte.versand_protokoll. Es wird
+// nichts nachgetragen, nichts gespiegelt, keine zweite Tabelle gefuehrt.
+//
+// Jeder Eintrag haengt an einer Berichtszeile und damit an genau EINEM Projekt
+// — auch die Eintraege eines Sammelversands, der je enthaltenem Projekt einen
+// eigenen Eintrag schreibt. Genau darauf ruht die Sichtbarkeitsregel:
+//
+//   Master/Admin  sehen alles.
+//   Partner       sehen nur Vorgaenge zu Projekten mit partner_user_id = sich
+//                 selbst. Dieselbe Eigentuemerspalte, auf der auch darfProjekt()
+//                 und das Partner-Cockpit scopen.
+//   Alle uebrigen Rollen: nichts. Der Versand ist Chefsache, seine Historie
+//                 ist es auch.
+//
+// Die Einschraenkung passiert HIER, nicht in der Anzeige: die Abfrage an
+// Supabase traegt bereits projekt_id=in.(eigene Projekte). Ein Partner, der
+// eine fremde Projekt-ID mitschickt, bekommt 403 — nicht etwa eine leere
+// Liste, die wie ein „gibt es nicht" aussaehe.
+//
+// Altentraege ohne `typ` sind Einzelversande (das Feld gibt es erst seit dem
+// Sammelbericht) und werden auch so ausgewiesen.
+const TYP_TEXT = { wochenbericht: 'Wochenbericht', sammelbericht: 'Sammelbericht' };
+
+export async function versandHistorie({ userId, role, projektId = null, von = null, bis = null, limit = 300 }) {
+  const master = role === 'gs_admin' || role === 'master';
+  let eigene = null;                      // null = keine Einschraenkung (Master)
+
+  if (!master) {
+    if (role !== 'gs_partner') {
+      return { error: 'Die Versandhistorie ist Master/Admin und Partnern vorbehalten.', status: 403 };
+    }
+    const meine = await sbSoft(`gs_projekte?partner_user_id=eq.${userId}&select=id`, []);
+    eigene = meine.map((p) => p.id);
+    if (projektId && !eigene.includes(projektId)) {
+      return { error: 'Keine Berechtigung für dieses Projekt', status: 403 };
+    }
+    if (!eigene.length) {
+      return { vorgaenge: [], projekte: [], anzahl: 0, gefiltert: { projekt_id: projektId, von, bis } };
+    }
+  }
+
+  const filter = projektId ? `&projekt_id=eq.${projektId}`
+    : (eigene ? `&projekt_id=in.(${eigene.join(',')})` : '');
+  const rows = await sbSoft(
+    `gs_wochenberichte?select=id,projekt_id,jahr,woche,bericht_nr,status,versand_protokoll${filter}&limit=1000`,
+    null,
+  );
+  // Fehlt die Spalte (Migration nicht gelaufen), gibt es keine Historie — das
+  // wird gesagt, nicht als leere Liste getarnt.
+  if (rows === null) {
+    return {
+      vorgaenge: [], projekte: [], anzahl: 0,
+      hinweis: 'Spalte versand_protokoll fehlt (scripts/wochenbericht_versand.sql noch nicht ausgeführt) — es gibt noch keine Historie.',
+      gefiltert: { projekt_id: projektId, von, bis },
+    };
+  }
+
+  const roh = [];
+  for (const r of rows) {
+    for (const e of (Array.isArray(r.versand_protokoll) ? r.versand_protokoll : [])) {
+      if (!e || !e.am) continue;
+      const tag = String(e.am).slice(0, 10);
+      if (von && tag < von) continue;
+      if (bis && tag > bis) continue;
+      roh.push({ row: r, e });
+    }
+  }
+  roh.sort((a, x) => String(x.e.am).localeCompare(String(a.e.am)));
+  const anzahl = roh.length;
+  const teil = roh.slice(0, Math.max(1, Math.min(1000, limit)));
+
+  // Namen nachschlagen: Projekt (Nummer + Bezeichnung) und absendende Person.
+  const pIds = [...new Set(teil.map((x) => x.row.projekt_id).filter(Boolean))];
+  const uIds = [...new Set(teil.map((x) => x.e.von).filter(Boolean))];
+  const pNamen = {}, uNamen = {};
+  if (pIds.length) {
+    for (const p of await sbSoft(`gs_projekte?id=in.(${pIds.join(',')})&select=id,name,projektnummer`, [])) pNamen[p.id] = p;
+  }
+  if (uIds.length) {
+    for (const t of await sbSoft(`gs_techniker?user_id=in.(${uIds.join(',')})&select=user_id,name`, [])) uNamen[t.user_id] = t.name;
+  }
+
+  const vorgaenge = teil.map((x) => {
+    const p = pNamen[x.row.projekt_id] || {};
+    const typ = x.e.typ || 'wochenbericht';
+    return {
+      am: x.e.am,
+      typ,
+      typ_text: TYP_TEXT[typ] || typ,
+      bericht_nr: x.e.bericht_nr || x.row.bericht_nr || null,
+      sammel_nr: x.e.sammel_nr || null,
+      sammel_projekte: x.e.sammel_projekte || null,
+      projekt_id: x.row.projekt_id,
+      projektnummer: p.projektnummer || null,
+      projekt: p.name || 'Projekt',
+      jahr: x.row.jahr, woche: x.row.woche,
+      empfaenger: Array.isArray(x.e.an) ? x.e.an : (x.e.an ? [String(x.e.an)] : []),
+      empfaenger_herkunft: x.e.empfaenger_herkunft || null,
+      von_user_id: x.e.von || null,
+      von_name: (x.e.von && uNamen[x.e.von]) || null,
+      ok: x.e.ok === true,
+      fehler: x.e.ok === true ? null : (x.e.fehler || 'unbekannt'),
+      pdf_bytes: Number(x.e.pdf_bytes || 0),
+      pdf_path: x.e.pdf_path || null,
+    };
+  });
+
+  // Projektliste fuer den Filter — nur aus dem, was der Aufrufer sehen darf.
+  const projekte = [...new Map(vorgaenge.map((v) => [v.projekt_id, {
+    id: v.projekt_id, projektnummer: v.projektnummer, name: v.projekt,
+  }])).values()].sort((a, x) => String(a.projektnummer || '~').localeCompare(String(x.projektnummer || '~')));
+
+  return {
+    vorgaenge, projekte, anzahl,
+    sichtbarkeit: master ? 'master' : 'partner',
+    gefiltert: { projekt_id: projektId, von, bis },
   };
 }

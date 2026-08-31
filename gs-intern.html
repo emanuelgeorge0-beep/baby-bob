@@ -2602,6 +2602,11 @@ function wrSammelPaint(i,d){
       '<button class="chip" data-wrsamall="'+i+':0">Keines</button>'+
       '<button class="chip" style="border-color:var(--gold);color:var(--gold)" data-wrsamgo="'+i+'"'+(n?'':' disabled')+'>'+
         '📄 '+(n===ps.length?('Alle '+ps.length+' erzeugen'):(n+' erzeugen'))+'</button>'+
+      // Zweiter Weg NEBEN dem ersten: ein PDF ueber alle angehakten Projekte.
+      // Der Knopf oben (ein PDF je Projekt) bleibt, weil beide gebraucht werden —
+      // je Bauleiter ein eigenes Blatt ODER ein Blatt fuer die ganze Woche.
+      '<button class="chip" style="border-color:var(--gold);color:var(--gold)" data-wrsamsb="'+i+'"'+(n?'':' disabled')+'>'+
+        '📑 Sammelbericht'+(n?(' ('+n+')'):'')+'</button>'+
     '</div>'+
     '<div data-wrsamrows="'+i+'"></div></div>';
 
@@ -2621,6 +2626,105 @@ function wrSammelPaint(i,d){
   });
   var go=box.querySelector('[data-wrsamgo]');
   if(go) go.onclick=function(){ wrSammelErzeugen(i,d); };
+  var sb=box.querySelector('[data-wrsamsb]');
+  if(sb) sb.onclick=function(){ sbPruefung(i,d); };
+}
+
+// ── SAMMELBERICHT: EIN PDF ueber alle angehakten Projekte ─────────────────
+// Erst die Pruef-Ansicht, dann der Versand — und zwar nicht als Hoeflichkeit:
+// der Server gibt in der Pruefung ein Kennzeichen aus, ohne das er nicht
+// versendet (api/wochenbericht.js, sammel_pruefung/sammel_versenden). Aendert
+// sich die Auswahl, verfaellt es und es muss neu geprueft werden.
+var _sb=null, _sbUrl=null;
+function sbFree(){ if(_sbUrl){ try{ URL.revokeObjectURL(_sbUrl); }catch(e){} _sbUrl=null; } }
+
+function sbPruefung(i,d){
+  var w=_wrListe[i];
+  var ps=(d.projekte||[]).filter(function(p){ return (_wrSammel[i]||{})[p.id]; });
+  if(!ps.length){ toast('Kein Projekt ausgewählt'); return; }
+  var box=$('view').querySelector('[data-pdfbox="'+i+'"]');
+  var btn=box?box.querySelector('[data-wrsamsb]'):null;
+  if(btn){ btn.disabled=true; btn.textContent='📑 Erstelle…'; }
+  wbApi('sammel_pruefung',{
+    wochenrapport_id:w?w.id:null, jahr:d.jahr, woche:d.woche,
+    projekt_ids:ps.map(function(p){ return p.id; }),
+  }).then(function(r){
+    if(btn){ btn.disabled=false; btn.textContent='📑 Sammelbericht ('+ps.length+')'; }
+    if(!r||r.error||!r.pdf_base64){ toast((r&&r.error)||'Sammelbericht fehlgeschlagen'); return; }
+    sbFree();
+    _sbUrl=URL.createObjectURL(wbB64ToBlob(r.pdf_base64));
+    _sb={ d:r, wr:w?w.id:null, ids:ps.map(function(p){ return p.id; }), jahr:d.jahr, woche:d.woche };
+    sbSheet();
+  }).catch(function(){
+    if(btn){ btn.disabled=false; btn.textContent='📑 Sammelbericht ('+ps.length+')'; }
+    toast('Verbindungsfehler');
+  });
+}
+
+function sbSheet(){
+  if(!_sb) return;
+  var r=_sb.d, ps=r.projekte||[], su=r.summen||{};
+  var vor=(r.empfaenger_vorschlag||[]).join(', ');
+  var zeilen=ps.map(function(p){
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12.5px">'+
+      '<span>'+esc((p.nummer?(p.nummer+' · '):'')+(p.titel||'Projekt'))+
+        (p.aus_snapshot?'<br><span style="color:var(--muted);font-size:11px">aus eingefrorenem Stand</span>':'')+'</span>'+
+      '<span style="color:var(--muted);white-space:nowrap">'+Number(p.stunden||0).toFixed(2)+' h · CHF '+Number(p.spesen||0).toFixed(2)+'</span></div>';
+  }).join('');
+  var hinw=(r.hinweise||[]).map(function(x){ return '<div class="meta"><span>• '+esc(x)+'</span></div>'; }).join('');
+
+  openSheet('<h3>'+esc(r.nr)+'</h3>'+
+    '<div class="meta" style="margin-bottom:10px"><span>KW '+esc(r.woche)+'/'+esc(r.jahr)+'</span>'+
+      '<span class="dot">'+ps.length+' Projekt'+(ps.length===1?'':'e')+'</span>'+
+      '<span class="dot">'+Number(su.stunden||0).toFixed(2)+' h</span>'+
+      '<span class="dot">CHF '+Number(su.spesen||0).toFixed(2)+'</span></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<a class="chip on" href="'+_sbUrl+'" target="_blank" rel="noopener" style="text-decoration:none">📄 Ansehen</a>'+
+      '<a class="chip" href="'+_sbUrl+'" download="'+esc(r.filename)+'" style="text-decoration:none">⬇ Herunterladen</a>'+
+    '</div>'+
+    '<div class="cc-sec">Enthaltene Projekte</div>'+zeilen+
+    (hinw?('<div class="cc-sec" style="margin-top:12px">Hinweise zur Datenlage</div>'+hinw):'')+
+    '<div class="cc-sec" style="margin-top:14px">Versand</div>'+
+    '<div class="meta" style="margin-bottom:8px"><span>Der Sammelbericht geht als EIN PDF an die Empfänger. '+
+      'Jeder enthaltene Wochenbericht wird dabei <strong>eingefroren</strong> und als versendet vermerkt.</span></div>'+
+    '<input id="sb-empf" class="field" style="width:100%" type="text" inputmode="email" autocapitalize="off" '+
+      'placeholder="bauleiter@firma.ch" value="'+esc(vor)+'"/>'+
+    (vor?'<div class="meta" style="margin-top:6px"><span>vorbelegt '+esc(r.empfaenger_herkunft_text||'')+'</span></div>'
+        :'<div class="meta" style="margin-top:6px"><span>Bei keinem der Projekte ist eine E-Mail hinterlegt — bitte Adresse eintragen.</span></div>')+
+    '<button class="btn btn-gold" id="sb-send" style="margin-top:12px">✉️ Jetzt versenden</button>'+
+    '<div id="sb-out"></div>'+
+    '<button class="btn ghost" id="sb-close" style="margin-top:12px">Schliessen</button>');
+  $('sb-close').onclick=function(){ sbFree(); closeSheet(); };
+  $('sb-send').onclick=sbSend;
+}
+
+function sbSend(){
+  if(!_sb) return;
+  var raw=(($('sb-empf')||{}).value||'').trim();
+  if(!raw){ toast('Bitte mindestens eine Empfängeradresse eintragen'); return; }
+  var btn=$('sb-send'); if(btn){ btn.disabled=true; btn.textContent='Sendet…'; }
+  wbApi('sammel_versenden',{
+    wochenrapport_id:_sb.wr, jahr:_sb.jahr, woche:_sb.woche,
+    projekt_ids:_sb.ids, pruef_id:_sb.d.pruef_id, empfaenger:raw,
+  }).then(function(d){
+    if(btn){ btn.disabled=false; btn.textContent='✉️ Jetzt versenden'; }
+    var out=$('sb-out'); if(!out) return;
+    d=d||{};
+    if(!d.ok){
+      out.innerHTML='<div class="meta" style="margin-top:10px"><span style="color:#ff8f8f">✗ '+esc(d.error||'Versand fehlgeschlagen')+'</span></div>';
+      toast('Versand fehlgeschlagen');
+      return;
+    }
+    out.innerHTML='<div class="meta" style="margin-top:10px"><span style="color:#3dd68c">✓ Versendet an '+
+      esc((d.empfaenger||[]).join(', '))+'</span></div>'+
+      '<div class="meta" style="margin-top:4px"><span>'+esc(d.nr||'')+' · '+((d.projekte||[]).length)+
+      ' Wochenbericht(e) eingefroren und protokolliert</span></div>'+
+      (d.protokoll_hinweis?('<div class="meta" style="margin-top:4px"><span>'+esc(d.protokoll_hinweis)+'</span></div>'):'');
+    toast('✓ Sammelbericht versendet');
+  }).catch(function(){
+    if(btn){ btn.disabled=false; btn.textContent='✉️ Jetzt versenden'; }
+    toast('Verbindungsfehler');
+  });
 }
 
 // Nacheinander, nicht parallel: jedes PDF bettet serverseitig Bilder ein.
