@@ -19,6 +19,7 @@ import {
   sammleWochendaten, erzeugeBericht, versendeBericht, isoWocheVonDatum,
   erzeugeFotodoku, fotodokuVorschau,
   erzeugeWochenrapport, isoWochenBereich,
+  empfaengerFuer, EMPFAENGER_HERKUNFT_TEXT,
 } from '../lib/wochenbericht.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -166,7 +167,20 @@ export default async function handler(req, res) {
     switch (b.action) {
       case 'vorschau': {
         const daten = await sammleWochendaten({ quelle: 'projekt', projektId, jahr, woche });
-        return res.status(200).json({ ok: true, daten });
+        // Empfaenger-Vorschlag ueber DIESELBE Kette wie der spaetere Versand
+        // (empfaengerFuer), inklusive eines bereits angelegten Berichtskopfs.
+        // Anzeige und Versand duerfen nie auseinanderlaufen: was hier steht,
+        // ist genau das, was ohne Eingriff verschickt wuerde.
+        const kopfRow = (await sbSoft(
+          `gs_wochenberichte?projekt_id=eq.${projektId}&jahr=eq.${jahr}&woche=eq.${woche}&select=empfaenger&limit=1`, [],
+        ))[0] || null;
+        const vor = empfaengerFuer({ angefragt: null, kopfRow, daten });
+        return res.status(200).json({
+          ok: true, daten,
+          empfaenger_vorschlag: vor.liste,
+          empfaenger_herkunft: vor.herkunft,
+          empfaenger_herkunft_text: vor.herkunft ? (EMPFAENGER_HERKUNFT_TEXT[vor.herkunft] || null) : null,
+        });
       }
       case 'pdf': {
         const r = await erzeugeBericht({ projektId, jahr, woche, userId: user.id });
@@ -260,6 +274,10 @@ async function sbGet(path) {
   if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
   return r.json();
 }
+// Ein Lesefehler darf die Vorschau nie zum Absturz bringen: fehlt der
+// Berichtskopf noch (normal, solange kein PDF erzeugt wurde), faellt der
+// Empfaenger-Vorschlag eben eine Stufe weiter zurueck.
+const sbSoft = (path, fallback) => sbGet(path).catch(() => fallback);
 async function getUser(token) {
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` } });
   return r.ok ? r.json() : null;

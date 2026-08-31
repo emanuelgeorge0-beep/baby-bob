@@ -12,6 +12,12 @@ import { getWeather } from './weather.js';
 import { buildPdf } from '../lib/pdf.js';
 import { isEntitled } from '../lib/entitlements.js';
 import { escrowHinterlegen, escrowFreigeben } from './escrow_stripe.js';
+import { sendResendEmail, exportEmailHtml } from '../lib/mail.js';
+// Die Empfaenger-Kette wird NICHT nachgebaut, sondern geteilt: derselbe
+// empfaengerFuer, den der Wochenbericht benutzt. Zwei Ketten waeren zwei
+// Wahrheiten. lib/wochenbericht.js haengt nicht von api/ ab (der Mailversand
+// kommt dort per Dependency Injection rein), der Import ist also zyklenfrei.
+import { empfaengerFuer, EMPFAENGER_HERKUNFT_TEXT } from '../lib/wochenbericht.js';
 
 // Signalisiert „darf der Aufrufer nicht" → Handler übersetzt zu HTTP 403.
 class Forbidden extends Error {}
@@ -296,6 +302,10 @@ export default async function handler(req, res) {
       case 'pm_export_material':   return res.status(200).json(await exportMaterial(req.body.projekt_id, scope));
       case 'pm_export_rapporte':   return res.status(200).json(await exportRapporte(req.body.projekt_id, scope));
       case 'pm_export_rechnungen': return res.status(200).json(await exportRechnungen(req.body.projekt_id, scope));
+      // Bewusst NICHT in PM_ACTIONS: Versenden verlaesst das Haus und bleibt
+      // Master-Sache, genau wie beim Wochenbericht. Der Partner behaelt seinen
+      // Download.
+      case 'pm_export_versenden':  return res.status(200).json(await exportVersenden(req.body, scope));
       case 'pm_datenblatt_save':   return res.status(200).json(await savePmDatenblatt(req.body, scope));
       // ── Feature A: Techniker-Rolle (nur zugewiesene Projekte, Rapport buchen) ──
       case 'tech_projekte':    return res.status(200).json(await getTechProjekte(scope));
@@ -5055,9 +5065,17 @@ async function subProjektDel(b, scope) {
 
 // ── PDF-Export pro Abschnitt (wiederverwendet lib/pdf.buildPdf) ────────────
 // Liefert das PDF als base64 zurück; das Cockpit macht daraus einen Download.
+//
+// Bauen und Ausliefern sind getrennt: baueExportPdf() liefert die Bytes, die
+// drei export*-Wrapper machen daraus die unveraenderte Download-Antwort, und
+// exportVersenden() haengt DIESELBEN Bytes an eine Mail. Ein Dokument, ein
+// Erzeuger — sonst weicht das versendete PDF irgendwann vom geladenen ab.
 function pdfResult(buf, filename) {
   return { ok: true, filename, pdf_base64: Buffer.from(buf).toString('base64') };
 }
+// Absender wie ueberall sonst beim Dokumentversand (lib/mail.js, api/blockaden.js,
+// lib/wochenbericht.js): fix das Buero, nie der eingeloggte Benutzer.
+const EXPORT_ABSENDER = 'George Solutions <info@george-solutions.ch>';
 function chf(n) { return 'CHF ' + Number(n || 0).toLocaleString('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 async function projektHead(projektId) {
@@ -5065,7 +5083,7 @@ async function projektHead(projektId) {
   return (pr && pr[0]) || {};
 }
 
-async function exportMaterial(projektId, scope) {
+async function baueMaterial(projektId, scope) {
   projektId = uuid(projektId);
   await requireOwnedProjekt(projektId, scope);
   const p = await projektHead(projektId);
@@ -5094,10 +5112,14 @@ async function exportMaterial(projektId, scope) {
   blocks.push({ t: 'kv', label: 'Summe Material', value: chf(sum) });
   blocks.push({ t: 'sp', size: 8 });
   blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
-  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Materialliste_${(p.projektnummer || 'projekt')}.pdf`);
+  return {
+    buf: buildPdf({ title: 'George Solutions', blocks }),
+    filename: `Materialliste_${(p.projektnummer || 'projekt')}.pdf`,
+    titel: 'Materialliste', kopf: p, anzahl: mat.length, summe: sum,
+  };
 }
 
-async function exportRapporte(projektId, scope) {
+async function baueRapporte(projektId, scope) {
   projektId = uuid(projektId);
   await requireOwnedProjekt(projektId, scope);
   const p = await projektHead(projektId);
@@ -5161,10 +5183,15 @@ async function exportRapporte(projektId, scope) {
   blocks.push({ t: 'kv', label: 'Total Stunden', value: `${total.toFixed(1)} h` });
   blocks.push({ t: 'sp', size: 8 });
   blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
-  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Arbeitsrapporte_${(p.projektnummer || 'projekt')}.pdf`);
+  return {
+    buf: buildPdf({ title: 'George Solutions', blocks }),
+    filename: `Arbeitsrapporte_${(p.projektnummer || 'projekt')}.pdf`,
+    titel: 'Arbeitsrapporte', kopf: p, anzahl: raps.length, summe: null,
+    zusatz: `${total.toFixed(1)} h`,
+  };
 }
 
-async function exportRechnungen(projektId, scope) {
+async function baueRechnungen(projektId, scope) {
   projektId = uuid(projektId);
   await requireOwnedProjekt(projektId, scope);
   const p = await projektHead(projektId);
@@ -5189,7 +5216,117 @@ async function exportRechnungen(projektId, scope) {
   blocks.push({ t: 'kv', label: 'Gesamtsumme', value: chf(sum) });
   blocks.push({ t: 'sp', size: 8 });
   blocks.push({ t: 'text', text: `Erstellt: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} · George Solutions` });
-  return pdfResult(buildPdf({ title: 'George Solutions', blocks }), `Rechnungen_${(p.projektnummer || 'projekt')}.pdf`);
+  return {
+    buf: buildPdf({ title: 'George Solutions', blocks }),
+    filename: `Rechnungen_${(p.projektnummer || 'projekt')}.pdf`,
+    titel: 'Rechnungs-History', kopf: p, anzahl: rechs.length, summe: sum,
+  };
+}
+
+// Ein Dispatcher fuer alle drei Abschnitte. requireOwnedProjekt steckt in jedem
+// Bauer drin — es ist die einzige Scope-Pruefung dieser Exporte.
+const EXPORT_BAUER = { material: baueMaterial, rapporte: baueRapporte, rechnungen: baueRechnungen };
+
+async function baueExportPdf(kind, projektId, scope) {
+  const bauer = EXPORT_BAUER[String(kind || '')];
+  if (!bauer) throw new Error('Unbekannte Export-Art');
+  return await bauer(projektId, scope);
+}
+
+// Die drei Download-Wrapper. Bestehende Felder unveraendert: { ok, filename,
+// pdf_base64 }. Fuer den Master kommt der Empfaenger-Vorschlag dazu, damit die
+// Pruef-Ansicht das Versandfeld gleich vorbelegen kann — der Partner sieht ihn
+// nicht, er darf in dieser Runde nicht versenden.
+async function exportMitVorschlag(bauer, projektId, scope) {
+  const r = await bauer(projektId, scope);
+  const antwort = pdfResult(r.buf, r.filename);
+  // scope traegt role, kein isMaster (siehe Aufbau im Handler) — hier wird
+  // genau das geprueft, was tatsaechlich gesetzt wird.
+  if (!scope || scope.role !== 'master') return antwort;
+  const vor = await empfaengerVorschlag(projektId);
+  return {
+    ...antwort,
+    empfaenger_vorschlag: vor.liste,
+    empfaenger_herkunft: vor.herkunft,
+    empfaenger_herkunft_text: vor.herkunft ? (EMPFAENGER_HERKUNFT_TEXT[vor.herkunft] || null) : null,
+  };
+}
+async function exportMaterial(projektId, scope)   { return exportMitVorschlag(baueMaterial, projektId, scope); }
+async function exportRapporte(projektId, scope)   { return exportMitVorschlag(baueRapporte, projektId, scope); }
+async function exportRechnungen(projektId, scope) { return exportMitVorschlag(baueRechnungen, projektId, scope); }
+
+// ── Empfaenger fuer einen Projekt-Export ──────────────────────────────────
+// Die Exporte haben keinen Berichtskopf wie der Wochenbericht. Statt eine
+// zweite Kette zu bauen, wird hier nur das Kopf-Objekt zusammengetragen, das
+// empfaengerFuer erwartet — die Reihenfolge selbst liegt weiter in
+// lib/wochenbericht.js. Aendert sie sich dort, aendert sie sich hier mit.
+async function empfaengerVorschlag(projektId, angefragt = null) {
+  const pr = await sbGet(`gs_projekte?id=eq.${projektId}&select=ansprech_email,kunde_id,partner_user_id&limit=1`).catch(() => []);
+  const p = (pr && pr[0]) || {};
+  let kundeEmail = null;
+  if (p.kunde_id) {
+    const kd = await sbGet(`gs_kunden?id=eq.${p.kunde_id}&select=email&limit=1`).catch(() => []);
+    kundeEmail = (kd[0] || {}).email || null;
+  }
+  let partnerEmail = null;
+  if (p.partner_user_id) {
+    const pp = await sbGet(`gs_partner_profil?partner_user_id=eq.${p.partner_user_id}&select=email&limit=1`).catch(() => []);
+    partnerEmail = (pp[0] || {}).email || null;
+  }
+  return empfaengerFuer({
+    angefragt,
+    kopfRow: null,
+    daten: { kopf: { ansprech_email: p.ansprech_email || null, kunde_email: kundeEmail, partner_email: partnerEmail } },
+  });
+}
+
+// ── Export versenden (Master) ─────────────────────────────────────────────
+// Baut DASSELBE PDF wie der Download (baueExportPdf) und haengt es an eine
+// Mail. Kein zweiter Erzeuger, kein zweites Layout.
+//
+// Wie beim Wochenbericht gilt: nur ein von Resend bestaetigtes ok:true ist ein
+// Versand. Ein Fehlschlag darf nie wie Erfolg aussehen.
+//
+// Anders als der Wochenbericht wird hier NICHTS eingefroren und nichts
+// protokolliert: diese Exporte haben keinen Berichtskopf in der DB, und dafuer
+// eine Tabelle anzulegen waere eine Migration — die gehoert nicht in diese
+// Runde. Die Mail sagt deshalb ausdruecklich, dass sie einen Stand abbildet.
+async function exportVersenden(b, scope) {
+  const kind = String(b.kind || '');
+  if (!EXPORT_BAUER[kind]) return { ok: false, error: 'Unbekannte Export-Art' };
+  const projektId = uuid(b.projekt_id);
+  // Scope-Pruefung passiert im Bauer (requireOwnedProjekt) — vor jedem Lesen.
+  const r = await baueExportPdf(kind, projektId, scope);
+
+  const { liste, herkunft, ungueltig } = await empfaengerVorschlag(projektId, b.empfaenger);
+  if (!liste.length) {
+    return {
+      ok: false, versendet: false,
+      error: ungueltig
+        ? 'Die eingetragene Empfängeradresse ist keine gültige E-Mail. Bitte korrigieren — es wurde nichts versendet.'
+        : 'Keine gültige Empfängeradresse. Bitte Empfänger angeben — oder eine E-Mail beim Projekt (Ansprechperson), beim Kunden oder im Partnerprofil hinterlegen.',
+    };
+  }
+
+  const p = r.kopf || {};
+  const betreff = `${r.titel} · ${p.name || 'Projekt'}${p.projektnummer ? ' · ' + p.projektnummer : ''}`;
+  const mail = await sendResendEmail({
+    to: liste,
+    from: EXPORT_ABSENDER,
+    subject: betreff,
+    html: exportEmailHtml({
+      titel: r.titel, projektName: p.name, projektnummer: p.projektnummer,
+      anzahl: r.anzahl, summe: r.summe, zusatz: r.zusatz,
+    }),
+    attachments: [{ filename: r.filename, content: Buffer.from(r.buf).toString('base64') }],
+  });
+  const erfolg = !!(mail && mail.ok);
+  return {
+    ok: erfolg, versendet: erfolg,
+    empfaenger: liste, empfaenger_herkunft: herkunft,
+    filename: r.filename, anzahl: r.anzahl,
+    error: erfolg ? null : ((mail && (mail.error || (mail.skipped ? 'Mailversand ist nicht konfiguriert (RESEND_API_KEY fehlt).' : null))) || 'Versand fehlgeschlagen'),
+  };
 }
 
 // Storage-Helfer (Muster aus api/projectflow.js).

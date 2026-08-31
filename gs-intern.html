@@ -2047,8 +2047,17 @@ function pmDeleteDatei(path){
     toast('Gelöscht');
   }).catch(function(){ toast('Fehler'); });
 }
-// PDF-Export eines Abschnitts (Material/Rapporte/Rechnungen) → base64 → Download.
+// PDF-Export eines Abschnitts (Material/Rapporte/Rechnungen).
 // Nutzt die bestehende PDF-Engine lib/pdf.js serverseitig (kein neuer Renderer).
+//
+// Der Export fuehrt in eine PRUEF-ANSICHT: erst ansehen, dann herunterladen
+// ODER versenden. Kein Versandweg umgeht diese Ansicht — dieselbe Regel wie
+// beim Wochenbericht (wbVersandForm) und bei der Angebotskette aus Runde 8a.
+// Ein Dokument, das das Haus verlaesst, muss vorher jemand gesehen haben.
+var PM_EXPORT_ART={pm_export_material:'material',pm_export_rapporte:'rapporte',pm_export_rechnungen:'rechnungen'};
+var _pxUrl=null, _px=null;
+function pxFree(){ if(_pxUrl){ try{ URL.revokeObjectURL(_pxUrl); }catch(e){} _pxUrl=null; } }
+
 function pmExportPdf(action){
   toast('Erstelle PDF…');
   api(action,{projekt_id:_pmProjektId}).then(function(d){
@@ -2056,13 +2065,64 @@ function pmExportPdf(action){
     try{
       var bin=atob(d.pdf_base64), len=bin.length, arr=new Uint8Array(len);
       for(var i=0;i<len;i++) arr[i]=bin.charCodeAt(i);
-      var blob=new Blob([arr],{type:'application/pdf'}), url=URL.createObjectURL(blob);
-      var a=document.createElement('a'); a.href=url; a.download=d.filename||'export.pdf';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(function(){ URL.revokeObjectURL(url); },4000);
-      toast('PDF geladen');
-    }catch(e){ toast('Download fehlgeschlagen'); }
+      pxFree();
+      _pxUrl=URL.createObjectURL(new Blob([arr],{type:'application/pdf'}));
+      _px={art:PM_EXPORT_ART[action]||'',filename:d.filename||'export.pdf',
+           liste:d.empfaenger_vorschlag||[],herkunft:d.empfaenger_herkunft_text||null};
+      pxSheet();
+    }catch(e){ toast('PDF konnte nicht geoeffnet werden'); }
   }).catch(function(){ toast('Fehler'); });
+}
+
+function pxSheet(){
+  if(!_px) return;
+  var vor=(_px.liste&&_px.liste.length)?_px.liste.join(', '):'';
+  var herk=_px.herkunft||'';
+  // Ohne Art (unbekannte Action) gibt es keinen Versand — nur den Download.
+  var versand=_px.art
+    ? ('<div class="cc-sec" style="margin-top:14px">Versand</div>'+
+       '<div class="meta" style="margin-bottom:8px"><span>Der Export geht als PDF an die Empfänger. '+
+         'Er bildet den <strong>heutigen Stand</strong> ab und wird nicht eingefroren.</span></div>'+
+       '<input id="px-empf" class="field" style="width:100%" type="text" inputmode="email" autocapitalize="off" '+
+         'placeholder="bauleiter@firma.ch" value="'+esc(vor)+'"/>'+
+       (vor?'<div class="meta" style="margin-top:6px"><span>vorbelegt '+esc(herk)+'</span></div>'
+           :'<div class="meta" style="margin-top:6px"><span>Weder beim Projekt noch beim Kunden noch im Partnerprofil ist eine E-Mail hinterlegt — bitte Adresse eintragen.</span></div>')+
+       '<button class="btn btn-gold" id="px-send" style="margin-top:12px">✉️ Jetzt versenden</button>')
+    : '';
+  openSheet('<h3>'+esc(_px.filename)+'</h3>'+
+    '<div class="meta" style="margin-bottom:10px"><span>Bitte vor dem Versand ansehen.</span></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<a class="chip on" href="'+_pxUrl+'" target="_blank" rel="noopener" style="text-decoration:none">📄 Ansehen</a>'+
+      '<a class="chip" href="'+_pxUrl+'" download="'+esc(_px.filename)+'" style="text-decoration:none">⬇ Herunterladen</a>'+
+    '</div>'+
+    versand+
+    '<div id="px-out"></div>'+
+    '<button class="btn ghost" id="px-close" style="margin-top:12px">Schliessen</button>');
+  $('px-close').onclick=function(){ pxFree(); closeSheet(); };
+  var sb=$('px-send'); if(sb) sb.onclick=pxSend;
+}
+
+function pxSend(){
+  if(!_px||!_px.art) return;
+  var raw=(($('px-empf')||{}).value||'').trim();
+  if(!raw){ toast('Bitte mindestens eine Empfängeradresse eintragen'); return; }
+  var btn=$('px-send'); if(btn){ btn.disabled=true; btn.textContent='Sendet…'; }
+  api('pm_export_versenden',{kind:_px.art,projekt_id:_pmProjektId,empfaenger:raw}).then(function(d){
+    if(btn){ btn.disabled=false; btn.textContent='✉️ Jetzt versenden'; }
+    var out=$('px-out'); if(!out) return;
+    d=d||{};
+    if(!d.ok){
+      out.innerHTML='<div class="meta" style="margin-top:10px"><span style="color:#ff8f8f">✗ '+esc(d.error||'Versand fehlgeschlagen')+'</span></div>';
+      toast('Versand fehlgeschlagen');
+      return;
+    }
+    out.innerHTML='<div class="meta" style="margin-top:10px"><span style="color:#3dd68c">✓ Versendet an '+
+      esc((d.empfaenger||[]).join(', '))+'</span></div>';
+    toast('✓ '+esc(_px.filename)+' versendet');
+  }).catch(function(){
+    if(btn){ btn.disabled=false; btn.textContent='✉️ Jetzt versenden'; }
+    toast('Verbindungsfehler');
+  });
 }
 function pmDel(action,id){ api(action,{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
 function pmUnassignTech(id){ api('pm_tech_unassign',{id:id}).then(function(d){ if(d&&d.notMigrated){ toast('Noch nicht migriert'); return; } loadProjekt(); }).catch(function(){ toast('Fehler'); }); }
@@ -3502,13 +3562,17 @@ function svcWhatsApp(a,d){
 }
 
 var _wbProjekte=[], _wbSel=null, _wbDaten=null, _wbBlobUrl=null;
+// Empfaenger-Vorschlag samt Herkunft, wie ihn der Server ueber empfaengerFuer
+// berechnet hat. Bewusst NICHT hier im Client nachgebaut: sonst zeigt die
+// Maske eine andere Adresse an, als der Versand nimmt.
+var _wbEmpf={liste:[],herkunft:null,text:null};
 // Vorbelegung aus dem Projektdetail ("📄 Wochenbericht"-Knopf). Bewusst getrennt
 // von _wbSel: _wbSel bedeutet "Bericht wurde erzeugt" und hängt an Vorschau,
 // PDF und Versand — eine blosse Vorauswahl darf das nicht auslösen.
 var _wbVorwahl=null;
 function wbOeffnenFuerProjekt(projektId){
   _wbVorwahl=projektId||null;
-  _wbSel=null; _wbDaten=null;
+  _wbSel=null; _wbDaten=null; _wbEmpf={liste:[],herkunft:null,text:null};
   go('wochenberichte');
 }
 
@@ -3523,7 +3587,7 @@ function renderWochenberichte(){
     '<div id="wb-liste"></div>';
   wireBack();
   wbFreeBlob();
-  _wbDaten=null;
+  _wbDaten=null; _wbEmpf={liste:[],herkunft:null,text:null};
   api('pm_projekte').then(function(d){
     if(!$('wb-picker')) return;
     _wbProjekte=(d&&d.projekte)||[];
@@ -3587,6 +3651,7 @@ function wbVorschau(){
     if(d&&d.notMigrated){ $('wb-vorschau').innerHTML='<div class="empty" style="padding:12px;font-size:12.5px">'+esc(d.error)+'</div>'; return; }
     if(!d||d.error){ $('wb-vorschau').innerHTML='<div class="empty">'+esc((d&&d.error)||'Fehler')+'</div>'; return; }
     _wbDaten=d.daten;
+    _wbEmpf={liste:d.empfaenger_vorschlag||[],herkunft:d.empfaenger_herkunft||null,text:d.empfaenger_herkunft_text||null};
     wbPaintVorschau(d.daten);
   }).catch(function(){ var el=$('wb-vorschau'); if(el) el.innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
 }
@@ -3718,7 +3783,11 @@ function wbPdf(){
 // ── Versand ────────────────────────────────────────────────────────────────
 function wbVersandForm(){
   var s=_wbSel; if(!s||!_wbDaten) return;
-  var vor=(_wbDaten.kopf&&_wbDaten.kopf.ansprech_email)||'';
+  // Vorbelegung kommt vom Server (dieselbe Kette wie der Versand). Fallback auf
+  // das alte Feld nur, falls eine gecachte Antwort ohne Vorschlag zurueckkommt.
+  var vor=(_wbEmpf.liste&&_wbEmpf.liste.length)?_wbEmpf.liste.join(', ')
+         :((_wbDaten.kopf&&_wbDaten.kopf.ansprech_email)||'');
+  var herk=_wbEmpf.text||'aus der Projekt-Ansprechperson';
   var offen=(_wbDaten.einreichstatus||[]).filter(function(e){ return e.status!=='eingereicht'; });
   $('wb-versand').innerHTML='<div class="cc-sec">Versand</div>'+
     '<div class="lcard">'+
@@ -3729,8 +3798,8 @@ function wbVersandForm(){
       '<label class="cc-sec" style="margin-top:0">Empfänger (mehrere mit Komma)</label>'+
       '<input id="wb-empf" class="field" style="width:100%" type="text" inputmode="email" autocapitalize="off" '+
         'placeholder="bauleiter@firma.ch" value="'+esc(vor)+'"/>'+
-      (vor?'<div class="meta" style="margin-top:6px"><span>vorbelegt aus der Projekt-Ansprechperson</span></div>'
-          :'<div class="meta" style="margin-top:6px"><span>Beim Projekt ist keine Ansprechperson mit E-Mail hinterlegt — bitte Adresse eintragen.</span></div>')+
+      (vor?'<div class="meta" style="margin-top:6px"><span>vorbelegt '+esc(herk)+'</span></div>'
+          :'<div class="meta" style="margin-top:6px"><span>Weder beim Projekt noch beim Kunden noch im Partnerprofil ist eine E-Mail hinterlegt — bitte Adresse eintragen.</span></div>')+
       '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
         '<button class="chip on" id="wb-send">✉️ Jetzt versenden</button>'+
         '<button class="chip" id="wb-send-abort">Abbrechen</button>'+
