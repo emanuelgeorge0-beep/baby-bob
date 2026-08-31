@@ -732,7 +732,7 @@ function buildNav(){
   }).join('');
   Array.prototype.forEach.call($('nav').children,function(b){ b.onclick=function(){ go(b.getAttribute('data-v')); }; });
 }
-var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','wochenberichte','wochenpaket','taetigkeitenkatalog','service'];
+var MEHR_VIEWS=['mehr','jarvis','marketing','todos','margen','saeulen','blockaden','users','projekte','lizenz','subanfragen','wochenrapporte','wochenberichte','wochenpaket','versandhistorie','taetigkeitenkatalog','service'];
 function go(v){
   curView=v;
   // Sub-Module zählen zum "Mehr"-Tab (Nav bleibt dort markiert).
@@ -756,6 +756,7 @@ function go(v){
   else if(v==='wochenrapporte') renderWochenrapporte();
   else if(v==='wochenpaket') renderWochenpaket();
   else if(v==='wochenberichte') renderWochenberichte();
+  else if(v==='versandhistorie') renderVersandhistorie();
   else if(v==='taetigkeitenkatalog') renderTaetigkeitenkatalog();
   else if(v==='service') renderService();
 }
@@ -1224,6 +1225,7 @@ function renderMehr(){
     {v:'wochenrapporte',ic:'📆',t:'Wochenrapporte',d:'Alle Techniker, alle Projekte – Stunden, Spesen, Material, Fotos pro KW'},
     {v:'wochenberichte',ic:'📄',t:'Wochenbericht',d:'Projekt × KW für den Bauleiter — Tagesverlauf, Tätigkeiten, Fotos. Vorschau, PDF, Versand'},
     {v:'wochenpaket',ic:'📦',t:'Wochenpaket',d:'Kunde × KW — Wochenberichte, Fotodokumentationen und Stundenblätter auf einmal erzeugen und herunterladen'},
+    {v:'versandhistorie',ic:'📬',t:'Versandhistorie',d:'Jeder Versand: wann, welcher Bericht, welches Projekt, an wen, von wem, gelungen oder nicht'},
     {v:'service',ic:'🛠️',t:'Serviceaufträge',d:'Disposition: neue Aufträge annehmen, Techniker zuweisen, Status verfolgen, Servicebericht erzeugen'},
     {v:'taetigkeitenkatalog',ic:'🗂️',t:'Tätigkeitskatalog',d:'Katalog für die Tätigkeitsauswahl im Wochenrapport pflegen (anlegen, umbenennen, sortieren, deaktivieren)'},
     {v:'users',ic:'👥',t:'Userverwaltung',d:'Partner & Techniker anlegen, Passwörter, aktivieren/deaktivieren'},
@@ -3678,6 +3680,97 @@ function wbOeffnenFuerProjekt(projektId){
   _wbVorwahl=projektId||null;
   _wbSel=null; _wbDaten=null; _wbEmpf={liste:[],herkunft:null,text:null};
   go('wochenberichte');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// VERSANDHISTORIE — was ist wann an wen hinausgegangen?
+// ══════════════════════════════════════════════════════════════════════════
+// Reine Ansicht. Datenquelle ist ausschliesslich versand_protokoll; hier wird
+// nichts nachgehalten und nichts gezaehlt. Die Sichtbarkeitsregel (Master
+// sieht alles, ein Partner nur seine eigenen Projekte) setzt der Server durch
+// — diese Ansicht zeigt nur, was sie geliefert bekommt.
+var _vhFilter={projekt_id:'',von:'',bis:''}, _vhProjekte=[];
+
+function renderVersandhistorie(){
+  $('view').innerHTML='<h2><span class="acc">📬</span> Versandhistorie</h2>'+backRow()+
+    '<div class="usub" style="color:var(--muted);font-size:13px;margin-bottom:14px">'+
+      'Jeder Versand eines Wochen- oder Sammelberichts, neueste zuerst. Aus dem Versandprotokoll '+
+      'der Berichte — nichts wird zusätzlich mitgeschrieben.</div>'+
+    '<div id="vh-filter"></div><div id="vh-liste">'+skeletonCards(3)+'</div>';
+  wireBack();
+  vhLaden();
+}
+
+function vhLaden(){
+  var l=$('vh-liste'); if(l) l.innerHTML=skeletonCards(3);
+  wbApi('versand_historie',{
+    projekt_id:_vhFilter.projekt_id||null,
+    von:_vhFilter.von||null, bis:_vhFilter.bis||null,
+  }).then(function(d){
+    if(!$('vh-liste')) return;
+    if(!d||d.error){ $('vh-liste').innerHTML='<div class="empty">'+esc((d&&d.error)||'Historie nicht ladbar')+'</div>'; return; }
+    // Die Projektliste kommt vom Server und enthaelt nur Erlaubtes. Sie wird
+    // NICHT ueberschrieben, wenn gerade nach einem Projekt gefiltert ist —
+    // sonst bliebe im Filter nur noch das eine Projekt uebrig.
+    if(!_vhFilter.projekt_id) _vhProjekte=d.projekte||[];
+    vhPaint(d);
+  }).catch(function(){
+    if($('vh-liste')) $('vh-liste').innerHTML='<div class="empty">Verbindungsfehler.</div>';
+  });
+}
+
+function vhPaint(d){
+  var vs=d.vorgaenge||[];
+  var opts='<option value="">Alle Projekte</option>'+_vhProjekte.map(function(p){
+    return '<option value="'+esc(p.id)+'"'+(_vhFilter.projekt_id===p.id?' selected':'')+'>'+
+      esc((p.projektnummer?(p.projektnummer+' · '):'')+(p.name||'Projekt'))+'</option>';
+  }).join('');
+  $('vh-filter').innerHTML='<div class="lcard" style="margin-bottom:12px">'+
+    '<select id="vh-p" class="field" style="width:100%">'+opts+'</select>'+
+    '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'+
+      '<input id="vh-von" class="field" type="date" style="flex:1;min-width:130px" value="'+esc(_vhFilter.von)+'"/>'+
+      '<input id="vh-bis" class="field" type="date" style="flex:1;min-width:130px" value="'+esc(_vhFilter.bis)+'"/>'+
+      '<button class="chip" id="vh-reset">Filter zurücksetzen</button>'+
+    '</div>'+
+    '<div class="meta" style="margin-top:8px"><span>'+vs.length+' von '+(d.anzahl||0)+' Vorgängen</span>'+
+      (d.sichtbarkeit==='partner'?'<span class="dot">nur eigene Projekte</span>':'')+'</div>'+
+    (d.hinweis?('<div class="meta" style="margin-top:6px"><span>'+esc(d.hinweis)+'</span></div>'):'')+
+  '</div>';
+  $('vh-p').onchange=function(){ _vhFilter.projekt_id=this.value; vhLaden(); };
+  $('vh-von').onchange=function(){ _vhFilter.von=this.value; vhLaden(); };
+  $('vh-bis').onchange=function(){ _vhFilter.bis=this.value; vhLaden(); };
+  $('vh-reset').onclick=function(){ _vhFilter={projekt_id:'',von:'',bis:''}; vhLaden(); };
+
+  if(!vs.length){
+    $('vh-liste').innerHTML='<div class="empty">Für diese Auswahl ist noch kein Bericht versendet worden.</div>';
+    return;
+  }
+  $('vh-liste').innerHTML='<div class="list">'+vs.map(function(v){
+    var farbe=v.ok?'#3dd68c':'#ff8f8f';
+    var kb=v.pdf_bytes?(Math.round(v.pdf_bytes/1024)+' KB'):'—';
+    return '<div class="lcard"><div class="top">'+
+        '<div class="nm">'+esc(v.typ_text||'Bericht')+' · '+esc(v.sammel_nr||v.bericht_nr||'')+'</div>'+
+        '<span class="src-tag" style="border-color:'+farbe+';color:'+farbe+'">'+(v.ok?'versendet':'fehlgeschlagen')+'</span>'+
+      '</div>'+
+      '<div class="meta" style="margin-top:4px"><span>'+esc(vhZeit(v.am))+'</span>'+
+        '<span class="dot">'+esc((v.projektnummer?(v.projektnummer+' · '):'')+(v.projekt||'Projekt'))+'</span>'+
+        '<span class="dot">KW '+esc(v.woche)+'/'+esc(v.jahr)+'</span></div>'+
+      '<div class="meta" style="margin-top:4px"><span>an '+esc((v.empfaenger||[]).join(', ')||'—')+'</span>'+
+        '<span class="dot">von '+esc(v.von_name||'unbekannt')+'</span>'+
+        '<span class="dot">'+esc(kb)+'</span></div>'+
+      (v.sammel_nr?('<div class="meta" style="margin-top:4px"><span>Teil des Sammelberichts '+esc(v.sammel_nr)+
+        ' ('+esc(v.sammel_projekte||'?')+' Projekte) · Einzelbericht '+esc(v.bericht_nr||'')+'</span></div>'):'')+
+      (v.ok?'':('<div class="meta" style="margin-top:4px"><span style="color:#ff8f8f">'+esc(v.fehler||'unbekannt')+'</span></div>'))+
+    '</div>';
+  }).join('')+'</div>';
+}
+
+function vhZeit(iso){
+  if(!iso) return '—';
+  var d=new Date(iso);
+  if(isNaN(d)) return String(iso).slice(0,16).replace('T',' ');
+  var z=function(n){ return (n<10?'0':'')+n; };
+  return z(d.getDate())+'.'+z(d.getMonth()+1)+'.'+d.getFullYear()+' '+z(d.getHours())+':'+z(d.getMinutes());
 }
 
 function renderWochenberichte(){
