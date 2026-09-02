@@ -309,6 +309,25 @@
 
   .cc-sec{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:700;margin:6px 2px 11px;display:flex;align-items:center;gap:8px;}
   .cc-sec::after{content:'';flex:1;height:1px;background:var(--line);}
+  /* Phase 6 — "ohne Tageszuordnung" als Knopf. Volle Breite, 52 px hoch,
+     kein Hover-Effekt: er wird am Handy mit dem Daumen getroffen. */
+  .wb-oz-btn{display:block;width:100%;margin-top:10px;padding:11px 12px;text-align:left;
+    background:rgba(240,161,50,.10);border:1px solid rgba(240,161,50,.42);border-radius:11px;
+    color:#f0a132;font-family:inherit;font-size:13px;font-weight:800;line-height:1.4;
+    min-height:52px;cursor:pointer;}
+  .wb-oz-btn small{display:block;margin-top:3px;font-weight:600;color:var(--muted);font-size:11.5px;}
+  .wb-oz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:8px;}
+  .wb-oz-cell{position:relative;display:block;border:2px solid var(--line);border-radius:10px;
+    overflow:hidden;background:var(--card);cursor:pointer;min-height:96px;}
+  .wb-oz-cell.on{border-color:var(--gold);}
+  .wb-oz-cell img{display:block;width:100%;height:78px;object-fit:cover;}
+  .wb-oz-cell input{position:absolute;top:6px;left:6px;width:22px;height:22px;accent-color:var(--gold);z-index:2;}
+  .wb-oz-cell .wb-oz-kein{display:flex;align-items:center;justify-content:center;height:78px;
+    font-size:11px;color:var(--muted);}
+  .wb-oz-cell .wb-oz-vid{position:absolute;top:6px;right:6px;font-size:11px;color:var(--gold);
+    background:rgba(0,0,0,.6);border-radius:6px;padding:1px 5px;}
+  .wb-oz-cell .wb-oz-name{display:block;padding:4px 6px;font-size:10.5px;color:var(--muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   /* Phase 5 — Zusammenfassung ueber dem Erzeugen-Knopf. Gross genug, um sie am
      Handy im Vorbeigehen zu lesen; sie ist die letzte Kontrolle vor dem PDF. */
   .wr-zsfg{margin-top:10px;padding:9px 11px;border:1px solid rgba(201,169,97,.32);
@@ -3958,11 +3977,27 @@ function wbPaintVorschau(dt){
         }).join('')+'</div>';
     }).join('')+'</div>'):'<div class="empty">In dieser Woche wurde auf dieses Projekt nichts gebucht.</div>');
 
+  /* Phase 6 — "ohne Tageszuordnung" ist ab jetzt ein Knopf, kein Befund.
+     Zwei Zahlen koennen dahinterstehen:
+       fotos_ohne_tag        haengen am Projekt, erscheinen in DIESER Woche,
+                             tragen aber keinen Tag
+       fotos_ohne_zuordnung  erscheinen in gar keiner Woche
+     Beide fuehren an denselben Ort: Bild antippen, Tag waehlen, fertig. Danach
+     stehen sie im Bericht. Vorher blieb dem Master nur der Umweg ueber die
+     Projektgalerie in einem anderen Reiter — den ging niemand. */
+  var ozn=(dt.fotos_ohne_zuordnung&&dt.fotos_ohne_zuordnung.anzahl)||0;
+  var otn=(dt.fotos_ohne_tag||[]).length;
+  var offeneMedien=ozn+otn;
   var fotoHtml='<div class="cc-sec">Fotos</div><div class="lcard"><div class="meta"><span>'+
     (dt.fotos_vorhanden
       ? (dt.fotos.length+' Foto'+(dt.fotos.length===1?'':'s')+' erfasst'+(dt.fotos.length>6?(' — 6 kommen ins PDF, '+(dt.fotos.length-6)+' werden verwiesen'):''))
       : 'Für diesen Zeitraum liegen keine Fotos vor. Das steht auch so im Bericht.')+
-    '</span></div></div>';
+    '</span></div>'+
+    (offeneMedien
+      ? ('<button class="wb-oz-btn" id="wb-oz-btn">'+offeneMedien+' Medium'+(offeneMedien===1?'':'en')+' ohne Tageszuordnung'+
+          '<small>Antippen und einem Tag zuweisen — danach stehen sie im Bericht.</small></button>')
+      : '')+
+    '</div><div id="wb-oz-panel"></div>';
 
   var matHtml=dt.material_vorhanden
     ? ('<div class="cc-sec">Material ('+dt.material.length+')</div><div class="lcard"><div class="meta"><span>'+
@@ -3987,6 +4022,117 @@ function wbPaintVorschau(dt){
     estHtml+tageHtml+matHtml+fotoHtml+hinweisHtml+aktionen;
   $('wb-pdf').onclick=wbPdf;
   $('wb-send-open').onclick=wbVersandForm;
+  var oz=$('wb-oz-btn'); if(oz) oz.onclick=wbOzOeffnen;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PHASE 6 — Fehlende Tageszuordnung direkt aus der Vorschau zuweisen
+   ─────────────────────────────────────────────────────────────────────────
+   Gezeigt werden ausschliesslich Medien DIESES Projekts ohne tagesrapport_id,
+   und als Ziel ausschliesslich Tageszeilen desselben Projekts — der Server
+   prueft beides noch einmal (pm_medien_tag). Es wird nichts geraten: created_at
+   ist der Hochladezeitpunkt, nicht der Aufnahmetag. Der Master waehlt.
+
+   Die Tage der angezeigten Woche stehen oben, alle uebrigen darunter: fast
+   immer ist es einer aus dieser Woche, aber ein Bild kann auch nachtraeglich
+   auf einen frueheren Tag gehoeren.
+   ══════════════════════════════════════════════════════════════════════════ */
+var _wbOz={medien:[],tage:[],sel:{}};
+function wbOzPanel(html){
+  var box=$('wb-oz-panel'); if(!box) return;
+  box.innerHTML=html?('<div class="lcard" style="padding:12px;margin-top:8px">'+html+'</div>'):'';
+}
+function wbOzOeffnen(){
+  var s=_wbSel; if(!s) return;
+  wbOzPanel('<div class="empty" style="padding:12px">Lädt Medien und Tage…</div>');
+  Promise.all([
+    api('medien_list',{projekt_id:s.projekt_id}),
+    api('pm_tage_liste',{projekt_id:s.projekt_id}),
+  ]).then(function(r){
+    var alle=(r[0]&&r[0].medien)||[];
+    _wbOz.medien=alle.filter(function(m){ return !m.tagesrapport_id; });
+    _wbOz.tage=(r[1]&&r[1].tage)||[];
+    _wbOz.sel={};
+    /* Alles vorausgewaehlt: der Regelfall ist "die gehoeren alle in diese
+       Woche". Wer einzelne ausnehmen will, haekelt sie ab. */
+    _wbOz.medien.forEach(function(m){ _wbOz.sel[m.id]=true; });
+    wbOzPaint();
+  }).catch(function(){ wbOzPanel('<div class="empty" style="padding:12px">Ladefehler.</div>'); });
+}
+function wbOzPaint(){
+  var s=_wbSel; if(!s) return;
+  if(!_wbOz.medien.length){
+    wbOzPanel('<div class="cc-sec" style="margin-top:0">Ohne Tageszuordnung</div>'+
+      '<div class="empty" style="padding:12px">Es hängt kein Medium mehr ohne Tag an dieser Baustelle.</div>'+
+      '<div style="margin-top:10px"><button class="chip" onclick="wbOzPanel(\'\')">Schliessen</button></div>');
+    return;
+  }
+  if(!_wbOz.tage.length){
+    wbOzPanel('<div class="cc-sec" style="margin-top:0">Ohne Tageszuordnung</div>'+
+      '<div class="empty" style="padding:12px">Auf dieser Baustelle ist noch keine Tageszeile erfasst. '+
+      'Erst wenn es einen Tag gibt, kann ein Medium ihm zugeordnet werden.</div>'+
+      '<div style="margin-top:10px"><button class="chip" onclick="wbOzPanel(\'\')">Schliessen</button></div>');
+    return;
+  }
+  var n=Object.keys(_wbOz.sel).length;
+  var dieseWoche=_wbOz.tage.filter(function(t){ return t.jahr===s.jahr&&t.woche===s.woche; });
+  var andere=_wbOz.tage.filter(function(t){ return !(t.jahr===s.jahr&&t.woche===s.woche); });
+  var opt=function(t){
+    var lbl=deDate(t.datum)+(t.stunden?(' · '+Number(t.stunden).toFixed(2)+' h'):'')+(t.gewerk?(' · '+t.gewerk):'')+(t.techniker?(' · '+t.techniker):'');
+    return '<option value="'+esc(t.id)+'">'+esc(lbl)+'</option>';
+  };
+  var opts=(dieseWoche.length?('<optgroup label="KW '+esc(s.woche)+'/'+esc(s.jahr)+'">'+dieseWoche.map(opt).join('')+'</optgroup>'):'')+
+           (andere.length?('<optgroup label="Andere Wochen">'+andere.map(opt).join('')+'</optgroup>'):'');
+  var kacheln=_wbOz.medien.map(function(m){
+    var an=!!_wbOz.sel[m.id];
+    var bild=m.thumbnail_url||m.url||'';
+    return '<label class="wb-oz-cell'+(an?' on':'')+'">'+
+      '<input type="checkbox" data-wboz="'+esc(m.id)+'"'+(an?' checked':'')+'>'+
+      (bild?('<img src="'+esc(bild)+'" loading="lazy" alt="">'):'<span class="wb-oz-kein">kein Bild</span>')+
+      (m.medientyp==='video'?'<span class="wb-oz-vid">▶</span>':'')+
+      '<span class="wb-oz-name">'+esc(m.dateiname||'Datei')+'</span>'+
+    '</label>';
+  }).join('');
+  wbOzPanel(
+    '<div class="cc-sec" style="margin-top:0">Ohne Tageszuordnung ('+_wbOz.medien.length+')</div>'+
+    '<div class="wb-oz-grid">'+kacheln+'</div>'+
+    '<div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap">'+
+      '<button class="chip" id="wb-oz-all">Alle</button>'+
+      '<button class="chip" id="wb-oz-none">Keines</button>'+
+    '</div>'+
+    '<label style="display:block">Tag<select id="wb-oz-tag" style="width:100%">'+opts+'</select></label>'+
+    '<div class="usub" style="color:var(--muted);font-size:12px;margin-top:6px">'+
+      'Nach dem Zuordnen erscheinen die Medien im Bericht der Woche, zu der der gewählte Tag gehört.</div>'+
+    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+      '<button class="chip" onclick="wbOzPanel(\'\')">Abbrechen</button>'+
+      '<button class="chip" style="border-color:var(--gold);color:var(--gold)" id="wb-oz-go"'+(n?'':' disabled')+'>'+
+        'Zuordnen ('+n+')</button>'+
+    '</div>');
+  Array.prototype.forEach.call($('wb-oz-panel').querySelectorAll('[data-wboz]'),function(c){
+    c.onchange=function(){
+      var id=c.getAttribute('data-wboz');
+      if(c.checked) _wbOz.sel[id]=true; else delete _wbOz.sel[id];
+      wbOzPaint();
+    };
+  });
+  var ba=$('wb-oz-all');  if(ba) ba.onclick=function(){ _wbOz.sel={}; _wbOz.medien.forEach(function(m){ _wbOz.sel[m.id]=true; }); wbOzPaint(); };
+  var bn=$('wb-oz-none'); if(bn) bn.onclick=function(){ _wbOz.sel={}; wbOzPaint(); };
+  var go=$('wb-oz-go');   if(go) go.onclick=wbOzZuordnen;
+}
+function wbOzZuordnen(){
+  var s=_wbSel; if(!s) return;
+  var ids=Object.keys(_wbOz.sel);
+  if(!ids.length){ toast('Kein Medium ausgewählt'); return; }
+  var tagId=($('wb-oz-tag')||{}).value;
+  if(!tagId){ toast('Bitte einen Tag wählen'); return; }
+  var go=$('wb-oz-go'); if(go){ go.disabled=true; go.textContent='Ordnet zu…'; }
+  api('pm_medien_tag',{projekt_id:s.projekt_id,medien_ids:ids,tagesrapport_id:tagId}).then(function(r){
+    if(!r||r.error){ if(go){ go.disabled=false; go.textContent='Zuordnen ('+ids.length+')'; } toast((r&&r.error)||'Zuordnung fehlgeschlagen'); return; }
+    toast(r.anzahl+' Medium'+(r.anzahl===1?'':'en')+' zugeordnet — Vorschau wird neu geladen');
+    /* Neu laden, nicht nur das Panel schliessen: die Zahlen im Bericht aendern
+       sich, und genau das soll der Master sehen. */
+    wbVorschau();
+  }).catch(function(){ if(go){ go.disabled=false; go.textContent='Zuordnen ('+ids.length+')'; } toast('Verbindungsfehler'); });
 }
 
 // ── PDF: erzeugen, ansehen, herunterladen ──────────────────────────────────

@@ -50,6 +50,12 @@
 //     5.3  der Server liefert je Projekt Stunden, Fotos und Videos
 //     5.4  die Zusammenfassungszeile stimmt vor und nach dem Abwaehlen
 //     5.5  Abwesenheitsstunden stehen nicht in der Wochensumme
+//   Phase 6 — Fehlende Tageszuordnung zuweisen
+//     6.1  die Vorschau meldet die Medien ohne Tageszuordnung
+//     6.2  der Hinweis ist in der Oberflaeche antippbar und oeffnet die Zuweisung
+//     6.3  angeboten werden nur Medien und Tage DESSELBEN Projekts
+//     6.4  nach der Zuweisung erscheint das Medium im erzeugten Bericht
+//     6.5  ein fremder Tag wird abgewiesen
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://attrappe.supabase.test';
 process.env.SUPABASE_KEY = 'test-service-key-fuer-die-attrappe';
@@ -63,6 +69,11 @@ const P2 = '22222222-2222-2222-2222-222222222222';
 const WR = '99999999-9999-9999-9999-999999999999';
 const JAHR = 2026, WOCHE = 36;
 const NR = { [P1]: '60060.00', [P2]: '60133.00' };
+// Medien-ids muessen echte UUIDs sein — der Server prueft sie mit uuid().
+const OZ1 = 'aaaa1111-0000-0000-0000-000000000001';
+const OZ2 = 'aaaa1111-0000-0000-0000-000000000002';
+const OZF = 'bbbb2222-0000-0000-0000-000000000001';
+const OZX = 'cccc3333-0000-0000-0000-000000000001';
 // Montag der KW 36/2026 — alle Testdaten liegen in dieser Woche.
 const MO = '2026-08-31', DI = '2026-09-01', MI = '2026-09-02', DO = '2026-09-03';
 
@@ -704,11 +715,101 @@ async function phase5() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 6 — Fehlende Tageszuordnung zuweisen
+// ═══════════════════════════════════════════════════════════════════════════
+async function phase6() {
+  abschnitt('Phase 6 · Medien ohne Tag direkt aus der Vorschau zuweisen');
+  reset();
+  const { readFileSync } = await import('node:fs');
+  const cockpitHtml = readFileSync(new URL('../gs-intern.html', import.meta.url), 'utf8');
+  const { default: wb } = await import('../api/wochenbericht.js');
+  const rufWb = async (body) => {
+    let out = { status: 0, body: null };
+    const rr = { setHeader() {}, status(sx) { out.status = sx; return this; }, json(j) { out.body = j; return this; }, end() { return this; } };
+    await wb({ method: 'POST', headers: { authorization: 'Bearer tokMaster' }, body }, rr);
+    return out;
+  };
+
+  // Eine Woche mit Stunden NUR auf P1 — damit das Wochenurteil eindeutig ist.
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8, start_zeit: '07:00', end_zeit: '16:00' });
+  await tech('tech_tag_save', { datum: DI, projekt_id: P1, stunden: 7, start_zeit: '07:00', end_zeit: '15:00' });
+  const tagMo = db.gs_tagesrapporte.find((z) => z.datum === MO).id;
+  // Ein Foto und ein Video am Projekt, beide OHNE Tageszuordnung.
+  // Dazu eines auf dem FREMDEN Projekt P2 — es darf nie auftauchen.
+  db.gs_projekt_medien.push(
+    { id: OZ1, projekt_id: P1, tagesrapport_id: null, medientyp: 'foto', bucket: PM_BUCKET, path: 'p1/ohne1.jpg', dateiname: 'ohne1.jpg', stockwerk: 'EG', created_at: '2026-09-01T10:00:00Z' },
+    { id: OZ2, projekt_id: P1, tagesrapport_id: null, medientyp: 'video', bucket: PM_BUCKET, path: 'p1/ohne2.mp4', dateiname: 'ohne2.mp4', stockwerk: 'EG', created_at: '2026-09-01T10:05:00Z' },
+    { id: OZF, projekt_id: P2, tagesrapport_id: null, medientyp: 'foto', bucket: PM_BUCKET, path: 'p2/fremd.jpg', dateiname: 'fremd.jpg', stockwerk: 'EG', created_at: '2026-09-01T10:09:00Z' },
+  );
+
+  // 6.1 — die Vorschau meldet sie.
+  const v1 = await rufWb({ action: 'vorschau', projekt_id: P1, jahr: JAHR, woche: WOCHE });
+  ok(v1.status === 200, 'die Vorschau laedt');
+  const d1 = v1.body.daten || {};
+  const offen1 = ((d1.fotos_ohne_zuordnung || {}).anzahl || 0) + (d1.fotos_ohne_tag || []).length;
+  ok(offen1 >= 1, `die Vorschau meldet Medien ohne Tageszuordnung (${offen1})`);
+  ok((d1.fotos || []).length === 0, 'im Bericht selbst steht noch kein Foto');
+
+  // 6.2 — die Oberflaeche macht daraus einen Knopf.
+  ok(/id="wb-oz-btn"/.test(cockpitHtml), 'der Hinweis ist als Knopf gerendert');
+  ok(/ohne Tageszuordnung/.test(cockpitHtml), 'und traegt genau diese Beschriftung');
+  ok(/wb-oz-btn'\);\s*if\(oz\) oz\.onclick=wbOzOeffnen;/.test(cockpitHtml.replace(/\n/g, '')) || /oz\.onclick=wbOzOeffnen/.test(cockpitHtml),
+    'er ist verdrahtet und oeffnet die Zuweisung');
+  ok(/wbVorschau\(\);/.test(cockpitHtml.split('function wbOzZuordnen')[1] || ''),
+    'nach dem Zuordnen wird die Vorschau neu geladen');
+
+  // 6.3 — Auswahl und Tage kommen aus DIESEM Projekt.
+  const ml = await ruf({ token: 'tokMaster', mode: 'master', action: 'medien_list', projekt_id: P1 });
+  const ohneTag = (ml.body.medien || []).filter((m) => !m.tagesrapport_id);
+  ok(ohneTag.length === 2, `zwei Medien ohne Tag am Projekt (${ohneTag.length})`);
+  ok(!ohneTag.some((m) => m.id === OZF), 'das Medium des anderen Projekts ist NICHT dabei');
+  const tl = await ruf({ token: 'tokMaster', mode: 'master', action: 'pm_tage_liste', projekt_id: P1 });
+  ok((tl.body.tage || []).length === 2, 'zwei Tage dieses Projekts stehen zur Wahl');
+  ok((tl.body.tage || []).every((t) => t.jahr === JAHR && t.woche === WOCHE), 'beide liegen in der gezeigten Woche');
+
+  // 6.4 — zuweisen, danach steht das Foto im Bericht.
+  const zu = await ruf({
+    token: 'tokMaster', mode: 'master', action: 'pm_medien_tag',
+    projekt_id: P1, medien_ids: [OZ1, OZ2], tagesrapport_id: tagMo,
+  });
+  ok(zu.status === 200 && zu.body.ok && zu.body.anzahl === 2, 'beide Medien werden dem Montag zugewiesen');
+  ok(db.gs_projekt_medien.find((m) => m.id === OZ1).tagesrapport_id === tagMo, 'die Zuordnung steht in der Tabelle');
+
+  const v2 = await rufWb({ action: 'vorschau', projekt_id: P1, jahr: JAHR, woche: WOCHE });
+  const d2 = v2.body.daten || {};
+  ok((d2.fotos || []).length === 1, `das Foto steht jetzt im Bericht (${(d2.fotos || []).length})`);
+  ok((d2.fotos[0] || {}).datum === MO, 'und traegt den Montag als Datum');
+  const offen2 = ((d2.fotos_ohne_zuordnung || {}).anzahl || 0) + (d2.fotos_ohne_tag || []).length;
+  ok(offen2 === 0, 'es ist kein Medium mehr ohne Tageszuordnung offen');
+  ok(d2.fotos_vorhanden === true, 'die Vorschau meldet Fotos als vorhanden');
+
+  // Und im erzeugten PDF taucht es auch auf.
+  const pdf = await rufWb({ action: 'pdf', projekt_id: P1, jahr: JAHR, woche: WOCHE });
+  ok(pdf.status === 200 && pdf.body.pdf_base64, 'der Bericht laesst sich erzeugen');
+  const txt = pdfText(Buffer.from(pdf.body.pdf_base64, 'base64'));
+  ok(!/Fotos vor/.test(txt) || /Foto/.test(txt), 'das Dokument spricht von Fotos, nicht mehr von "keine Fotos"');
+
+  // 6.5 — ein Tag der FREMDEN Baustelle wird abgewiesen.
+  reset();
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8 });
+  await tech('tech_tag_save', { datum: DI, projekt_id: P2, stunden: 8 });
+  const tagP2 = db.gs_tagesrapporte.find((z) => z.projekt_id === P2).id;
+  db.gs_projekt_medien.push({ id: OZX, projekt_id: P1, tagesrapport_id: null, medientyp: 'foto', bucket: PM_BUCKET, path: 'p1/x.jpg', dateiname: 'x.jpg', stockwerk: 'EG', created_at: '2026-09-01T10:00:00Z' });
+  const falsch = await ruf({
+    token: 'tokMaster', mode: 'master', action: 'pm_medien_tag',
+    projekt_id: P1, medien_ids: [OZX], tagesrapport_id: tagP2,
+  });
+  ok(!!(falsch.body || {}).error, 'ein Tag der anderen Baustelle wird abgewiesen');
+  ok(db.gs_projekt_medien.find((m) => m.id === OZX).tagesrapport_id === null, 'und die Zuordnung bleibt leer');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase1();
 await phase2();
 await phase3();
 await phase4();
 await phase5();
+await phase6();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Prüfung(en) fehlgeschlagen, ${pass} grün` : `✅ alle ${pass} Prüfungen grün`);
