@@ -44,6 +44,12 @@
 //     4.6  ein am Client umgangenes Limit faellt beim Registrieren auf und
 //          die bereits abgelegte Datei wird wieder entfernt
 //     4.7  der Fotoupload bleibt unveraendert funktionsfaehig
+//   Phase 5 — Berichtsauswahl umkehren
+//     5.1  die Maske startet mit ALLEN Projekten der Woche angehakt
+//     5.2  sie startet auch beim zweiten Oeffnen wieder mit allen
+//     5.3  der Server liefert je Projekt Stunden, Fotos und Videos
+//     5.4  die Zusammenfassungszeile stimmt vor und nach dem Abwaehlen
+//     5.5  Abwesenheitsstunden stehen nicht in der Wochensumme
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://attrappe.supabase.test';
 process.env.SUPABASE_KEY = 'test-service-key-fuer-die-attrappe';
@@ -621,10 +627,88 @@ async function phase4() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 5 — Berichtsauswahl umkehren
+// ═══════════════════════════════════════════════════════════════════════════
+// Die Vorbelegung selbst ist Oberflaeche (gs-intern.html, wrBerichtKlick). Was
+// hier geprueft wird, ist beides: dass der Code die Auswahl bei JEDEM Oeffnen
+// neu auf "alle" setzt, und dass der Server die Zahlen liefert, aus denen die
+// Zusammenfassungszeile gebildet wird. Die Zeile selbst wird mit derselben
+// Rechnung nachgestellt wie in der Oberflaeche.
+async function phase5() {
+  abschnitt('Phase 5 · Alles angehakt, Zusammenfassung ueber dem Knopf');
+  reset();
+  const { readFileSync } = await import('node:fs');
+  const cockpitHtml = readFileSync(new URL('../gs-intern.html', import.meta.url), 'utf8');
+
+  // 5.1/5.2 — die Vorbelegung steht bedingungslos im Code.
+  ok(/_wrSammel\[i\]=\{\};\s*ps\.forEach\(function\(p\)\{\s*_wrSammel\[i\]\[p\.id\]=true;/.test(cockpitHtml),
+    'die Maske hakt beim Oeffnen alle Projekte an');
+  ok(!/if\(!_wrSammel\[i\]\)\{\s*_wrSammel\[i\]=\{\}/.test(cockpitHtml),
+    'und zwar bei JEDEM Oeffnen, nicht nur beim ersten');
+  ok(/data-wrsamzsfg/.test(cockpitHtml), 'die Zusammenfassungszeile ist gerendert');
+  ok(cockpitHtml.indexOf('data-wrsamzsfg') < cockpitHtml.indexOf('data-wrsamgo'),
+    'sie steht ÜBER dem Erzeugen-Knopf');
+
+  // 5.3 — Serverdaten: Stunden, Fotos, Videos je Projekt.
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8, start_zeit: '07:00', end_zeit: '16:00' });
+  await tech('tech_tag_save', { datum: DI, projekt_id: P2, stunden: 6.5 });
+  await tech('tech_tag_save', { datum: MI, abwesenheit: 'K', stunden: 8 });
+  const z1 = db.gs_tagesrapporte.find((z) => z.projekt_id === P1).id;
+  const z2 = db.gs_tagesrapporte.find((z) => z.projekt_id === P2).id;
+  // Drei Fotos und ein Video auf P1, ein Foto auf P2, dazu ein Medium ohne Tag.
+  db.gs_projekt_medien.push(
+    { id: 'm1', projekt_id: P1, tagesrapport_id: z1, medientyp: 'foto', path: 'a.jpg', bucket: PM_BUCKET },
+    { id: 'm2', projekt_id: P1, tagesrapport_id: z1, medientyp: 'foto', path: 'b.jpg', bucket: PM_BUCKET },
+    { id: 'm3', projekt_id: P1, tagesrapport_id: z1, medientyp: 'foto', path: 'c.jpg', bucket: PM_BUCKET },
+    { id: 'm4', projekt_id: P1, tagesrapport_id: z1, medientyp: 'video', path: 'd.mp4', bucket: PM_BUCKET },
+    { id: 'm5', projekt_id: P2, tagesrapport_id: z2, medientyp: 'foto', path: 'e.jpg', bucket: PM_BUCKET },
+    { id: 'm6', projekt_id: P1, tagesrapport_id: null, medientyp: 'foto', path: 'f.jpg', bucket: PM_BUCKET },
+  );
+
+  const { default: wb } = await import('../api/wochenbericht.js');
+  const rufWb = async (body) => {
+    let out = { status: 0, body: null };
+    const rr = { setHeader() {}, status(sx) { out.status = sx; return this; }, json(j) { out.body = j; return this; }, end() { return this; } };
+    await wb({ method: 'POST', headers: { authorization: 'Bearer tokMaster' }, body }, rr);
+    return out;
+  };
+  const wp = await rufWb({ action: 'wochen_projekte', wochenrapport_id: WR });
+  ok(wp.status === 200 && wp.body.ok, 'die Projekte der Woche werden geliefert');
+  const ps = wp.body.projekte || [];
+  ok(ps.length === 2, `zwei Projekte in der Woche (${ps.length})`);
+  const pp1 = ps.find((x) => x.id === P1) || {}, pp2 = ps.find((x) => x.id === P2) || {};
+  ok(pp1.fotos === 3 && pp1.videos === 1, `Projekt 1: 3 Fotos, 1 Video (${pp1.fotos}/${pp1.videos})`);
+  ok(pp2.fotos === 1 && pp2.videos === 0, `Projekt 2: 1 Foto, 0 Videos (${pp2.fotos}/${pp2.videos})`);
+  ok(pp1.medien_ohne_tag === 1, 'ein Medium ohne Tageszuordnung wird mitgezaehlt');
+
+  // 5.5 — Abwesenheit nicht in der Wochensumme.
+  ok(wp.body.summen.stunden === 14.5,
+    `Wochensumme 14.50 h ohne die 8 h Krankheit (ist: ${wp.body.summen.stunden})`);
+  ok(wp.body.summen.fotos === 4 && wp.body.summen.videos === 1, 'Wochensumme Medien: 4 Fotos, 1 Video');
+
+  // 5.4 — die Zeile, mit derselben Rechnung wie die Oberflaeche.
+  const zeile = (gewaehlt, woche) => {
+    const s2 = gewaehlt.reduce((a, p) => ({
+      std: a.std + Number(p.stunden || 0), fotos: a.fotos + Number(p.fotos || 0), videos: a.videos + Number(p.videos || 0),
+    }), { std: 0, fotos: 0, videos: 0 });
+    const n = gewaehlt.length;
+    return `KW ${woche} · ${n} Projekt${n === 1 ? '' : 'e'} · ${(Math.round(s2.std * 10) / 10).toFixed(1)} h · `
+      + `${s2.fotos} Foto${s2.fotos === 1 ? '' : 's'} · ${s2.videos} Video${s2.videos === 1 ? '' : 's'}`;
+  };
+  const alle = zeile(ps, wp.body.woche);
+  ok(alle === `KW ${WOCHE} · 2 Projekte · 14.5 h · 4 Fotos · 1 Video`, `alle angehakt: "${alle}"`);
+  const nurEins = zeile(ps.filter((x) => x.id === P1), wp.body.woche);
+  ok(nurEins === `KW ${WOCHE} · 1 Projekt · 8.0 h · 3 Fotos · 1 Video`, `eines abgewaehlt: "${nurEins}"`);
+  const keines = zeile([], wp.body.woche);
+  ok(keines === `KW ${WOCHE} · 0 Projekte · 0.0 h · 0 Fotos · 0 Videos`, `keines angehakt: "${keines}"`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase1();
 await phase2();
 await phase3();
 await phase4();
+await phase5();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Prüfung(en) fehlgeschlagen, ${pass} grün` : `✅ alle ${pass} Prüfungen grün`);

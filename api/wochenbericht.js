@@ -431,31 +431,74 @@ export async function wochenProjekte(wochenrapportId) {
     if (!(z.datum in spesenTag) || v > spesenTag[z.datum]) spesenTag[z.datum] = v;
   }
   const spesenWoche = Math.round(Object.values(spesenTag).reduce((a, v) => a + v, 0) * 100) / 100;
-  const stundenWoche = Math.round(zeilen.reduce((a, z) => a + Number(z.gesamtstunden || 0), 0) * 100) / 100;
+  // Abwesenheitsstunden zaehlen nicht als geleistete Arbeit (lib/abwesenheit.js).
+  const stundenWoche = Math.round(zeilen.filter((z) => !z.abwesenheit)
+    .reduce((a, z) => a + Number(z.gesamtstunden || 0), 0) * 100) / 100;
 
   const jeProjekt = {};
   for (const z of zeilen) {
     if (!z.projekt_id) continue;
-    const p = jeProjekt[z.projekt_id] || (jeProjekt[z.projekt_id] = { zeilen: 0, stunden: 0, offen: 0, verrechnet: 0 });
+    const p = jeProjekt[z.projekt_id] || (jeProjekt[z.projekt_id] = { zeilen: 0, stunden: 0, offen: 0, verrechnet: 0, zeilenIds: [] });
     p.zeilen += 1;
     p.stunden += Number(z.gesamtstunden || 0);
+    p.zeilenIds.push(z.id);
     if ((z.abrechnung_status || 'offen') === 'verrechnet') p.verrechnet += 1; else p.offen += 1;
   }
   const ids = Object.keys(jeProjekt);
+
+  // ── Phase 5: Fotos und Videos je Projekt ────────────────────────────────
+  // Die Zusammenfassungszeile ueber dem Erzeugen-Knopf nennt sie, und sie muss
+  // sich beim Abwaehlen mitrechnen lassen — also je Projekt, nicht als
+  // Wochensumme. Zugeordnet wird wie im Bericht selbst: ueber
+  // tagesrapport_id, nicht ueber den Hochladezeitpunkt.
+  //
+  // Zusaetzlich: wie viele Medien haengen am Projekt OHNE Tageszuordnung?
+  // Die tauchen im Bericht nicht auf; wer das nicht weiss, wundert sich.
+  const zeilenIdsAlle = zeilen.map((z) => z.id).filter(Boolean);
+  const medienJeZeile = {};
+  if (zeilenIdsAlle.length) {
+    const mm = await sbGet(
+      `gs_projekt_medien?tagesrapport_id=in.(${zeilenIdsAlle.join(',')})&select=tagesrapport_id,medientyp`,
+    ).catch(() => []);
+    for (const x of mm || []) {
+      const t = medienJeZeile[x.tagesrapport_id] || (medienJeZeile[x.tagesrapport_id] = { fotos: 0, videos: 0 });
+      if (x.medientyp === 'video') t.videos += 1; else t.fotos += 1;
+    }
+  }
+  const ohneTagJeProjekt = {};
+  if (ids.length) {
+    const mo = await sbGet(
+      `gs_projekt_medien?projekt_id=in.(${ids.join(',')})&tagesrapport_id=is.null&select=projekt_id,medientyp`,
+    ).catch(() => []);
+    for (const x of mo || []) {
+      const t = ohneTagJeProjekt[x.projekt_id] || (ohneTagJeProjekt[x.projekt_id] = { fotos: 0, videos: 0 });
+      if (x.medientyp === 'video') t.videos += 1; else t.fotos += 1;
+    }
+  }
   const stamm = ids.length
     ? await sbGet(`gs_projekte?id=in.(${ids.join(',')})&select=id,name,projektnummer,kunde_id`).catch(() => [])
     : [];
   const nachId = {};
   for (const p of stamm) nachId[p.id] = p;
 
-  const projekte = ids.map((id) => ({
-    id,
-    name: (nachId[id] || {}).name || 'Projekt',
-    projektnummer: (nachId[id] || {}).projektnummer || null,
-    zeilen: jeProjekt[id].zeilen,
-    stunden: Math.round(jeProjekt[id].stunden * 100) / 100,
-    abrechnung: jeProjekt[id].offen === 0 ? 'verrechnet' : (jeProjekt[id].verrechnet ? 'teilweise' : 'offen'),
-  })).sort((a, b) => String(a.projektnummer || '').localeCompare(String(b.projektnummer || '')));
+  const projekte = ids.map((id) => {
+    const m = jeProjekt[id].zeilenIds.reduce((a, zid) => {
+      const t = medienJeZeile[zid] || { fotos: 0, videos: 0 };
+      return { fotos: a.fotos + t.fotos, videos: a.videos + t.videos };
+    }, { fotos: 0, videos: 0 });
+    const oz = ohneTagJeProjekt[id] || { fotos: 0, videos: 0 };
+    return {
+      id,
+      name: (nachId[id] || {}).name || 'Projekt',
+      projektnummer: (nachId[id] || {}).projektnummer || null,
+      zeilen: jeProjekt[id].zeilen,
+      stunden: Math.round(jeProjekt[id].stunden * 100) / 100,
+      abrechnung: jeProjekt[id].offen === 0 ? 'verrechnet' : (jeProjekt[id].verrechnet ? 'teilweise' : 'offen'),
+      fotos: m.fotos,
+      videos: m.videos,
+      medien_ohne_tag: oz.fotos + oz.videos,
+    };
+  }).sort((a, b) => String(a.projektnummer || '').localeCompare(String(b.projektnummer || '')));
 
   let grund = null;
   if (!projekte.length) {
@@ -468,7 +511,12 @@ export async function wochenProjekte(wochenrapportId) {
   return {
     wochenrapport_id: kopf.id, jahr: kopf.jahr, woche: kopf.woche, rapport_nr: kopf.rapport_nr || null,
     projekte, grund,
-    summen: { stunden: stundenWoche, spesen: spesenWoche, zeilen: zeilen.length },
+    summen: {
+      stunden: stundenWoche, spesen: spesenWoche, zeilen: zeilen.length,
+      fotos: projekte.reduce((a, p) => a + p.fotos, 0),
+      videos: projekte.reduce((a, p) => a + p.videos, 0),
+      medien_ohne_tag: projekte.reduce((a, p) => a + p.medien_ohne_tag, 0),
+    },
   };
 }
 

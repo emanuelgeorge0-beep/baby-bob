@@ -309,6 +309,12 @@
 
   .cc-sec{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:700;margin:6px 2px 11px;display:flex;align-items:center;gap:8px;}
   .cc-sec::after{content:'';flex:1;height:1px;background:var(--line);}
+  /* Phase 5 — Zusammenfassung ueber dem Erzeugen-Knopf. Gross genug, um sie am
+     Handy im Vorbeigehen zu lesen; sie ist die letzte Kontrolle vor dem PDF. */
+  .wr-zsfg{margin-top:10px;padding:9px 11px;border:1px solid rgba(201,169,97,.32);
+    border-radius:11px;background:rgba(201,169,97,.07);color:var(--gold);
+    font-size:13px;font-weight:800;line-height:1.45;}
+  .wr-zsfg-oz{color:var(--muted);font-weight:700;}
   .wr-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:13px;background:var(--card);}
   .wr-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
   .wr-table th{text-align:left;font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);font-weight:700;padding:9px 12px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line);}
@@ -2591,7 +2597,12 @@ function wrBerichtKlick(i){
         '<div class="meta" style="margin-top:6px"><span>'+esc(d.grund||'In dieser Woche ist kein Projekt gebucht.')+'</span></div></div>';
       return;
     }
-    if(!_wrSammel[i]){ _wrSammel[i]={}; ps.forEach(function(p){ _wrSammel[i][p.id]=true; }); }
+    /* Phase 5 — die Maske startet IMMER mit allen Projekten angehakt.
+       Vorher wurde nur beim allerersten Oeffnen vorbelegt; wer einmal
+       abgewaehlt hatte, fand beim naechsten Oeffnen seine alte Auswahl vor und
+       erzeugte einen Bericht, der Projekte still ausliess. Abwaehlen statt
+       Anwaehlen — und zwar bei jedem Oeffnen neu. */
+    _wrSammel[i]={}; ps.forEach(function(p){ _wrSammel[i][p.id]=true; });
     wrSammelPaint(i,d);
   }).catch(function(){ box.innerHTML='<div class="lcard" style="margin-top:8px"><div class="meta"><span>Verbindungsfehler.</span></div></div>'; });
 }
@@ -2599,7 +2610,20 @@ function wrBerichtKlick(i){
 function wrSammelPaint(i,d){
   var box=$('view').querySelector('[data-pdfbox="'+i+'"]'); if(!box) return;
   var ps=d.projekte||[], sel=_wrSammel[i]||{};
-  var n=ps.filter(function(p){ return sel[p.id]; }).length;
+  var gewaehlt=ps.filter(function(p){ return sel[p.id]; });
+  var n=gewaehlt.length;
+  /* Phase 5 — Zusammenfassung ueber dem Erzeugen-Knopf. Sie rechnet ueber die
+     ANGEHAKTEN Projekte, nicht ueber die Woche: sonst nennt sie Zahlen, die im
+     Bericht gar nicht vorkommen. Wird bei jedem Haken neu gezeichnet
+     (wrSammelPaint laeuft in onchange). */
+  var sum=gewaehlt.reduce(function(a,p){
+    return {std:a.std+Number(p.stunden||0),fotos:a.fotos+Number(p.fotos||0),
+      videos:a.videos+Number(p.videos||0),oz:a.oz+Number(p.medien_ohne_tag||0)};
+  },{std:0,fotos:0,videos:0,oz:0});
+  var zsfg='KW '+esc(d.woche)+' · '+n+' Projekt'+(n===1?'':'e')+' · '+
+    (Math.round(sum.std*10)/10).toFixed(1)+' h · '+
+    sum.fotos+' Foto'+(sum.fotos===1?'':'s')+' · '+
+    sum.videos+' Video'+(sum.videos===1?'':'s');
   var pill=function(a){
     var c=a==='verrechnet'?'#3dd68c':(a==='teilweise'?'var(--gold)':'var(--muted)');
     return '<span style="font-size:10px;color:'+c+'">'+esc(a)+'</span>';
@@ -2618,6 +2642,8 @@ function wrSammelPaint(i,d){
         '</label>';
       }).join('')+
     '</div>'+
+    '<div class="wr-zsfg" data-wrsamzsfg="'+i+'">'+zsfg+
+      (sum.oz?('<span class="wr-zsfg-oz"> · '+sum.oz+' ohne Tageszuordnung</span>'):'')+'</div>'+
     '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
       '<button class="chip" data-wrsamall="'+i+':1">Alle</button>'+
       '<button class="chip" data-wrsamall="'+i+':0">Keines</button>'+
