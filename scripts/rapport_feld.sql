@@ -8,7 +8,8 @@
 --   1. Abwesenheitskatalog erweitern  (Phase 1)
 --   2. Datumsschranke für Tageszeilen (Phase 2)
 --   3. Projekt-Status "unvollstaendig" + Fremdnummer (Phase 3)
---   4. Video-Spalten für Medien       (Phase 4)
+--   4. Video: nur Kommentare, keine neue Spalte     (Phase 4)
+--   5. Erinnerung an unvollständige Rapporte        (Phase 7)
 --
 -- Vor jedem CREATE TABLE wurde geprüft, ob der Name schon vergeben ist
 -- (Eiserne Regel 7). Es wird KEINE Tabelle angelegt und KEINE gelöscht —
@@ -135,6 +136,39 @@ comment on column gs_projekt_medien.groesse is
 
 
 -- ───────────────────────────────────────────────────────────────────────────
+-- 5. ERINNERUNG AN UNVOLLSTAENDIGE RAPPORTE                       (Phase 7)
+-- ───────────────────────────────────────────────────────────────────────────
+-- Zwei Zeitstempel je Tageszeile. Sie sind der einzige Schutz gegen
+-- Mehrfachversand: gesetzt heisst versendet, und der stuendliche Lauf
+-- (api/rapport_erinnerung.js) ueberspringt die Zeile danach.
+alter table gs_tagesrapporte
+  add column if not exists erinnerung_24_am timestamptz,
+  add column if not exists erinnerung_48_am timestamptz;
+
+comment on column gs_tagesrapporte.erinnerung_24_am is
+  'Zeitpunkt der ersten Erinnerung an die erfassende Person (24 h). NULL = noch keine.';
+comment on column gs_tagesrapporte.erinnerung_48_am is
+  'Zeitpunkt der zweiten und letzten Erinnerung (48 h). NULL = noch keine.';
+
+-- Findet die Kandidaten schnell, ohne die ganze Tabelle zu lesen.
+create index if not exists idx_gs_tagesrapporte_erinnerung
+  on gs_tagesrapporte(created_at)
+  where erinnerung_48_am is null and abwesenheit is null;
+
+-- Der Mailtext, je Betrieb. Leer heisst: der neutrale Standardtext aus
+-- lib/erinnerung.js gilt. Der Text darf die Lohnzahlung NICHT an die Abgabe
+-- des Rapports knuepfen — api/cockpit.js weist solche Texte beim Speichern ab
+-- (lib/erinnerung.js, erinnerungTextPruefen).
+alter table gs_branding
+  add column if not exists rapport_erinnerung_text text;
+
+comment on column gs_branding.rapport_erinnerung_text is
+  'Vorlage der Erinnerungsmail an unvollstaendige Rapporte. Platzhalter: '
+  '{name} {anzahl} {liste} {stunden}. Leer = neutraler Standardtext aus lib/erinnerung.js. '
+  'Darf keine Lohnzahlung an die Abgabe knuepfen.';
+
+
+-- ───────────────────────────────────────────────────────────────────────────
 -- KONTROLLE NACH DEM LAUF
 -- ───────────────────────────────────────────────────────────────────────────
 select conname, pg_get_constraintdef(oid) as regel
@@ -148,6 +182,12 @@ from information_schema.columns
 where table_name = 'gs_projekte'
   and column_name in ('unvollstaendig', 'fremdnummer', 'schnellanlage_von', 'schnellanlage_am')
 order by column_name;
+
+select column_name, data_type
+from information_schema.columns
+where table_name in ('gs_tagesrapporte', 'gs_branding')
+  and column_name in ('erinnerung_24_am', 'erinnerung_48_am', 'rapport_erinnerung_text')
+order by table_name, column_name;
 
 select column_name, data_type
 from information_schema.columns

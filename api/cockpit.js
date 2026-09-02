@@ -20,6 +20,8 @@ import { sendResendEmail, exportEmailHtml } from '../lib/mail.js';
 import { empfaengerFuer, EMPFAENGER_HERKUNFT_TEXT } from '../lib/wochenbericht.js';
 import { ABWESENHEIT_CODES, ABWESENHEIT_KATALOG, trenneStunden, abwesenheitBloecke } from '../lib/abwesenheit.js';
 import { pruefeTagesdatum } from '../lib/datum.js';
+import { erinnerungTextPruefen, STANDARD_ERINNERUNG_TEXT } from '../lib/erinnerung.js';
+import { sammleUnvollstaendige, ladeErinnerungVorlage } from './rapport_erinnerung.js';
 
 // Signalisiert „darf der Aufrufer nicht" → Handler übersetzt zu HTTP 403.
 class Forbidden extends Error {}
@@ -335,6 +337,9 @@ export default async function handler(req, res) {
       case 'pm_katalog_entscheidung': return res.status(200).json(await pmKatalogEntscheidungLog(req.body, scope));
       case 'pm_wochenrapporte_liste': return res.status(200).json(await pmWochenrapporteListe());
       case 'pm_wochenrapport':   return res.status(200).json(await pmWochenrapport(req.body));
+      // Phase 7 — unvollstaendige Rapporte: Liste + Mailtext. Master-Sache.
+      case 'pm_rapporte_unvollstaendig': return res.status(200).json(await pmRapporteUnvollstaendig(scope));
+      case 'pm_erinnerung_text':         return res.status(200).json(await pmErinnerungText(req.body, scope));
       case 'pm_wochenrapport_update': return res.status(200).json(await pmWochenrapportUpdate(req.body, scope));
       case 'pm_wochenrapport_delete': return res.status(200).json(await pmWochenrapportDelete(req.body, scope));
       // ZIEL 2 — ganzer Wochenrapport inkl. aller Tageszeilen (nicht zu verwechseln
@@ -3643,6 +3648,57 @@ const PM_TAG_UPDATE_FELDER = new Set([
   'taetigkeit', 'projektnummer_erfasst', 'spesen', 'ueberzeit_25', 'ueberzeit_50', 'ueberzeit_100',
   'arbeiten', 'besonderheiten', 'abwesenheit', 'abwesenheit_grund',
 ]);
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 7 — Unvollstaendige Rapporte im Master-Cockpit
+// ═══════════════════════════════════════════════════════════════════════════
+// Dieselbe Quelle, aus der auch die Erinnerungsmails gespeist werden
+// (api/rapport_erinnerung.js). Zwei Wahrheiten waeren hier besonders
+// schaedlich: der Master saehe eine Liste und die Leute bekaemen Mails zu
+// etwas anderem.
+async function pmRapporteUnvollstaendig(scope) {
+  if (scope.partnerId) throw new Forbidden();          // Master/Admin only
+  const r = await sammleUnvollstaendige({});
+  return {
+    ok: true,
+    notMigrated: !!r.notMigrated,
+    hinweis: r.hinweis || null,
+    anzahl: (r.offen || []).length,
+    rapporte: (r.offen || []).map((o) => ({
+      id: o.id, datum: o.datum, person: o.person, email: o.email,
+      projekt_id: o.projekt_id, baustelle: o.baustelle,
+      alter_stunden: o.alter_stunden,
+      gruende: o.gruende_text,
+      erinnert_24: !!o.erinnerung_24_am,
+      erinnert_48: !!o.erinnerung_48_am,
+    })),
+  };
+}
+
+// Mailtext lesen und speichern. Beim Speichern wird geprueft, dass er die
+// Lohnzahlung nicht an die Abgabe knuepft (lib/erinnerung.js) — abgelehnt wird
+// mit Begruendung, nicht kommentarlos.
+async function pmErinnerungText(b, scope) {
+  if (scope.partnerId) throw new Forbidden();
+  if (b.text === undefined) {
+    return { ok: true, text: await ladeErinnerungVorlage(), standard: STANDARD_ERINNERUNG_TEXT };
+  }
+  const p = erinnerungTextPruefen(b.text);
+  if (!p.ok) return { error: p.error };
+  // Der Betrieb ist die Zeile mit partner_id IS NULL — dieselbe, die auch
+  // Logo und Fusszeile traegt (lib/pdf.js ladeBranding).
+  const rows = await sbGet('gs_branding?partner_id=is.null&select=id&limit=1').catch(() => []);
+  if (!rows || !rows[0]) return { error: 'Es gibt noch keine Branding-Zeile für den Betrieb (gs_branding).' };
+  try {
+    await sbWrite('PATCH', `gs_branding?id=eq.${rows[0].id}`, { rapport_erinnerung_text: p.text }, 'return=minimal');
+  } catch (e) {
+    if (/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) {
+      return { error: 'Die Spalte rapport_erinnerung_text fehlt — scripts/rapport_feld.sql ist noch nicht gelaufen.' };
+    }
+    throw e;
+  }
+  return { ok: true, text: p.text };
+}
+
 async function pmWochenrapportUpdate(b, scope) {
   const id = uuid(b.id);
   const rows = await sbGet(`gs_tagesrapporte?id=eq.${id}&select=*&limit=1`).catch(() => []);

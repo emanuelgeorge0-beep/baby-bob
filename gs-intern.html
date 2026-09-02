@@ -2476,8 +2476,12 @@ function renderWochenrapporte(){
   $('view').innerHTML='<h2><span class="acc">📆</span> Wochenrapporte</h2>'+backRow()+
     '<div class="usub" id="wr-count" style="color:var(--muted);font-size:13px;margin-bottom:10px">Lädt…</div>'+
     '<div id="wr-filter" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>'+
+    /* Phase 7 — die unvollstaendigen Rapporte stehen VOR der Wochenliste.
+       Wer sie unten anhaengt, sieht sie nie; sie sind das, was Arbeit macht. */
+    '<div id="wr-unvoll"></div>'+
     '<div class="list" id="wr-list">'+skeletonCards(4)+'</div>';
   wireBack();
+  wrUnvollstaendigLaden();
   api('pm_wochenrapporte_liste',{}).then(function(d){
     if(d&&d.notMigrated){ $('wr-list').innerHTML=migRow('scripts/wochenrapport_migration.sql im Supabase SQL Editor ausführen.'); $('wr-count').textContent=''; return; }
     var ws=(d&&d.wochen)||[];
@@ -2485,6 +2489,79 @@ function renderWochenrapporte(){
     if(!ws.length){ $('wr-count').textContent='0 Wochenrapporte'; $('wr-list').innerHTML='<div class="empty">Noch keine Wochenrapporte erfasst.</div>'; return; }
     wrPaint();
   }).catch(function(){ $('wr-list').innerHTML='<div class="empty">Verbindungsfehler.</div>'; });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PHASE 7 — Unvollstaendige Rapporte
+   ─────────────────────────────────────────────────────────────────────────
+   Person, Projekt, Alter in Stunden — mehr braucht die Liste nicht. Dahinter
+   steht dieselbe Quelle wie hinter den Erinnerungsmails
+   (api/rapport_erinnerung.js): zwei Wahrheiten waeren hier besonders
+   schaedlich, weil der Master eine Liste saehe und die Leute Mails zu etwas
+   anderem bekaemen.
+   ══════════════════════════════════════════════════════════════════════════ */
+function wrUnvollstaendigLaden(){
+  var box=$('wr-unvoll'); if(!box) return;
+  api('pm_rapporte_unvollstaendig',{}).then(function(d){
+    if(!$('wr-unvoll')) return;
+    if(!d||d.error){ box.innerHTML=''; return; }
+    if(d.notMigrated){ box.innerHTML='<div class="lcard" style="margin-bottom:12px"><div class="meta"><span>'+esc(d.hinweis||'')+'</span></div></div>'; return; }
+    var rs=d.rapporte||[];
+    if(!rs.length){ box.innerHTML=''; return; }
+    var zeile=function(r){
+      var alt=r.alter_stunden>=48?'#ff8f8f':(r.alter_stunden>=24?'#f0a132':'var(--muted)');
+      var erinnert=r.erinnert_48?'2 Erinnerungen':(r.erinnert_24?'1 Erinnerung':'noch keine Erinnerung');
+      return '<div class="lcard">'+
+        '<div class="top"><div class="nm">'+esc(r.person)+'</div>'+
+          '<span style="font-size:11px;font-weight:800;color:'+alt+'">'+r.alter_stunden+' h</span></div>'+
+        '<div class="meta"><span>'+esc(deDate(r.datum))+'</span>'+
+          '<span class="dot">'+esc(r.baustelle)+'</span>'+
+          '<span class="dot">'+esc(erinnert)+'</span></div>'+
+        '<div class="meta" style="margin-top:5px"><span style="color:var(--muted)">'+
+          esc((r.gruende||[]).join(' ')) +'</span></div>'+
+      '</div>';
+    };
+    box.innerHTML='<div class="cc-sec" style="margin-top:0">Unvollständige Rapporte ('+rs.length+')</div>'+
+      '<div class="list" style="margin-bottom:6px">'+rs.map(zeile).join('')+'</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
+        '<button class="chip" id="wr-erinnerungstext">✉️ Text der Erinnerungsmail</button></div>'+
+      '<div id="wr-ertext"></div>';
+    var b=$('wr-erinnerungstext'); if(b) b.onclick=wrErinnerungTextOeffnen;
+  }).catch(function(){ if($('wr-unvoll')) $('wr-unvoll').innerHTML=''; });
+}
+function wrErinnerungTextOeffnen(){
+  var box=$('wr-ertext'); if(!box) return;
+  box.innerHTML='<div class="lcard" style="padding:12px"><div class="empty">Lädt…</div></div>';
+  api('pm_erinnerung_text',{}).then(function(d){
+    if(!$('wr-ertext')) return;
+    if(!d||d.error){ box.innerHTML='<div class="lcard" style="padding:12px"><div class="empty">'+esc((d&&d.error)||'Ladefehler')+'</div></div>'; return; }
+    box.innerHTML='<div class="lcard" style="padding:12px">'+
+      '<div class="cc-sec" style="margin-top:0">Text der Erinnerungsmail</div>'+
+      '<div class="usub" style="color:var(--muted);font-size:12px;margin-bottom:8px">'+
+        'Platzhalter: {name} · {anzahl} · {liste} · {stunden}. '+
+        'Der Text darf die Lohnzahlung nicht an die Abgabe des Rapports knüpfen — '+
+        'solche Texte werden beim Speichern abgelehnt.</div>'+
+      '<textarea id="wr-ertext-feld" style="width:100%;min-height:190px;font-size:13px;line-height:1.5">'+esc(d.text||'')+'</textarea>'+
+      '<div class="login-msg" id="wr-ertext-msg" style="margin-top:8px"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+        '<button class="chip" onclick="document.getElementById(\'wr-ertext\').innerHTML=\'\'">Schliessen</button>'+
+        '<button class="chip" id="wr-ertext-std">Standardtext einsetzen</button>'+
+        '<button class="chip" style="border-color:var(--gold);color:var(--gold)" id="wr-ertext-save">Speichern</button>'+
+      '</div></div>';
+    var std=$('wr-ertext-std');
+    if(std) std.onclick=function(){ var f=$('wr-ertext-feld'); if(f) f.value=d.standard||''; };
+    var sv=$('wr-ertext-save');
+    if(sv) sv.onclick=function(){
+      var f=$('wr-ertext-feld'); if(!f) return;
+      var msg=$('wr-ertext-msg');
+      sv.disabled=true; sv.textContent='…';
+      api('pm_erinnerung_text',{text:f.value}).then(function(r){
+        sv.disabled=false; sv.textContent='Speichern';
+        if(!r||r.error){ if(msg){ msg.className='login-msg err'; msg.textContent=(r&&r.error)||'Fehler'; } return; }
+        if(msg){ msg.className='login-msg ok'; msg.textContent='Gespeichert.'; }
+      }).catch(function(){ sv.disabled=false; sv.textContent='Speichern'; if(msg){ msg.className='login-msg err'; msg.textContent='Verbindungsfehler'; } });
+    };
+  }).catch(function(){ if($('wr-ertext')) $('wr-ertext').innerHTML=''; });
 }
 
 // ── Statusfilter ──────────────────────────────────────────────────────────
