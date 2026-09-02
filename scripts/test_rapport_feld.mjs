@@ -19,6 +19,13 @@
 //     1.3  Abwesenheitsstunden laufen als eigene Summe mit
 //     1.4  im Stundenblatt-PDF stehen sie in einem eigenen Block mit Summe
 //     1.5  ohne Migration meldet der Server die fehlende Migration im Klartext
+//   Phase 2 — Datumspruefung
+//     2.1  eine Tageszeile mit Jahr 2099 wird SERVERSEITIG abgelehnt
+//     2.2  die Meldung nennt Jahr und zulaessigen Bereich, nichts wird gespeichert
+//     2.3  Jahr −1 / heute / Jahr +1 gehen durch, Jahr −2 und +2 nicht
+//     2.4  auch der aeltere Weg api/tagesrapport.js weist 2099 ab
+//     2.5  auch die Master-Korrektur darf kein 2099 setzen
+//     2.6  ein Datum, das es im Kalender nicht gibt, wird abgelehnt
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://attrappe.supabase.test';
 process.env.SUPABASE_KEY = 'test-service-key-fuer-die-attrappe';
@@ -198,7 +205,10 @@ globalThis.fetch = async (url, opts = {}) => {
       const neu = [];
       for (const r of liste) {
         const zeile = {
-          id: r.id || `${tabelle}-${db[tabelle].length + 1}-${Math.random().toString(36).slice(2, 6)}`,
+          // Echte UUIDs: der Server prueft ids mit uuid() und wuerde eine
+          // Bastel-id ("gs_tagesrapporte-1") als ungueltig abweisen — der Test
+          // pruefte dann versehentlich die id-Pruefung statt der Fachregel.
+          id: r.id || crypto.randomUUID(),
           created_at: new Date().toISOString(), ...r,
         };
         if (tabelle === 'gs_tagesrapporte') {
@@ -352,7 +362,70 @@ async function phase1() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 2 — Datumspruefung
+// ═══════════════════════════════════════════════════════════════════════════
+async function phase2() {
+  abschnitt('Phase 2 · Jahresschranke fuer Tageszeilen');
+  reset();
+  const HEUTE = new Date().getUTCFullYear();
+
+  // 2.1/2.2 — der konkrete Fall aus der Live-DB.
+  const r = await tech('tech_tag_save', { datum: '2099-03-02', projekt_id: P1, stunden: 8, start_zeit: '07:00', end_zeit: '16:15' });
+  const msg = (r.body && (r.body.error || '')) || '';
+  ok(r.status >= 400 || msg, 'Tageszeile mit Jahr 2099 wird abgewiesen');
+  ok(/2099/.test(msg) && new RegExp(String(HEUTE - 1)).test(msg) && new RegExp(String(HEUTE + 1)).test(msg),
+    `die Meldung nennt Jahr und Bereich: "${msg.slice(0, 90)}"`);
+  ok(db.gs_tagesrapporte.length === 0, 'es wurde NICHTS gespeichert');
+  ok(db.gs_wochenrapporte.length === 1, 'und es entstand auch kein Wochenkopf fuer 2099');
+
+  // 2.3 — der zulaessige Bereich, an beiden Kanten.
+  reset();
+  const erlaubt = [
+    [`${HEUTE - 1}-06-15`, true, `Jahr ${HEUTE - 1} (minus 1)`],
+    [`${HEUTE}-06-15`, true, `Jahr ${HEUTE} (aktuell)`],
+    [`${HEUTE + 1}-06-15`, true, `Jahr ${HEUTE + 1} (plus 1)`],
+    [`${HEUTE - 2}-06-15`, false, `Jahr ${HEUTE - 2} (minus 2)`],
+    [`${HEUTE + 2}-06-15`, false, `Jahr ${HEUTE + 2} (plus 2)`],
+  ];
+  for (const [datum, sollGehen, was] of erlaubt) {
+    const x = await tech('tech_tag_save', { datum, projekt_id: P1, stunden: 4 });
+    const ging = !!(x.status === 200 && x.body && x.body.ok);
+    ok(ging === sollGehen, `${was} → ${sollGehen ? 'angenommen' : 'abgewiesen'}`);
+  }
+
+  // 2.4 — derselbe Riegel im aelteren Weg api/tagesrapport.js.
+  const { default: tagesrapport } = await import('../api/tagesrapport.js');
+  const rufTr = async (body) => {
+    let out = { status: 0, body: null };
+    const rr = { setHeader() {}, status(sx) { out.status = sx; return this; }, json(j) { out.body = j; return this; }, end() { return this; } };
+    await tagesrapport({ method: 'POST', headers: { authorization: 'Bearer tokTech' }, body }, rr);
+    return out;
+  };
+  reset();
+  const alt = await rufTr({ action: 'save', projekt_id: P1, datum: '2099-03-02', gesamtstunden: 8 });
+  ok(alt.status === 400 && /2099/.test(alt.body.error || ''), 'api/tagesrapport.js weist 2099 ebenfalls ab');
+  ok(db.gs_tagesrapporte.length === 0, 'auch dort wurde nichts geschrieben');
+  const altOk = await rufTr({ action: 'save', projekt_id: P1, datum: `${HEUTE}-06-15`, gesamtstunden: 8 });
+  ok(altOk.status === 200 && altOk.body.ok, 'ein gueltiges Datum geht dort weiterhin durch');
+
+  // 2.5 — Master-Korrektur.
+  reset();
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8 });
+  const zid = db.gs_tagesrapporte[0].id;
+  const m = await ruf({ token: 'tokMaster', mode: 'master', action: 'pm_wochenrapport_update', id: zid, patch: { datum: '2099-03-02' } });
+  const mmsg = (m.body && (m.body.error || '')) || '';
+  ok(/2099/.test(mmsg), `die Master-Korrektur weist 2099 ebenfalls ab: "${mmsg.slice(0, 70)}"`);
+  ok(db.gs_tagesrapporte[0].datum === MO, 'das Datum der Zeile blieb unveraendert');
+
+  // 2.6 — Kalender-Unsinn.
+  reset();
+  const feb = await tech('tech_tag_save', { datum: `${HEUTE}-02-31`, projekt_id: P1, stunden: 8 });
+  ok((feb.body && feb.body.error) && /Kalender/.test(feb.body.error), 'den 31. Februar gibt es nicht — abgelehnt');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase1();
+await phase2();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Prüfung(en) fehlgeschlagen, ${pass} grün` : `✅ alle ${pass} Prüfungen grün`);

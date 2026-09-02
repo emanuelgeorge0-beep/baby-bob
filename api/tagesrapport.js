@@ -1,6 +1,7 @@
 // api/tagesrapport.js – Daily rapport: capture, media, week view, status, auto PDF+invoice
 import { buildRapportPdf, buildRechnungPdf } from '../lib/pdf.js';
 import { isEntitled } from '../lib/entitlements.js';
+import { pruefeTagesdatum } from '../lib/datum.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.SUPABASE_SERVICE_KEY;
@@ -107,9 +108,14 @@ async function today(res, user, role, body) {
 
 async function save(res, user, role, body) {
   if (role !== 'techniker' && role !== 'gs_admin') return res.status(403).json({ error: 'Nur für Techniker' });
-  const { projekt_id, datum } = body || {};
+  const { projekt_id } = body || {};
   if (!projekt_id) return res.status(400).json({ error: 'projekt_id erforderlich' });
-  if (!datum) return res.status(400).json({ error: 'datum erforderlich' });
+  if (!(body || {}).datum) return res.status(400).json({ error: 'datum erforderlich' });
+  // Jahresschranke: aktuelles Jahr −1 bis +1 (lib/datum.js). Derselbe Riegel
+  // wie im Wochenblatt — dieser aeltere Weg schreibt in dieselbe Tabelle.
+  const dp = pruefeTagesdatum(body.datum);
+  if (!dp.ok) return res.status(400).json({ error: dp.error });
+  const datum = dp.datum;
   const submit = body.status === 'eingereicht';
 
   const gesamt = body.gesamtstunden != null ? Number(body.gesamtstunden) : computeHours(body.zeit_von, body.zeit_bis);

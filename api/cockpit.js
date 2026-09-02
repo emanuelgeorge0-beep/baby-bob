@@ -19,6 +19,7 @@ import { sendResendEmail, exportEmailHtml } from '../lib/mail.js';
 // kommt dort per Dependency Injection rein), der Import ist also zyklenfrei.
 import { empfaengerFuer, EMPFAENGER_HERKUNFT_TEXT } from '../lib/wochenbericht.js';
 import { ABWESENHEIT_CODES, ABWESENHEIT_KATALOG, trenneStunden, abwesenheitBloecke } from '../lib/abwesenheit.js';
+import { pruefeTagesdatum } from '../lib/datum.js';
 
 // Signalisiert „darf der Aufrufer nicht" → Handler übersetzt zu HTTP 403.
 class Forbidden extends Error {}
@@ -2397,8 +2398,15 @@ async function addTechRapport(b, scope) {
     await requireAssignedProjekt(b.projekt_id, scope);
     row.projekt_id = uuid(b.projekt_id);               // Projekt-Rapport funktioniert auch vor Migration
   }
-  const datum = String(b.datum || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new Error('datum (YYYY-MM-DD) nötig');
+  // Jahresschranke: aktuelles Jahr −1 bis +1 (lib/datum.js). Serverseitig,
+  // nicht nur im Formular — das Wochenblatt speichert per Autosave ueber die
+  // API, und die API ist auch ohne Formular erreichbar.
+  // `return`, kein `throw`: ein geworfener Fehler kommt beim Techniker als
+  // nacktes „Serverfehler" an (siehe Dispatcher). Eine Datumsmeldung muss er
+  // lesen koennen, sonst weiss er nicht, was er aendern soll.
+  const dp = pruefeTagesdatum(b.datum);
+  if (!dp.ok) return { error: dp.error };
+  const datum = dp.datum;
   const { woche, jahr } = isoWeekJahr(datum);
   const heute = new Date().toISOString().slice(0, 10);
   Object.assign(row, {
@@ -2813,12 +2821,20 @@ async function syncTagesrapportTaetigkeiten(tagesrapportId, list) {
 // Abwesenheit (G/F/M/U/A, kein Projekt). KW/Jahr kommen aus dem GEBUCHTEN
 // Datum, nicht "heute" → Rückdatierung landet im richtigen Wochenkopf.
 async function saveTechTag(b, scope) {
-  const datum = String(b.datum || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new Error('datum (YYYY-MM-DD) nötig');
+  // Jahresschranke VOR allem anderen: eine Zeile mit Jahr 2099 soll gar nicht
+  // erst einen Wochenkopf anlegen (lib/datum.js).
+  // `return`, kein `throw`: geworfene Fehler kommen beim Techniker als nacktes
+  // „Serverfehler" an (siehe Dispatcher). Beides hier sind Aussagen ueber seine
+  // Eingabe — die muss er lesen koennen.
+  const dp = pruefeTagesdatum(b.datum);
+  if (!dp.ok) return { error: dp.error };
+  const datum = dp.datum;
   const abwesenheit = b.abwesenheit ? String(b.abwesenheit).toUpperCase() : null;
   if (abwesenheit && !ABWESENHEIT_CODES.has(abwesenheit)) {
-    throw new Error('Unbekannte Abwesenheit "' + abwesenheit + '". Zulässig: '
-      + ABWESENHEIT_KATALOG.map((x) => x.code).join(', ') + '.');
+    return {
+      error: 'Unbekannte Abwesenheit "' + abwesenheit + '". Zulässig: '
+        + ABWESENHEIT_KATALOG.map((x) => x.code).join(', ') + '.',
+    };
   }
 
   const row = { techniker_user_id: scope.technikerUserId };
@@ -3495,6 +3511,13 @@ async function pmWochenrapportUpdate(b, scope) {
     else row[k] = patch[k] != null ? String(patch[k]).slice(0, 2000) : null;
   }
   if (!Object.keys(row).length) return { error: 'Keine gültigen Felder zum Ändern' };
+  // Auch die Master-Korrektur darf kein Jahr 2099 setzen — ein Vertipper ist
+  // hier derselbe Vertipper. `null` heisst „Datum leeren" und bleibt erlaubt.
+  if (row.datum) {
+    const dpm = pruefeTagesdatum(row.datum);
+    if (!dpm.ok) return { error: dpm.error };
+    row.datum = dpm.datum;
+  }
 
   // ZIEL 2 — Wandert das Datum ueber eine Wochen- oder Jahresgrenze, muessen
   // jahr/woche der Zeile und ihr Stundenblatt mitwandern. Ohne das blieb die

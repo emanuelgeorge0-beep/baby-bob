@@ -6387,6 +6387,7 @@ function initTechRapport(){
     }).catch(function(){});
   }catch(e){}
   document.getElementById('tr-datum').value=new Date().toISOString().slice(0,10);
+  bbDatumFeldGrenzen('tr-datum');
   trBuildKwOptions();
   chipsInto('tr-arbeiten',trArbeitenAll(),[],true);
   chipsInto('tr-material',TR_MATERIAL,[],true,trRenderMaterialQty);
@@ -6716,9 +6717,29 @@ function trLoadWeek(woche,jahr){
     }).join('');
   });
 }
+/* ── Datum: Jahresschranke (Phase 2) ────────────────────────────────────
+   Zulaessig ist das aktuelle Jahr minus 1 bis plus 1 — dieselbe Regel, die
+   der Server in lib/datum.js durchsetzt. Hier steht sie nur zur Bequemlichkeit:
+   der Kalender laesst gar nicht erst weiter springen, und wer einen Wert
+   eintippt, sieht die Meldung sofort statt erst nach dem Speichern. Verlassen
+   darf man sich darauf nicht — das tut der Server. */
+function bbDatumMin(){ return (new Date().getFullYear()-1)+'-01-01'; }
+function bbDatumMax(){ return (new Date().getFullYear()+1)+'-12-31'; }
+function bbDatumFeldGrenzen(id){
+  var el=document.getElementById(id); if(!el) return;
+  el.min=bbDatumMin(); el.max=bbDatumMax();
+}
+function bbDatumOk(wert){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(wert||'')) return 'Bitte ein Datum waehlen.';
+  var j=Number(String(wert).slice(0,4)), h=new Date().getFullYear();
+  if(j<h-1||j>h+1) return 'Das Jahr '+j+' liegt ausserhalb des zulaessigen Bereichs ('+(h-1)+' bis '+(h+1)+'). Es wurde nichts gespeichert — bitte das Datum pruefen.';
+  return null;
+}
 function trSave(status){
   var projekt_id=document.getElementById('tr-projekt').value;
   if(!projekt_id){setMsg('tr-msg','Bitte Projekt/Baustelle wählen','err');trShowMsg();return;}
+  var datumFehler=bbDatumOk(document.getElementById('tr-datum').value);
+  if(datumFehler){setMsg('tr-msg',datumFehler,'err');trShowMsg();return;}
   var pnr=(document.getElementById('tr-pnr')||{}).value;
   var body={action:'save',projekt_id:projekt_id,datum:document.getElementById('tr-datum').value,
     projektnummer:(pnr||'').trim()||null,
@@ -6776,6 +6797,7 @@ var tsTimer=null,tsStart=0,tsElapsed=0,tsRunning=false,tsTarif=40.38; // Ø Tech
 function showTechStunden(){
   showScreen('tech-stunden');
   document.getElementById('ts-datum').value=new Date().toISOString().slice(0,10);
+  bbDatumFeldGrenzen('ts-datum');
   var sel=document.getElementById('ts-projekt');
   sel.innerHTML='<option value="">– Projekt wählen –</option>'+(trProjekte||[]).map(function(p){return '<option value="'+p.id+'">'+gsEsc(p.name)+'</option>';}).join('');
   tsRenderTimer();tsLoadWeek();
@@ -6804,6 +6826,8 @@ function tsSaveManual(){
   var taet=document.getElementById('ts-taetigkeit').value.trim();
   if(!projekt_id){setMsg('ts-msg','Bitte Projekt wählen','err');return;}
   if(!(stunden>0)){setMsg('ts-msg','Bitte Stunden eingeben','err');return;}
+  var tsDatumFehler=bbDatumOk(datum);
+  if(tsDatumFehler){setMsg('ts-msg',tsDatumFehler,'err');return;}
   var btn=document.getElementById('ts-save');if(btn){btn.disabled=true;btn.textContent='Speichert…';}
   // Linked to rapport: save as a draft tagesrapport (hours + activity).
   gsAuthApi('tagesrapport',{action:'save',projekt_id:projekt_id,datum:datum,gesamtstunden:stunden,
