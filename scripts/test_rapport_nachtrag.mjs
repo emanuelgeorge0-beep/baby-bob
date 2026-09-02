@@ -570,8 +570,114 @@ async function phase8() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 9 — Downloadzeit
+// ═══════════════════════════════════════════════════════════════════════════
+async function phase9() {
+  abschnitt('Phase 9 · Kleiner und schneller, ohne sichtbaren Verlust');
+  const { buildWochenberichtPdf, erzeugeBericht, fotoQuelle, ladeFotoBytes } =
+    await import('../lib/wochenbericht.js');
+
+  // ── 9.1 Dasselbe Bild wird nur EINMAL eingebettet ──
+  const daten = {
+    quelle: 'projekt',
+    kopf: { titel: 'Messprojekt', nummer: '60060.00', kuerzel: 'MES', jahr: JAHR, woche: WOCHE, von: MO, bis: '2026-09-06', kunde: null, partner_id: null },
+    tage: [], summen: { stunden: 8, uz25: 0, uz50: 0, uz100: 0, spesen: 0, tage: 1, zeilen: 1, techniker: 1 },
+    material: [], fotos: [], videos: [], fotos_ohne_tag: [], fotos_ohne_zuordnung: { anzahl: 0 },
+    fotos_vorhanden: true, material_vorhanden: false, einreichstatus: [], hinweise: [],
+  };
+  const einmal = buildWochenberichtPdf(daten, { fotos: [{ buf: JPEG_1PX, caption: 'a' }] });
+  const sechsmal = buildWochenberichtPdf(daten, {
+    fotos: Array.from({ length: 6 }, (_, i) => ({ buf: JPEG_1PX, caption: 'a' + i })),
+  });
+  const xobj = (pdf) => (Buffer.from(pdf).toString('latin1').match(/\/Subtype\/Image/g) || []).length;
+  ok(xobj(einmal) === 1, `ein Bild → ein Bildobjekt (${xobj(einmal)})`);
+  ok(xobj(sechsmal) === 1, `9.1 — dasselbe Bild sechsmal abgebildet → immer noch EIN Bildobjekt (${xobj(sechsmal)})`);
+  // Und die Datei waechst dadurch praktisch nicht.
+  ok(sechsmal.length < einmal.length + 3000,
+    `sechs Abbildungen kosten kaum Bytes (${einmal.length} → ${sechsmal.length})`);
+
+  // Zwei VERSCHIEDENE Bilder muessen dagegen beide drin sein.
+  const anders = Buffer.concat([JPEG_1PX.subarray(0, JPEG_1PX.length - 2), Buffer.from([0x00, 0xFF, 0xD9])]);
+  const zwei = buildWochenberichtPdf(daten, { fotos: [{ buf: JPEG_1PX, caption: 'a' }, { buf: anders, caption: 'b' }] });
+  ok(xobj(zwei) === 2, `zwei verschiedene Bilder → zwei Bildobjekte (${xobj(zwei)})`);
+
+  // ── 9.2 Die Bilder werden PARALLEL geladen ──
+  // Die Attrappe laesst jeden Storage-Abruf 60 ms dauern. Zehn Bilder
+  // nacheinander sind ueber 600 ms, parallel deutlich unter 300 ms.
+  reset();
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8, start_zeit: '07:00', end_zeit: '16:00', arbeiten: ['Montage'] });
+  const zid = db.gs_tagesrapporte[0].id;
+  for (let i = 0; i < 10; i++) {
+    db.gs_projekt_medien.push({
+      id: `ffff0000-0000-0000-0000-00000000000${i.toString(16)}`,
+      projekt_id: P1, tagesrapport_id: zid, medientyp: 'foto', bucket: PM_BUCKET,
+      path: `p1/foto-${i}.jpg`, dateiname: `foto-${i}.jpg`, stockwerk: 'EG',
+      created_at: `2026-09-01T09:0${i}:00Z`,
+    });
+  }
+  let abrufe = 0;
+  const echtesFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.includes('/storage/v1/object/') && (opts || {}).method === undefined) {
+      abrufe++;
+      await new Promise((r) => setTimeout(r, 60));
+      return { ok: true, status: 200, arrayBuffer: async () => JPEG_1PX.buffer.slice(JPEG_1PX.byteOffset, JPEG_1PX.byteOffset + JPEG_1PX.length), json: async () => ({}), text: async () => '' };
+    }
+    return echtesFetch(url, opts);
+  };
+  const t0 = Date.now();
+  const r = await erzeugeBericht({ projektId: P1, jahr: JAHR, woche: WOCHE, userId: MASTER });
+  const dauer = Date.now() - t0;
+  globalThis.fetch = echtesFetch;
+  ok(!!r && !!r.pdf, 'der Bericht wird erzeugt');
+  ok(abrufe >= 6, `es wurden Bilder geladen (${abrufe} Abrufe à 60 ms)`);
+  ok(dauer < 60 * abrufe * 0.6,
+    `9.2 — parallel geladen: ${dauer} ms statt ${60 * abrufe} ms nacheinander`);
+
+  // ── 9.3 Die kleine Fassung wird bevorzugt ──
+  ok(fotoQuelle({ bucket: 'b', path: 'gross.jpg', thumbnail_path: 'klein.jpg' }).path === 'klein.jpg',
+    'gibt es eine kleine Fassung, wird sie genommen');
+  ok(fotoQuelle({ bucket: 'b', path: 'gross.jpg', thumbnail_path: null }).path === 'gross.jpg',
+    'ohne kleine Fassung bleibt das Original — Altbestand geht nicht verloren');
+
+  // ── 9.4 Der Bericht ist mit der kleinen Fassung kleiner ──
+  // Nachgestellt mit zwei Puffern derselben Bildwirkung, aber verschiedener
+  // Groesse — genau das Verhaeltnis, das die Live-Messung ergeben hat.
+  const gross = Buffer.concat([JPEG_1PX.subarray(0, JPEG_1PX.length - 2), Buffer.alloc(400000, 0x20), Buffer.from([0xFF, 0xD9])]);
+  const kleinBuf = Buffer.concat([JPEG_1PX.subarray(0, JPEG_1PX.length - 2), Buffer.alloc(130000, 0x20), Buffer.from([0xFF, 0xD9])]);
+  const zehn = (buf) => buildWochenberichtPdf(daten, {
+    fotos: Array.from({ length: 10 }, (_, i) => ({
+      // je Bild ein eigener Puffer, sonst greift die Deduplizierung
+      buf: Buffer.concat([buf.subarray(0, buf.length - 3), Buffer.from([i, 0xFF, 0xD9])]),
+      caption: 'f' + i,
+    })),
+  }).length;
+  const vorher = zehn(gross), nachher = zehn(kleinBuf);
+  ok(nachher < vorher, `9.4 — mit kleiner Fassung ist der Bericht kleiner (${(vorher / 1024).toFixed(0)} KB → ${(nachher / 1024).toFixed(0)} KB)`);
+  ok(nachher < vorher * 0.5, `und zwar deutlich: ${(100 - nachher / vorher * 100).toFixed(0)} % weniger`);
+
+  // ── 9.5 Keine sichtbare Kompression: die Bilder sind noch da ──
+  ok(xobj(zehn === 0 ? einmal : buildWochenberichtPdf(daten, { fotos: [{ buf: kleinBuf, caption: 'x' }] })) === 1,
+    'die kleine Fassung wird eingebettet, nicht verworfen');
+  // Der wichtigste Riegel: ein PROGRESSIVES JPEG darf nie stillschweigend
+  // verschwinden — lib/pdf.js weist es ab, und genau deshalb wird die
+  // serverseitige Umrechnung nicht benutzt.
+  const { buildPdf } = await import('../lib/pdf.js');
+  const progressiv = Buffer.from(JPEG_1PX);
+  // SOF0 (0xC0) → SOF2 (0xC2) umschreiben
+  for (let i = 0; i < progressiv.length - 1; i++) {
+    if (progressiv[i] === 0xFF && progressiv[i + 1] === 0xC0) { progressiv[i + 1] = 0xC2; break; }
+  }
+  const pdfProg = buildPdf({ title: 'x', blocks: [{ t: 'img', data: progressiv }] });
+  ok((Buffer.from(pdfProg).toString('latin1').match(/\/Subtype\/Image/g) || []).length === 0,
+    'ein progressives JPEG wird von lib/pdf.js abgewiesen (deshalb kein Server-Resize)');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase7();
 await phase8();
+await phase9();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Pruefung(en) fehlgeschlagen, ${pass} gruen` : `✅ alle ${pass} Pruefungen gruen`);

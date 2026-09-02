@@ -4549,6 +4549,12 @@ async function medienUpload(b, scope) {
   // Optionaler Video-Thumbnail (Client liefert base64-Poster) → für Vorschau.
   let thumbnail_path = null;
   if (medientyp === 'video' && b.thumbnail) thumbnail_path = await legeStandbildAb(scopeKey, safe, b.thumbnail);
+  // Phase 9 — kleine Fassung eines FOTOS fuer die Abbildung im Bericht. Sie
+  // kommt vom Geraet (canvas, Baseline-JPEG, 1000 px lange Kante) und liegt in
+  // derselben Spalte wie das Standbild eines Videos: thumbnail_path. Das
+  // Original bleibt unangetastet und ist ueber die Galerie weiter in voller
+  // Groesse da.
+  if (medientyp === 'foto' && b.vorschau) thumbnail_path = await legeStandbildAb(scopeKey, safe, b.vorschau);
   const row = {
     projekt_id: tgt.projekt_id, service_auftrag_id: tgt.service_auftrag_id,
     tagesrapport_id,
@@ -4570,6 +4576,8 @@ async function medienUpload(b, scope) {
       medien: await signMedien(Array.isArray(r) ? r[0] : r),
       // Ehrlich benennen statt stillschweigend weglassen.
       standbild: medientyp === 'video' ? !!thumbnail_path : null,
+      // Bei einem Foto ist thumbnail_path die kleine Fassung fuers Dokument.
+      vorschau_gespeichert: medientyp === 'foto' ? !!thumbnail_path : null,
       hinweis: (medientyp === 'video' && !thumbnail_path)
         ? 'Das Video ist gespeichert, ein Standbild konnte nicht erzeugt werden. In der Galerie fehlt die Vorschau.'
         : null,

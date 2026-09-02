@@ -8636,6 +8636,50 @@ var UPLOAD_NONIMG_MAX_BYTES=Math.floor(UPLOAD_BODY_SAFE_CHARS/1.37);
 var UPLOAD_NONIMG_MAX_MB=(UPLOAD_NONIMG_MAX_BYTES/1048576).toFixed(0);
 // Liefert die data-URL (base64) für den Upload. Bilder werden vorher so weit
 // verkleinert (Dimension, dann JPEG-Qualität), dass sie unter das Body-Budget passen.
+/* ══════════════════════════════════════════════════════════════════════════
+   PHASE 9 — kleine Fassung fuers Dokument, schon beim Hochladen
+   ─────────────────────────────────────────────────────────────────────────
+   Das Original bleibt, wie es ist (bis 2400 px, Archiv und Galerie). Zusaetzlich
+   entsteht hier eine zweite, kleine Fassung fuer die Abbildung im Bericht.
+
+   GERECHNET: die Fotoreihe im Wochenbericht ist zweispaltig, eine Spalte ist
+   228.5 pt breit und hoechstens 168 pt hoch. Bei 300 dpi sind das 952 x 700
+   Pixel. 1000 px lange Kante deckt das mit Reserve — mehr landet im PDF, ohne
+   je sichtbar zu werden.
+
+   Qualitaet 0.9, also HOEHER als die 0.85 des Originals: es wird Aufloesung
+   weggelassen, nicht Bildqualitaet. Genau das ist der Unterschied zwischen
+   "kleiner" und "sichtbar komprimiert".
+
+   canvas.toDataURL liefert BASELINE-JPEG. Das ist keine Nebensache: die
+   Umrechnung auf Serverseite (Supabase /render/image) liefert PROGRESSIVE
+   JPEGs, und die kann ein PDF nicht einbetten. Deshalb entsteht die kleine
+   Fassung hier, wo es einen Encoder gibt. */
+var FOTO_VORSCHAU_KANTE=1000, FOTO_VORSCHAU_Q=0.9;
+function bildVorschau(f){
+  return new Promise(function(res){
+    if(!/^image\//.test(f.type||'')){ res(null); return; }
+    var url=URL.createObjectURL(f), img=new Image();
+    var fertig=false;
+    var ende=function(v){ if(fertig) return; fertig=true; try{URL.revokeObjectURL(url);}catch(e){} res(v); };
+    img.onload=function(){
+      try{
+        var w=img.naturalWidth||1,h=img.naturalHeight||1;
+        var sk=Math.min(1,FOTO_VORSCHAU_KANTE/Math.max(w,h));
+        /* Ist das Bild ohnehin klein genug, braucht es keine zweite Fassung —
+           eine Kopie derselben Groesse waere nur doppelter Speicher. */
+        if(sk>=1){ ende(null); return; }
+        var c=document.createElement('canvas');
+        c.width=Math.max(1,Math.round(w*sk)); c.height=Math.max(1,Math.round(h*sk));
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        ende(c.toDataURL('image/jpeg',FOTO_VORSCHAU_Q));
+      }catch(e){ ende(null); }
+    };
+    img.onerror=function(){ ende(null); };
+    img.src=url;
+    setTimeout(function(){ ende(null); },6000);
+  });
+}
 function fileToUploadData(f){
   return new Promise(function(resolve,reject){
     if(!/^image\//.test(f.type||'')){ // PDF/DWG/… unverändert einlesen
@@ -10022,9 +10066,10 @@ function tcMediaUpload(kind,id,file,tagesrapportId){
       if(erfolg) tcLoadGallery(kind,id,tagesrapportId);
     });
   } else {
-    fileToUploadData(file).then(function(data){
+    Promise.all([fileToUploadData(file),bildVorschau(file)]).then(function(r){
+      var data=r[0], vorschau=r[1];
       var isImg=/^data:image\//.test(data);
-      return techApi('medien_upload',Object.assign({data:data,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
+      return techApi('medien_upload',Object.assign({data:data,vorschau:vorschau||undefined,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
         if(d&&d.error){ tcToast(d.error); return; } tcToast('Foto gespeichert'); tcLoadGallery(kind,id,tagesrapportId);
       });
     }).catch(function(){ tcToast('Lesefehler'); });
@@ -11812,9 +11857,10 @@ function tcRowMediaUpload(scope,kind,id,file,tagesrapportId){
       if(erfolg) tcRowLoadGallery(gal,kind,id,tagesrapportId);
     });
   } else {
-    fileToUploadData(file).then(function(data){
+    Promise.all([fileToUploadData(file),bildVorschau(file)]).then(function(r){
+      var data=r[0], vorschau=r[1];
       var isImg=/^data:image\//.test(data);
-      return techApi('medien_upload',Object.assign({data:data,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
+      return techApi('medien_upload',Object.assign({data:data,vorschau:vorschau||undefined,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
         if(d&&d.error){ tcToast(d.error); return; } tcToast('Foto gespeichert'); tcRowLoadGallery(gal,kind,id,tagesrapportId);
       });
     }).catch(function(){ tcToast('Lesefehler'); });
