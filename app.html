@@ -9891,7 +9891,7 @@ function tcMediaForm(kind,id){
     '<div class="tc-lbl">Bauabschnitt (optional)</div><input class="tc-field" id="tc-m-ba" placeholder="z. B. Rohinstallation"/>'+
     '<input type="hidden" id="tc-m-sw-val"/><input type="hidden" id="tc-m-raum-val"/>'+
     '<div class="tc-btnrow"><button class="tc-btn gold" onclick="tcMediaPick(\''+tcEsc(kind)+'\',\''+tcEsc(id)+'\')">📷 Aufnehmen / Auswählen</button></div>'+
-    '<div class="tc-hint">Fotos werden komprimiert hochgeladen, Videos direkt in den Speicher (auch grosse Clips).</div>'+
+    '<div class="tc-hint">Fotos werden komprimiert hochgeladen. Videos: mp4 oder mov, höchstens 100 MB und 2 Minuten — zu grosse Clips werden vor dem Hochladen gemeldet. Zu jedem Video wird ein Standbild erzeugt.</div>'+
     '<div id="tc-gal-slot" style="margin-top:8px"></div>');
   tcLoadGallery(kind,id);
 }
@@ -9903,31 +9903,124 @@ function tcSelVal(group,freeId){ var f=(document.getElementById(freeId)||{}).val
 function tcMediaPick(kind,id,tagesrapportId){
   var stockwerk=tcSelVal('sw','tc-m-swfree');
   if(kind==='projekt' && !stockwerk){ tcToast('Bitte Stockwerk wählen'); return; }
-  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,video/*'; inp.capture='environment';
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,video/mp4,video/quicktime,.mp4,.mov'; inp.capture='environment';
   inp.onchange=function(){ var f=(inp.files||[])[0]; if(f) tcMediaUpload(kind,id,f,tagesrapportId); };
   inp.click();
 }
 function tcVideoDuration(file){ return new Promise(function(res){ try{ var v=document.createElement('video'); v.preload='metadata'; v.onloadedmetadata=function(){ try{URL.revokeObjectURL(v.src);}catch(e){} res(isFinite(v.duration)?Math.round(v.duration):null); }; v.onerror=function(){ res(null); }; v.src=URL.createObjectURL(file); }catch(e){ res(null); } }); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PHASE 4 — Video: mp4/mov, max 100 MB, max 2 Minuten, mit Standbild
+   ─────────────────────────────────────────────────────────────────────────
+   Gemeldet wird VOR dem Upload. Auf der Baustelle ist das der Unterschied
+   zwischen "geht nicht" und "haengt zehn Minuten und geht dann nicht".
+   Format und Groesse stehen sofort am File-Objekt; die Dauer kommt aus den
+   Metadaten, das dauert Sekundenbruchteile. Der Server prueft dasselbe noch
+   einmal und ist die massgebliche Instanz — diese Pruefung hier ist die
+   Hoeflichkeit, nicht die Sicherung.
+   ══════════════════════════════════════════════════════════════════════════ */
+var TC_VIDEO_MAX_BYTES=100*1024*1024;
+var TC_VIDEO_MAX_SEK=120;
+function tcIstVideo(file){
+  if(!file) return false;
+  if(/^video\//.test(file.type||'')) return true;
+  return /\.(mp4|mov|m4v)$/i.test(file.name||'');
+}
+function tcVideoFormatOk(file){
+  var t=String(file.type||'').toLowerCase();
+  if(t==='video/mp4'||t==='video/quicktime'||t==='video/x-m4v') return true;
+  return /\.(mp4|mov|m4v)$/i.test(file.name||'');
+}
+/* Liefert {ok:true,dauer} oder {ok:false,grund}. Prueft in dieser Reihenfolge:
+   Format (sofort), Groesse (sofort), Dauer (braucht die Metadaten). */
+function tcVideoPruefen(file){
+  if(!tcVideoFormatOk(file)){
+    return Promise.resolve({ok:false,grund:'Dieses Videoformat wird nicht angenommen ('+(file.type||file.name||'unbekannt')+'). Erlaubt sind mp4 und mov.'});
+  }
+  if(file.size>TC_VIDEO_MAX_BYTES){
+    return Promise.resolve({ok:false,grund:'Das Video ist '+(file.size/1048576).toFixed(1)+' MB gross. Erlaubt sind höchstens 100 MB — bitte kürzer aufnehmen.'});
+  }
+  return tcVideoDuration(file).then(function(dur){
+    if(dur!=null&&dur>TC_VIDEO_MAX_SEK){
+      return {ok:false,grund:'Das Video dauert '+dur+' Sekunden. Erlaubt sind höchstens 2 Minuten (120 Sekunden).'};
+    }
+    return {ok:true,dauer:dur};
+  });
+}
+/* Standbild aus dem Video: ein Frame bei einer Sekunde (oder in der Mitte,
+   wenn der Clip kuerzer ist) auf ein Canvas zeichnen und als JPEG ausgeben.
+   Bei einer Sekunde, weil der allererste Frame haeufig noch schwarz ist.
+   Schlaegt es fehl (Codec, iOS-Eigenheiten), kommt null zurueck — das Video
+   wird dann trotzdem gespeichert und der Server sagt, dass die Vorschau
+   fehlt. Kein Standbild ist besser als kein Video. */
+function tcVideoStandbild(file){
+  return new Promise(function(res){
+    var url=null,fertig=false;
+    var ende=function(v){ if(fertig) return; fertig=true; try{ if(url) URL.revokeObjectURL(url); }catch(e){} res(v); };
+    try{
+      var v=document.createElement('video');
+      v.preload='metadata'; v.muted=true; v.playsInline=true;
+      v.onerror=function(){ ende(null); };
+      v.onloadedmetadata=function(){
+        var t=(isFinite(v.duration)&&v.duration>0)?Math.min(1,v.duration/2):0;
+        var greifen=function(){
+          try{
+            var w=v.videoWidth||0,h=v.videoHeight||0;
+            if(!w||!h){ ende(null); return; }
+            /* Auf 640 px lange Kante herunterrechnen: das Standbild ist eine
+               Vorschau, kein zweites Foto. So bleibt es unter 100 KB und passt
+               in den Antwort-Body. */
+            var f=Math.min(1,640/Math.max(w,h));
+            var c=document.createElement('canvas');
+            c.width=Math.round(w*f); c.height=Math.round(h*f);
+            c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+            ende(c.toDataURL('image/jpeg',0.72));
+          }catch(e){ ende(null); }
+        };
+        v.onseeked=greifen;
+        try{ v.currentTime=t; }catch(e){ greifen(); }
+      };
+      url=URL.createObjectURL(file); v.src=url;
+      /* Notausgang: manche Geraete feuern weder onseeked noch onerror. */
+      setTimeout(function(){ ende(null); },6000);
+    }catch(e){ ende(null); }
+  });
+}
+/* Gemeinsamer Videoweg fuer beide Upload-Masken (Medien-Reiter und Zeile im
+   Wochenblatt). Ruft `fertig(text)` genau einmal — mit Erfolgs- oder
+   Fehlertext, damit die Maske nicht raten muss. */
+function tcVideoHochladen(file,tags,tgt,fertig){
+  tcVideoPruefen(file).then(function(p){
+    if(!p.ok){ fertig(p.grund,false); return null; }
+    return tcVideoStandbild(file).then(function(thumb){
+      return techApi('medien_sign_upload',Object.assign({filename:file.name,contentType:file.type||'video/mp4',medientyp:'video',groesse:file.size,dauer_sekunden:p.dauer},tgt)).then(function(sg){
+        if(!sg||sg.error||!sg.uploadUrl){ fertig((sg&&sg.error)||'Upload-URL fehlgeschlagen',false); return null; }
+        return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':file.type||'video/mp4','x-upsert':'true'},body:file}).then(function(r){
+          if(!r.ok){ fertig('Video-Upload fehlgeschlagen',false); return null; }
+          return techApi('medien_register',Object.assign({path:sg.path,filename:file.name,contentType:file.type||'video/mp4',
+            medientyp:'video',groesse:file.size,dauer_sekunden:p.dauer,thumbnail:thumb||undefined},tags,tgt)).then(function(d){
+            if(d&&d.error){ fertig(d.error,false); return null; }
+            fertig(d&&d.hinweis?d.hinweis:'Video gespeichert',true);
+            return d;
+          });
+        });
+      });
+    });
+  }).catch(function(){ fertig('Video-Upload fehlgeschlagen',false); });
+}
 // tagesrapportId optional: aus dem Wochenrapport-Formular gesetzt, damit das Foto
 // direkt an diese Tageszeile hängt (fürs künftige Foto-Wochenbericht).
 function tcMediaUpload(kind,id,file,tagesrapportId){
   var tgt=(kind==='service')?{service_auftrag_id:id}:{projekt_id:id};
   if(tagesrapportId) tgt.tagesrapport_id=tagesrapportId;
   var tags={stockwerk:tcSelVal('sw','tc-m-swfree'),raum:tcSelVal('raum','tc-m-raumfree'),bauabschnitt:(document.getElementById('tc-m-ba')||{}).value||''};
-  var isVideo=/^video\//.test(file.type||'');
-  tcToast((isVideo?'Video':'Foto')+' wird hochgeladen…');
+  var isVideo=tcIstVideo(file);
+  tcToast((isVideo?'Video wird geprüft':'Foto wird hochgeladen')+'…');
   if(isVideo){
-    tcVideoDuration(file).then(function(dur){
-      return techApi('medien_sign_upload',Object.assign({filename:file.name},tgt)).then(function(sg){
-        if(!sg||sg.error||!sg.uploadUrl){ tcToast((sg&&sg.error)||'Upload-URL fehlgeschlagen'); return; }
-        return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':file.type||'video/mp4','x-upsert':'true'},body:file}).then(function(r){
-          if(!r.ok){ tcToast('Video-Upload fehlgeschlagen'); return; }
-          return techApi('medien_register',Object.assign({path:sg.path,filename:file.name,contentType:file.type||'video/mp4',medientyp:'video',groesse:file.size,dauer_sekunden:dur},tags,tgt)).then(function(d){
-            if(d&&d.error){ tcToast(d.error); return; } tcToast('Video gespeichert'); tcLoadGallery(kind,id,tagesrapportId);
-          });
-        });
-      });
-    }).catch(function(){ tcToast('Video-Upload fehlgeschlagen'); });
+    tcVideoHochladen(file,tags,tgt,function(text,erfolg){
+      tcToast(text);
+      if(erfolg) tcLoadGallery(kind,id,tagesrapportId);
+    });
   } else {
     fileToUploadData(file).then(function(data){
       var isImg=/^data:image\//.test(data);
@@ -11702,7 +11795,7 @@ function tcRowMediaPick(btn,kind,id,tagesrapportId){
   var scope=btn.closest('.tc-details-photo'); if(!scope) return;
   var stockwerk=tcRowSelVal(scope,'sw','rm-swfree');
   if(kind==='projekt' && !stockwerk){ tcToast('Bitte Stockwerk wählen'); return; }
-  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,video/*'; inp.capture='environment';
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,video/mp4,video/quicktime,.mp4,.mov'; inp.capture='environment';
   inp.onchange=function(){ var f=(inp.files||[])[0]; if(f) tcRowMediaUpload(scope,kind,id,f,tagesrapportId); };
   inp.click();
 }
@@ -11710,21 +11803,14 @@ function tcRowMediaUpload(scope,kind,id,file,tagesrapportId){
   var tgt=(kind==='service')?{service_auftrag_id:id}:{projekt_id:id};
   if(tagesrapportId) tgt.tagesrapport_id=tagesrapportId;
   var tags={stockwerk:tcRowSelVal(scope,'sw','rm-swfree'),raum:tcRowSelVal(scope,'raum','rm-raumfree'),bauabschnitt:(scope.querySelector('.rm-ba')||{}).value||''};
-  var isVideo=/^video\//.test(file.type||'');
-  tcToast((isVideo?'Video':'Foto')+' wird hochgeladen…');
+  var isVideo=tcIstVideo(file);
+  tcToast((isVideo?'Video wird geprüft':'Foto wird hochgeladen')+'…');
   var gal=scope.querySelector('.tc-gal-slot');
   if(isVideo){
-    tcVideoDuration(file).then(function(dur){
-      return techApi('medien_sign_upload',Object.assign({filename:file.name},tgt)).then(function(sg){
-        if(!sg||sg.error||!sg.uploadUrl){ tcToast((sg&&sg.error)||'Upload-URL fehlgeschlagen'); return; }
-        return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':file.type||'video/mp4','x-upsert':'true'},body:file}).then(function(r){
-          if(!r.ok){ tcToast('Video-Upload fehlgeschlagen'); return; }
-          return techApi('medien_register',Object.assign({path:sg.path,filename:file.name,contentType:file.type||'video/mp4',medientyp:'video',groesse:file.size,dauer_sekunden:dur},tags,tgt)).then(function(d){
-            if(d&&d.error){ tcToast(d.error); return; } tcToast('Video gespeichert'); tcRowLoadGallery(gal,kind,id,tagesrapportId);
-          });
-        });
-      });
-    }).catch(function(){ tcToast('Video-Upload fehlgeschlagen'); });
+    tcVideoHochladen(file,tags,tgt,function(text,erfolg){
+      tcToast(text);
+      if(erfolg) tcRowLoadGallery(gal,kind,id,tagesrapportId);
+    });
   } else {
     fileToUploadData(file).then(function(data){
       var isImg=/^data:image\//.test(data);

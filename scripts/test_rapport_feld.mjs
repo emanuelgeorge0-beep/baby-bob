@@ -35,6 +35,15 @@
 //     3.6  ohne Bezeichnung wird nichts angelegt
 //     3.7  Nachtragen im Cockpit loescht den Marker von selbst
 //     3.8  eine getippte Fremdnummer wird uebernommen, nie erzeugt
+//   Phase 4 — Medien-Upload mit Video
+//     4.1  ein Video ueber 100 MB wird abgelehnt, BEVOR es hochgeladen wird
+//     4.2  ein Video ueber 2 Minuten wird abgelehnt
+//     4.3  ein anderes Format als mp4/mov wird abgelehnt
+//     4.4  ein zulaessiges Video wird angenommen und bekommt ein Standbild
+//     4.5  ohne Standbild wird das Video gespeichert, der Mangel aber benannt
+//     4.6  ein am Client umgangenes Limit faellt beim Registrieren auf und
+//          die bereits abgelegte Datei wird wieder entfernt
+//     4.7  der Fotoupload bleibt unveraendert funktionsfaehig
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://attrappe.supabase.test';
 process.env.SUPABASE_KEY = 'test-service-key-fuer-die-attrappe';
@@ -177,6 +186,7 @@ const res = (body, okFlag = true, status = 200) => ({
 
 let mails = [];
 let storage = {};      // "bucket/path" -> bytes
+const PM_BUCKET = 'projektdateien';   // wie PM_DATEI_BUCKET in api/cockpit.js
 const TOKENS = { tokMaster: MASTER, tokTech: TECHU };
 
 globalThis.fetch = async (url, opts = {}) => {
@@ -191,6 +201,13 @@ globalThis.fetch = async (url, opts = {}) => {
   }
   if (u.includes('/storage/v1/object/sign/')) {
     return res({ signedURL: '/object/sign/x?token=t' });
+  }
+  // Signierte UPLOAD-URL (Direktupload grosser Dateien). Muss vor dem
+  // allgemeinen Objekt-Zweig stehen — sonst faengt der den Aufruf ab und
+  // liefert eine Ablage-Antwort statt einer URL.
+  if (u.includes('/storage/v1/object/upload/sign/')) {
+    const pfad = u.split('/storage/v1/object/upload/sign/')[1];
+    return res({ url: `/object/upload/sign/${pfad}?token=t` });
   }
   if (u.includes('/storage/v1/object/')) {
     const schluessel = u.split('/storage/v1/object/')[1].split('?')[0];
@@ -510,9 +527,104 @@ async function phase3() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 4 — Medien-Upload mit Video
+// ═══════════════════════════════════════════════════════════════════════════
+async function phase4() {
+  abschnitt('Phase 4 · Video: mp4/mov, 100 MB, 2 Minuten, Standbild');
+  reset();
+  // Eine Tageszeile, an die die Medien haengen.
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8 });
+  const trId = db.gs_tagesrapporte[0].id;
+  const basis = { projekt_id: P1, tagesrapport_id: trId, stockwerk: 'EG' };
+
+  // 4.1 zu gross — die Upload-URL wird gar nicht erst herausgegeben
+  const zuGross = await tech('medien_sign_upload', {
+    ...basis, filename: 'baustelle.mp4', contentType: 'video/mp4',
+    groesse: 150 * 1024 * 1024, dauer_sekunden: 30,
+  });
+  ok(!!(zuGross.body || {}).error, 'Video mit 150 MB: abgelehnt');
+  ok(/100 MB/.test((zuGross.body || {}).error || ''), `Meldung nennt die Grenze: "${((zuGross.body || {}).error || '').slice(0, 80)}"`);
+  ok(!(zuGross.body || {}).uploadUrl, 'es gibt KEINE Upload-URL — die Datei verlaesst das Handy nicht');
+  ok(Object.keys(storage).length === 0, 'und im Speicher liegt nichts');
+
+  // 4.2 zu lang
+  const zuLang = await tech('medien_sign_upload', {
+    ...basis, filename: 'lang.mp4', contentType: 'video/mp4',
+    groesse: 20 * 1024 * 1024, dauer_sekunden: 185,
+  });
+  ok(/2 Minuten|120/.test((zuLang.body || {}).error || ''), 'Video mit 3:05 min: abgelehnt mit Begruendung');
+  ok(!(zuLang.body || {}).uploadUrl, 'auch hier keine Upload-URL');
+
+  // 4.3 falsches Format
+  const falsch = await tech('medien_sign_upload', {
+    ...basis, filename: 'clip.avi', contentType: 'video/x-msvideo',
+    groesse: 5 * 1024 * 1024, dauer_sekunden: 20, medientyp: 'video',
+  });
+  ok(/mp4 und mov/.test((falsch.body || {}).error || ''), 'avi: abgelehnt, mp4/mov genannt');
+
+  // 4.4 gutes Video: Upload-URL, Ablage, Registrierung, Standbild
+  const gut = await tech('medien_sign_upload', {
+    ...basis, filename: 'steigzone.mov', contentType: 'video/quicktime',
+    groesse: 42 * 1024 * 1024, dauer_sekunden: 95,
+  });
+  ok(gut.status === 200 && gut.body.ok && gut.body.uploadUrl, 'mov, 42 MB, 95 s: Upload-URL erteilt');
+  const pfad = gut.body.path;
+  ok(String(pfad).startsWith(P1 + '/'), 'der Pfad liegt unter dem eigenen Projekt');
+  storage[`${PM_BUCKET}/${pfad}`] = 42 * 1024 * 1024;             // Direktupload nachstellen
+
+  const standbild = 'data:image/jpeg;base64,' + Buffer.from('STANDBILD-BYTES').toString('base64');
+  const reg = await tech('medien_register', {
+    ...basis, path: pfad, filename: 'steigzone.mov', contentType: 'video/quicktime',
+    medientyp: 'video', groesse: 42 * 1024 * 1024, dauer_sekunden: 95, thumbnail: standbild,
+  });
+  ok(reg.status === 200 && reg.body.ok, 'das Video wird registriert');
+  const m = reg.body.medien || {};
+  ok(m.medientyp === 'video', 'es ist als Video gespeichert');
+  ok(m.dauer_sekunden === 95, 'die Dauer steht in der Zeile (95 s)');
+  ok(m.groesse === 42 * 1024 * 1024, 'die Groesse steht in der Zeile');
+  ok(!!m.thumbnail_path, `ein Standbild ist gespeichert: ${m.thumbnail_path}`);
+  ok(reg.body.standbild === true, 'die Antwort bestaetigt das Standbild');
+  ok(!!storage[`${PM_BUCKET}/${m.thumbnail_path}`], 'das Standbild liegt wirklich im Speicher');
+  ok(m.tagesrapport_id === trId, 'das Video haengt an der Tageszeile');
+
+  // 4.5 kein Standbild erzeugbar → Video trotzdem da, Mangel benannt
+  const gut2 = await tech('medien_sign_upload', { ...basis, filename: 'zweites.mp4', contentType: 'video/mp4', groesse: 5e6, dauer_sekunden: 20 });
+  storage[`${PM_BUCKET}/${gut2.body.path}`] = 5e6;
+  const ohne = await tech('medien_register', {
+    ...basis, path: gut2.body.path, filename: 'zweites.mp4', contentType: 'video/mp4',
+    medientyp: 'video', groesse: 5e6, dauer_sekunden: 20,
+  });
+  ok(ohne.body.ok && ohne.body.standbild === false, 'ohne Standbild wird das Video trotzdem gespeichert');
+  ok(/Standbild/.test(ohne.body.hinweis || ''), `und der Mangel wird benannt: "${(ohne.body.hinweis || '').slice(0, 60)}"`);
+
+  // 4.6 Client umgangen: beim Registrieren faellt es auf, die Datei fliegt raus
+  const schmuggel = `${P1}/medien/${Date.now()}-riesig.mp4`;
+  storage[`${PM_BUCKET}/${schmuggel}`] = 300 * 1024 * 1024;
+  const abgewiesen = await tech('medien_register', {
+    ...basis, path: schmuggel, filename: 'riesig.mp4', contentType: 'video/mp4',
+    medientyp: 'video', groesse: 300 * 1024 * 1024, dauer_sekunden: 30,
+  });
+  ok(!!(abgewiesen.body || {}).error, 'ein am Client vorbeigeschmuggeltes Video wird abgewiesen');
+  ok(!storage[`${PM_BUCKET}/${schmuggel}`], 'und die bereits abgelegte Datei wird wieder entfernt');
+  ok(!db.gs_projekt_medien.some((x) => x.path === schmuggel), 'es entsteht keine Medienzeile dafuer');
+
+  // 4.7 Fotoupload unveraendert
+  const fotoVorher = db.gs_projekt_medien.filter((x) => x.medientyp === 'foto').length;
+  const foto = await tech('medien_upload', {
+    ...basis, filename: 'wand.jpg', contentType: 'image/jpeg',
+    data: 'data:image/jpeg;base64,' + Buffer.from('FOTO-BYTES').toString('base64'),
+  });
+  ok(foto.status === 200 && foto.body.ok, 'der Fotoupload funktioniert unveraendert');
+  ok((foto.body.medien || {}).medientyp === 'foto', 'und wird als Foto gespeichert');
+  ok(db.gs_projekt_medien.filter((x) => x.medientyp === 'foto').length === fotoVorher + 1, 'genau ein Foto dazu');
+  ok(foto.body.standbild === null, 'bei einem Foto ist von Standbild keine Rede');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase1();
 await phase2();
 await phase3();
+await phase4();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Prüfung(en) fehlgeschlagen, ${pass} grün` : `✅ alle ${pass} Prüfungen grün`);

@@ -4395,16 +4395,85 @@ async function signMedien(m) {
   return { ...m, url, thumbnail_url };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 4 — Video: Format, Groesse, Dauer, Standbild
+// ═══════════════════════════════════════════════════════════════════════════
+// Drei Grenzen, und alle drei werden VOR dem Upload gemeldet — der Client
+// prueft sie am File-Objekt, der Server prueft sie noch einmal, BEVOR er eine
+// signierte Upload-URL herausgibt. Ein 300-MB-Clip verlaesst das Handy damit
+// gar nicht erst; auf der Baustelle ist das der Unterschied zwischen "geht
+// nicht" und "haengt zehn Minuten und geht dann nicht".
+//
+// Die Server-Pruefung ist die massgebliche: der Client kann fehlen, alt sein
+// oder umgangen werden.
+const VIDEO_MAX_BYTES = 100 * 1024 * 1024;      // 100 MB
+const VIDEO_MAX_SEKUNDEN = 120;                 // 2 Minuten
+const VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/x-m4v']);
+const VIDEO_ENDUNGEN = new Set(['mp4', 'mov', 'm4v']);
+const VIDEO_THUMB_MAX = 4 * 1024 * 1024;
+
+function istVideo(contentType, filename, medientyp) {
+  if (medientyp === 'video') return true;
+  if (/^video\//.test(String(contentType || ''))) return true;
+  const e = String(filename || '').toLowerCase().split('.').pop();
+  return VIDEO_ENDUNGEN.has(e);
+}
+
+// Gibt null zurueck, wenn alles passt — sonst den fertigen Meldungstext.
+// `dauer` und `groesse` duerfen fehlen (dann werden sie nicht geprueft); der
+// Client liefert beides mit, der Server prueft die Groesse beim Registrieren
+// zusaetzlich am tatsaechlich abgelegten Objekt.
+function videoRegelFehler({ contentType, filename, groesse, dauer }) {
+  const e = String(filename || '').toLowerCase().split('.').pop();
+  const typOk = VIDEO_MIME.has(String(contentType || '').toLowerCase()) || VIDEO_ENDUNGEN.has(e);
+  if (!typOk) {
+    return `Dieses Videoformat wird nicht angenommen (${contentType || e || 'unbekannt'}). Erlaubt sind mp4 und mov.`;
+  }
+  const g = Number(groesse);
+  if (Number.isFinite(g) && g > VIDEO_MAX_BYTES) {
+    return `Das Video ist ${(g / 1048576).toFixed(1)} MB gross. Erlaubt sind höchstens 100 MB — bitte kürzer aufnehmen.`;
+  }
+  const d = Number(dauer);
+  if (Number.isFinite(d) && d > VIDEO_MAX_SEKUNDEN) {
+    return `Das Video dauert ${Math.round(d)} Sekunden. Erlaubt sind höchstens 2 Minuten (120 Sekunden).`;
+  }
+  return null;
+}
+
+// Standbild zum Video ablegen. Das Bild kommt vom Client (er hat das Video im
+// Speicher und kann einen Frame zeichnen; auf dem Server gaebe es dafuer keinen
+// Dekoder). Schlaegt es fehl, wird das Video trotzdem gespeichert — aber es
+// wird GESAGT, dass die Vorschau fehlt, statt sie stillschweigend wegzulassen.
+async function legeStandbildAb(scopeKey, safe, thumbB64) {
+  const tbuf = sbDecodeB64(thumbB64);
+  if (!tbuf || tbuf.length > VIDEO_THUMB_MAX) return null;
+  const tpath = `${scopeKey}/medien/thumbs/${nowStamp()}-${safe}.jpg`;
+  const tup = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${tpath}`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
+    body: tbuf,
+  });
+  return tup.ok ? tpath : null;
+}
+
 // Medien-Upload (Foto ODER Video) mit Standort-Tags in Bucket 'projektdateien' + DB-Zeile.
 async function medienUpload(b, scope) {
   const tgt = await resolveMedienTarget(b, scope, true);        // Schreibrecht nötig (Partner → Forbidden)
   const tagesrapport_id = await resolveTagesrapportId(b, scope);
   const buf = sbDecodeB64(b.data);
   if (!buf) return { error: 'Datei (base64) erforderlich' };
-  if (buf.length > 200 * 1024 * 1024) return { error: 'Datei zu gross (max. 200 MB)' };  // Videos → grösseres Limit
   const safe = sbSafeName(b.filename || 'medien');
   const contentType = b.contentType || sbGuessType(safe);
-  const medientyp = (/^video\//.test(contentType) || b.medientyp === 'video') ? 'video' : 'foto';
+  const medientyp = istVideo(contentType, safe, b.medientyp) ? 'video' : 'foto';
+  // Phase 4 — Videogrenzen gelten auch auf diesem (aelteren) Weg. Gemeldet
+  // wird VOR dem Upload; die Datei liegt hier zwar schon im Speicher, aber
+  // sie geht nicht in den Bucket.
+  if (medientyp === 'video') {
+    const fehler = videoRegelFehler({ contentType, filename: safe, groesse: buf.length, dauer: b.dauer_sekunden });
+    if (fehler) return { error: fehler, video_abgelehnt: true };
+  } else if (buf.length > 25 * 1024 * 1024) {
+    return { error: 'Foto zu gross (max. 25 MB).' };
+  }
   // Stockwerk: Pflicht wird APP-SEITIG nur bei PROJEKT-Fotos erzwungen; Service darf leer.
   const stockwerk = b.stockwerk ? String(b.stockwerk).slice(0, 80) : null;
   if (!tgt.isService && !stockwerk) return { error: 'Stockwerk ist bei Projekt-Medien erforderlich' };
@@ -4423,18 +4492,7 @@ async function medienUpload(b, scope) {
   }
   // Optionaler Video-Thumbnail (Client liefert base64-Poster) → für Vorschau.
   let thumbnail_path = null;
-  if (medientyp === 'video' && b.thumbnail) {
-    const tbuf = sbDecodeB64(b.thumbnail);
-    if (tbuf && tbuf.length <= 4 * 1024 * 1024) {
-      const tpath = `${scopeKey}/medien/thumbs/${nowStamp()}-${safe}.jpg`;
-      const tup = await fetch(`${SUPABASE_URL}/storage/v1/object/${PM_DATEI_BUCKET}/${tpath}`, {
-        method: 'POST',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'image/jpeg', 'x-upsert': 'true' },
-        body: tbuf,
-      });
-      if (tup.ok) thumbnail_path = tpath;
-    }
-  }
+  if (medientyp === 'video' && b.thumbnail) thumbnail_path = await legeStandbildAb(scopeKey, safe, b.thumbnail);
   const row = {
     projekt_id: tgt.projekt_id, service_auftrag_id: tgt.service_auftrag_id,
     tagesrapport_id,
@@ -4451,7 +4509,15 @@ async function medienUpload(b, scope) {
   };
   try {
     const r = await sbWrite('POST', 'gs_projekt_medien', row);
-    return { ok: true, medien: await signMedien(Array.isArray(r) ? r[0] : r) };
+    return {
+      ok: true,
+      medien: await signMedien(Array.isArray(r) ? r[0] : r),
+      // Ehrlich benennen statt stillschweigend weglassen.
+      standbild: medientyp === 'video' ? !!thumbnail_path : null,
+      hinweis: (medientyp === 'video' && !thumbnail_path)
+        ? 'Das Video ist gespeichert, ein Standbild konnte nicht erzeugt werden. In der Galerie fehlt die Vorschau.'
+        : null,
+    };
   } catch (e) {
     if (isNoTable(e)) return { notMigrated: true };
     throw e;
@@ -4513,6 +4579,16 @@ async function medienDel(b, scope) {
 async function medienSignUpload(b, scope) {
   const tgt = await resolveMedienTarget(b, scope, true);
   const safe = sbSafeName(b.filename || 'video');
+  // Phase 4 — HIER faellt die Entscheidung. Wer keine Upload-URL bekommt, laedt
+  // nichts hoch; der 300-MB-Clip verlaesst das Handy gar nicht erst. Der Client
+  // schickt Groesse und Dauer mit, beides liest er am File-Objekt ab.
+  if (istVideo(b.contentType, safe, b.medientyp)) {
+    const fehler = videoRegelFehler({
+      contentType: b.contentType || sbGuessType(safe), filename: safe,
+      groesse: b.groesse, dauer: b.dauer_sekunden,
+    });
+    if (fehler) return { error: fehler, video_abgelehnt: true };
+  }
   const scopeKey = tgt.isService ? `service/${tgt.service_auftrag_id}` : tgt.projekt_id;
   const path = `${scopeKey}/medien/${nowStamp()}-${safe}`;
   // Body {} nötig: der Endpoint lehnt leeren Body bei Content-Type json ab.
@@ -4538,9 +4614,31 @@ async function medienRegister(b, scope) {
   const prefix = tgt.isService ? `service/${tgt.service_auftrag_id}/` : `${tgt.projekt_id}/`;
   if (!path.startsWith(prefix)) throw new Forbidden();
   const contentType = b.contentType || sbGuessType(path);
-  const medientyp = (/^video\//.test(contentType) || b.medientyp === 'video') ? 'video' : 'foto';
+  const medientyp = istVideo(contentType, path, b.medientyp) ? 'video' : 'foto';
   const stockwerk = b.stockwerk ? String(b.stockwerk).slice(0, 80) : null;
   if (!tgt.isService && !stockwerk) return { error: 'Stockwerk ist bei Projekt-Medien erforderlich' };
+
+  // Zweite Pruefung, nach dem Direktupload. Der Client koennte die erste
+  // umgangen haben — dann liegt die Datei zwar schon im Bucket, bekommt aber
+  // keine Zeile und wird wieder entfernt. Ohne das Aufraeumen bliebe ein
+  // Video liegen, das nirgends auftaucht und niemand mehr findet.
+  let thumbnail_path = b.thumbnail_path ? String(b.thumbnail_path).slice(0, 300) : null;
+  const scopeKey = tgt.isService ? `service/${tgt.service_auftrag_id}` : tgt.projekt_id;
+  if (medientyp === 'video') {
+    const fehler = videoRegelFehler({ contentType, filename: path, groesse: b.groesse, dauer: b.dauer_sekunden });
+    if (fehler) {
+      await sbStorageDel(PM_DATEI_BUCKET, path).catch(() => {});
+      return { error: fehler, video_abgelehnt: true };
+    }
+    // Standbild: kommt als base64 mit (klein genug fuer den Body) und wird
+    // hier abgelegt. Zu jedem Video gehoert eines.
+    // sbDisplayName streift den fuehrenden Zeitstempel des Videopfads ab —
+    // sonst hiesse das Standbild "1788…-1788…-clip.mov.jpg".
+    if (!thumbnail_path && b.thumbnail) {
+      thumbnail_path = await legeStandbildAb(scopeKey, sbSafeName(sbDisplayName(path.split('/').pop())), b.thumbnail);
+    }
+  }
+
   const row = {
     projekt_id: tgt.projekt_id, service_auftrag_id: tgt.service_auftrag_id,
     tagesrapport_id,
@@ -4548,7 +4646,7 @@ async function medienRegister(b, scope) {
     dateiname: b.filename ? sbDisplayName(sbSafeName(b.filename)) : sbDisplayName(path.split('/').pop()),
     mime: contentType, groesse: (b.groesse != null && b.groesse !== '') ? Math.round(num(b.groesse)) : null,
     dauer_sekunden: (b.dauer_sekunden != null && b.dauer_sekunden !== '') ? Math.round(num(b.dauer_sekunden)) : null,
-    thumbnail_path: b.thumbnail_path ? String(b.thumbnail_path).slice(0, 300) : null,
+    thumbnail_path,
     stockwerk, stockwerk_id: b.stockwerk_id ? uuid(b.stockwerk_id) : null,
     wohnung: b.wohnung ? String(b.wohnung).slice(0, 80) : null,
     raum: b.raum ? String(b.raum).slice(0, 80) : null,
@@ -4558,7 +4656,14 @@ async function medienRegister(b, scope) {
   };
   try {
     const r = await sbWrite('POST', 'gs_projekt_medien', row);
-    return { ok: true, medien: await signMedien(Array.isArray(r) ? r[0] : r) };
+    return {
+      ok: true,
+      medien: await signMedien(Array.isArray(r) ? r[0] : r),
+      standbild: medientyp === 'video' ? !!thumbnail_path : null,
+      hinweis: (medientyp === 'video' && !thumbnail_path)
+        ? 'Das Video ist gespeichert, ein Standbild konnte nicht erzeugt werden. In der Galerie fehlt die Vorschau.'
+        : null,
+    };
   } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
 }
 
@@ -5570,7 +5675,14 @@ function sbDisplayName(n) { return String(n).replace(/^\d{10,}-/, ''); }
 function nowStamp() { return String(Date.now()); }
 function sbGuessType(n) {
   const e = String(n).toLowerCase().split('.').pop();
-  return { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', dwg: 'application/acad', dxf: 'image/vnd.dxf' }[e] || 'application/octet-stream';
+  return {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    webp: 'image/webp', gif: 'image/gif', heic: 'image/heic',
+    dwg: 'application/acad', dxf: 'image/vnd.dxf',
+    // Video (Phase 4). Ohne diese beiden riet der Typ auf octet-stream und der
+    // Bucket lieferte das Video spaeter als Download statt als Video aus.
+    mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4',
+  }[e] || 'application/octet-stream';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
