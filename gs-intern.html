@@ -1460,19 +1460,32 @@ function renderProjektListe(){
 function paintProjektListe(list){
   var el=$('pm-list'); if(!el) return;
   if(!list.length){ el.innerHTML='<div class="empty">Noch keine Projekte. Leg das erste an.</div>'; return; }
-  el.innerHTML=list.map(function(p){
+  /* Phase 3 — im Rapport schnell angelegte Projekte stehen OBEN und tragen
+     einen Hinweis. Sie sind echte Projekte, aber es fehlen Angaben; wer sie
+     unten in der Liste versteckt, traegt sie nie nach. */
+  var unvoll=list.filter(function(p){return p.unvollstaendig;});
+  var rest=list.filter(function(p){return !p.unvollstaendig;});
+  var karte=function(p){
     var kunde=p.kunde?(p.kunde.firma||p.kunde.kontaktperson||''):'';
     var bl=p.blockaden_offen?'<span class="fu ueberfaellig">⚠ '+p.blockaden_offen+' offene Blockade'+(p.blockaden_offen>1?'n':'')+'</span>':'';
+    var uv=p.unvollstaendig?'<span class="fu ueberfaellig">✎ unvollständig — Angaben nachtragen</span>':'';
     return '<div class="lcard" data-id="'+esc(p.id)+'">'+
       '<div class="top"><div class="nm">'+esc(p.name||'Projekt')+'</div>'+pmPill(p.status||'—',pmStatusColor(p.status))+'</div>'+
       '<div class="meta">'+
         (p.projektnummer?'<span>'+esc(p.projektnummer)+'</span>':'')+
+        (p.fremdnummer?'<span class="dot">Fremdnr. '+esc(p.fremdnummer)+'</span>':'')+
         (p.standort?'<span class="dot">'+esc(p.standort)+'</span>':'')+
         (p.bereich?'<span class="dot">'+esc(p.bereich)+'</span>':'')+
         (kunde?'<span class="dot">'+esc(kunde)+'</span>':'')+dbListDot(p)+'</div>'+
-      (bl?'<div class="meta" style="margin-top:6px">'+bl+'</div>':'')+'</div>';
-  }).join('');
-  Array.prototype.forEach.call(el.children,function(c){ if(c.getAttribute) c.onclick=function(){ openProjekt(c.getAttribute('data-id')); }; });
+      ((bl||uv)?'<div class="meta" style="margin-top:6px">'+uv+bl+'</div>':'')+'</div>';
+  };
+  el.innerHTML=(unvoll.length?('<div class="cc-sec" style="margin-top:0">Unvollständig ('+unvoll.length+')</div>'+unvoll.map(karte).join('')+'<div class="cc-sec">Übrige Projekte</div>'):'')
+    +rest.map(karte).join('');
+  // Nur Karten sind antippbar — zwischen ihnen stehen jetzt Abschnittstitel.
+  Array.prototype.forEach.call(el.children,function(c){
+    var id=c.getAttribute&&c.getAttribute('data-id');
+    if(id) c.onclick=function(){ openProjekt(id); };
+  });
 }
 
 // ── Projekt-Detail: alles zu einem Projekt an einem Ort ──
@@ -2323,8 +2336,13 @@ function openProjektEdit(p){
   var kundeOpts=_pmKunden.map(function(k){ return {v:k.id,t:(k.firma||k.kontaktperson||'Kunde')}; });
   var tarifOpts=[{v:'',t:'— kein Tarif —'},{v:65,t:'65 CHF/h'},{v:70,t:'70 CHF/h'},{v:72,t:'72 CHF/h'},{v:95,t:'95 CHF/h'}];
   openSheet('<h3>'+(p.id?'Projekt bearbeiten':'Neues Projekt')+'</h3>'+
+    // Phase 3 — steht ganz oben: dieses Projekt kam aus dem Rapport und
+    // wartet auf die fehlenden Angaben. Sobald Name, Adresse, Ansprechperson
+    // und E-Mail dastehen, verschwindet der Hinweis von selbst (Server).
+    (p.unvollstaendig?'<div class="login-msg err" style="margin-bottom:10px">Unvollständig — im Rapport schnell angelegt. Es fehlen Adresse, Ansprechperson oder E-Mail.</div>':'')+
     '<input class="field" id="pe-name" placeholder="Projektname *" value="'+esc(p.name||'')+'"/>'+
     '<input class="field" id="pe-nr" placeholder="Projektnummer" value="'+esc(p.projektnummer||'')+'" style="margin-top:8px"/>'+
+    '<input class="field" id="pe-fremd" placeholder="Fremdnummer (Nummer des Auftraggebers)" value="'+esc(p.fremdnummer||'')+'" style="margin-top:8px"/>'+
     '<input class="field" id="pe-ort" placeholder="Standort" value="'+esc(p.standort||'')+'" style="margin-top:8px"/>'+
     '<input class="field" id="pe-adr" placeholder="Projektadresse (Baustelle)" value="'+esc(p.projektadresse||'')+'" style="margin-top:8px"/>'+
     '<input class="field" id="pe-bereich" placeholder="Bereich (z. B. Sanierung, HKLS)" value="'+esc(p.bereich||'')+'" style="margin-top:8px"/>'+
@@ -2347,7 +2365,8 @@ function openProjektEdit(p){
     var body={id:p.id||undefined,name:name,projektnummer:($('pe-nr')||{}).value,standort:($('pe-ort')||{}).value,
       bereich:($('pe-bereich')||{}).value,status:($('pe-status')||{}).value,kunde_id:($('pe-kunde')||{}).value,
       projektadresse:($('pe-adr')||{}).value,projektleiter:($('pe-pl')||{}).value,ansprechperson:($('pe-ap')||{}).value,
-      ansprech_telefon:($('pe-ap-tel')||{}).value,ansprech_email:($('pe-ap-mail')||{}).value,stundensatz:($('pe-tarif')||{}).value};
+      ansprech_telefon:($('pe-ap-tel')||{}).value,ansprech_email:($('pe-ap-mail')||{}).value,stundensatz:($('pe-tarif')||{}).value,
+      fremdnummer:($('pe-fremd')||{}).value};
     var btn=$('pe-save'); if(btn){ btn.disabled=true; btn.textContent='…'; }
     api('pm_projekt_save',body).then(function(d){
       closeSheet();

@@ -26,6 +26,15 @@
 //     2.4  auch der aeltere Weg api/tagesrapport.js weist 2099 ab
 //     2.5  auch die Master-Korrektur darf kein 2099 setzen
 //     2.6  ein Datum, das es im Kalender nicht gibt, wird abgelehnt
+//   Phase 3 — Projekt im Rapport anlegen
+//     3.1  Schnellanlage mit NUR einer Bezeichnung erzeugt ein echtes Projekt
+//     3.2  es traegt Status "unvollstaendig" und eine LEERE Fremdnummer
+//     3.3  es bekommt eine provisorische interne Nummer, keine erfundene
+//     3.4  der Techniker ist sofort zugewiesen und kann darauf buchen
+//     3.5  der vollstaendige Weg erzeugt ein Projekt OHNE den Marker
+//     3.6  ohne Bezeichnung wird nichts angelegt
+//     3.7  Nachtragen im Cockpit loescht den Marker von selbst
+//     3.8  eine getippte Fremdnummer wird uebernommen, nie erzeugt
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://attrappe.supabase.test';
 process.env.SUPABASE_KEY = 'test-service-key-fuer-die-attrappe';
@@ -424,8 +433,86 @@ async function phase2() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 3 — Projekt im Rapport anlegen
+// ═══════════════════════════════════════════════════════════════════════════
+async function phase3() {
+  abschnitt('Phase 3 · Projekt direkt aus dem Rapport anlegen');
+  reset();
+  const vorher = db.gs_projekte.length;
+
+  // 3.1–3.4 Schnellanlage
+  const r = await tech('tech_projekt_neu', { name: 'Umbau Bahnhofplatz' });
+  ok(r.status === 200 && r.body.ok, 'Schnellanlage mit nur einer Bezeichnung geht durch');
+  const p = (r.body || {}).projekt || {};
+  ok(db.gs_projekte.length === vorher + 1, 'es entstand GENAU ein echtes Projekt');
+  const roh = db.gs_projekte.find((x) => x.id === p.id) || {};
+  ok(roh.name === 'Umbau Bahnhofplatz', 'die Bezeichnung steht drin');
+  ok(roh.unvollstaendig === true, 'Status: unvollstaendig');
+  ok(roh.fremdnummer === null, 'die Fremdnummer ist LEER — nichts erfunden');
+  ok(/^NEU-\d{4}-\d{3}$/.test(roh.projektnummer || ''),
+    `provisorische interne Nummer vergeben: ${roh.projektnummer}`);
+  ok(r.body.unvollstaendig === true, 'die Antwort sagt es dem Techniker');
+  ok(/unvoll/i.test(r.body.hinweis || ''), `mit Klartext: "${(r.body.hinweis || '').slice(0, 70)}"`);
+  ok(r.body.zugewiesen === true, 'der Techniker ist dem Projekt zugewiesen');
+  ok(db.gs_projekt_techniker.some((a2) => a2.projekt_id === p.id && a2.techniker_id === TECHID),
+    'die Zuweisung steht auch wirklich in der Tabelle');
+
+  // 3.4 — und er kann sofort darauf buchen (das ist der eigentliche Zweck).
+  const buchung = await tech('tech_tag_save', { datum: MO, projekt_id: p.id, stunden: 8, start_zeit: '07:00', end_zeit: '16:00' });
+  ok(buchung.status === 200 && buchung.body.ok, 'der Tag laesst sich sofort auf das neue Projekt buchen');
+
+  // Und es taucht in seiner Projektliste auf.
+  const liste = await tech('tech_projekte');
+  ok((liste.body.projekte || []).some((x) => x.id === p.id), 'das Projekt steht in seiner Projektliste');
+
+  // 3.5 Vollstaendiger Weg
+  reset();
+  const v = await tech('tech_projekt_neu', {
+    name: 'Neubau Seestrasse', adresse: 'Seestrasse 4, 8002 Zürich',
+    ansprechperson: 'Bauleiter Eins', ansprech_email: 'bauleiter@example.invalid',
+    fremdnummer: 'AG-2026-777',
+  });
+  ok(v.status === 200 && v.body.ok, 'vollstaendige Anlage geht durch');
+  const rv = db.gs_projekte.find((x) => x.id === v.body.projekt.id) || {};
+  ok(rv.unvollstaendig === false, 'kein Marker: alle Pflichtangaben da');
+  ok(rv.projektadresse === 'Seestrasse 4, 8002 Zürich', 'die Adresse ist gespeichert');
+  ok(rv.ansprech_email === 'bauleiter@example.invalid', 'die Mail ist gespeichert');
+  ok(rv.fremdnummer === 'AG-2026-777', '3.8 — eine getippte Fremdnummer wird uebernommen');
+  ok(/^NEU-\d{4}-\d{3}$/.test(rv.projektnummer || ''), 'auch hier eine provisorische interne Nummer');
+
+  // 3.6 Ohne Bezeichnung
+  reset();
+  const leer = await tech('tech_projekt_neu', { name: '   ' });
+  ok(!!(leer.body || {}).error, 'ohne Bezeichnung: Fehlermeldung');
+  ok(db.gs_projekte.length === 2, 'und kein Projekt angelegt');
+  const krummeMail = await tech('tech_projekt_neu', { name: 'X', ansprech_email: 'keine-mail' });
+  ok(!!(krummeMail.body || {}).error, 'eine offensichtlich falsche E-Mail wird abgewiesen');
+
+  // 3.7 Nachtragen im Cockpit
+  reset();
+  const s2 = await tech('tech_projekt_neu', { name: 'Halle Nord' });
+  const pid = s2.body.projekt.id;
+  ok(db.gs_projekte.find((x) => x.id === pid).unvollstaendig === true, 'frisch angelegt: unvollstaendig');
+  const nach = await ruf({
+    token: 'tokMaster', mode: 'master', action: 'pm_projekt_save',
+    id: pid, name: 'Halle Nord', projektadresse: 'Industriestrasse 9',
+    ansprechperson: 'Frau Muster', ansprech_email: 'muster@example.invalid',
+  });
+  ok(nach.status === 200 && nach.body.ok, 'Master traegt die Angaben nach');
+  ok(db.gs_projekte.find((x) => x.id === pid).unvollstaendig === false,
+    'der Marker verschwindet von selbst — kein Haken zum Wegklicken');
+
+  // Zwei Anlagen hintereinander duerfen nicht dieselbe Nummer bekommen.
+  reset();
+  const a1 = await tech('tech_projekt_neu', { name: 'Erste' });
+  const a2 = await tech('tech_projekt_neu', { name: 'Zweite' });
+  ok(a1.body.nummer !== a2.body.nummer, `zwei Anlagen, zwei Nummern (${a1.body.nummer} / ${a2.body.nummer})`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase1();
 await phase2();
+await phase3();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Prüfung(en) fehlgeschlagen, ${pass} grün` : `✅ alle ${pass} Prüfungen grün`);

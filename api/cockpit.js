@@ -108,6 +108,8 @@ const TECHNIKER_ACTIONS = new Set([
   'tech_projekte', 'tech_projekt', 'tech_rapporte', 'tech_rapport_add',
   // Wochenrapport (Kopf + strukturierte Tageszeilen, siehe unten).
   'tech_tag_save', 'tech_tag_del', 'tech_wochen_rapport', 'tech_wochen_liste',
+  // Phase 3: Projekt direkt aus dem Rapport anlegen (Vollstaendig oder Schnell).
+  'tech_projekt_neu',
   'tech_wochen_einreichen', 'tech_wochen_sign', 'tech_taetigkeitenkatalog',
   // Feature B/C: Techniker lädt getaggte Medien hoch, sieht Galerie, bucht auf
   // zugewiesene Service-Aufträge, markiert erledigt. Zugriff über die verifizierte Kette.
@@ -315,6 +317,7 @@ export default async function handler(req, res) {
       case 'tech_rapporte':    return res.status(200).json(await getTechRapporte(scope));
       case 'tech_rapport_add': return res.status(200).json(await addTechRapport(req.body, scope));
       // ── Wochenrapport: Kopf (KW) + strukturierte Tageszeilen ──
+      case 'tech_projekt_neu':   return res.status(200).json(await techProjektNeu(req.body, scope));
       case 'tech_tag_save':      return res.status(200).json(await saveTechTag(req.body, scope));
       case 'tech_tag_del':       return res.status(200).json(await delTechTag(req.body, scope));
       case 'tech_wochen_rapport': return res.status(200).json(await getTechWochenRapport(req.body, scope));
@@ -1963,6 +1966,14 @@ function pmTechCard(t) {
 // Erweiterte Stammdaten (brauchen scripts/projekt_detail_scharf.sql). Fehlt die
 // Migration, entfernen wir sie beim Speichern und retryen → nie ein 500.
 const PM_PROJ_EXTRA = ['projektadresse', 'projektleiter', 'ansprechperson', 'ansprech_telefon', 'ansprech_email'];
+// Phase 3: dieselbe Vollstaendigkeits-Regel wie bei der Schnellanlage
+// (techProjektNeu). Sie steht hier ein zweites Mal in Form einer Funktion,
+// damit ein im Rapport schnell angelegtes Projekt beim Nachtragen im Cockpit
+// von selbst wieder sauber wird — ohne dass jemand einen Haken setzen muss.
+function projektVollstaendig(p) {
+  const da = (v) => !!String(v || '').trim();
+  return da(p.name) && da(p.projektadresse) && da(p.ansprechperson) && da(p.ansprech_email);
+}
 async function savePmProjekt(b, scope) {
   // Bearbeiten: Partner darf nur EIGENE Projekte ändern.
   if (b.id) await requireOwnedProjekt(b.id, scope);
@@ -1971,6 +1982,10 @@ async function savePmProjekt(b, scope) {
   if (!b.id && scope && scope.partnerId) patch.partner_user_id = scope.partnerId;
   if (b.name !== undefined) patch.name = String(b.name || '').trim().slice(0, 120);
   if (b.projektnummer !== undefined) patch.projektnummer = String(b.projektnummer || '').trim().slice(0, 60) || null;
+  // Fremdnummer = Nummer des Auftraggebers. Wird nie erzeugt, nur uebernommen;
+  // leer bleibt leer. Gehoert zu PM_PROJ_EXTRA-Logik: fehlt die Spalte noch,
+  // faellt sie beim Retry mit heraus.
+  if (b.fremdnummer !== undefined) patch.fremdnummer = String(b.fremdnummer || '').trim().slice(0, 60) || null;
   if (b.standort !== undefined) patch.standort = String(b.standort || '').trim().slice(0, 160) || null;
   if (b.bereich !== undefined) patch.bereich = String(b.bereich || '').trim().slice(0, 80) || null;
   if (b.status !== undefined) patch.status = String(b.status || '').trim().slice(0, 40) || 'aktiv';
@@ -1979,6 +1994,20 @@ async function savePmProjekt(b, scope) {
   for (const f of PM_PROJ_EXTRA) {
     if (b[f] !== undefined) patch[f] = String(b[f] || '').trim().slice(0, 200) || null;
   }
+  // Kennzeichnung "unvollstaendig" nachfuehren: wer die fehlenden Angaben
+  // eintraegt, soll den Marker nicht zusaetzlich von Hand loeschen muessen —
+  // und wer sie wieder leert, bekommt ihn zurueck. Nur wenn eines der
+  // beteiligten Felder ueberhaupt angefasst wurde.
+  const beteiligt = ['name', 'projektadresse', 'ansprechperson', 'ansprech_email'];
+  if (beteiligt.some((f) => patch[f] !== undefined)) {
+    let alt = {};
+    if (b.id) {
+      const vor = await sbGet(`gs_projekte?id=eq.${uuid(b.id)}&select=name,projektadresse,ansprechperson,ansprech_email&limit=1`).catch(() => []);
+      alt = (vor && vor[0]) || {};
+    }
+    patch.unvollstaendig = !projektVollstaendig({ ...alt, ...patch });
+  }
+
   const write = async (p) => {
     if (b.id) { const id = uuid(b.id); return await sbWrite('PATCH', `gs_projekte?id=eq.${id}`, p); }
     if (!p.name) throw new Error('name nötig');
@@ -1991,6 +2020,7 @@ async function savePmProjekt(b, scope) {
     // Spalte (noch) nicht migriert → Extra-Felder droppen, Kernfelder trotzdem speichern.
     if (/column|does not exist|PGRST204/i.test((e && e.message) || '')) {
       const base = { ...patch }; for (const f of PM_PROJ_EXTRA) delete base[f];
+      delete base.unvollstaendig; delete base.fremdnummer;
       r = await write(base);
       return { ok: true, projekt: Array.isArray(r) ? r[0] : r, extraNotMigrated: true };
     }
@@ -2307,6 +2337,130 @@ function techSafeProjekt(p) {
     anlagenart: Array.isArray(db.anlagenart) ? db.anlagenart : [],
     notiz: db.notiz || null,
     start: db.start || null,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 3 — Projekt direkt aus dem Rapport anlegen
+// ═══════════════════════════════════════════════════════════════════════════
+// Der Techniker steht auf einer Baustelle, die im System noch nicht existiert.
+// Bisher blieb ihm nur, den Master anzurufen und den Tag ungebucht zu lassen.
+// Ab jetzt legt er sie selbst an — auf zwei Wegen:
+//
+//   vollstaendig: Bezeichnung, Adresse, Ansprechperson, Mail, Fremdnummer
+//   schnell:      nur Bezeichnung
+//
+// PFLICHT IST AUSSCHLIESSLICH DIE BEZEICHNUNG. Alles andere darf fehlen; was
+// fehlt, macht das Projekt "unvollstaendig" und damit im Cockpit sichtbar
+// nachtragbar. Ein Projekt gilt als vollstaendig, wenn Bezeichnung, Adresse,
+// Ansprechperson UND Mail dastehen — die Fremdnummer zaehlt bewusst NICHT
+// dazu: sie gehoert dem Auftraggeber, und viele Auftraege haben gar keine.
+//
+// DIE FREMDNUMMER WIRD NIE ERFUNDEN. Vergeben wird ausschliesslich eine
+// provisorische INTERNE Nummer im Format NEU-{Jahr}-{lfd}. Sie ist auf den
+// ersten Blick als vorlaeufig zu erkennen und kollidiert mit keinem der
+// bestehenden numerischen Kreise (60133.00 …).
+const PROV_PRAEFIX = 'NEU';
+
+async function naechsteProvisorischeNummer() {
+  const jahr = new Date().getUTCFullYear();
+  const rows = await sbGet(
+    `gs_projekte?projektnummer=like.${PROV_PRAEFIX}-${jahr}-*&select=projektnummer&order=projektnummer.desc&limit=1`,
+  ).catch(() => []);
+  let n = 1;
+  const letzte = (rows && rows[0] && rows[0].projektnummer) || null;
+  if (letzte) { const m = String(letzte).match(/(\d+)$/); if (m) n = parseInt(m[1], 10) + 1; }
+  // Freie Nummer suchen statt blind hochzaehlen: zwei Techniker koennen
+  // gleichzeitig anlegen. Eine doppelte Nummer waere still und stoerend.
+  for (let i = 0; i < 50; i++) {
+    const kandidat = `${PROV_PRAEFIX}-${jahr}-${String(n + i).padStart(3, '0')}`;
+    const da = await sbGet(`gs_projekte?projektnummer=eq.${kandidat}&select=id&limit=1`).catch(() => []);
+    if (!da || !da.length) return kandidat;
+  }
+  return `${PROV_PRAEFIX}-${jahr}-${Date.now().toString().slice(-6)}`;
+}
+
+// Felder, die es erst nach scripts/rapport_feld.sql gibt. Fehlen sie, wird das
+// Projekt trotzdem angelegt — aber es wird GESAGT, dass die Kennzeichnung
+// "unvollstaendig" nicht gespeichert werden konnte.
+const PROJ_NEU_EXTRA = ['unvollstaendig', 'fremdnummer', 'schnellanlage_von', 'schnellanlage_am'];
+
+async function techProjektNeu(b, scope) {
+  if (!scope || !scope.technikerId) throw new Forbidden();
+  const txt = (v, n) => String(v || '').trim().slice(0, n);
+  const name = txt(b.name, 120);
+  if (!name) return { error: 'Bitte eine Bezeichnung angeben — sie ist das einzige Pflichtfeld.' };
+
+  const adresse = txt(b.adresse, 200);
+  const ansprechperson = txt(b.ansprechperson, 200);
+  const email = txt(b.ansprech_email, 200);
+  const fremdnummer = txt(b.fremdnummer, 60);
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return { error: 'Die E-Mail-Adresse sieht nicht richtig aus. Bitte prüfen oder leer lassen.' };
+  }
+
+  const vollstaendig = !!(name && adresse && ansprechperson && email);
+  const nummer = await naechsteProvisorischeNummer();
+
+  const row = {
+    name,
+    projektnummer: nummer,
+    status: 'aktiv',
+    projektadresse: adresse || null,
+    ansprechperson: ansprechperson || null,
+    ansprech_email: email || null,
+    // Leer heisst leer. Kein Platzhalter, keine abgeleitete Nummer.
+    fremdnummer: fremdnummer || null,
+    unvollstaendig: !vollstaendig,
+    schnellanlage_von: scope.technikerUserId || null,
+    schnellanlage_am: new Date().toISOString(),
+  };
+
+  let angelegt = null, extraFehlt = false;
+  const schreib = async (p) => {
+    const r = await sbWrite('POST', 'gs_projekte', p);
+    return Array.isArray(r) ? r[0] : r;
+  };
+  try {
+    angelegt = await schreib(row);
+  } catch (e) {
+    if (!/column|does not exist|PGRST204|schema cache/i.test((e && e.message) || '')) throw e;
+    // Erst die neuen Spalten weglassen, dann zusaetzlich die "scharf"-Spalten
+    // (projektadresse/ansprechperson/ansprech_email) — in dieser Reihenfolge,
+    // damit so viel wie moeglich erhalten bleibt.
+    const ohneNeu = { ...row }; for (const f of PROJ_NEU_EXTRA) delete ohneNeu[f];
+    extraFehlt = true;
+    try {
+      angelegt = await schreib(ohneNeu);
+    } catch (e2) {
+      if (!/column|does not exist|PGRST204|schema cache/i.test((e2 && e2.message) || '')) throw e2;
+      const kern = { name, projektnummer: nummer, status: 'aktiv' };
+      angelegt = await schreib(kern);
+    }
+  }
+  if (!angelegt || !angelegt.id) return { error: 'Das Projekt konnte nicht angelegt werden.' };
+
+  // Ohne Zuweisung koennte der Techniker auf sein eigenes neues Projekt nicht
+  // buchen (requireAssignedProjekt). Schlaegt das fehl, ist das Projekt zwar
+  // da, aber unbrauchbar — dann wird es gesagt, nicht verschwiegen.
+  let zugewiesen = true;
+  try {
+    await sbWrite('POST', 'gs_projekt_techniker', {
+      projekt_id: angelegt.id, techniker_id: scope.technikerId, seit: new Date().toISOString().slice(0, 10),
+    });
+  } catch (_) { zugewiesen = false; }
+
+  return {
+    ok: true,
+    projekt: techSafeProjekt(angelegt),
+    nummer: angelegt.projektnummer || nummer,
+    unvollstaendig: !vollstaendig,
+    zugewiesen,
+    hinweis: !zugewiesen
+      ? 'Das Projekt ist angelegt, aber die Zuweisung an dich hat nicht geklappt — bitte den Master informieren, sonst kannst du nicht darauf buchen.'
+      : (extraFehlt
+        ? 'Das Projekt ist angelegt. Die Kennzeichnung „unvollständig" konnte noch nicht gespeichert werden — scripts/rapport_feld.sql ist noch nicht gelaufen.'
+        : (vollstaendig ? null : 'Das Projekt ist angelegt und als unvollständig gekennzeichnet. Die fehlenden Angaben können im Cockpit nachgetragen werden.')),
   };
 }
 

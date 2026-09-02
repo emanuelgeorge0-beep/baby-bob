@@ -1250,6 +1250,26 @@ body.demo-on .tech-screen,body.demo-on .admin-screen{padding-top:calc(38px + env
   #tech-cockpit .rc-grund{flex:0 0 300px;}
   #tech-cockpit .rc-details{flex-basis:100%;}
 }
+/* ── Phase 3: Blatt "Neues Projekt" ─────────────────────────────────────
+   Eigene Klassen statt der Rad-Klassen: das Rad sperrt jede Wischgeste
+   (touch-action:none), hier muss das Blatt aber scrollen koennen, weil
+   Tastatur plus fuenf Felder auf einem Handy nicht auf den Schirm passen.
+   Alle Tippflaechen mindestens 48 px hoch, eine Spalte, kein Hover. */
+#tech-cockpit .tc-np-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:8100;
+  display:flex;align-items:flex-end;justify-content:center;overscroll-behavior:contain;}
+#tech-cockpit .tc-np-sheet{width:100%;max-width:520px;background:#0f1115;
+  border-top:1px solid rgba(201,169,97,.35);border-radius:18px 18px 0 0;
+  padding:14px 14px calc(18px + env(safe-area-inset-bottom,0px));
+  max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+#tech-cockpit .tc-np-modi{display:flex;gap:8px;margin:10px 0 14px;}
+#tech-cockpit .tc-np-modi button{flex:1;min-height:52px;border-radius:13px;font-family:inherit;
+  font-size:14px;font-weight:800;cursor:pointer;background:#15171c;color:#E8EDF5;
+  border:1px solid rgba(201,169,97,.28);padding:8px 6px;line-height:1.25;}
+#tech-cockpit .tc-np-modi button.on{background:rgba(201,169,97,.16);border-color:#C9A961;color:#C9A961;}
+#tech-cockpit .tc-np-sheet .tc-field{min-height:50px;font-size:16px;}
+#tech-cockpit .tc-np-hint{font-size:12.5px;line-height:1.5;color:rgba(232,237,245,.55);margin:2px 0 12px;}
+#tech-cockpit .tc-np-fehler{font-size:13px;font-weight:700;color:#ff8a80;margin:8px 0 0;min-height:0;}
+#tech-cockpit .tc-np-sheet .tc-btnrow button{min-height:52px;font-size:15px;}
 #tech-cockpit .tc-nav{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-around;align-items:center;gap:2px;padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px));background:rgba(10,10,11,.92);backdrop-filter:blur(14px);border-top:1px solid rgba(201,169,97,.18);z-index:40;}
 #tech-cockpit .tc-nav button{flex:1;background:none;border:none;color:#5c6878;font-size:10.5px;font-weight:700;letter-spacing:.3px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 2px;cursor:pointer;}
 #tech-cockpit .tc-nav button .ic{font-size:19px;line-height:1;}
@@ -10140,6 +10160,11 @@ function tcZielOptions(z){
     var v='s:'+s.id; return '<option value="'+tcEsc(v)+'"'+(cur===v?' selected':'')+'>'+tcEsc(s.objekt||'Service-Auftrag')+'</option>';
   }).join('');
   var html='<option value=""'+(cur===''?' selected':'')+'>– Projekt / Auftrag / Abwesenheit –</option>';
+  /* Phase 3 — Baustelle noch nicht im System? Direkt hier anlegen. Steht ganz
+     oben, weil sie sonst unter zwanzig Projekten nicht zu finden waere. Der
+     Wert 'neu:' wird NIE gespeichert: tcRowZielChange faengt ihn ab, oeffnet
+     das Blatt und stellt die Auswahl zurueck. */
+  html+='<option value="neu:">＋ Neues Projekt anlegen …</option>';
   if(pOpts) html+='<optgroup label="Projekte">'+pOpts+'</optgroup>';
   if(sOpts) html+='<optgroup label="Service-Aufträge">'+sOpts+'</optgroup>';
   html+='<optgroup label="Abwesenheit">'+abwOpts+'</optgroup>';
@@ -11212,6 +11237,132 @@ function tcDayFixup(date){
   tcApplyLockState();
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   PHASE 3 — Neues Projekt direkt aus dem Rapport
+   ─────────────────────────────────────────────────────────────────────────
+   Zwei Wege, EIN Blatt: "Schnell" zeigt nur die Bezeichnung, "Vollstaendig"
+   alle fuenf Felder. Pflicht ist in beiden Faellen ausschliesslich die
+   Bezeichnung — das ist der ganze Sinn des schnellen Wegs.
+
+   Die Fremdnummer wird NIE erfunden. Bleibt das Feld leer, bleibt sie leer;
+   die interne Nummer vergibt der Server (NEU-{Jahr}-{lfd}).
+
+   Handy zuerst: eine Spalte, Tippflaechen ab 48 px, kein Hover, das Blatt
+   selbst scrollt (die Seite dahinter ist gesperrt).
+   ══════════════════════════════════════════════════════════════════════════ */
+var tcNeuProjektZeile=null;      // Zeile, in der "＋ Neues Projekt" getippt wurde
+var tcNeuProjektModus='schnell';
+
+function tcNeuProjektSlot(){
+  var slot=document.getElementById('tc-np-slot');
+  if(!slot){
+    slot=document.createElement('div'); slot.id='tc-np-slot';
+    (document.getElementById('tech-cockpit')||document.body).appendChild(slot);
+  }
+  return slot;
+}
+function tcNeuProjektOeffnen(rowEl){
+  tcNeuProjektZeile=rowEl||null;
+  tcNeuProjektModus='schnell';
+  tcSeiteSperren();
+  tcNeuProjektSlot().innerHTML=
+    '<div class="tc-np-backdrop" id="tc-np-backdrop" onclick="tcNeuProjektBackdropTap(event)">'+
+      '<div class="tc-np-sheet" onclick="event.stopPropagation()">'+
+        '<div class="tc-sec" style="margin-top:0">Neues Projekt</div>'+
+        '<div class="tc-np-modi">'+
+          '<button type="button" id="tc-np-m-schnell" class="on" onclick="tcNeuProjektModusSetzen(\'schnell\')">Schnell<br><small>nur Bezeichnung</small></button>'+
+          '<button type="button" id="tc-np-m-voll" onclick="tcNeuProjektModusSetzen(\'voll\')">Vollständig<br><small>mit Kontakt</small></button>'+
+        '</div>'+
+        '<div class="tc-lbl">Bezeichnung *</div>'+
+        '<input class="tc-field" id="tc-np-name" placeholder="z.B. Umbau Bahnhofplatz" autocomplete="off"/>'+
+        '<div id="tc-np-voll" style="display:none">'+
+          '<div class="tc-lbl">Adresse</div>'+
+          '<input class="tc-field" id="tc-np-adresse" placeholder="Strasse Nr, PLZ Ort" autocomplete="off"/>'+
+          '<div class="tc-lbl">Ansprechperson</div>'+
+          '<input class="tc-field" id="tc-np-person" placeholder="Vorname Name" autocomplete="off"/>'+
+          '<div class="tc-lbl">E-Mail</div>'+
+          '<input class="tc-field" id="tc-np-mail" type="email" inputmode="email" placeholder="name@firma.ch" autocomplete="off"/>'+
+          '<div class="tc-lbl">Fremdnummer (Nummer des Auftraggebers)</div>'+
+          '<input class="tc-field" id="tc-np-fremd" placeholder="leer lassen, wenn keine bekannt" autocomplete="off"/>'+
+        '</div>'+
+        '<div class="tc-np-hint" id="tc-np-hint">Die interne Projektnummer vergibt das System. Eine Fremdnummer wird nie erfunden — was du nicht einträgst, bleibt leer.</div>'+
+        '<div class="tc-np-fehler" id="tc-np-fehler"></div>'+
+        '<div class="tc-btnrow" style="margin-top:12px">'+
+          '<button type="button" class="tc-btn ghost" onclick="tcNeuProjektSchliessen()">Abbrechen</button>'+
+          '<button type="button" class="tc-btn gold" id="tc-np-ok" onclick="tcNeuProjektSpeichern()">Projekt anlegen</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  var n=document.getElementById('tc-np-name'); if(n) setTimeout(function(){ n.focus(); },80);
+}
+function tcNeuProjektBackdropTap(ev){
+  if(ev&&ev.target&&ev.target.id==='tc-np-backdrop') tcNeuProjektSchliessen();
+}
+function tcNeuProjektSchliessen(){
+  var slot=document.getElementById('tc-np-slot'); if(slot) slot.innerHTML='';
+  tcSeiteFreigeben();
+  tcNeuProjektZeile=null;
+}
+function tcNeuProjektModusSetzen(m){
+  tcNeuProjektModus=m;
+  tcHaptik(5);
+  var voll=document.getElementById('tc-np-voll'); if(voll) voll.style.display=(m==='voll')?'':'none';
+  var a=document.getElementById('tc-np-m-schnell'), b=document.getElementById('tc-np-m-voll');
+  if(a) a.classList.toggle('on',m==='schnell');
+  if(b) b.classList.toggle('on',m==='voll');
+  var h=document.getElementById('tc-np-hint');
+  if(h) h.textContent=(m==='schnell')
+    ? 'Nur die Bezeichnung nötig. Das Projekt wird als unvollständig gekennzeichnet und kann später im Cockpit ergänzt werden.'
+    : 'Die interne Projektnummer vergibt das System. Eine Fremdnummer wird nie erfunden — was du nicht einträgst, bleibt leer.';
+}
+function tcNeuProjektSpeichern(){
+  var wert=function(id){ var e=document.getElementById(id); return e?e.value.trim():''; };
+  var fehlerEl=document.getElementById('tc-np-fehler');
+  var setzeFehler=function(t){ if(fehlerEl) fehlerEl.textContent=t||''; };
+  var name=wert('tc-np-name');
+  if(!name){ setzeFehler('Bitte eine Bezeichnung angeben — sie ist das einzige Pflichtfeld.'); return; }
+  var body={name:name};
+  if(tcNeuProjektModus==='voll'){
+    body.adresse=wert('tc-np-adresse');
+    body.ansprechperson=wert('tc-np-person');
+    body.ansprech_email=wert('tc-np-mail');
+    body.fremdnummer=wert('tc-np-fremd');
+  }
+  var btn=document.getElementById('tc-np-ok');
+  if(btn){ btn.disabled=true; btn.textContent='Legt an…'; }
+  setzeFehler('');
+  techApi('tech_projekt_neu',body).then(function(d){
+    if(btn){ btn.disabled=false; btn.textContent='Projekt anlegen'; }
+    if(!d||d.error){ setzeFehler((d&&d.error)||'Das Projekt konnte nicht angelegt werden.'); return; }
+    tcNeuProjektUebernehmen(d);
+  }).catch(function(){
+    if(btn){ btn.disabled=false; btn.textContent='Projekt anlegen'; }
+    setzeFehler('Verbindungsfehler — das Projekt ist NICHT angelegt.');
+  });
+}
+/* Das neue Projekt in die Auswahl aller Zeilen einhaengen und in der Zeile,
+   aus der heraus es angelegt wurde, sofort auswaehlen. Ohne das muesste der
+   Techniker die Woche neu laden, um seine eigene Baustelle zu sehen. */
+function tcNeuProjektUebernehmen(d){
+  var p=d.projekt||{};
+  if(!p.id){ tcToast('Antwort ohne Projekt — bitte Woche neu laden.'); tcNeuProjektSchliessen(); return; }
+  if(!tcWocheProjekte.some(function(x){return x.id===p.id;})) tcWocheProjekte.push(p);
+  var zeile=tcNeuProjektZeile;
+  tcNeuProjektSchliessen();
+  /* Alle Auswahlfelder neu aufbauen, ohne die bestehende Wahl zu verlieren. */
+  Array.prototype.forEach.call(document.querySelectorAll('#tc-content .tc-row[data-row] .rc-ziel'),function(sel){
+    var alt=sel.value;
+    sel.innerHTML=tcZielOptions(null);
+    sel.value=alt;
+  });
+  if(zeile&&zeile.isConnected){
+    var sel=zeile.querySelector('.rc-ziel');
+    if(sel){ sel.value='p:'+p.id; tcRowZielChange(sel); }
+  }
+  tcHaptik(10);
+  tcToast(d.hinweis||('Projekt „'+p.name+'" angelegt · '+(d.nummer||p.projektnummer||'')));
+}
+
 /* ── Live-Eingabe: Feld ändert sich → Totals sofort neu, Zeile debounced speichern ── */
 function tcRowInput(el){
   var rowEl=el.closest('[data-row]'); if(!rowEl) return;
@@ -11220,6 +11371,16 @@ function tcRowInput(el){
 }
 function tcRowZielChange(el){
   var rowEl=el.closest('[data-row]'); if(!rowEl) return;
+  /* Phase 3 — "＋ Neues Projekt" ist kein Ziel, sondern ein Knopf. Auswahl
+     sofort zuruecksetzen, damit kein Autosave mit 'neu:' losfaehrt, und das
+     Blatt oeffnen. Erst wenn das Projekt wirklich existiert, wird es in DIESER
+     Zeile ausgewaehlt (tcNeuProjektUebernehmen). */
+  if(el.value==='neu:'){
+    el.value=rowEl.getAttribute('data-ziel-vorher')||'';
+    tcNeuProjektOeffnen(rowEl);
+    return;
+  }
+  rowEl.setAttribute('data-ziel-vorher',el.value);
   var val=el.value, isAbw=val.indexOf('abw:')===0, hasZiel=!!val;
   var ph=rowEl.querySelector('.rc-placeholder'); if(ph) ph.style.display=hasZiel?'none':'';
   var grund=rowEl.querySelector('.rc-grund-wrap'); if(grund) grund.style.display=isAbw?'':'none';
