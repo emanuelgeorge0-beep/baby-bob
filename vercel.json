@@ -14,7 +14,8 @@
     { "source": "/agb", "destination": "/agb.html" },
     { "source": "/impressum", "destination": "/impressum.html" },
     { "source": "/gs-intern-7k2x", "destination": "/gs-intern.html" },
-    { "source": "/gewerke", "destination": "/gewerke.html" }
+    { "source": "/gewerke", "destination": "/gewerke.html" },
+    { "source": "/v/:token", "destination": "/v.html" }
   ],
   "headers": [
     {
@@ -56,6 +57,22 @@
     {
       "source": "/qr",
       "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/v/:token",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/v.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
     },
     {
       "source": "/qr.html",

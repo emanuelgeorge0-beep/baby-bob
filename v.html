@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="robots" content="noindex,nofollow,noarchive"/>
+<title>Video · George Solutions</title>
+<!--
+  /v/<token> — ein einzelnes Video aus einem Wochenbericht.
+
+  Diese Seite wechselt NIE die Adresse. Wer sich anmelden muss, tut das hier,
+  und danach läuft das Video an derselben Stelle — kein Sprung auf die
+  Startseite, kein Rückweg, den man verlieren kann. Genau daran scheitern
+  solche Links sonst.
+
+  Die Seite ist bewusst eigenständig und winzig: sie wird von Leuten geöffnet,
+  die keinen Zugang zur Software haben, oft am Handy, oft auf der Baustelle.
+-->
+<style>
+  :root{--bg:#0A0A0B;--card:#131519;--line:rgba(201,169,97,.22);--gold:#C9A961;
+        --text:#E8EDF5;--muted:rgba(232,237,245,.55);--err:#ff8f8f;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+       min-height:100dvh;display:flex;align-items:center;justify-content:center;
+       padding:18px calc(18px + env(safe-area-inset-left,0px)) calc(18px + env(safe-area-inset-bottom,0px));}
+  .wrap{width:100%;max-width:640px;}
+  .marke{display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+  .marke b{font-size:15px;font-weight:800;letter-spacing:.2px;}
+  .marke span{color:var(--gold);font-size:19px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;}
+  h1{font-size:17px;margin:0 0 4px;font-weight:800;}
+  .sub{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 12px;}
+  video{width:100%;border-radius:12px;background:#000;display:block;}
+  .meta{color:var(--muted);font-size:12.5px;line-height:1.6;margin-top:10px;}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px;}
+  input{width:100%;min-height:52px;padding:0 13px;font-size:16px;border-radius:12px;
+        background:#0f1115;border:1px solid var(--line);color:var(--text);font-family:inherit;}
+  button{width:100%;min-height:52px;margin-top:12px;border-radius:12px;cursor:pointer;
+         font-family:inherit;font-size:15px;font-weight:800;
+         background:var(--gold);color:#0A0A0B;border:none;}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--line);}
+  .msg{margin-top:10px;font-size:13px;line-height:1.5;min-height:0;}
+  .msg.err{color:var(--err);}
+  .msg.ok{color:#3dd68c;}
+  .laden{color:var(--muted);font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="marke"><span>◆</span><b>George Solutions</b></div>
+  <div class="card" id="box"><div class="laden">Video wird geladen…</div></div>
+</div>
+<script>
+(function(){
+  var box=document.getElementById('box');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  /* Der Token steht im Pfad (/v/<token>). Kein Query-Parameter: ein Pfad
+     ueberlebt das Kopieren aus einem PDF zuverlaessiger. */
+  var token=(location.pathname.replace(/^\/v\/?/,'')||'').split(/[?#]/)[0];
+  /* Das Anmelde-Token bleibt in dieser Sitzung, damit ein zweites Video im
+     selben Bericht keine erneute Anmeldung verlangt. sessionStorage, nicht
+     localStorage: es ist ein Besuch, kein Konto auf diesem Geraet. */
+  function authGet(){ try{ return sessionStorage.getItem('gs_v_auth')||''; }catch(e){ return ''; } }
+  function authSet(t){ try{ sessionStorage.setItem('gs_v_auth',t); }catch(e){} }
+
+  function api(pfad,body,auth){
+    var h={'Content-Type':'application/json'};
+    if(auth) h.Authorization='Bearer '+auth;
+    return fetch(pfad,{method:'POST',headers:h,body:JSON.stringify(body)})
+      .then(function(r){ return r.json().then(function(d){ d.__status=r.status; return d; }); });
+  }
+
+  function laden(){
+    box.innerHTML='<div class="laden">Video wird geladen…</div>';
+    api('/api/videolink',{token:token},authGet()).then(function(d){
+      if(d&&d.ok&&d.video) return zeigeVideo(d.video,d.weg);
+      if(d&&d.anmeldung_noetig) return zeigeAnmeldung(d.error);
+      zeigeFehler((d&&d.error)||'Dieser Link funktioniert nicht.');
+    }).catch(function(){ zeigeFehler('Verbindungsfehler.'); });
+  }
+
+  function zeigeVideo(v,weg){
+    box.innerHTML=
+      '<h1>'+esc(v.dateiname||'Video')+'</h1>'+
+      (v.projekt?('<p class="sub">'+esc(v.projekt)+'</p>'):'')+
+      '<video controls playsinline preload="metadata"'+
+        (v.thumbnail_url?(' poster="'+esc(v.thumbnail_url)+'"'):'')+
+        '><source src="'+esc(v.url)+'" type="'+esc(v.mime||'video/mp4')+'">'+
+        'Dieses Gerät kann das Video nicht abspielen.</video>'+
+      '<div class="meta">'+
+        [v.ort?esc(v.ort):'', v.dauer_sekunden?(v.dauer_sekunden+' Sekunden'):'',
+         weg==='anmeldung'?'über deine Anmeldung freigegeben':'aus dem Wochenbericht']
+          .filter(Boolean).join(' · ')+
+        (v.notiz?('<br>'+esc(v.notiz)):'')+
+      '</div>';
+  }
+
+  function zeigeFehler(t){
+    box.innerHTML='<h1>Kein Zugriff</h1><p class="sub">'+esc(t)+'</p>';
+  }
+
+  /* Anmeldung AUF DIESER SEITE. Nach dem Erfolg wird nicht weitergeleitet,
+     sondern derselbe Aufruf noch einmal gemacht — die Stelle bleibt dieselbe. */
+  function zeigeAnmeldung(grund){
+    box.innerHTML=
+      '<h1>Anmeldung nötig</h1>'+
+      '<p class="sub">'+esc(grund||'Bitte melde dich an, um dieses Video zu sehen.')+'</p>'+
+      '<label for="v-mail">E-Mail</label>'+
+      '<input id="v-mail" type="email" inputmode="email" autocomplete="username" placeholder="name@firma.ch"/>'+
+      '<label for="v-pw">Passwort</label>'+
+      '<input id="v-pw" type="password" autocomplete="current-password" placeholder="Passwort"/>'+
+      '<button id="v-go">Anmelden und Video ansehen</button>'+
+      '<button class="ghost" id="v-magic">Stattdessen Magic Link schicken</button>'+
+      '<div class="msg" id="v-msg"></div>';
+    var msg=document.getElementById('v-msg');
+    var setz=function(t,k){ msg.className='msg '+(k||''); msg.textContent=t||''; };
+
+    document.getElementById('v-go').onclick=function(){
+      var mail=(document.getElementById('v-mail').value||'').trim();
+      var pw=document.getElementById('v-pw').value||'';
+      if(!mail||!pw){ setz('Bitte E-Mail und Passwort eingeben.','err'); return; }
+      var b=this; b.disabled=true; b.textContent='Meldet an…';
+      api('/api/auth',{action:'login',email:mail,password:pw}).then(function(d){
+        b.disabled=false; b.textContent='Anmelden und Video ansehen';
+        var tok=d&&(d.access_token||(d.session&&d.session.access_token));
+        if(!tok){ setz((d&&d.error)||'Anmeldung fehlgeschlagen.','err'); return; }
+        authSet(tok);
+        laden();                       /* dieselbe Stelle, nur jetzt angemeldet */
+      }).catch(function(){ b.disabled=false; b.textContent='Anmelden und Video ansehen'; setz('Verbindungsfehler.','err'); });
+    };
+
+    /* Der Magic Link fuehrt bewusst auf DIESE Adresse zurueck, nicht auf die
+       Startseite — sonst landet der Empfaenger im Cockpit und sucht sein
+       Video. */
+    document.getElementById('v-magic').onclick=function(){
+      var mail=(document.getElementById('v-mail').value||'').trim();
+      if(!mail){ setz('Bitte zuerst die E-Mail eintragen.','err'); return; }
+      var b=this; b.disabled=true; b.textContent='Schickt…';
+      api('/api/auth',{action:'magic_link',email:mail,redirect_to:location.href}).then(function(d){
+        b.disabled=false; b.textContent='Stattdessen Magic Link schicken';
+        if(d&&d.error){ setz(d.error,'err'); return; }
+        setz('Der Link ist unterwegs. Er führt genau hierher zurück.','ok');
+      }).catch(function(){ b.disabled=false; b.textContent='Stattdessen Magic Link schicken'; setz('Verbindungsfehler.','err'); });
+    };
+  }
+
+  /* Kommt der Nutzer ueber den Magic Link zurueck, steht das Zugangs-Token im
+     Fragment (#access_token=…). Es wird uebernommen und aus der Adresse
+     entfernt — die Seite bleibt /v/<token>. */
+  (function ausFragment(){
+    var h=location.hash||'';
+    var m=h.match(/access_token=([^&]+)/);
+    if(m){
+      authSet(decodeURIComponent(m[1]));
+      try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    }
+  })();
+
+  if(!token) zeigeFehler('Dieser Link ist unvollständig.');
+  else laden();
+})();
+</script>
+</body>
+</html>

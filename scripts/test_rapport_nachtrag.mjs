@@ -44,6 +44,11 @@ const P2 = '22222222-2222-2222-2222-222222222222';
 const WR = '99999999-9999-9999-9999-999999999999';
 const JAHR = 2026, WOCHE = 36;
 const NR = { [P1]: '60060.00', [P2]: '60133.00' };
+const OZ_FOTO = 'eeee1111-0000-0000-0000-000000000001';
+// Winziges, gueltiges Baseline-JPEG (1x1 px) als Standbild-Attrappe.
+const JPEG_1PX = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/'
+  + 'wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64');
 // Medien-ids muessen echte UUIDs sein — der Server prueft sie mit uuid().
 const OZ1 = 'aaaa1111-0000-0000-0000-000000000001';
 const OZ2 = 'aaaa1111-0000-0000-0000-000000000002';
@@ -440,7 +445,133 @@ async function phase7() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 8 — Video-Link im Bericht
+// ═══════════════════════════════════════════════════════════════════════════
+const VID1 = 'dddd1111-0000-0000-0000-000000000001';   // gehoert P1 (Master)
+const VID2 = 'dddd2222-0000-0000-0000-000000000002';   // gehoert PB-Projekt
+const PARTNER_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+const PARTNER_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+const P_FREMD = '33333333-3333-3333-3333-333333333333';
+
+async function phase8() {
+  abschnitt('Phase 8 · Video-Link, signiert, 30 Tage, genau ein Video');
+  process.env.VIDEO_TOKEN_SECRET = 'test-geheimnis-fuer-die-attrappe';
+  const { videoTokenErzeugen, videoTokenPruefen, videoLink, VIDEO_TOKEN_TAGE } =
+    await import('../lib/videotoken.js');
+  const { videoAufloesen } = await import('../api/videolink.js');
+  const { sammleWochendaten, buildWochenberichtPdf } = await import('../lib/wochenbericht.js');
+
+  const T0 = Date.parse('2026-09-01T08:00:00.000Z');
+  const TAG = 86400000;
+
+  // ── Der Token selbst ──
+  ok(VIDEO_TOKEN_TAGE === 30, 'der Token gilt 30 Tage');
+  const t1 = videoTokenErzeugen(VID1, T0);
+  const p1 = videoTokenPruefen(t1, T0 + 5 * TAG);
+  ok(p1.ok && p1.medien_id === VID1, 'ein frischer Token nennt genau dieses Video');
+  const p2 = videoTokenPruefen(t1, T0 + 31 * TAG);
+  ok(!p2.ok && p2.grund === 'abgelaufen', '8.2 — nach 30 Tagen ist er abgelaufen');
+  ok(videoTokenPruefen(t1, T0 + 29 * TAG).ok, 'am 29. Tag gilt er noch');
+  // Manipulation
+  const kaputt = t1.slice(0, -3) + 'xyz';
+  ok(!videoTokenPruefen(kaputt, T0).ok, '8.3 — ein manipulierter Token wird abgewiesen');
+  const t2 = videoTokenErzeugen(VID2, T0);
+  const gemischt = t2.split('.')[0] + '.' + t1.split('.')[1];   // fremder Rumpf, gueltige Signatur
+  ok(!videoTokenPruefen(gemischt, T0).ok, 'eine Signatur laesst sich nicht auf ein anderes Video umhaengen');
+  ok(videoLink(VID1, T0).indexOf('/v/') > 0, 'der Link zeigt auf /v/<token>');
+
+  // ── Die Aufloesung gegen die Attrappe ──
+  reset();
+  db.user_roles.push({ user_id: PARTNER_A, role: 'gs_partner' }, { user_id: PARTNER_B, role: 'gs_partner' });
+  db.gs_techniker.push({ id: 'ta', user_id: PARTNER_A, name: 'Partner Anna' }, { id: 'tb', user_id: PARTNER_B, name: 'Partner Bruno' });
+  db.gs_projekte.push({ id: P_FREMD, name: 'Werkhof Ost', projektnummer: '80010.00', partner_user_id: PARTNER_B, status: 'aktiv', geloescht_at: null });
+  db.gs_projekte.find((p) => p.id === P1).partner_user_id = PARTNER_A;
+  db.gs_projekt_medien.push(
+    { id: VID1, projekt_id: P1, tagesrapport_id: null, medientyp: 'video', bucket: PM_BUCKET, path: 'p1/film.mp4', thumbnail_path: 'p1/thumbs/film.jpg', dateiname: 'film.mp4', dauer_sekunden: 42, mime: 'video/mp4', stockwerk: 'EG' },
+    { id: VID2, projekt_id: P_FREMD, tagesrapport_id: null, medientyp: 'video', bucket: PM_BUCKET, path: 'pf/fremd.mp4', thumbnail_path: null, dateiname: 'fremd.mp4', dauer_sekunden: 20, mime: 'video/mp4', stockwerk: 'EG' },
+  );
+  TOKENS.tokPartnerA = PARTNER_A;
+  TOKENS.tokPartnerB = PARTNER_B;
+
+  // 8.1 gueltiger Token, KEINE Anmeldung
+  const r1 = await videoAufloesen({ token: videoTokenErzeugen(VID1, T0), authToken: '', jetzt: T0 + TAG });
+  ok(r1.video && r1.video.id === VID1, '8.1 — ein gueltiger Token gibt das Video frei, ohne Anmeldung');
+  ok(r1.weg === 'token', 'und zwar ueber den Token, nicht ueber eine Anmeldung');
+  ok(!!r1.video.url, 'es kommt eine signierte URL zurueck');
+  ok(!!r1.video.thumbnail_url, 'und das Standbild dazu');
+  ok(r1.video.projekt && /60060/.test(r1.video.projekt), 'die Baustelle steht dabei');
+
+  // Genau EIN Video: der Token fuer VID1 oeffnet VID2 nicht.
+  const r1b = await videoAufloesen({ token: videoTokenErzeugen(VID2, T0), authToken: '', jetzt: T0 + TAG });
+  ok(r1b.video && r1b.video.id === VID2, 'ein eigener Token fuer das zweite Video oeffnet dieses');
+  ok(r1.video.id !== r1b.video.id, 'ein Token gilt fuer genau EIN Video');
+
+  // 8.2 abgelaufen, ohne Anmeldung
+  const r2 = await videoAufloesen({ token: videoTokenErzeugen(VID1, T0), authToken: '', jetzt: T0 + 31 * TAG });
+  ok(!!r2.error && r2.anmeldung_noetig, '8.2 — ein abgelaufener Token wird abgewiesen');
+  ok(/abgelaufen/.test(r2.error), `mit klarer Begruendung: "${r2.error.slice(0, 60)}"`);
+  ok(!r2.video, 'und ohne Video');
+
+  // 8.5 abgelaufen, ABER angemeldet und berechtigt → dieselbe Stelle, jetzt mit Video
+  const r3 = await videoAufloesen({ token: videoTokenErzeugen(VID1, T0), authToken: 'tokPartnerA', jetzt: T0 + 31 * TAG });
+  ok(r3.video && r3.video.id === VID1, '8.5 — nach der Anmeldung laeuft dasselbe Video an derselben Stelle');
+  ok(r3.weg === 'anmeldung', 'freigegeben ueber die Anmeldung');
+
+  // 8.4 angemeldeter Partner erreicht kein FREMDES Video
+  const r4 = await videoAufloesen({ token: videoTokenErzeugen(VID2, T0), authToken: 'tokPartnerA', jetzt: T0 + 31 * TAG });
+  ok(!!r4.error && !r4.video, '8.4 — Partner A kommt an das Video von Partner B nicht heran');
+  ok(/Berechtigung/.test(r4.error), `Meldung: "${r4.error.slice(0, 50)}"`);
+  const r5 = await videoAufloesen({ token: videoTokenErzeugen(VID2, T0), authToken: 'tokPartnerB', jetzt: T0 + 31 * TAG });
+  ok(r5.video && r5.video.id === VID2, 'Partner B erreicht sein eigenes Video');
+  const r6 = await videoAufloesen({ token: videoTokenErzeugen(VID2, T0), authToken: 'tokMaster', jetzt: T0 + 31 * TAG });
+  ok(r6.video && r6.video.id === VID2, 'der Master erreicht beide');
+  const r7 = await videoAufloesen({ token: videoTokenErzeugen(VID2, T0), authToken: 'tokTech', jetzt: T0 + 31 * TAG });
+  ok(!!r7.error, 'ein Techniker ohne Zuweisung auf das fremde Projekt kommt nicht heran');
+
+  // Ein Verweis auf ein FOTO ist kein Videolink.
+  db.gs_projekt_medien.push({ id: OZ_FOTO, projekt_id: P1, medientyp: 'foto', bucket: PM_BUCKET, path: 'p1/bild.jpg', dateiname: 'bild.jpg' });
+  const rf = await videoAufloesen({ token: videoTokenErzeugen(OZ_FOTO, T0), authToken: '', jetzt: T0 + TAG });
+  ok(!!rf.error && /nicht zu einem Video/.test(rf.error), 'ein Token auf ein Foto fuehrt nicht ins Leere, sondern zu einer Meldung');
+
+  // Ein Token auf eine id, die es nicht gibt.
+  const rx = await videoAufloesen({ token: videoTokenErzeugen('99999999-9999-9999-9999-999999999999', T0), authToken: '', jetzt: T0 + TAG });
+  ok(!!rx.error, 'ein Token auf ein nicht vorhandenes Medium wird abgewiesen');
+  ok(!/nicht gefunden|existiert/.test(rx.error), 'und verraet nicht, ob es die id gibt');
+
+  // 8.6 Im PDF: Standbild mit Verweis
+  reset();
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8, start_zeit: '07:00', end_zeit: '16:00', arbeiten: ['Steigzone'] });
+  const zid = db.gs_tagesrapporte[0].id;
+  db.gs_projekt_medien.push({
+    id: VID1, projekt_id: P1, tagesrapport_id: zid, medientyp: 'video', bucket: PM_BUCKET,
+    path: 'p1/film.mp4', thumbnail_path: 'p1/thumbs/film.jpg', dateiname: 'film.mp4',
+    dauer_sekunden: 42, mime: 'video/mp4', stockwerk: 'EG', created_at: '2026-09-01T09:00:00Z',
+  });
+  const daten = await sammleWochendaten({ quelle: 'projekt', projektId: P1, jahr: JAHR, woche: WOCHE });
+  ok((daten.videos || []).length === 1, `die Wochendaten kennen das Video (${(daten.videos || []).length})`);
+  ok(daten.videos[0].datum === MO, 'und ordnen es dem Montag zu');
+
+  const pdf = buildWochenberichtPdf(daten, {
+    videos: [{ buf: JPEG_1PX, caption: 'film.mp4 · 42 s', url: videoLink(VID1, T0) }],
+  });
+  const roh = Buffer.from(pdf).toString('latin1');
+  ok(/\/Subtype\/Link/.test(roh), '8.6 — das PDF traegt eine Verweis-Annotation');
+  ok(/\/URI\(https?:[^)]*\/v\/[^)]+\)/.test(roh), 'sie zeigt auf /v/<token>');
+  const txt = pdfText(pdf);
+  ok(/Videos/.test(txt), 'es gibt einen eigenen Abschnitt "Videos"');
+  ok(/30 Tage/.test(txt), 'und der Bericht sagt, wie lange der Link gilt');
+  ok(/film\.mp4/.test(txt), 'die Bildunterschrift nennt das Video');
+
+  // Ohne Standbild wird das Video gezaehlt und benannt, nicht abgebildet.
+  const pdf2 = buildWochenberichtPdf(daten, { videos: [] });
+  const txt2 = pdfText(pdf2);
+  ok(/ohne Standbild/.test(txt2), 'ein Video ohne Standbild wird ausdruecklich benannt');
+  ok(!/\/Subtype\/Link/.test(Buffer.from(pdf2).toString('latin1')), 'und traegt dann keinen Verweis');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase7();
+await phase8();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Pruefung(en) fehlgeschlagen, ${pass} gruen` : `✅ alle ${pass} Pruefungen gruen`);
