@@ -18,6 +18,7 @@ import { sendResendEmail, exportEmailHtml } from '../lib/mail.js';
 // Wahrheiten. lib/wochenbericht.js haengt nicht von api/ ab (der Mailversand
 // kommt dort per Dependency Injection rein), der Import ist also zyklenfrei.
 import { empfaengerFuer, EMPFAENGER_HERKUNFT_TEXT } from '../lib/wochenbericht.js';
+import { ABWESENHEIT_CODES, ABWESENHEIT_KATALOG, trenneStunden, abwesenheitBloecke } from '../lib/abwesenheit.js';
 
 // Signalisiert „darf der Aufrufer nicht" → Handler übersetzt zu HTTP 403.
 class Forbidden extends Error {}
@@ -2258,6 +2259,15 @@ function tagKonfliktText(code, ziel) {
     return 'Für diesen Tag besteht bereits eine gleichartige Zeile. Es wurde nichts überschrieben.';
   }
   if (code === '23514') {
+    // Zwei verschiedene Ursachen tragen denselben Fehlercode. Die zweite ist
+    // seit den neuen Abwesenheitsgründen (K/B/AR/S/UB/SW) real: steht die
+    // Datenbank noch auf dem alten Katalog G/F/M/U/A, lehnt sie einen neuen
+    // Code ab. Das ist eine fehlende Migration, kein Bedienfehler — und darf
+    // nicht als „Abwesenheit und Baustelle" durchgehen.
+    if (ziel && ziel.neuerAbwesenheitsgrund) {
+      return 'Dieser Abwesenheitsgrund ist in der Datenbank noch nicht freigeschaltet. '
+        + 'Es wurde nichts gespeichert — bitte scripts/rapport_feld.sql ausführen lassen.';
+    }
     return 'Diese Zeile darf nicht gleichzeitig eine Abwesenheit und eine Baustelle tragen. '
       + 'Es wurde nichts geändert — bitte zuerst die Abwesenheit entfernen.';
   }
@@ -2431,7 +2441,9 @@ async function addTechRapport(b, scope) {
 // KEINE Marge-/Kosten-/Ansatz-Felder — Stundensatz bleibt in
 // gs_projekt_techniker, wird hier nie gelesen/geschrieben/zurückgegeben.
 // ═══════════════════════════════════════════════════════════════════════════
-const ABWESENHEIT_CODES = new Set(['G', 'F', 'M', 'U', 'A']);
+// ABWESENHEIT_CODES kommt aus lib/abwesenheit.js — EINE Quelle für Prüfung,
+// Beschriftung und Auswahlfeld. Die Datenbank hält denselben Katalog als
+// CHECK-Constraint; neue Codes brauchen scripts/rapport_feld.sql.
 // Gewerk: feste Schnellwahl (Chips im Wochenrapport-Editor) statt Freitext — strukturiert
 // für spätere Auswertung/Rechnung/Filter. Server validiert gegen dieselbe Liste.
 const GEWERK_OPTIONS = new Set(['Sanitär', 'Heizung', 'Klima', 'Lüftung', 'Divers']);
@@ -2804,7 +2816,10 @@ async function saveTechTag(b, scope) {
   const datum = String(b.datum || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) throw new Error('datum (YYYY-MM-DD) nötig');
   const abwesenheit = b.abwesenheit ? String(b.abwesenheit).toUpperCase() : null;
-  if (abwesenheit && !ABWESENHEIT_CODES.has(abwesenheit)) throw new Error('ungültige Abwesenheits-Kennung');
+  if (abwesenheit && !ABWESENHEIT_CODES.has(abwesenheit)) {
+    throw new Error('Unbekannte Abwesenheit "' + abwesenheit + '". Zulässig: '
+      + ABWESENHEIT_KATALOG.map((x) => x.code).join(', ') + '.');
+  }
 
   const row = { techniker_user_id: scope.technikerUserId };
   let projektIdForHeader = null;
@@ -2934,6 +2949,8 @@ async function saveTechTag(b, scope) {
       if (/duplicate key|23505|conflict/i.test((e && e.message) || '')) {
         return { error: 'Für diesen Tag/Projekt existiert bereits eine andere Zeile.' };
       }
+      const t = tagKonfliktText(pgCode(e), { projektbezogen: !!row.projekt_id, neuerAbwesenheitsgrund: !!abwesenheit });
+      if (t) return { error: t };
       if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht vollständig migriert – scripts/wochenrapport_migration.sql und scripts/wochenrapport_ueberzeit.sql ausführen.' };
       throw e;
     }
@@ -2965,6 +2982,8 @@ async function saveTechTag(b, scope) {
       }
       return { error: 'Für diesen Tag besteht bereits ein Eintrag. Er wurde nicht überschrieben.' };
     }
+    const t = tagKonfliktText(pgCode(e), { projektbezogen: !!row.projekt_id, neuerAbwesenheitsgrund: !!abwesenheit });
+    if (t) return { error: t };
     if (notMigratedErr(e)) return { notMigrated: true, error: 'Wochenrapport-Tabellen noch nicht vollständig migriert – scripts/wochenrapport_migration.sql und scripts/wochenrapport_ueberzeit.sql ausführen.' };
     throw e;
   }
@@ -3162,7 +3181,12 @@ async function getTechWochenRapport(b, scope) {
     taetigkeiten: taetMap[z.id] || [],
     medien_anzahl: medienZahl[z.id] || 0,
   }));
-  const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
+  // Abwesenheitszeilen fliessen NICHT in die Normalstunden. Sie stehen in
+  // derselben Spalte (gesamtstunden), sind aber keine geleistete Arbeit — eine
+  // Woche mit drei Krankheitstagen darf nicht als voll gearbeitet im Fuss
+  // stehen. Sie laufen getrennt in total_abwesenheit_stunden.
+  const sum = (key) => Math.round(zeilen.filter((z) => !z.abwesenheit)
+    .reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {
     kopf: kopf ? {
       ...kopf,
@@ -3178,6 +3202,11 @@ async function getTechWochenRapport(b, scope) {
     total_uz50: sum('ueberzeit_50'),
     total_uz100: sum('ueberzeit_100'),
     total_spesen: spesenJeTag(zeilen),
+    total_abwesenheit_stunden: trenneStunden(zeilen).abwesenheit_stunden,
+    abwesenheit_bloecke: abwesenheitBloecke(zeilen),
+    // Katalog mitliefern, damit das Auswahlfeld in app.html nicht von einer
+    // eigenen, veraltenden Liste lebt (siehe lib/abwesenheit.js).
+    abwesenheit_katalog: ABWESENHEIT_KATALOG,
   };
 }
 
@@ -3196,10 +3225,13 @@ async function getTechWochenListe(scope) {
   if (ids.length) {
     // `datum` muss mit in den Select: ohne das laesst sich die Spesenregel
     // (einmal je Kalendertag) gar nicht anwenden.
-    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${ids.join(',')})&select=wochenrapport_id,datum,gesamtstunden,spesen`).catch(() => []);
+    // `abwesenheit` muss mit in den Select: Abwesenheitsstunden gehoeren nicht
+    // in die Wochensumme, die in der Liste als "x h" steht.
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${ids.join(',')})&select=wochenrapport_id,datum,gesamtstunden,spesen,abwesenheit`).catch(() => []);
     for (const z of zeilen) {
-      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, zeilen: [] });
-      s.stunden += Number(z.gesamtstunden || 0);
+      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, abwesend: 0, zeilen: [] });
+      if (z.abwesenheit) s.abwesend += Number(z.gesamtstunden || 0);
+      else s.stunden += Number(z.gesamtstunden || 0);
       s.zeilen.push(z);                       // Spesen erst am Ende je Tag verdichten
     }
   }
@@ -3207,6 +3239,7 @@ async function getTechWochenListe(scope) {
     wochen: rows.map((r) => ({
       ...r,
       total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
+      total_abwesenheit_stunden: Math.round(((sums[r.id] || {}).abwesend || 0) * 100) / 100,
       total_spesen: spesenJeTag((sums[r.id] || {}).zeilen || []),
     })),
   };
@@ -3228,10 +3261,13 @@ async function pmWochenrapporteListe() {
   const projIdsJeWoche = {};                    // wochenrapport_id → Set(projekt_id)
   if (wrIds.length) {
     // `datum` muss mit in den Select — siehe spesenJeTag().
-    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,datum,gesamtstunden,spesen,projekt_id,abrechnung_status`).catch(() => []);
+    // `abwesenheit` muss mit in den Select — Abwesenheitsstunden laufen
+    // getrennt und stehen nicht in der Wochensumme (lib/abwesenheit.js).
+    const zeilen = await sbGet(`gs_tagesrapporte?wochenrapport_id=in.(${wrIds.join(',')})&select=wochenrapport_id,datum,gesamtstunden,spesen,projekt_id,abrechnung_status,abwesenheit`).catch(() => []);
     for (const z of zeilen) {
-      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, zeilen: [], offen: 0, verrechnet: 0 });
-      s.stunden += Number(z.gesamtstunden || 0);
+      const s = sums[z.wochenrapport_id] || (sums[z.wochenrapport_id] = { stunden: 0, abwesend: 0, zeilen: [], offen: 0, verrechnet: 0 });
+      if (z.abwesenheit) s.abwesend += Number(z.gesamtstunden || 0);
+      else s.stunden += Number(z.gesamtstunden || 0);
       s.zeilen.push(z);
       if ((z.abrechnung_status || 'offen') === 'verrechnet') s.verrechnet += 1; else s.offen += 1;
       // Die Projekte kommen aus den TAGESZEILEN, nicht aus hauptprojekt_id.
@@ -3252,6 +3288,7 @@ async function pmWochenrapporteListe() {
       ...r,
       techniker_name: nameMap[r.techniker_user_id] || 'Techniker',
       total_stunden: Math.round(((sums[r.id] || {}).stunden || 0) * 100) / 100,
+      total_abwesenheit_stunden: Math.round(((sums[r.id] || {}).abwesend || 0) * 100) / 100,
       total_spesen: spesenJeTag((sums[r.id] || {}).zeilen || []),
       // Abrechnung ist eine Eigenschaft der TAGESZEILEN, nicht des Wochenkopfs.
       // Die Woche gilt erst als verrechnet, wenn keine offene Zeile mehr da ist;
@@ -3324,7 +3361,12 @@ async function pmWochenrapport(b) {
     service_objekt: z.service_auftrag_id ? (svcMap[z.service_auftrag_id] || {}).objekt || null : null,
     taetigkeiten: taetMap[z.id] || [],
   }));
-  const sum = (key) => Math.round(zeilen.reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
+  // Abwesenheitszeilen fliessen NICHT in die Normalstunden. Sie stehen in
+  // derselben Spalte (gesamtstunden), sind aber keine geleistete Arbeit — eine
+  // Woche mit drei Krankheitstagen darf nicht als voll gearbeitet im Fuss
+  // stehen. Sie laufen getrennt in total_abwesenheit_stunden.
+  const sum = (key) => Math.round(zeilen.filter((z) => !z.abwesenheit)
+    .reduce((s, z) => s + Number(z[key] || 0), 0) * 100) / 100;
   return {
     kopf: {
       ...kopf, techniker_name: technikerName,
@@ -3340,6 +3382,11 @@ async function pmWochenrapport(b) {
     total_uz50: sum('ueberzeit_50'),
     total_uz100: sum('ueberzeit_100'),
     total_spesen: spesenJeTag(zeilen),
+    total_abwesenheit_stunden: trenneStunden(zeilen).abwesenheit_stunden,
+    abwesenheit_bloecke: abwesenheitBloecke(zeilen),
+    // Katalog mitliefern, damit das Auswahlfeld in app.html nicht von einer
+    // eigenen, veraltenden Liste lebt (siehe lib/abwesenheit.js).
+    abwesenheit_katalog: ABWESENHEIT_KATALOG,
   };
 }
 

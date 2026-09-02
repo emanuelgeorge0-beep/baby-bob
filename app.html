@@ -9929,7 +9929,12 @@ var tcWocheServices=[];
 var tcShowUZ=false;
 var tcRowSeq={};                 // date -> nächster freier Zeilen-Index (für "+")
 var tcWocheDefault={ziel:'',gewerk:''}; // Kopf-Vorbelegung "ganze Woche gleiches Projekt"
-var TC_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'Unfall',A:'Absenzen (Grund/Dauer)'};
+/* Abwesenheitsgründe. EINE Quelle ist lib/abwesenheit.js auf dem Server; diese
+   Liste hier ist nur die Vorbelegung, bis die Woche geladen ist. tcLoadWoche()
+   überschreibt sie mit dem Katalog aus der API (abwesenheit_katalog), damit
+   Auswahlfeld und Server nie auseinanderlaufen können. */
+var TC_ABW_LABEL={G:'Gesetzl. Feiertag',F:'Ferien',M:'Militär/Zivilschutz',U:'Unfall',A:'Absenz (Grund/Dauer)',
+  K:'Krankheit',B:'Trauerfall',AR:'Arztbesuch',S:'Schule/Kurs',UB:'Unbezahlter Urlaub',SW:'Schlechtwetter'};
 var TC_GEWERK=['Sanitär','Heizung','Klima','Lüftung','Divers'];
 var TC_SPESEN_DEFAULT=[15,30,35,45];
 // ZIEL 5 (Feinschliff II) — Wochentag ausgeschrieben ("Montag 20.07." statt
@@ -10086,6 +10091,12 @@ function tcLoadWoche(jahr,woche,after){
     if(d.notMigrated){ tcH('<div class="tc-sec">Wochenblatt</div><div class="tc-empty">Noch nicht eingerichtet — bitte Master kontaktieren.</div>'); return; }
     tcWocheKopf=d.kopf||{jahr:jahr,woche:woche};
     tcWocheZeilen=d.zeilen||[];
+    /* Abwesenheitskatalog vom Server übernehmen — sonst böte die Oberfläche
+       eventuell einen Grund an, den der Server (und die DB) gar nicht kennt. */
+    if(d.abwesenheit_katalog&&d.abwesenheit_katalog.length){
+      var neu={}; d.abwesenheit_katalog.forEach(function(x){ neu[x.code]=x.label; });
+      TC_ABW_LABEL=neu;
+    }
     tcWocheProjekte=dp.projekte||[];
     tcWocheServices=(ds.auftraege||[]).filter(function(s){return s.status==='angenommen';});
     TC_TAET_KATALOG=dt.items||[];
@@ -10544,6 +10555,7 @@ function tcRenderWoche(){
     '<div class="ft"><span class="lbl">ÜZ 50%</span><span class="val" id="tc-tot-uz50">0.00 h</span></div>'+
     '<div class="ft"><span class="lbl">ÜZ 100%</span><span class="val" id="tc-tot-uz100">0.00 h</span></div>'+
     '<div class="ft"><span class="lbl">Spesen</span><span class="val" id="tc-tot-spesen">CHF 0.00</span></div>'+
+    '<div class="ft"><span class="lbl">Abwesenheit</span><span class="val" id="tc-tot-abw">0.00 h</span></div>'+
   '</div>';
 
   var einreichen=tcEinreichenHtml(kopf);
@@ -11041,8 +11053,13 @@ function tcRowHtml(date,idx,z,isLast){
     '<div class="rc-placeholder" style="'+placeholderDisp+'">Zuerst Projekt/Auftrag oder Abwesenheit wählen — Felder werden erst danach aktiv.</div>'+
     '<div class="rc-fehler"></div>'+
     '<div class="rc-grund-wrap" style="'+grundDisp+'">'+
-      '<div class="tc-lbl">Grund / Dauer (bei A: inkl. Krankheit)</div>'+
+      '<div class="tc-lbl">Grund / Dauer (optional)</div>'+
       '<input class="tc-field rc-grund" placeholder="Grund / Dauer" value="'+tcEsc((z&&z.abwesenheit_grund)||'')+'" oninput="tcRowInput(this)"/>'+
+      /* Abwesenheitsstunden. Eigenes Feld, eigene Summe: sie zaehlen NICHT in
+         die Normalstunden (tcRecalcTotals) und stehen im PDF in einem eigenen
+         Block. Ein halber Krankheitstag laesst sich damit ehrlich erfassen. */
+      '<div class="tc-lbl">Stunden Abwesenheit</div>'+
+      '<input type="number" step="0.5" min="0" max="12" class="tc-field f-abwstd tc-std-big" placeholder="Std" value="'+tcEsc((isAbw&&z&&z.gesamtstunden)||'')+'" oninput="tcRowInput(this)"/>'+
     '</div>'+
     '<div class="rc-body" style="'+bodyDisp+'">'+
       '<div class="tc-lbl">Projektnummer</div>'+
@@ -11214,12 +11231,28 @@ function tcRowZielChange(el){
 /* ZIEL 1 — Fussnote zählt NUR Zeilen mit gewähltem Ziel. Eine leere, nicht
    zugeordnete Zeile darf nie in Total-Stunden/-Spesen einfliessen (Datenrisiko-Fix). */
 function tcRecalcTotals(){
+  /* Abwesenheitszeilen zaehlen NICHT in "Total erfasste Stunden". Sie haben
+     ihre eigene Kachel (tc-tot-abw). Sonst wies eine Woche mit drei
+     Krankheitstagen 24 h geleistete Arbeit aus. */
+  function istAbw(rowEl){
+    var v=(rowEl.querySelector('.rc-ziel')||{}).value||'';
+    return v.indexOf('abw:')===0;
+  }
   function sum(cls){
     var s=0;
     Array.prototype.forEach.call(document.querySelectorAll('#tc-content .tc-row[data-row]'),function(rowEl){
       var zielVal=(rowEl.querySelector('.rc-ziel')||{}).value||'';
-      if(!zielVal) return;
+      if(!zielVal||istAbw(rowEl)) return;
       var e=rowEl.querySelector('.'+cls);
+      if(e) s+=Number(e.value)||0;
+    });
+    return Math.round(s*100)/100;
+  }
+  function sumAbw(){
+    var s=0;
+    Array.prototype.forEach.call(document.querySelectorAll('#tc-content .tc-row[data-row]'),function(rowEl){
+      if(!istAbw(rowEl)) return;
+      var e=rowEl.querySelector('.f-abwstd');
       if(e) s+=Number(e.value)||0;
     });
     return Math.round(s*100)/100;
@@ -11237,7 +11270,7 @@ function tcRecalcTotals(){
     var proTag={};
     Array.prototype.forEach.call(document.querySelectorAll('#tc-content .tc-row[data-row]'),function(rowEl){
       var zielVal=(rowEl.querySelector('.rc-ziel')||{}).value||'';
-      if(!zielVal) return;
+      if(!zielVal||istAbw(rowEl)) return;
       var d=rowEl.getAttribute('data-date')||'';
       var e=rowEl.querySelector('.f-spesen');
       var v=e?(Number(e.value)||0):0;
@@ -11248,6 +11281,7 @@ function tcRecalcTotals(){
     return Math.round(t*100)/100;
   }
   set('tc-tot-spesen', 'CHF '+spesenProTag().toFixed(2));
+  set('tc-tot-abw', sumAbw().toFixed(2)+' h');
 }
 
 /* ── Autosave pro Zeile (debounced, kein Save-Klick nötig) ── */
@@ -11286,6 +11320,9 @@ function tcCollectRow(rowEl){
   if(zielVal.indexOf('abw:')===0){
     body.abwesenheit=zielVal.slice(4);
     body.abwesenheit_grund=(rowEl.querySelector('.rc-grund')||{}).value||'';
+    /* Abwesenheitsstunden gehen in dieselbe Spalte (gesamtstunden), werden aber
+       ueberall getrennt gezaehlt — Server: lib/abwesenheit.js. */
+    body.stunden=(rowEl.querySelector('.f-abwstd')||{}).value||0;
   } else {
     if(zielVal.indexOf('s:')===0) body.service_auftrag_id=zielVal.slice(2);
     else body.projekt_id=zielVal.slice(2);

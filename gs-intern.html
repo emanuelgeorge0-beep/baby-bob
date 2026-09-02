@@ -2903,7 +2903,11 @@ function openWochenrapport(id){
     var totals='<div class="cc-sec">Total</div><div class="lcard"><div class="top">'+
       '<div class="nm">'+Number(d.total_stunden||0).toFixed(2)+' h normal</div>'+
       '<div class="nm">CHF '+Number(d.total_spesen||0).toLocaleString('de-CH',{minimumFractionDigits:2})+' Spesen</div></div>'+
-      '<div class="meta"><span>ÜZ 25%: '+Number(d.total_uz25||0).toFixed(2)+' h</span><span class="dot">ÜZ 50%: '+Number(d.total_uz50||0).toFixed(2)+' h</span><span class="dot">ÜZ 100%: '+Number(d.total_uz100||0).toFixed(2)+' h</span></div></div>';
+      '<div class="meta"><span>ÜZ 25%: '+Number(d.total_uz25||0).toFixed(2)+' h</span><span class="dot">ÜZ 50%: '+Number(d.total_uz50||0).toFixed(2)+' h</span><span class="dot">ÜZ 100%: '+Number(d.total_uz100||0).toFixed(2)+' h</span>'+
+      /* Abwesenheitsstunden laufen getrennt und sind in "h normal" NICHT
+         enthalten (Server: lib/abwesenheit.js). Sie hier zu verschweigen
+         hiesse, eine Krankheitswoche sähe aus wie eine leere Woche. */
+      '<span class="dot">Abwesenheit: '+Number(d.total_abwesenheit_stunden||0).toFixed(2)+' h</span></div></div>';
     // ZIEL 3 — Spalten Datum/Projektnummer/Baustelle/Gewerk/Std/Spesen/Tätigkeit(40 Zeichen),
     // ÜZ/Abw. additiv weiter hinten dran (nicht entfernt, nur nicht Teil der Kernanforderung).
     var zeilenHtml=zeilen.length?(
@@ -2919,7 +2923,7 @@ function openWochenrapport(id){
           '<td>'+projektnr+'</td>'+
           '<td>'+baustelle+'</td>'+
           '<td>'+esc(isAbw?'—':(z.taetigkeit||'—'))+'</td>'+
-          '<td class="wr-num">'+(isAbw?'—':Number(z.gesamtstunden||0).toFixed(2))+'</td>'+
+          '<td class="wr-num">'+(isAbw?(Number(z.gesamtstunden||0)?(Number(z.gesamtstunden).toFixed(2)+' abw.'):'—'):Number(z.gesamtstunden||0).toFixed(2))+'</td>'+
           '<td class="wr-num">'+(!isAbw&&z.spesen?('CHF '+Number(z.spesen).toFixed(2)):'—')+'</td>'+
           '<td class="wr-arb">'+esc(arb.slice(0,40))+(arb.length>40?'…':'')+'</td>'+
           '<td class="wr-num">'+(!isAbw&&z.ueberzeit_25?Number(z.ueberzeit_25).toFixed(2):'—')+'</td>'+
