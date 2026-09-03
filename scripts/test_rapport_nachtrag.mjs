@@ -73,6 +73,7 @@ const ABW_NEU = ['G', 'F', 'M', 'U', 'A', 'K', 'B', 'AR', 'S', 'UB', 'SW'];
 let db;
 function reset() {
   migriertAbwesenheit = true;
+  storage = {}; storageInhalt = {};
   db = {
     user_roles: [{ user_id: MASTER, role: 'master' }, { user_id: TECHU, role: 'techniker' }],
     user_extra_roles: [],
@@ -178,11 +179,17 @@ const res = (body, okFlag = true, status = 200) => ({
   ok: okFlag, status,
   json: async () => body,
   text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
-  arrayBuffer: async () => new ArrayBuffer(0),
+  // Ein Buffer als Body wird als echte Bytes ausgeliefert. Ohne das kaeme aus
+  // jedem Storage-Abruf ein leerer Puffer, ladeFotoBytes gaebe null zurueck —
+  // und ein Test ueber eingebettete Bilder waere gar nicht moeglich.
+  arrayBuffer: async () => (Buffer.isBuffer(body)
+    ? body.buffer.slice(body.byteOffset, body.byteOffset + body.length)
+    : new ArrayBuffer(0)),
 });
 
 let mails = [];
-let storage = {};      // "bucket/path" -> bytes
+let storage = {};      // "bucket/path" -> Anzahl Bytes
+let storageInhalt = {};// "bucket/path" -> echte Bytes (fuer Bild-Tests)
 const PM_BUCKET = 'projektdateien';   // wie PM_DATEI_BUCKET in api/cockpit.js
 const TOKENS = { tokMaster: MASTER, tokTech: TECHU };
 
@@ -212,7 +219,9 @@ globalThis.fetch = async (url, opts = {}) => {
       storage[schluessel] = opts.body ? (opts.body.length || opts.body.byteLength || 1) : 0;
       return res({ Key: schluessel });
     }
-    if (method === 'DELETE') { delete storage[schluessel]; return res({}); }
+    if (method === 'DELETE') { delete storage[schluessel]; delete storageInhalt[schluessel]; return res({}); }
+    // Liegen echte Bytes vor (vom Test hinterlegt), kommen die zurueck.
+    if (schluessel in storageInhalt) return res(storageInhalt[schluessel]);
     if (schluessel in storage) return res('bytes');
     return res('nicht gefunden', false, 404);
   }
@@ -287,6 +296,19 @@ async function ruf(body) {
   return out;
 }
 const tech = (action, extra = {}) => ruf({ token: 'tokTech', mode: 'techniker', action, ...extra });
+
+// api/wochenbericht.js hat einen eigenen Handler (Token im Authorization-Kopf,
+// nicht im Body) — deshalb ein zweiter Aufrufer.
+const { default: wochenbericht } = await import('../api/wochenbericht.js');
+async function rufWb(body, token = 'tokMaster') {
+  let out = { status: 0, body: null };
+  const r = {
+    setHeader() {}, status(sx) { out.status = sx; return this; },
+    json(j) { out.body = j; return this; }, end() { return this; },
+  };
+  await wochenbericht({ method: 'POST', headers: { authorization: `Bearer ${token}` }, body }, r);
+  return out;
+}
 
 // Text aus dem unkomprimierten PDF-Inhaltsstrom (lib/pdf.js schreibt Text als
 // reines latin1; nur Bilder sind Flate-kodiert).
@@ -567,6 +589,63 @@ async function phase8() {
   const txt2 = pdfText(pdf2);
   ok(/ohne Standbild/.test(txt2), 'ein Video ohne Standbild wird ausdruecklich benannt');
   ok(!/\/Subtype\/Link/.test(Buffer.from(pdf2).toString('latin1')), 'und traegt dann keinen Verweis');
+
+  // ── 8.7 SAMMELBERICHT: dieselbe Darstellung, Standbild plus Link ──
+  // Gefahren wird der ECHTE Weg: api/wochenbericht.js action 'sammel_pruefung'
+  // ueber zwei Projekte, von denen eines ein Video traegt.
+  reset();
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8, start_zeit: '07:00', end_zeit: '16:00', arbeiten: ['Steigzone'] });
+  await tech('tech_tag_save', { datum: DI, projekt_id: P2, stunden: 6, start_zeit: '07:00', end_zeit: '14:00', arbeiten: ['Verteiler'] });
+  const zP1 = db.gs_tagesrapporte.find((z) => z.projekt_id === P1).id;
+  const zP2 = db.gs_tagesrapporte.find((z) => z.projekt_id === P2).id;
+  db.gs_projekt_medien.push(
+    { id: VID1, projekt_id: P1, tagesrapport_id: zP1, medientyp: 'video', bucket: PM_BUCKET,
+      path: 'p1/film.mp4', thumbnail_path: 'p1/thumbs/film.jpg', dateiname: 'film.mp4',
+      dauer_sekunden: 42, mime: 'video/mp4', stockwerk: 'EG', created_at: '2026-09-01T09:00:00Z' },
+    // Zweites Video OHNE Standbild — es darf nicht abgebildet, aber auch nicht
+    // verschwiegen werden.
+    { id: VID2, projekt_id: P2, tagesrapport_id: zP2, medientyp: 'video', bucket: PM_BUCKET,
+      path: 'p2/ohne.mp4', thumbnail_path: null, dateiname: 'ohne.mp4',
+      dauer_sekunden: 15, mime: 'video/mp4', stockwerk: 'EG', created_at: '2026-09-02T09:00:00Z' },
+  );
+  storageInhalt[`${PM_BUCKET}/p1/thumbs/film.jpg`] = JPEG_1PX;
+
+  const sb = await rufWb({
+    action: 'sammel_pruefung', jahr: JAHR, woche: WOCHE, projekt_ids: [P1, P2],
+  });
+  ok(sb.status === 200 && sb.body.ok && sb.body.pdf_base64, 'der Sammelbericht wird erzeugt');
+  const sbPdf = Buffer.from(sb.body.pdf_base64, 'base64');
+  const sbRoh = sbPdf.toString('latin1');
+  const sbTxt = pdfText(sbPdf);
+  ok(/\/Subtype\/Image/.test(sbRoh), '8.7 — das Standbild ist im Sammelbericht eingebettet');
+  ok(/\/Subtype\/Link/.test(sbRoh), 'und es traegt einen Verweis');
+  ok(/\/URI\(https?:[^)]*\/v\/[^)]+\)/.test(sbRoh), 'der Verweis zeigt auf /v/<token>');
+  ok(new RegExp('Videos ' + NR[P1].replace('.', '\\.')).test(sbTxt),
+    `der Abschnitt steht beim richtigen Projekt ("Videos ${NR[P1]}")`);
+  ok(/30 Tage/.test(sbTxt), 'der Sammelbericht sagt, wie lange der Link gilt');
+  ok(/film\.mp4|42 s/.test(sbTxt), 'die Bildunterschrift nennt das Video');
+  ok(/nicht abbilden|kein Standbild/.test(sbTxt),
+    'das Video ohne Standbild wird benannt statt verschwiegen');
+
+  // Ohne Videos bleibt der Sammelbericht wie er war — kein leerer Abschnitt.
+  db.gs_projekt_medien.length = 0;
+  const sb2 = await rufWb({ action: 'sammel_pruefung', jahr: JAHR, woche: WOCHE, projekt_ids: [P1, P2] });
+  const sb2Txt = pdfText(Buffer.from(sb2.body.pdf_base64, 'base64'));
+  ok(!/Videos /.test(sb2Txt), 'ohne Videos entsteht kein leerer Video-Abschnitt');
+  ok(!/\/Subtype\/Link/.test(Buffer.from(sb2.body.pdf_base64, 'base64').toString('latin1')),
+    'und kein Verweis');
+
+  // Alt-Snapshot ohne `videos`-Feld darf nicht werfen.
+  reset();
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8, start_zeit: '07:00', end_zeit: '16:00', arbeiten: ['Alt'] });
+  db.gs_wochenberichte.push({
+    id: 'wb-alt', quelle: 'projekt', projekt_id: P1, jahr: JAHR, woche: WOCHE,
+    bericht_nr: 'WB-ALT-2026-36', status: 'versendet',
+    daten: { kopf: { titel: 'Alt', nummer: NR[P1] }, tage: [], summen: { stunden: 4, uz25: 0, uz50: 0, uz100: 0, spesen: 0, tage: 1, zeilen: 1 } },
+    pdf_path: null, empfaenger: [], versendet_am: null, versand_protokoll: [],
+  });
+  const sb3 = await rufWb({ action: 'sammel_pruefung', jahr: JAHR, woche: WOCHE, projekt_ids: [P1] });
+  ok(sb3.status === 200 && sb3.body.ok, 'ein Alt-Snapshot ohne videos-Feld bricht nichts');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
