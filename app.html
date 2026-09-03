@@ -8634,52 +8634,153 @@ var UPLOAD_BODY_SAFE_CHARS=4.0*1024*1024;
 // Grössere klar & früh abweisen statt am Vercel-413 lautlos scheitern zu lassen.
 var UPLOAD_NONIMG_MAX_BYTES=Math.floor(UPLOAD_BODY_SAFE_CHARS/1.37);
 var UPLOAD_NONIMG_MAX_MB=(UPLOAD_NONIMG_MAX_BYTES/1048576).toFixed(0);
-// Liefert die data-URL (base64) für den Upload. Bilder werden vorher so weit
-// verkleinert (Dimension, dann JPEG-Qualität), dass sie unter das Body-Budget passen.
-/* ══════════════════════════════════════════════════════════════════════════
-   PHASE 9 — kleine Fassung fuers Dokument, schon beim Hochladen
-   ─────────────────────────────────────────────────────────────────────────
-   Das Original bleibt, wie es ist (bis 2400 px, Archiv und Galerie). Zusaetzlich
-   entsteht hier eine zweite, kleine Fassung fuer die Abbildung im Bericht.
+// Liefert die data-URL (base64) für den Upload.
+//
+// NICHT-BILDER (PDF, DWG …) gehen hier unverändert durch — das ist und bleibt
+// ihr normaler Weg.
+//
+// Der BILD-Zweig darunter verkleinert und ersetzt damit das Original. Er ist
+// seit der Abschlussrunde nur noch RÜCKFALLEBENE: Bilder laufen über
+// bildOriginalHochladen (Direktupload, Original unverändert). Hierher kommt
+// ein Bild nur, wenn der Server den Direktweg nicht kennt — und die
+// Oberfläche sagt dann ausdrücklich, dass verkleinert wurde. Gelöscht wird der
+// Zweig bewusst nicht: er ist die einzige Möglichkeit, auf einer alten
+// Serverfassung überhaupt noch etwas hochzuladen.
+/* ==BILDUPLOAD-V1-START== WORTGLEICH in app.html und gs-intern.html.
+   Änderungen IMMER in beiden Dateien; scripts/test_bildupload_block.mjs
+   vergleicht die zwei Blöcke Zeichen für Zeichen und wird sonst rot.
+
+   Kein gemeinsames .js: vercel.json gibt jeder Root-JS-Datei ein Jahr
+   Cache-Control immutable, und cockpit-sw.js legt statische Dateien
+   zusätzlich cache-first ab. Eine gemeinsame bildupload.js wäre in jedem
+   Browser eingefroren; die beiden HTML-Dateien sind no-store bzw.
+   network-first. Zwei Kopien mit erzwungener Gleichheit sind hier das
+   kleinere Übel als eine Datei, die man nicht mehr korrigieren kann.
+
+   ── Wozu der Block da ist ────────────────────────────────────────────────
+   Bis hierher wurde JEDES Bild vor dem Hochladen durch ein Canvas geschickt
+   und als JPEG neu kodiert — im Technik-Cockpit auf 2400 px bei Qualität
+   0.85, im Master-Cockpit sogar auf 1600 px bei 0.75. Das Original war
+   danach weg, unwiederbringlich. Grund war das Body-Limit der Serverless-
+   Funktion (~4.5 MB), durch das der base64-Upload nicht mehr passte.
+
+   Ab jetzt geht die Datei UNVERÄNDERT in den Bucket — über eine signierte
+   Upload-URL, direkt, am Body-Limit vorbei. Genau der Weg, den Videos schon
+   immer gegangen sind. Zusätzlich entsteht eine kleine Fassung, die
+   ausschliesslich für PDF und Galerie da ist; beide hängen an derselben
+   Medienzeile (path = Original, thumbnail_path = kleine Fassung) und bleiben
+   damit einander zugeordnet. == */
+var BILD_VORSCHAU_KANTE=1000, BILD_VORSCHAU_Q=0.9;
+var BILD_MAX_BYTES=25*1024*1024;   // muss zu FOTO_MAX_BYTES in api/cockpit.js passen
+
+function bildIstBild(f){
+  if(!f) return false;
+  if(/^image\//.test(f.type||'')) return true;
+  return /\.(jpe?g|png|webp|gif|bmp|heic|heif|tiff?)$/i.test(f.name||'');
+}
+
+/* Kleine Fassung fürs Dokument. IMMER ein Baseline-JPEG, auch wenn das Bild
+   ohnehin klein ist — und das ist der Punkt, nicht die Ersparnis.
 
    GERECHNET: die Fotoreihe im Wochenbericht ist zweispaltig, eine Spalte ist
-   228.5 pt breit und hoechstens 168 pt hoch. Bei 300 dpi sind das 952 x 700
-   Pixel. 1000 px lange Kante deckt das mit Reserve — mehr landet im PDF, ohne
-   je sichtbar zu werden.
+   228.5 pt breit und höchstens 168 pt hoch. Bei 300 dpi sind das 952 x 700
+   Pixel. 1000 px lange Kante deckt das mit Reserve.
 
-   Qualitaet 0.9, also HOEHER als die 0.85 des Originals: es wird Aufloesung
-   weggelassen, nicht Bildqualitaet. Genau das ist der Unterschied zwischen
-   "kleiner" und "sichtbar komprimiert".
+   WARUM AUCH KLEINE BILDER NEU KODIERT WERDEN: seit das Original unverändert
+   im Bucket liegt, kann dort HEIC, PNG oder ein progressives JPEG stehen. Ein
+   PDF kann davon nichts einbetten (/DCTDecode verlangt Baseline), und ein
+   iPhone-HEIC zeigt auch kein Browser an. Ohne diese Zeile stünde im Bericht
+   "Bild nicht darstellbar" und in der Galerie ein leerer Rahmen. Die kleine
+   Fassung ist deshalb keine Sparmassnahme, sondern die einzige Fassung, auf
+   die sich Bericht und Galerie verlassen können.
 
-   canvas.toDataURL liefert BASELINE-JPEG. Das ist keine Nebensache: die
-   Umrechnung auf Serverseite (Supabase /render/image) liefert PROGRESSIVE
-   JPEGs, und die kann ein PDF nicht einbetten. Deshalb entsteht die kleine
-   Fassung hier, wo es einen Encoder gibt. */
-var FOTO_VORSCHAU_KANTE=1000, FOTO_VORSCHAU_Q=0.9;
-function bildVorschau(f){
+   Qualität 0.9 ist höher als die 0.85/0.75, mit denen bisher das Original
+   überschrieben wurde: es wird Auflösung weggelassen, nicht Bildqualität.
+
+   Scheitert es (fremder Codec, Speicher, Zeitüberschreitung), kommt null —
+   der Upload läuft trotzdem, und der Server sagt, dass die kleine Fassung
+   fehlt. Kein Bild ist schlimmer als ein grosses Bild. */
+function bildVorschauImmer(file){
   return new Promise(function(res){
-    if(!/^image\//.test(f.type||'')){ res(null); return; }
-    var url=URL.createObjectURL(f), img=new Image();
-    var fertig=false;
-    var ende=function(v){ if(fertig) return; fertig=true; try{URL.revokeObjectURL(url);}catch(e){} res(v); };
-    img.onload=function(){
-      try{
-        var w=img.naturalWidth||1,h=img.naturalHeight||1;
-        var sk=Math.min(1,FOTO_VORSCHAU_KANTE/Math.max(w,h));
-        /* Ist das Bild ohnehin klein genug, braucht es keine zweite Fassung —
-           eine Kopie derselben Groesse waere nur doppelter Speicher. */
-        if(sk>=1){ ende(null); return; }
-        var c=document.createElement('canvas');
-        c.width=Math.max(1,Math.round(w*sk)); c.height=Math.max(1,Math.round(h*sk));
-        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-        ende(c.toDataURL('image/jpeg',FOTO_VORSCHAU_Q));
-      }catch(e){ ende(null); }
-    };
-    img.onerror=function(){ ende(null); };
-    img.src=url;
-    setTimeout(function(){ ende(null); },6000);
+    if(!bildIstBild(file)){ res(null); return; }
+    var url=null, fertig=false;
+    var ende=function(v){ if(fertig) return; fertig=true; try{ if(url) URL.revokeObjectURL(url); }catch(e){} res(v); };
+    try{
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var w=img.naturalWidth||0, h=img.naturalHeight||0;
+          if(!w||!h){ ende(null); return; }
+          var sk=Math.min(1,BILD_VORSCHAU_KANTE/Math.max(w,h));
+          var c=document.createElement('canvas');
+          c.width=Math.max(1,Math.round(w*sk)); c.height=Math.max(1,Math.round(h*sk));
+          c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+          ende(c.toDataURL('image/jpeg',BILD_VORSCHAU_Q));
+        }catch(e){ ende(null); }
+      };
+      img.onerror=function(){ ende(null); };
+      url=URL.createObjectURL(file); img.src=url;
+      setTimeout(function(){ ende(null); },8000);
+    }catch(e){ ende(null); }
   });
 }
+
+/* Das Original unverändert in den Bucket. Drei Schritte, wie beim Video:
+     1. signierte Upload-URL holen  (o.signAction)
+     2. die DATEI SELBST hinlegen   — body:file, kein Canvas, kein base64
+     3. Zeile eintragen             (o.registerAction), kleine Fassung dabei
+
+   o = { api, signAction, registerAction, felder, fertig }
+     api(action, body) -> Promise    die Transportfunktion der jeweiligen
+                                     Oberfläche (pmApi / techApi / api)
+     felder                          Ziel- und Tagfelder, unverändert
+                                     durchgereicht
+     fertig(text, erfolg, info)      wird GENAU EINMAL gerufen.
+                                     info.rueckfall === true heisst: der
+                                     Server kennt den Direktweg nicht — der
+                                     Aufrufer darf den alten base64-Weg
+                                     versuchen. Bei einer echten Ablehnung
+                                     (zu gross, kein Zugriff) steht das NICHT
+                                     drin; dann wäre ein zweiter Versuch nur
+                                     ein zweites Nein. */
+function bildOriginalHochladen(file,o){
+  var fertig=o.fertig||function(){};
+  if(file.size>BILD_MAX_BYTES){
+    fertig('„'+file.name+'" ist '+(file.size/1048576).toFixed(1)+' MB gross (max. 25 MB)',false,{});
+    return;
+  }
+  var typ=file.type||'application/octet-stream';
+  bildVorschauImmer(file).then(function(vorschau){
+    return o.api(o.signAction,Object.assign({
+      filename:file.name, contentType:typ, medientyp:'foto', groesse:file.size,
+    },o.felder||{})).then(function(sg){
+      if(!sg||!sg.uploadUrl){
+        var abgelehnt=!!(sg&&(sg.error&&(sg.foto_abgelehnt||sg.video_abgelehnt||/Berechtigung|Zugriff|Stockwerk/i.test(sg.error))));
+        fertig((sg&&sg.error)||'Upload-URL fehlgeschlagen',false,{rueckfall:!abgelehnt});
+        return null;
+      }
+      return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':typ,'x-upsert':'true'},body:file})
+        .then(function(r){
+          if(!r.ok){ fertig('„'+file.name+'" konnte nicht übertragen werden',false,{}); return null; }
+          return o.api(o.registerAction,Object.assign({
+            path:sg.path, filename:file.name, contentType:typ, groesse:file.size,
+            vorschau:vorschau||undefined,
+          },o.felder||{})).then(function(d){
+            if(!d||d.error){
+              /* Die Bytes liegen schon im Bucket, nur die Zeile fehlt. Das ist
+                 etwas anderes als "Upload fehlgeschlagen" und muss auch so
+                 heissen, sonst lädt jemand dieselbe Datei fünfmal hoch. */
+              fertig((d&&d.error)||'Die Datei ist übertragen, konnte aber nicht eingetragen werden',false,{});
+              return null;
+            }
+            fertig(d.hinweis||'„'+file.name+'" gespeichert',true,d);
+            return d;
+          });
+        });
+    });
+  }).catch(function(){ fertig('„'+file.name+'" fehlgeschlagen',false,{rueckfall:true}); });
+}
+/* ==BILDUPLOAD-V1-ENDE== */
 function fileToUploadData(f){
   return new Promise(function(resolve,reject){
     if(!/^image\//.test(f.type||'')){ // PDF/DWG/… unverändert einlesen
@@ -8729,17 +8830,43 @@ function pmDoUpload(files,kategorie){
   (function next(){
     if(i>=files.length){ if(fails) toast(fails+' Datei'+(fails>1?'en':'')+' fehlgeschlagen'); pmReload(); return; }
     var f=files[i++];
-    if(f.size>UPLOAD_MAX_BYTES){ toast('„'+f.name+'" zu gross (max. '+UPLOAD_MAX_MB+' MB)'); fails++; next(); return; }
-    if(!/^image\//.test(f.type||'') && f.size>UPLOAD_NONIMG_MAX_BYTES){ toast('„'+f.name+'" zu gross für Direkt-Upload (max ~'+UPLOAD_NONIMG_MAX_MB+' MB) — bitte komprimieren.'); fails++; next(); return; }
+    // Bilder duerfen jetzt bis 25 MB gross sein — sie gehen unveraendert ueber
+    // den Direktweg, nicht mehr als base64 durch die Funktion.
+    if(!bildIstBild(f) && f.size>UPLOAD_MAX_BYTES){ toast('„'+f.name+'" zu gross (max. '+UPLOAD_MAX_MB+' MB)'); fails++; next(); return; }
+    if(!bildIstBild(f) && f.size>UPLOAD_NONIMG_MAX_BYTES){ toast('„'+f.name+'" zu gross für Direkt-Upload (max ~'+UPLOAD_NONIMG_MAX_MB+' MB) — bitte komprimieren.'); fails++; next(); return; }
+    if(bildIstBild(f)){
+      bildOriginalHochladen(f,{
+        api:pmApi, signAction:'pm_datei_sign_upload', registerAction:'pm_datei_register',
+        felder:{projekt_id:pmState.proj,kategorie:kategorie},
+        fertig:function(text,erfolg,info){
+          if(erfolg){ next(); return; }
+          if(!(info&&info.rueckfall)){ toast('„'+f.name+'": '+text); fails++; next(); return; }
+          pmDoUploadRueckfall(f,kategorie,function(ok){ if(!ok) fails++; next(); });
+        },
+      });
+      return;
+    }
     fileToUploadData(f).then(function(data){
-      // Bilder werden als JPEG komprimiert → Content-Type + Dateiendung entsprechend setzen.
-      var isImg=/^data:image\//.test(data);
-      var ct=isImg?'image/jpeg':(f.type||'');
-      var nm=isImg?f.name.replace(/\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i,'')+'.jpg':f.name;
-      return pmApi('pm_datei_upload',{projekt_id:pmState.proj,kategorie:kategorie,filename:nm,contentType:ct,data:data})
+      return pmApi('pm_datei_upload',{projekt_id:pmState.proj,kategorie:kategorie,filename:f.name,contentType:(f.type||''),data:data})
       .then(function(d){ if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fails++; } });
     }).catch(function(){ toast('Lesefehler bei „'+f.name+'"'); fails++; }).then(next);
   })();
+}
+/* Rueckfallebene fuer Bilder: alter base64-Weg, der das Bild verkleinert.
+   Wird nur benutzt, wenn der Server den Direktweg nicht kennt — und sagt
+   ausdruecklich, dass das Original dabei NICHT erhalten bleibt. */
+function pmDoUploadRueckfall(f,kategorie,fertig){
+  Promise.all([fileToUploadData(f),bildVorschauImmer(f)]).then(function(r){
+    var data=r[0], vorschau=r[1];
+    var isImg=/^data:image\//.test(data);
+    var nm=isImg?f.name.replace(/\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i,'')+'.jpg':f.name;
+    return pmApi('pm_datei_upload',{projekt_id:pmState.proj,kategorie:kategorie,filename:nm,contentType:isImg?'image/jpeg':(f.type||''),data:data,vorschau:vorschau||undefined})
+    .then(function(d){
+      if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fertig(false); return; }
+      toast('„'+f.name+'" verkleinert hochgeladen — Direktweg nicht verfügbar');
+      fertig(true);
+    });
+  }).catch(function(){ toast('Lesefehler bei „'+f.name+'"'); fertig(false); });
 }
 function pmFileDel(pathEnc){
   var path=decodeURIComponent(pathEnc);
@@ -9165,14 +9292,30 @@ function subDoUpload(files,kategorie){
   (function next(){
     if(i>=files.length){ if(fails) toast(fails+' Datei'+(fails>1?'en':'')+' fehlgeschlagen'); subReload(); return; }
     var f=files[i++];
-    // Roh-Cap (12 MB); Bilder werden vor dem Upload unter das Body-Limit komprimiert.
-    if(f.size>UPLOAD_MAX_BYTES){ toast('„'+f.name+'" zu gross (max. '+UPLOAD_MAX_MB+' MB)'); fails++; next(); return; }
-    if(!/^image\//.test(f.type||'') && f.size>UPLOAD_NONIMG_MAX_BYTES){ toast('„'+f.name+'" zu gross für Direkt-Upload (max ~'+UPLOAD_NONIMG_MAX_MB+' MB) — bitte komprimieren.'); fails++; next(); return; }
+    // Bilder gehen unveraendert ueber den Direktweg (bis 25 MB), alles andere
+    // weiter als base64 durch die Funktion.
+    if(!bildIstBild(f) && f.size>UPLOAD_MAX_BYTES){ toast('„'+f.name+'" zu gross (max. '+UPLOAD_MAX_MB+' MB)'); fails++; next(); return; }
+    if(!bildIstBild(f) && f.size>UPLOAD_NONIMG_MAX_BYTES){ toast('„'+f.name+'" zu gross für Direkt-Upload (max ~'+UPLOAD_NONIMG_MAX_MB+' MB) — bitte komprimieren.'); fails++; next(); return; }
+    if(bildIstBild(f)){
+      bildOriginalHochladen(f,{
+        api:pmApi, signAction:'sub_datei_sign_upload', registerAction:'sub_datei_register',
+        felder:{projekt_id:subState.proj,kategorie:kategorie},
+        fertig:function(text,erfolg,info){
+          if(erfolg){ next(); return; }
+          if(!(info&&info.rueckfall)){ toast('„'+f.name+'": '+text); fails++; next(); return; }
+          Promise.all([fileToUploadData(f),bildVorschauImmer(f)]).then(function(r){
+            var isImg=/^data:image\//.test(r[0]);
+            var nm=isImg?f.name.replace(/\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i,'')+'.jpg':f.name;
+            return pmApi('sub_datei_upload',{projekt_id:subState.proj,kategorie:kategorie,filename:nm,contentType:isImg?'image/jpeg':(f.type||''),data:r[0],vorschau:r[1]||undefined})
+            .then(function(d){ if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fails++; }
+              else toast('„'+f.name+'" verkleinert hochgeladen — Direktweg nicht verfügbar'); });
+          }).catch(function(){ toast('Lesefehler bei „'+f.name+'"'); fails++; }).then(next);
+        },
+      });
+      return;
+    }
     fileToUploadData(f).then(function(data){
-      var isImg=/^data:image\//.test(data);
-      var ct=isImg?'image/jpeg':(f.type||'');
-      var nm=isImg?f.name.replace(/\.(png|jpe?g|webp|gif|bmp|heic|heif|tiff?)$/i,'')+'.jpg':f.name;
-      return pmApi('sub_datei_upload',{projekt_id:subState.proj,kategorie:kategorie,filename:nm,contentType:ct,data:data})
+      return pmApi('sub_datei_upload',{projekt_id:subState.proj,kategorie:kategorie,filename:f.name,contentType:(f.type||''),data:data})
       .then(function(d){ if(!d||d.error){ toast('„'+f.name+'": '+((d&&d.error)||'Upload fehlgeschlagen')); fails++; } });
     }).catch(function(){ toast('Lesefehler bei „'+f.name+'"'); fails++; }).then(next);
   })();
@@ -10066,14 +10209,33 @@ function tcMediaUpload(kind,id,file,tagesrapportId){
       if(erfolg) tcLoadGallery(kind,id,tagesrapportId);
     });
   } else {
-    Promise.all([fileToUploadData(file),bildVorschau(file)]).then(function(r){
-      var data=r[0], vorschau=r[1];
-      var isImg=/^data:image\//.test(data);
-      return techApi('medien_upload',Object.assign({data:data,vorschau:vorschau||undefined,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
-        if(d&&d.error){ tcToast(d.error); return; } tcToast('Foto gespeichert'); tcLoadGallery(kind,id,tagesrapportId);
-      });
-    }).catch(function(){ tcToast('Lesefehler'); });
+    /* Das Original geht unveraendert in den Bucket (Direktweg), die kleine
+       Fassung fuers Dokument faehrt im Register-Aufruf mit. Kennt der Server
+       den Weg noch nicht, faellt der Upload auf den alten base64-Weg zurueck —
+       dabei wird das Bild wie frueher verkleinert, und das wird gesagt. */
+    bildOriginalHochladen(file,{
+      api:techApi, signAction:'medien_sign_upload', registerAction:'medien_register',
+      felder:Object.assign({},tags,tgt),
+      fertig:function(text,erfolg,info){
+        if(erfolg){ tcToast(text); tcLoadGallery(kind,id,tagesrapportId); return; }
+        if(!(info&&info.rueckfall)){ tcToast(text); return; }
+        tcMediaUploadRueckfall(kind,id,file,tagesrapportId,tags,tgt);
+      },
+    });
   }
+}
+/* Rueckfallebene: alter base64-Weg. Verkleinert das Bild wie bisher — deshalb
+   sagt der Hinweis ausdruecklich, dass das Original NICHT erhalten bleibt. */
+function tcMediaUploadRueckfall(kind,id,file,tagesrapportId,tags,tgt){
+  Promise.all([fileToUploadData(file),bildVorschauImmer(file)]).then(function(r){
+    var data=r[0], vorschau=r[1];
+    var isImg=/^data:image\//.test(data);
+    return techApi('medien_upload',Object.assign({data:data,vorschau:vorschau||undefined,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
+      if(d&&d.error){ tcToast(d.error); return; }
+      tcToast('Foto gespeichert (verkleinert — Direktweg nicht verfügbar)');
+      tcLoadGallery(kind,id,tagesrapportId);
+    });
+  }).catch(function(){ tcToast('Lesefehler'); });
 }
 function tcLoadGallery(kind,id,tagesrapportId){
   var slot=document.getElementById('tc-gal-slot'); if(!slot) return;
@@ -10085,7 +10247,10 @@ function tcLoadGallery(kind,id,tagesrapportId){
     var html='<div class="tc-sec">Galerie</div>'+gr.map(function(g){
       var cells=(g.medien||[]).map(function(m){
         if(m.medientyp==='video') return '<div class="tc-galcell"><video src="'+tcEsc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+tcEsc(m.thumbnail_url)+'"'):'')+' controls preload="metadata"></video><span class="tc-vbadge">▶ VIDEO</span></div>';
-        return '<div class="tc-galcell"><img src="'+tcEsc(m.url||'')+'" loading="lazy"/></div>';
+        /* Kleine Fassung anzeigen, nicht das Original: seit das Original
+           unveraendert im Bucket liegt, kann es HEIC sein — das zeigt kein
+           Browser an. Fehlt sie (Altbestand), bleibt das Original. */
+        return '<div class="tc-galcell"><img src="'+tcEsc(m.thumbnail_url||m.url||'')+'" loading="lazy"/></div>';
       }).join('');
       return '<div class="tc-galfloor">'+tcEsc(g.stockwerk||'Ohne Stockwerk')+' ('+(g.medien||[]).length+')</div><div class="tc-gal">'+cells+'</div>';
     }).join('');
@@ -11857,13 +12022,23 @@ function tcRowMediaUpload(scope,kind,id,file,tagesrapportId){
       if(erfolg) tcRowLoadGallery(gal,kind,id,tagesrapportId);
     });
   } else {
-    Promise.all([fileToUploadData(file),bildVorschau(file)]).then(function(r){
-      var data=r[0], vorschau=r[1];
-      var isImg=/^data:image\//.test(data);
-      return techApi('medien_upload',Object.assign({data:data,vorschau:vorschau||undefined,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
-        if(d&&d.error){ tcToast(d.error); return; } tcToast('Foto gespeichert'); tcRowLoadGallery(gal,kind,id,tagesrapportId);
-      });
-    }).catch(function(){ tcToast('Lesefehler'); });
+    bildOriginalHochladen(file,{
+      api:techApi, signAction:'medien_sign_upload', registerAction:'medien_register',
+      felder:Object.assign({},tags,tgt),
+      fertig:function(text,erfolg,info){
+        if(erfolg){ tcToast(text); tcRowLoadGallery(gal,kind,id,tagesrapportId); return; }
+        if(!(info&&info.rueckfall)){ tcToast(text); return; }
+        Promise.all([fileToUploadData(file),bildVorschauImmer(file)]).then(function(r){
+          var data=r[0], vorschau=r[1];
+          var isImg=/^data:image\//.test(data);
+          return techApi('medien_upload',Object.assign({data:data,vorschau:vorschau||undefined,filename:file.name,contentType:isImg?'image/jpeg':(file.type||'')},tags,tgt)).then(function(d){
+            if(d&&d.error){ tcToast(d.error); return; }
+            tcToast('Foto gespeichert (verkleinert — Direktweg nicht verfügbar)');
+            tcRowLoadGallery(gal,kind,id,tagesrapportId);
+          });
+        }).catch(function(){ tcToast('Lesefehler'); });
+      },
+    });
   }
 }
 function tcRowLoadGallery(slot,kind,id,tagesrapportId){
@@ -11876,7 +12051,10 @@ function tcRowLoadGallery(slot,kind,id,tagesrapportId){
     var html=gr.map(function(g){
       var cells=(g.medien||[]).map(function(m){
         if(m.medientyp==='video') return '<div class="tc-galcell"><video src="'+tcEsc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+tcEsc(m.thumbnail_url)+'"'):'')+' controls preload="metadata"></video><span class="tc-vbadge">▶ VIDEO</span></div>';
-        return '<div class="tc-galcell"><img src="'+tcEsc(m.url||'')+'" loading="lazy"/></div>';
+        /* Kleine Fassung anzeigen, nicht das Original: seit das Original
+           unveraendert im Bucket liegt, kann es HEIC sein — das zeigt kein
+           Browser an. Fehlt sie (Altbestand), bleibt das Original. */
+        return '<div class="tc-galcell"><img src="'+tcEsc(m.thumbnail_url||m.url||'')+'" loading="lazy"/></div>';
       }).join('');
       return '<div class="tc-galfloor">'+tcEsc(g.stockwerk||'Ohne Stockwerk')+' ('+(g.medien||[]).length+')</div><div class="tc-gal">'+cells+'</div>';
     }).join('');

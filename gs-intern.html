@@ -2016,14 +2016,150 @@ function openDateiUpload(kategorie){
   inp.onchange=function(){ var files=Array.prototype.slice.call(inp.files||[]); if(files.length) pmUploadFiles(files,kategorie); };
   inp.click();
 }
-// Bilder werden VOR dem Hochladen verkleinert — lange Kante 1600 px, JPEG q 0.75.
-// Grund: die Fotodokumentation bettet die Originalbytes ein (lib/pdf.js reicht
-// JPEG unveraendert durch, /DCTDecode). Zehn unverkleinerte Handyfotos ergaben
-// ein PDF von 6.7 MB. Serverseitig laesst sich daran nichts machen — Node hat
-// keinen Bildcodec und neue Abhaengigkeiten sind ausgeschlossen. Der Browser
-// hat einen: Canvas. Dasselbe Verfahren laeuft im Technik-Cockpit seit je
-// (app.html fileToUploadData), nur mit groesseren Werten.
-// Nicht-Bilder (PDF, DWG) gehen unveraendert durch.
+/* ==BILDUPLOAD-V1-START== WORTGLEICH in app.html und gs-intern.html.
+   Änderungen IMMER in beiden Dateien; scripts/test_bildupload_block.mjs
+   vergleicht die zwei Blöcke Zeichen für Zeichen und wird sonst rot.
+
+   Kein gemeinsames .js: vercel.json gibt jeder Root-JS-Datei ein Jahr
+   Cache-Control immutable, und cockpit-sw.js legt statische Dateien
+   zusätzlich cache-first ab. Eine gemeinsame bildupload.js wäre in jedem
+   Browser eingefroren; die beiden HTML-Dateien sind no-store bzw.
+   network-first. Zwei Kopien mit erzwungener Gleichheit sind hier das
+   kleinere Übel als eine Datei, die man nicht mehr korrigieren kann.
+
+   ── Wozu der Block da ist ────────────────────────────────────────────────
+   Bis hierher wurde JEDES Bild vor dem Hochladen durch ein Canvas geschickt
+   und als JPEG neu kodiert — im Technik-Cockpit auf 2400 px bei Qualität
+   0.85, im Master-Cockpit sogar auf 1600 px bei 0.75. Das Original war
+   danach weg, unwiederbringlich. Grund war das Body-Limit der Serverless-
+   Funktion (~4.5 MB), durch das der base64-Upload nicht mehr passte.
+
+   Ab jetzt geht die Datei UNVERÄNDERT in den Bucket — über eine signierte
+   Upload-URL, direkt, am Body-Limit vorbei. Genau der Weg, den Videos schon
+   immer gegangen sind. Zusätzlich entsteht eine kleine Fassung, die
+   ausschliesslich für PDF und Galerie da ist; beide hängen an derselben
+   Medienzeile (path = Original, thumbnail_path = kleine Fassung) und bleiben
+   damit einander zugeordnet. == */
+var BILD_VORSCHAU_KANTE=1000, BILD_VORSCHAU_Q=0.9;
+var BILD_MAX_BYTES=25*1024*1024;   // muss zu FOTO_MAX_BYTES in api/cockpit.js passen
+
+function bildIstBild(f){
+  if(!f) return false;
+  if(/^image\//.test(f.type||'')) return true;
+  return /\.(jpe?g|png|webp|gif|bmp|heic|heif|tiff?)$/i.test(f.name||'');
+}
+
+/* Kleine Fassung fürs Dokument. IMMER ein Baseline-JPEG, auch wenn das Bild
+   ohnehin klein ist — und das ist der Punkt, nicht die Ersparnis.
+
+   GERECHNET: die Fotoreihe im Wochenbericht ist zweispaltig, eine Spalte ist
+   228.5 pt breit und höchstens 168 pt hoch. Bei 300 dpi sind das 952 x 700
+   Pixel. 1000 px lange Kante deckt das mit Reserve.
+
+   WARUM AUCH KLEINE BILDER NEU KODIERT WERDEN: seit das Original unverändert
+   im Bucket liegt, kann dort HEIC, PNG oder ein progressives JPEG stehen. Ein
+   PDF kann davon nichts einbetten (/DCTDecode verlangt Baseline), und ein
+   iPhone-HEIC zeigt auch kein Browser an. Ohne diese Zeile stünde im Bericht
+   "Bild nicht darstellbar" und in der Galerie ein leerer Rahmen. Die kleine
+   Fassung ist deshalb keine Sparmassnahme, sondern die einzige Fassung, auf
+   die sich Bericht und Galerie verlassen können.
+
+   Qualität 0.9 ist höher als die 0.85/0.75, mit denen bisher das Original
+   überschrieben wurde: es wird Auflösung weggelassen, nicht Bildqualität.
+
+   Scheitert es (fremder Codec, Speicher, Zeitüberschreitung), kommt null —
+   der Upload läuft trotzdem, und der Server sagt, dass die kleine Fassung
+   fehlt. Kein Bild ist schlimmer als ein grosses Bild. */
+function bildVorschauImmer(file){
+  return new Promise(function(res){
+    if(!bildIstBild(file)){ res(null); return; }
+    var url=null, fertig=false;
+    var ende=function(v){ if(fertig) return; fertig=true; try{ if(url) URL.revokeObjectURL(url); }catch(e){} res(v); };
+    try{
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var w=img.naturalWidth||0, h=img.naturalHeight||0;
+          if(!w||!h){ ende(null); return; }
+          var sk=Math.min(1,BILD_VORSCHAU_KANTE/Math.max(w,h));
+          var c=document.createElement('canvas');
+          c.width=Math.max(1,Math.round(w*sk)); c.height=Math.max(1,Math.round(h*sk));
+          c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+          ende(c.toDataURL('image/jpeg',BILD_VORSCHAU_Q));
+        }catch(e){ ende(null); }
+      };
+      img.onerror=function(){ ende(null); };
+      url=URL.createObjectURL(file); img.src=url;
+      setTimeout(function(){ ende(null); },8000);
+    }catch(e){ ende(null); }
+  });
+}
+
+/* Das Original unverändert in den Bucket. Drei Schritte, wie beim Video:
+     1. signierte Upload-URL holen  (o.signAction)
+     2. die DATEI SELBST hinlegen   — body:file, kein Canvas, kein base64
+     3. Zeile eintragen             (o.registerAction), kleine Fassung dabei
+
+   o = { api, signAction, registerAction, felder, fertig }
+     api(action, body) -> Promise    die Transportfunktion der jeweiligen
+                                     Oberfläche (pmApi / techApi / api)
+     felder                          Ziel- und Tagfelder, unverändert
+                                     durchgereicht
+     fertig(text, erfolg, info)      wird GENAU EINMAL gerufen.
+                                     info.rueckfall === true heisst: der
+                                     Server kennt den Direktweg nicht — der
+                                     Aufrufer darf den alten base64-Weg
+                                     versuchen. Bei einer echten Ablehnung
+                                     (zu gross, kein Zugriff) steht das NICHT
+                                     drin; dann wäre ein zweiter Versuch nur
+                                     ein zweites Nein. */
+function bildOriginalHochladen(file,o){
+  var fertig=o.fertig||function(){};
+  if(file.size>BILD_MAX_BYTES){
+    fertig('„'+file.name+'" ist '+(file.size/1048576).toFixed(1)+' MB gross (max. 25 MB)',false,{});
+    return;
+  }
+  var typ=file.type||'application/octet-stream';
+  bildVorschauImmer(file).then(function(vorschau){
+    return o.api(o.signAction,Object.assign({
+      filename:file.name, contentType:typ, medientyp:'foto', groesse:file.size,
+    },o.felder||{})).then(function(sg){
+      if(!sg||!sg.uploadUrl){
+        var abgelehnt=!!(sg&&(sg.error&&(sg.foto_abgelehnt||sg.video_abgelehnt||/Berechtigung|Zugriff|Stockwerk/i.test(sg.error))));
+        fertig((sg&&sg.error)||'Upload-URL fehlgeschlagen',false,{rueckfall:!abgelehnt});
+        return null;
+      }
+      return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':typ,'x-upsert':'true'},body:file})
+        .then(function(r){
+          if(!r.ok){ fertig('„'+file.name+'" konnte nicht übertragen werden',false,{}); return null; }
+          return o.api(o.registerAction,Object.assign({
+            path:sg.path, filename:file.name, contentType:typ, groesse:file.size,
+            vorschau:vorschau||undefined,
+          },o.felder||{})).then(function(d){
+            if(!d||d.error){
+              /* Die Bytes liegen schon im Bucket, nur die Zeile fehlt. Das ist
+                 etwas anderes als "Upload fehlgeschlagen" und muss auch so
+                 heissen, sonst lädt jemand dieselbe Datei fünfmal hoch. */
+              fertig((d&&d.error)||'Die Datei ist übertragen, konnte aber nicht eingetragen werden',false,{});
+              return null;
+            }
+            fertig(d.hinweis||'„'+file.name+'" gespeichert',true,d);
+            return d;
+          });
+        });
+    });
+  }).catch(function(){ fertig('„'+file.name+'" fehlgeschlagen',false,{rueckfall:true}); });
+}
+/* ==BILDUPLOAD-V1-ENDE== */
+
+// RUECKFALLEBENE. Verkleinert ein Bild auf 1600 px / JPEG q 0.75 und ERSETZT
+// damit das Original — genau der Fehler, den diese Runde behebt. Der normale
+// Weg fuer Bilder ist seither bildOriginalHochladen (Direktupload, Original
+// unveraendert); diese Funktion greift nur noch, wenn der Server den
+// Direktweg nicht kennt, und die Oberflaeche sagt dann ausdruecklich, dass
+// verkleinert wurde.
+// Fuer NICHT-Bilder (PDF, DWG) ist sie weiterhin der normale Weg; dort liest
+// sie die Datei roh ein und aendert nichts.
 var PM_BILD_MAXDIM=1600, PM_BILD_Q=0.75;
 function pmVerkleinern(f){
   return new Promise(function(resolve){
@@ -2056,13 +2192,38 @@ function pmVerkleinern(f){
 
 function pmUploadFiles(files,kategorie){
   toast('Lade '+files.length+' Datei'+(files.length>1?'en':'')+' hoch…');
-  var chain=Promise.resolve(), okCount=0, errMsg='', gespart=0;
+  var chain=Promise.resolve(), okCount=0, errMsg='', verkleinertRueckfall=0;
   files.forEach(function(f){
     chain=chain.then(function(){
-      if(f.size>12*1024*1024){ errMsg=f.name+' > 12 MB'; return; }
+      if(f.size>(bildIstBild(f)?BILD_MAX_BYTES:12*1024*1024)){ errMsg=f.name+(bildIstBild(f)?' > 25 MB':' > 12 MB'); return; }
+      /* Bilder: das ORIGINAL geht unveraendert in den Bucket. Bis hierher
+         wurde es hier auf 1600 px bei Qualitaet 0.75 heruntergerechnet und
+         damit ersetzt — genau der Fehler, den diese Runde behebt. */
+      if(bildIstBild(f)){
+        return new Promise(function(fertig){
+          bildOriginalHochladen(f,{
+            api:api, signAction:'pm_datei_sign_upload', registerAction:'pm_datei_register',
+            felder:{projekt_id:_pmProjektId,kategorie:kategorie},
+            fertig:function(text,erfolg,info){
+              if(erfolg){ okCount++; fertig(); return; }
+              if(!(info&&info.rueckfall)){ errMsg=text; fertig(); return; }
+              // Alter Weg als Rueckfallebene — verkleinert, und das wird gesagt.
+              pmVerkleinern(f).then(function(res){
+                if(!res){ errMsg='Datei nicht lesbar'; fertig(); return; }
+                return bildVorschauImmer(f).then(function(vorschau){
+                  return api('pm_datei_upload',{projekt_id:_pmProjektId,kategorie:kategorie,filename:f.name,contentType:res.typ,data:res.data,vorschau:vorschau||undefined})
+                    .then(function(r){
+                      if(r&&r.ok){ okCount++; verkleinertRueckfall++; }
+                      else if(r&&r.error) errMsg=r.error;
+                    });
+                });
+              }).catch(function(){ errMsg='Upload fehlgeschlagen'; }).then(fertig,fertig);
+            },
+          });
+        });
+      }
       return pmVerkleinern(f).then(function(res){
         if(!res){ errMsg='Datei nicht lesbar'; return; }
-        if(res.verkleinert) gespart+=Math.max(0,f.size-Math.round(res.data.length*0.75));
         return api('pm_datei_upload',{projekt_id:_pmProjektId,kategorie:kategorie,filename:f.name,contentType:res.typ,data:res.data})
           .then(function(r){ if(r&&r.ok) okCount++; else if(r&&r.error) errMsg=r.error; })
           .catch(function(){ errMsg='Upload fehlgeschlagen'; });
@@ -2074,7 +2235,10 @@ function pmUploadFiles(files,kategorie){
   function fertig(){
     pmDateienReload();
     if(_pmProjektId) medienLoad(_pmProjektId);
-    var sp=gespart>262144?(' · '+Math.round(gespart/1048576*10)/10+' MB gespart'):'';
+    /* Die alte Meldung "x MB gespart" ist weg: es wird nichts mehr gespart,
+       das Original bleibt vollstaendig. Stattdessen wird gesagt, wenn eine
+       Datei doch ueber den alten, verkleinernden Weg ging. */
+    var sp=verkleinertRueckfall?(' · '+verkleinertRueckfall+' verkleinert (Direktweg nicht verfügbar)'):'';
     toast(okCount?(okCount+' hochgeladen'+sp+(errMsg?' · '+errMsg:'')):(errMsg||'Kein Upload'));
   }
   chain.then(fertig,fertig);
@@ -2462,7 +2626,7 @@ function medienLoad(pid){
       var cells=(g.medien||[]).map(function(m){
         var cell=(m.medientyp==='video')
           ? '<video src="'+esc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+esc(m.thumbnail_url)+'"'):'')+' controls preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>'
-          : '<img src="'+esc(m.url||'')+'" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>';
+          : '<img src="'+esc(m.thumbnail_url||m.url||'')+'" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>';
         return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.04)">'+cell+'</div>';
       }).join('');
       return '<div style="font-size:12px;color:var(--muted);margin:10px 2px 6px;font-weight:700">'+esc(g.stockwerk||'Ohne Stockwerk')+' ('+(g.medien||[]).length+')</div>'+
@@ -3087,7 +3251,7 @@ function openWochenrapport(id){
     var medienHtml=medien.length?('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px">'+medien.map(function(m){
       var cell=(m.medientyp==='video')
         ? '<video src="'+esc(m.url||'')+'"'+(m.thumbnail_url?(' poster="'+esc(m.thumbnail_url)+'"'):'')+' controls preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>'
-        : '<img src="'+esc(m.url||'')+'" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>';
+        : '<img src="'+esc(m.thumbnail_url||m.url||'')+'" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>';
       return '<div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.04)" title="'+esc(m.stockwerk||'')+'">'+cell+'</div>';
     }).join('')+'</div>'):'<div class="empty">Noch keine Fotos/Videos.</div>';
     var medienSec='<div class="cc-sec">📷 Fotos &amp; Videos ('+medien.length+')</div>'+medienHtml;

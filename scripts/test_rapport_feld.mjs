@@ -44,6 +44,16 @@
 //     4.6  ein am Client umgangenes Limit faellt beim Registrieren auf und
 //          die bereits abgelegte Datei wird wieder entfernt
 //     4.7  der Fotoupload bleibt unveraendert funktionsfaehig
+//   Phase 10 — Original bleibt Original (Abschlussrunde)
+//    10.1  ein Foto ueber 25 MB bekommt gar keine Upload-URL
+//    10.2  ein Foto erzeugt ZWEI Fassungen: Original + kleine Fassung
+//    10.3  die Groesse wird am abgelegten Objekt GEMESSEN, nicht geglaubt
+//    10.4  ein am Client umgangener Deckel faellt beim Registrieren auf
+//    10.5  ein fremder Pfad und ein fremder thumbnail_path werden abgewiesen
+//    10.6  ein Pfad ohne Datei erzeugt keine Karteileiche
+//    10.7  die Projektdateien-Kachel geht denselben Weg
+//    10.8  Loeschen raeumt beide Fassungen weg
+//    10.9  der base64-Weg funktioniert unveraendert weiter
 //   Phase 5 — Berichtsauswahl umkehren
 //     5.1  die Maske startet mit ALLEN Projekten der Woche angehakt
 //     5.2  sie startet auch beim zweiten Oeffnen wieder mit allen
@@ -93,6 +103,7 @@ const ABW_NEU = ['G', 'F', 'M', 'U', 'A', 'K', 'B', 'AR', 'S', 'UB', 'SW'];
 let db;
 function reset() {
   migriertAbwesenheit = true;
+  storage = {};
   db = {
     user_roles: [{ user_id: MASTER, role: 'master' }, { user_id: TECHU, role: 'techniker' }],
     user_extra_roles: [],
@@ -215,6 +226,29 @@ globalThis.fetch = async (url, opts = {}) => {
     const tok = String((opts.headers || {}).Authorization || '').replace('Bearer ', '').trim();
     const id = TOKENS[tok];
     return id ? res({ id, email: id + '@test' }) : res({ error: 'bad' }, false, 401);
+  }
+  // Storage-LISTE. Muss VOR dem allgemeinen Objekt-Zweig stehen, sonst faengt
+  // der den POST als Upload ab und sbObjektInfo/listProjektDateien sehen nichts.
+  // Antwortform wie Supabase: name relativ zum prefix, metadata.size.
+  if (u.includes('/storage/v1/object/list/')) {
+    const bucket = u.split('/storage/v1/object/list/')[1].split('?')[0];
+    const q = opts.body ? JSON.parse(opts.body) : {};
+    const prefix = String(q.prefix || '');
+    const suche = q.search ? String(q.search) : null;
+    const out = [];
+    for (const schluessel of Object.keys(storage)) {
+      if (!schluessel.startsWith(bucket + '/')) continue;
+      const pfad = schluessel.slice(bucket.length + 1);
+      if (prefix && !pfad.startsWith(prefix)) continue;
+      const name = pfad.slice(prefix.length);
+      if (name.includes('/')) continue;             // Unterordner: nicht rekursiv
+      if (suche && name !== suche) continue;
+      out.push({
+        name, id: 'obj-' + name, created_at: '2026-09-01T00:00:00Z',
+        metadata: { size: storage[schluessel], mimetype: 'application/octet-stream' },
+      });
+    }
+    return res(out);
   }
   if (u.includes('/storage/v1/object/sign/')) {
     return res({ signedURL: '/object/sign/x?token=t' });
@@ -804,12 +838,166 @@ async function phase6() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PHASE 10 — Original bleibt Original
+// ═══════════════════════════════════════════════════════════════════════════
+const FOTO_ID = 'dddd0000-0000-0000-0000-000000000001';
+
+async function phase10() {
+  abschnitt('Phase 10 · Original unveraendert, kleine Fassung zusaetzlich');
+  reset();
+  await tech('tech_tag_save', { datum: MO, projekt_id: P1, stunden: 8 });
+  const trId = db.gs_tagesrapporte[0].id;
+  const basis = { projekt_id: P1, tagesrapport_id: trId, stockwerk: 'EG' };
+  const vorschau = 'data:image/jpeg;base64,' + Buffer.from('KLEINE-FASSUNG').toString('base64');
+
+  // 10.1 — zu gross: keine Upload-URL, nichts im Speicher
+  const zuGross = await tech('medien_sign_upload', {
+    ...basis, filename: 'riesig.jpg', contentType: 'image/jpeg', groesse: 30 * 1024 * 1024,
+  });
+  ok(!!(zuGross.body || {}).error, '10.1 — ein Foto mit 30 MB wird abgewiesen');
+  ok(/25 MB/.test((zuGross.body || {}).error || ''), 'die Meldung nennt die Grenze');
+  ok(!(zuGross.body || {}).uploadUrl, 'es gibt KEINE Upload-URL — die Datei verlaesst das Geraet nicht');
+  ok(Object.keys(storage).length === 0, 'und im Speicher liegt nichts');
+
+  // 10.2 — der normale Weg: zwei Fassungen
+  const sg = await tech('medien_sign_upload', {
+    ...basis, filename: 'wand.jpg', contentType: 'image/jpeg', groesse: 4 * 1024 * 1024,
+  });
+  ok(sg.status === 200 && sg.body.ok && sg.body.uploadUrl, 'ein Foto bekommt eine Upload-URL');
+  const pfad = sg.body.path;
+  ok(String(pfad).startsWith(P1 + '/'), 'der Pfad liegt unter dem eigenen Projekt');
+  // Direktupload nachstellen: die ECHTEN Bytes landen im Speicher.
+  storage[`${PM_BUCKET}/${pfad}`] = 4 * 1024 * 1024;
+
+  const reg = await tech('medien_register', {
+    ...basis, path: pfad, filename: 'wand.jpg', contentType: 'image/jpeg',
+    groesse: 4 * 1024 * 1024, vorschau,
+  });
+  ok(reg.status === 200 && reg.body.ok, 'die Zeile wird eingetragen');
+  const m = reg.body.medien || {};
+  ok(m.medientyp === 'foto', 'es ist als Foto gespeichert');
+  ok(m.path === pfad, '10.2 — path zeigt auf das ORIGINAL, unveraendert');
+  ok(!!m.thumbnail_path && m.thumbnail_path !== m.path,
+    `und thumbnail_path auf eine ZWEITE, eigene Datei (${m.thumbnail_path})`);
+  ok(reg.body.vorschau_gespeichert === true, 'die Antwort bestaetigt die kleine Fassung');
+  ok(!!storage[`${PM_BUCKET}/${pfad}`], 'das Original liegt im Speicher');
+  ok(!!storage[`${PM_BUCKET}/${m.thumbnail_path}`], 'die kleine Fassung ebenfalls');
+  ok(storage[`${PM_BUCKET}/${m.thumbnail_path}`] < storage[`${PM_BUCKET}/${pfad}`],
+    'und sie ist kleiner als das Original');
+  // Beide Fassungen haengen an DERSELBEN Zeile — damit sind sie zuordenbar.
+  ok(db.gs_projekt_medien.filter((x) => x.path === pfad).length === 1,
+    'beide Fassungen haengen an EINER Medienzeile');
+
+  // Der Bericht nimmt die kleine Fassung, das Original bleibt erreichbar.
+  const { fotoQuelle } = await import('../lib/wochenbericht.js');
+  ok(fotoQuelle(m).path === m.thumbnail_path, 'der Bericht bettet die kleine Fassung ein');
+
+  // 10.3 — Groesse gemessen, nicht geglaubt
+  const sg2 = await tech('medien_sign_upload', { ...basis, filename: 'zwei.jpg', contentType: 'image/jpeg', groesse: 10 });
+  storage[`${PM_BUCKET}/${sg2.body.path}`] = 900000;               // tatsaechlich abgelegt
+  const reg2 = await tech('medien_register', {
+    ...basis, path: sg2.body.path, filename: 'zwei.jpg', contentType: 'image/jpeg', groesse: 10, vorschau,
+  });
+  ok(reg2.body.medien.groesse === 900000,
+    `10.3 — die Zeile traegt die gemessenen 900000 Bytes, nicht die behaupteten 10 (${reg2.body.medien.groesse})`);
+
+  // 10.4 — Client umgangen: beim Registrieren faellt es auf
+  const schmuggel = `${P1}/medien/${Date.now()}-riesig.jpg`;
+  storage[`${PM_BUCKET}/${schmuggel}`] = 40 * 1024 * 1024;
+  const abgewiesen = await tech('medien_register', {
+    ...basis, path: schmuggel, filename: 'riesig.jpg', contentType: 'image/jpeg', groesse: 100,
+  });
+  ok(!!(abgewiesen.body || {}).error, '10.4 — ein am Client vorbeigeschmuggeltes Foto wird abgewiesen');
+  ok(!storage[`${PM_BUCKET}/${schmuggel}`], 'und die bereits abgelegte Datei wird wieder entfernt');
+  ok(!db.gs_projekt_medien.some((x) => x.path === schmuggel), 'es entsteht keine Medienzeile dafuer');
+
+  // 10.5 — fremde Pfade
+  const fremd = await tech('medien_register', {
+    ...basis, path: `${P2}/medien/fremd.jpg`, filename: 'fremd.jpg', contentType: 'image/jpeg',
+  });
+  ok(fremd.status === 403 || !!(fremd.body || {}).error, '10.5 — ein fremder Pfad wird abgewiesen');
+  const sg3 = await tech('medien_sign_upload', { ...basis, filename: 'drei.jpg', contentType: 'image/jpeg', groesse: 1000 });
+  storage[`${PM_BUCKET}/${sg3.body.path}`] = 1000;
+  const fremdThumb = await tech('medien_register', {
+    ...basis, path: sg3.body.path, filename: 'drei.jpg', contentType: 'image/jpeg',
+    thumbnail_path: `${P2}/medien/thumbs/fremd.jpg`,
+  });
+  ok(fremdThumb.status === 403 || !!(fremdThumb.body || {}).error,
+    'ein fremder thumbnail_path ebenfalls');
+
+  // 10.6 — Pfad ohne Datei
+  const leer = await tech('medien_register', {
+    ...basis, path: `${P1}/medien/gibtsnicht.jpg`, filename: 'gibtsnicht.jpg', contentType: 'image/jpeg',
+  });
+  ok(!!(leer.body || {}).error, '10.6 — ein Pfad ohne Datei wird abgewiesen');
+  ok(!db.gs_projekt_medien.some((x) => x.path.endsWith('gibtsnicht.jpg')), 'keine Karteileiche');
+
+  // 10.7 — die Projektdateien-Kachel: derselbe Weg, anderer Ordner
+  reset();
+  const pk = await ruf({
+    token: 'tokMaster', mode: 'master', action: 'pm_datei_sign_upload',
+    projekt_id: P1, kategorie: 'bilder', filename: 'baustelle.jpg', contentType: 'image/jpeg', groesse: 3000000,
+  });
+  ok(pk.status === 200 && pk.body.ok && pk.body.uploadUrl, '10.7 — die Kachel bekommt eine Upload-URL');
+  ok(String(pk.body.path).startsWith(`${P1}/bilder/`),
+    `der Pfad liegt im Kategorie-Ordner (${pk.body.path})`);
+  storage[`${PM_BUCKET}/${pk.body.path}`] = 3000000;
+  const pr = await ruf({
+    token: 'tokMaster', mode: 'master', action: 'pm_datei_register',
+    projekt_id: P1, kategorie: 'bilder', path: pk.body.path,
+    filename: 'baustelle.jpg', contentType: 'image/jpeg', vorschau,
+  });
+  ok(pr.status === 200 && pr.body.ok, 'die Datei wird eingetragen');
+  ok(pr.body.vorschau_gespeichert === true, 'mit kleiner Fassung');
+  const zeile = db.gs_projekt_medien.find((x) => x.path === pk.body.path);
+  ok(!!zeile, 'es entsteht eine Medienzeile — sonst waere das Foto fuer den Bericht unsichtbar');
+  ok(!!zeile.thumbnail_path, 'und sie traegt die kleine Fassung');
+  ok(zeile.groesse === 3000000, 'die Groesse ist die gemessene');
+
+  // Die kleine Fassung darf NICHT als zweite Datei in der Kachel auftauchen.
+  const liste = await ruf({ token: 'tokMaster', mode: 'master', action: 'pm_datei_list', projekt_id: P1 });
+  const pfade = (liste.body.dateien || []).map((d) => d.path);
+  ok(pfade.includes(pk.body.path), 'die Kachel findet das Original');
+  ok(!pfade.some((x) => x.includes('/thumbs/')), 'die kleine Fassung taucht dort NICHT auf');
+
+  // 10.8 — Loeschen raeumt beide Fassungen
+  const thumbPfad = zeile.thumbnail_path;
+  ok(!!storage[`${PM_BUCKET}/${thumbPfad}`], 'vor dem Loeschen liegt die kleine Fassung im Speicher');
+  const del = await ruf({ token: 'tokMaster', mode: 'master', action: 'pm_datei_del', projekt_id: P1, path: pk.body.path });
+  ok(del.status === 200 && del.body.ok, '10.8 — Loeschen geht durch');
+  ok(!storage[`${PM_BUCKET}/${pk.body.path}`], 'das Original ist weg');
+  ok(!storage[`${PM_BUCKET}/${thumbPfad}`], 'und die kleine Fassung auch — keine Waise im Bucket');
+  ok(!db.gs_projekt_medien.some((x) => x.path === pk.body.path), 'die Zeile ebenfalls');
+
+  // 10.9 — der base64-Weg (Rueckfallebene, Nicht-Bilder) unveraendert
+  reset();
+  const b64 = await ruf({
+    token: 'tokMaster', mode: 'master', action: 'pm_datei_upload',
+    projekt_id: P1, kategorie: 'bilder', filename: 'alt.jpg', contentType: 'image/jpeg',
+    data: 'data:image/jpeg;base64,' + Buffer.from('ALTES-FOTO').toString('base64'), vorschau,
+  });
+  ok(b64.status === 200 && b64.body.ok, '10.9 — der base64-Weg funktioniert weiter');
+  const altZeile = db.gs_projekt_medien.find((x) => x.path === b64.body.datei.path);
+  ok(!!altZeile && !!altZeile.thumbnail_path,
+    'und fuellt jetzt ebenfalls die kleine Fassung');
+  const pdf2 = await ruf({
+    token: 'tokMaster', mode: 'master', action: 'pm_datei_upload',
+    projekt_id: P1, kategorie: 'dateien', filename: 'plan.pdf', contentType: 'application/pdf',
+    data: 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4 test').toString('base64'),
+  });
+  ok(pdf2.status === 200 && pdf2.body.ok, 'auch Nicht-Bilder gehen unveraendert durch');
+  ok(!db.gs_projekt_medien.some((x) => x.path === pdf2.body.datei.path),
+    'ein PDF wird nicht als Foto registriert');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 await phase1();
 await phase2();
 await phase3();
 await phase4();
 await phase5();
 await phase6();
+await phase10();
 
 console.log(`\n${'═'.repeat(70)}`);
 console.log(fail ? `❌ ${fail} Prüfung(en) fehlgeschlagen, ${pass} grün` : `✅ alle ${pass} Prüfungen grün`);

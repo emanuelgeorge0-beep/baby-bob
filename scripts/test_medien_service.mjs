@@ -107,6 +107,15 @@ global.fetch = async (url, opts = {}) => {
   if (url.includes('gs_tagesrapporte?') && url.includes('service_auftrag_id=eq.')) return ok([]);
   if (url.includes('gs_projekt_medien?') && method === 'GET') return ok([]);
   if (url.includes('gs_projekt_stockwerk?') && method === 'GET') return ok([]);
+  // Storage-LISTE: seit der Abschlussrunde misst medien_register die Groesse am
+  // abgelegten Objekt, statt sie dem Client zu glauben. Ohne diesen Zweig faende
+  // der Server die Datei nicht und traege gar nichts ein. Muss VOR dem
+  // allgemeinen Objekt-Zweig stehen.
+  if (url.includes('/storage/v1/object/list/')) {
+    let q = {}; try { q = JSON.parse(opts.body || '{}'); } catch {}
+    const name = q.search || 'x';
+    return ok([{ name, id: 'obj-1', created_at: '2026-09-01T00:00:00Z', metadata: { size: 1024, mimetype: 'application/octet-stream' } }]);
+  }
   if (url.includes('/storage/v1/object/upload/sign/')) return ok({ url: '/object/upload/sign/projektdateien/x?token=abc' });
   if (url.includes('/storage/v1/object/sign/')) return ok({ signedURL: '/signed/x' });
   if (url.includes('/storage/v1/object/')) return ok({ Key: 'x' });

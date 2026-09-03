@@ -78,6 +78,9 @@ const PM_ACTIONS = new Set([
   'pm_techniker', 'pm_tech_assign', 'pm_tech_unassign', 'pm_taetigkeit_add', 'pm_taetigkeit_del',
   'pm_material_add', 'pm_material_upd', 'pm_material_del', 'pm_rapport_verrechnet',
   'pm_datei_upload', 'pm_datei_list', 'pm_datei_del', 'pm_datei_rename',
+  // Direktupload fuer Projektdateien — das Original geht unveraendert in den
+  // Bucket, statt vorher im Browser verkleinert zu werden.
+  'pm_datei_sign_upload', 'pm_datei_register',
   'pm_tag_projektwahl',
   'pm_tage_liste', 'pm_medien_tag', 'pm_medien_kategorie', 'pm_medien_projekt',
   'pm_export_material', 'pm_export_rapporte', 'pm_export_rechnungen',
@@ -98,6 +101,7 @@ const PARTNER_FEATURE_ACTIONS = {
   pm_profil_get: 'partner_branding', pm_profil_save: 'partner_branding', pm_logo_upload: 'partner_branding',
   sub_projekte: 'sub_akkord', sub_projekt: 'sub_akkord', sub_projekt_save: 'sub_akkord', sub_anfrage: 'sub_akkord',
   sub_datei_upload: 'sub_akkord', sub_datei_list: 'sub_akkord', sub_datei_del: 'sub_akkord',
+  sub_datei_sign_upload: 'sub_akkord', sub_datei_register: 'sub_akkord',
   sub_entscheiden: 'sub_akkord', sub_zahlungsplan_annehmen: 'sub_akkord', sub_step_hinterlegen: 'sub_akkord',
   sub_projekt_del: 'sub_akkord',
 };
@@ -297,6 +301,8 @@ export default async function handler(req, res) {
       case 'pm_material_del':  return res.status(200).json(await delPmRow('gs_material', req.body.id, scope));
       case 'pm_rapport_verrechnet': return res.status(200).json(await setRapportAbrechnung(req.body, scope));
       case 'pm_datei_upload':  return res.status(200).json(await pmDateiUpload(req.body, scope));
+      case 'pm_datei_sign_upload': return res.status(200).json(await pmDateiSignUpload(req.body, scope));
+      case 'pm_datei_register':    return res.status(200).json(await pmDateiRegister(req.body, scope));
       case 'pm_datei_list':    return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
       case 'pm_datei_del':     return res.status(200).json(await pmDateiDel(req.body, scope));
       case 'pm_datei_rename':  return res.status(200).json(await pmDateiRename(req.body, scope));
@@ -376,6 +382,8 @@ export default async function handler(req, res) {
       case 'sub_anfrage':      return res.status(200).json(await subAnfrage(req.body, scope));
       case 'sub_projekt_del':  return res.status(200).json(await subProjektDel(req.body, scope));
       case 'sub_datei_upload': return res.status(200).json(await pmDateiUpload(req.body, scope));
+      case 'sub_datei_sign_upload': return res.status(200).json(await pmDateiSignUpload(req.body, scope));
+      case 'sub_datei_register':    return res.status(200).json(await pmDateiRegister(req.body, scope));
       case 'sub_datei_list':   return res.status(200).json(await pmDateiList(req.body.projekt_id, scope));
       case 'sub_datei_del':    return res.status(200).json(await pmDateiDel(req.body, scope));
       case 'sub_entscheiden':  return res.status(200).json(await subEntscheiden(req.body, scope));
@@ -4091,10 +4099,15 @@ async function pmDateiUpload(b, scope) {
   // Der Bericht zeigt solche Fotos im Abschnitt "ohne Tageszuordnung".
   // Nur Kategorie 'bilder': Pläne bleiben draussen, auch wenn sie Bilder sind.
   if (kat === 'bilder' && /^image\//.test(contentType)) {
+    // Kleine Fassung fuers Dokument, falls der Client sie mitgeschickt hat.
+    // Auch der Rueckfallweg soll sie fuellen — sonst haette ein ueber base64
+    // hochgeladenes Bild keine, und der Bericht muesste das Original einbetten.
+    const vorschauPfad = b.vorschau ? await legeStandbildAb(projektId, safe, b.vorschau) : null;
     await sbWrite('POST', 'gs_projekt_medien', {
       projekt_id: projektId, service_auftrag_id: null, tagesrapport_id: null,
       medientyp: 'foto', bucket: PM_DATEI_BUCKET, path,
       dateiname: sbDisplayName(safe), mime: contentType, groesse: buf.length,
+      thumbnail_path: vorschauPfad,
       hochgeladen_von: scope.userId || null,
     }, 'return=minimal').catch((e) => {
       // Der Upload ist gelungen; eine fehlende Registrierung darf ihn nicht
@@ -4384,9 +4397,99 @@ async function pmDateiDel(b, scope) {
   // Gegenstück zum Auffangnetz im Upload: die Datei ist weg, also darf auch
   // die Medienzeile nicht stehenbleiben — sonst zeigt der Wochenbericht ein
   // Foto an, dessen Bytes es nicht mehr gibt (ladeFotoBytes → null → Lücke).
+  // Und mit ihr die kleine Fassung: ohne das bliebe sie als Waise im Bucket
+  // liegen, von nichts mehr referenziert.
+  const zeilen = await sbGet(`gs_projekt_medien?path=eq.${encodeURIComponent(path)}&select=thumbnail_path`).catch(() => []);
+  for (const z of (zeilen || [])) {
+    if (z.thumbnail_path) await sbStorageDel(PM_DATEI_BUCKET, z.thumbnail_path).catch(() => {});
+  }
   await sbWrite('DELETE', `gs_projekt_medien?path=eq.${encodeURIComponent(path)}`, {}, 'return=minimal')
     .catch((e) => { console.error('pm datei medien-del fail', (e && e.message) || e); });
   return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROJEKTDATEIEN — Direktupload, damit das ORIGINAL unveraendert ankommt
+// ═══════════════════════════════════════════════════════════════════════════
+// Der base64-Weg oben bleibt bestehen (Rueckfallebene und Nicht-Bilder), aber
+// er zwingt den Client, Bilder vorher zu verkleinern: der Request-Body endet
+// bei ~4.5 MB. Genau daran ging bisher jedes Original verloren.
+//
+// Diese beiden Aktionen sind das Gegenstueck zu medien_sign_upload /
+// medien_register — mit zwei Unterschieden, die beide zwingend sind:
+//   • der Pfad ist `<projekt>/<kategorie>/…`, nicht `<projekt>/medien/…`.
+//     Die Projektdateien-Kachel listet direkt aus dem Storage
+//     (listProjektDateien) und faende die Datei sonst nicht.
+//   • es gibt kein Stockwerk. medien_register verlangt eines.
+//
+// Die kleine Fassung landet ueber legeStandbildAb unter
+// `<projekt>/medien/thumbs/…`. Dieser Ordner wird von listProjektDateien NICHT
+// gelistet — die Vorschau taucht also nicht als zweite Datei in der Kachel auf.
+async function pmDateiSignUpload(b, scope) {
+  const projektId = uuid(b.projekt_id);
+  await requireOwnedProjekt(projektId, scope);
+  const safe = sbSafeName(b.filename || 'datei');
+  const kat = pmKategorie(b.kategorie);
+  const contentType = b.contentType || sbGuessType(safe);
+  const g = Number(b.groesse || 0);
+  if (Number.isFinite(g) && g > FOTO_MAX_BYTES) {
+    return { error: `Die Datei ist ${(g / 1048576).toFixed(1)} MB gross. Erlaubt sind höchstens 25 MB.`, foto_abgelehnt: true };
+  }
+  const path = `${projektId}/${kat}/${nowStamp()}-${safe}`;
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${PM_DATEI_BUCKET}/${path}`, {
+    method: 'POST', headers: SB, body: '{}',
+  });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    if (/bucket not found/i.test(t)) return { error: `Bucket '${PM_DATEI_BUCKET}' fehlt.`, notMigrated: true };
+    console.error('pm datei sign upload fail', r.status, t);
+    return { error: 'Signierte Upload-URL fehlgeschlagen' };
+  }
+  const d = await r.json().catch(() => ({}));
+  const rel = d.url || d.signedURL || '';
+  if (!rel) return { error: 'Keine Upload-URL erhalten' };
+  return { ok: true, path, kategorie: kat, contentType, uploadUrl: SUPABASE_URL + '/storage/v1' + (rel.startsWith('/') ? rel : '/' + rel) };
+}
+
+async function pmDateiRegister(b, scope) {
+  const projektId = uuid(b.projekt_id);
+  await requireOwnedProjekt(projektId, scope);
+  const path = String(b.path || '');
+  const kat = pmKategorie(b.kategorie);
+  // Kein fremder Pfad, keine fremde Kategorie: beides steckt im Praefix.
+  if (!path.startsWith(`${projektId}/${kat}/`)) throw new Forbidden();
+  const safe = sbSafeName(sbDisplayName(path.split('/').pop()));
+  const contentType = b.contentType || sbGuessType(safe);
+
+  // Gemessen, nicht behauptet — siehe sbObjektInfo.
+  const info = await sbObjektInfo(PM_DATEI_BUCKET, path);
+  if (!info) return { error: 'Die hochgeladene Datei wurde nicht gefunden. Es wurde nichts eingetragen — bitte noch einmal versuchen.' };
+  if (info.size > FOTO_MAX_BYTES) {
+    await sbStorageDel(PM_DATEI_BUCKET, path).catch(() => {});
+    return { error: `Die Datei ist ${(info.size / 1048576).toFixed(1)} MB gross. Erlaubt sind höchstens 25 MB.`, foto_abgelehnt: true };
+  }
+
+  let vorschauPfad = null;
+  if (kat === 'bilder' && /^image\//.test(contentType)) {
+    if (b.vorschau) vorschauPfad = await legeStandbildAb(projektId, safe, b.vorschau);
+    // Dieselbe Registrierung wie im base64-Weg — der Bericht liest
+    // ausschliesslich gs_projekt_medien, die Kachel listet aus dem Storage.
+    await sbWrite('POST', 'gs_projekt_medien', {
+      projekt_id: projektId, service_auftrag_id: null, tagesrapport_id: null,
+      medientyp: 'foto', bucket: PM_DATEI_BUCKET, path,
+      dateiname: sbDisplayName(safe), mime: contentType, groesse: info.size,
+      thumbnail_path: vorschauPfad,
+      hochgeladen_von: scope.userId || null,
+    }, 'return=minimal').catch((e) => {
+      console.error('pm datei register medien fail', (e && e.message) || e);
+    });
+  }
+  const url = await sbSignUrl(PM_DATEI_BUCKET, path);
+  return {
+    ok: true,
+    datei: { name: sbDisplayName(path.split('/').pop()), path, kategorie: kat, contentType, size: info.size, url },
+    vorschau_gespeichert: (kat === 'bilder' && /^image\//.test(contentType)) ? !!vorschauPfad : null,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4466,7 +4569,14 @@ const VIDEO_MAX_BYTES = 100 * 1024 * 1024;      // 100 MB
 const VIDEO_MAX_SEKUNDEN = 120;                 // 2 Minuten
 const VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/x-m4v']);
 const VIDEO_ENDUNGEN = new Set(['mp4', 'mov', 'm4v']);
+// Gilt fuer JEDES Standbild: Video-Poster wie Foto-Vorschau. Beide gehen
+// ueber legeStandbildAb und kommen als base64 im Antwortkoerper mit.
 const VIDEO_THUMB_MAX = 4 * 1024 * 1024;
+// Obergrenze fuer ein Foto — dieselbe Zahl wie im base64-Weg (medienUpload),
+// damit es EINE Grenze gibt und nicht zwei. Deutlich unter dem Bucket-Default,
+// damit nie Supabase mit einer undurchsichtigen Meldung ablehnt, sondern immer
+// unser Text. Und rund doppelt so hoch wie das groesste realistische Handyfoto.
+const FOTO_MAX_BYTES = 25 * 1024 * 1024;
 
 function istVideo(contentType, filename, medientyp) {
   if (medientyp === 'video') return true;
@@ -4652,6 +4762,18 @@ async function medienSignUpload(b, scope) {
       groesse: b.groesse, dauer: b.dauer_sekunden,
     });
     if (fehler) return { error: fehler, video_abgelehnt: true };
+  } else {
+    // Seit Fotos denselben Weg gehen, darf hier kein Loch bleiben: bisher wurde
+    // fuer alles ausser Video eine Upload-URL OHNE jede Pruefung ausgestellt.
+    // Massgeblich ist trotzdem die Messung beim Registrieren — das hier ist die
+    // Hoeflichkeit, die dem Geraet den Upload erspart.
+    const g = Number(b.groesse || 0);
+    if (Number.isFinite(g) && g > FOTO_MAX_BYTES) {
+      return {
+        error: `Die Datei ist ${(g / 1048576).toFixed(1)} MB gross. Erlaubt sind höchstens 25 MB.`,
+        foto_abgelehnt: true,
+      };
+    }
   }
   const scopeKey = tgt.isService ? `service/${tgt.service_auftrag_id}` : tgt.projekt_id;
   const path = `${scopeKey}/medien/${nowStamp()}-${safe}`;
@@ -4684,23 +4806,54 @@ async function medienRegister(b, scope) {
 
   // Zweite Pruefung, nach dem Direktupload. Der Client koennte die erste
   // umgangen haben — dann liegt die Datei zwar schon im Bucket, bekommt aber
-  // keine Zeile und wird wieder entfernt. Ohne das Aufraeumen bliebe ein
-  // Video liegen, das nirgends auftaucht und niemand mehr findet.
-  let thumbnail_path = b.thumbnail_path ? String(b.thumbnail_path).slice(0, 300) : null;
+  // keine Zeile und wird wieder entfernt. Ohne das Aufraeumen bliebe eine
+  // Datei liegen, die nirgends auftaucht und niemand mehr findet.
+  //
+  // thumbnail_path aus dem Body ist ein vom CLIENT bestimmter Speicherpfad und
+  // landete bisher ungeprueft auf der Zeile. Solange nur Videos diesen Weg
+  // gingen, schickte ihn niemand; jetzt gehoert dieselbe Praefixpruefung daran
+  // wie an `path`.
+  let thumbnail_path = null;
+  if (b.thumbnail_path) {
+    const tp = String(b.thumbnail_path).slice(0, 300);
+    if (!tp.startsWith(prefix)) throw new Forbidden();
+    thumbnail_path = tp;
+  }
   const scopeKey = tgt.isService ? `service/${tgt.service_auftrag_id}` : tgt.projekt_id;
+
+  // GEMESSEN, nicht behauptet. `groesse` kaeme sonst aus dem Body — von dem,
+  // der gerade hochgeladen hat. Liegt gar nichts unter dem Pfad, entsteht auch
+  // keine Zeile: eine Medienzeile ohne Datei ist eine Karteileiche, die in
+  // jeder Galerie als kaputtes Bild auftaucht.
+  const info = await sbObjektInfo(PM_DATEI_BUCKET, path);
+  if (!info) {
+    return { error: 'Die hochgeladene Datei wurde nicht gefunden. Es wurde nichts eingetragen — bitte noch einmal versuchen.' };
+  }
+  const groesse = info.size;
+
   if (medientyp === 'video') {
-    const fehler = videoRegelFehler({ contentType, filename: path, groesse: b.groesse, dauer: b.dauer_sekunden });
+    const fehler = videoRegelFehler({ contentType, filename: path, groesse, dauer: b.dauer_sekunden });
     if (fehler) {
       await sbStorageDel(PM_DATEI_BUCKET, path).catch(() => {});
       return { error: fehler, video_abgelehnt: true };
     }
-    // Standbild: kommt als base64 mit (klein genug fuer den Body) und wird
-    // hier abgelegt. Zu jedem Video gehoert eines.
-    // sbDisplayName streift den fuehrenden Zeitstempel des Videopfads ab —
-    // sonst hiesse das Standbild "1788…-1788…-clip.mov.jpg".
-    if (!thumbnail_path && b.thumbnail) {
-      thumbnail_path = await legeStandbildAb(scopeKey, sbSafeName(sbDisplayName(path.split('/').pop())), b.thumbnail);
-    }
+  } else if (groesse > FOTO_MAX_BYTES) {
+    await sbStorageDel(PM_DATEI_BUCKET, path).catch(() => {});
+    return {
+      error: `Die Datei ist ${(groesse / 1048576).toFixed(1)} MB gross. Erlaubt sind höchstens 25 MB.`,
+      foto_abgelehnt: true,
+    };
+  }
+
+  // Standbild bzw. kleine Fassung: kommt als base64 mit (klein genug fuer den
+  // Body) und wird hier abgelegt. Zu jedem Video gehoert ein Standbild, zu
+  // jedem Foto eine kleine Fassung fuer PDF und Galerie — das Original bleibt
+  // unter `path` unangetastet.
+  // sbDisplayName streift den fuehrenden Zeitstempel ab, sonst hiesse die
+  // Ablage "1788…-1788…-clip.mov.jpg".
+  const kleineFassung = b.vorschau || b.thumbnail;
+  if (!thumbnail_path && kleineFassung) {
+    thumbnail_path = await legeStandbildAb(scopeKey, sbSafeName(sbDisplayName(path.split('/').pop())), kleineFassung);
   }
 
   const row = {
@@ -4708,7 +4861,7 @@ async function medienRegister(b, scope) {
     tagesrapport_id,
     medientyp, bucket: PM_DATEI_BUCKET, path,
     dateiname: b.filename ? sbDisplayName(sbSafeName(b.filename)) : sbDisplayName(path.split('/').pop()),
-    mime: contentType, groesse: (b.groesse != null && b.groesse !== '') ? Math.round(num(b.groesse)) : null,
+    mime: contentType, groesse,
     dauer_sekunden: (b.dauer_sekunden != null && b.dauer_sekunden !== '') ? Math.round(num(b.dauer_sekunden)) : null,
     thumbnail_path,
     stockwerk, stockwerk_id: b.stockwerk_id ? uuid(b.stockwerk_id) : null,
@@ -4724,8 +4877,12 @@ async function medienRegister(b, scope) {
       ok: true,
       medien: await signMedien(Array.isArray(r) ? r[0] : r),
       standbild: medientyp === 'video' ? !!thumbnail_path : null,
-      hinweis: (medientyp === 'video' && !thumbnail_path)
-        ? 'Das Video ist gespeichert, ein Standbild konnte nicht erzeugt werden. In der Galerie fehlt die Vorschau.'
+      vorschau_gespeichert: medientyp === 'foto' ? !!thumbnail_path : null,
+      groesse,
+      hinweis: !thumbnail_path
+        ? (medientyp === 'video'
+          ? 'Das Video ist gespeichert, ein Standbild konnte nicht erzeugt werden. In der Galerie fehlt die Vorschau.'
+          : 'Das Foto ist im Original gespeichert, eine kleine Fassung konnte nicht erzeugt werden. Im Bericht wird das Original abgebildet.')
         : null,
     };
   } catch (e) { if (isNoTable(e)) return { notMigrated: true }; throw e; }
@@ -5729,6 +5886,28 @@ async function sbSignUrl(bucket, path, expiresIn = 3600) {
   const d = await r.json().catch(() => ({}));
   return d.signedURL ? SUPABASE_URL + '/storage/v1' + d.signedURL : null;
 }
+// Was liegt WIRKLICH unter diesem Pfad? Nach einem Direktupload ist das die
+// einzige ehrliche Quelle: `groesse` kommt sonst aus dem Body, also von dem,
+// der gerade hochgeladen hat. Wer beim Signieren 1 MB behauptet und 500 MB
+// ablegt, kaeme sonst durch — die Videopruefung haengt an derselben Zahl.
+// Benutzt denselben Listen-Endpunkt wie die Projektdateien-Kachel.
+async function sbObjektInfo(bucket, path) {
+  const i = String(path).lastIndexOf('/');
+  const prefix = i >= 0 ? String(path).slice(0, i + 1) : '';
+  const name = i >= 0 ? String(path).slice(i + 1) : String(path);
+  try {
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${bucket}`, {
+      method: 'POST', headers: SB,
+      body: JSON.stringify({ prefix, search: name, limit: 100 }),
+    });
+    if (!r.ok) return null;
+    const objs = await r.json().catch(() => []);
+    const treffer = (Array.isArray(objs) ? objs : []).find((o) => o && o.name === name && o.id !== null);
+    if (!treffer) return null;
+    return { size: Number((treffer.metadata && treffer.metadata.size) || 0), mimetype: (treffer.metadata && treffer.metadata.mimetype) || null };
+  } catch (_) { return null; }
+}
+
 function sbDecodeB64(s) {
   if (!s || typeof s !== 'string') return null;
   const raw = s.includes(',') ? s.split(',')[1] : s;

@@ -203,6 +203,29 @@ globalThis.fetch = async (url, opts = {}) => {
     const id = TOKENS[tok];
     return id ? res({ id, email: id + '@test' }) : res({ error: 'bad' }, false, 401);
   }
+  // Storage-LISTE. Muss VOR dem allgemeinen Objekt-Zweig stehen, sonst faengt
+  // der den POST als Upload ab und sbObjektInfo/listProjektDateien sehen nichts.
+  // Antwortform wie Supabase: name relativ zum prefix, metadata.size.
+  if (u.includes('/storage/v1/object/list/')) {
+    const bucket = u.split('/storage/v1/object/list/')[1].split('?')[0];
+    const q = opts.body ? JSON.parse(opts.body) : {};
+    const prefix = String(q.prefix || '');
+    const suche = q.search ? String(q.search) : null;
+    const out = [];
+    for (const schluessel of Object.keys(storage)) {
+      if (!schluessel.startsWith(bucket + '/')) continue;
+      const pfad = schluessel.slice(bucket.length + 1);
+      if (prefix && !pfad.startsWith(prefix)) continue;
+      const name = pfad.slice(prefix.length);
+      if (name.includes('/')) continue;             // Unterordner: nicht rekursiv
+      if (suche && name !== suche) continue;
+      out.push({
+        name, id: 'obj-' + name, created_at: '2026-09-01T00:00:00Z',
+        metadata: { size: storage[schluessel], mimetype: 'application/octet-stream' },
+      });
+    }
+    return res(out);
+  }
   if (u.includes('/storage/v1/object/sign/')) {
     return res({ signedURL: '/object/sign/x?token=t' });
   }
