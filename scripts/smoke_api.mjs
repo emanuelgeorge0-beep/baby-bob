@@ -34,13 +34,12 @@ const NUR = (args.find((a) => a.startsWith('--nur=')) || '').slice(6).split(',')
 
 // Endpunkte, die kein normales "antwortet mit JSON" erfuellen — mit Grund,
 // damit niemand sie fuer einen Regressionsfehler haelt.
-const SONDERFALL = {
-  // Hilfsmodul, das faelschlich in api/ liegt: kein default export, also baut
-  // Vercel daraus eine Funktion, die bei JEDEM Aufruf 500 wirft. Wird von
-  // api/cockpit.js importiert und dort ganz normal benutzt. Umziehen waere ein
-  // Strukturumbau — bewusst nicht hier.
-  escrow_stripe: { erwartet: 'absturz', grund: 'Hilfsmodul ohne default export, kein Endpunkt' },
-};
+// Leer, und das soll so bleiben: escrow_stripe stand hier, weil ein Hilfsmodul
+// ohne default export in api/ lag und Vercel daraus eine Funktion baute, die
+// bei jedem Aufruf 500 warf. Es ist nach lib/escrow_stripe.js umgezogen. Ein
+// Eintrag hier verdeckt einen Fehler nur — der richtige Weg ist fast immer,
+// die Datei dorthin zu legen, wo sie hingehoert.
+const SONDERFALL = {};
 const UEBERSPRUNGEN = {
   // Cron-Endpunkt ohne Methoden-Guard: ein OPTIONS wuerde den Lernlauf wirklich
   // starten, wenn CRON_SECRET nicht gesetzt ist. Nur auf ausdrueckliche Ansage.

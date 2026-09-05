@@ -11,7 +11,7 @@
 import { getWeather } from './weather.js';
 import { buildPdf } from '../lib/pdf.js';
 import { isEntitled } from '../lib/entitlements.js';
-import { escrowHinterlegen, escrowFreigeben } from './escrow_stripe.js';
+import { escrowHinterlegen, escrowFreigeben } from '../lib/escrow_stripe.js';
 import { sendResendEmail, exportEmailHtml } from '../lib/mail.js';
 // Die Empfaenger-Kette wird NICHT nachgebaut, sondern geteilt: derselbe
 // empfaengerFuer, den der Wochenbericht benutzt. Zwei Ketten waeren zwei
@@ -5932,7 +5932,7 @@ function sbGuessType(n) {
 // ZAHLUNGSSYSTEM (Escrow-Engine) — Master-only.
 //   Tabellen (bereits migriert): gs_bauabschnitte, gs_steps, gs_escrow,
 //   gs_split_profile, gs_bob_wissen. Der Server nutzt service_role (SB/sbGet/
-//   sbWrite). Stripe ist ein Stub (api/escrow_stripe.js) — es fliesst kein Geld.
+//   sbWrite). Stripe ist ein Stub (lib/escrow_stripe.js) — es fliesst kein Geld.
 // ═══════════════════════════════════════════════════════════════════════════
 
 // DB-Accessor fuer den Stripe-Stub (Dependency-Injection statt 2. SB-Client).
