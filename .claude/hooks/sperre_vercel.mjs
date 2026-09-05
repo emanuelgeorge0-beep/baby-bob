@@ -9,7 +9,7 @@
 // Die Sperre gilt fuer JEDEN Schreibweg: Write/Edit auf die Datei genauso wie
 // sed -i, tee, mv, cp, rm oder eine Umleitung aus Bash heraus. Lesen bleibt frei.
 
-import { ereignis, pfade, befehl, abschnitte, programm, LESEND, leitetUm, nein, durch } from './_sperre.mjs';
+import { ereignis, pfade, befehl, abschnitte, schreibtAuf, nein, durch } from './_sperre.mjs';
 
 const GRUND = 'GESPERRT (CLAUDE.md Regel 1): vercel.json wird nicht veraendert. '
   + 'Ohne "outputDirectory": "." serviert Vercel nur noch public/ — index.html, app.html '
@@ -24,18 +24,16 @@ for (const p of pfade(e)) {
   if (/(^|\/)vercel\.json$/.test(p)) nein(GRUND);
 }
 
-// Weg 2: Bash. Nur anschlagen, wenn der Abschnitt die Datei auch anfassen will —
-// ein `cat vercel.json` oder `git diff vercel.json` bleibt erlaubt.
+// Weg 2: Bash. Nur anschlagen, wenn der Abschnitt die Datei auch SCHREIBEN will.
+// `cat`, `head`, `jq`, `grep -i`, `sed -n`, `git show|diff|log` bleiben erlaubt —
+// Regel 1 verbietet das Aendern, nicht das Nachsehen. Was als Schreibzugriff
+// gilt, entscheidet schreibtAuf() in _sperre.mjs, damit es genau eine Fassung
+// dieser Frage gibt.
 const cmd = befehl(e);
 if (cmd && /vercel\.json/.test(cmd)) {
   for (const a of abschnitte(cmd)) {
-    if (!/vercel\.json/.test(a) && !leitetUm(a, 'vercel\\.json')) continue;
-    const prog = programm(a);
-    if (leitetUm(a, 'vercel\\.json')) nein(GRUND);
-    if (!LESEND.has(prog)) nein(GRUND);
-    // `sed`/`perl` stehen nicht in LESEND, `awk` schon — awk -i inplace waere
-    // der eine Schlupfweg, also hier noch einmal ausdruecklich zu.
-    if (/-i\b|inplace/.test(a)) nein(GRUND);
+    if (!/vercel\.json/.test(a)) continue;
+    if (schreibtAuf(a, 'vercel\\.json')) nein(GRUND);
   }
 }
 

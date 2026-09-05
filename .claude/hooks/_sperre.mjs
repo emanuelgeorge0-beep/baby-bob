@@ -106,16 +106,60 @@ export function argumente(abschnitt) {
   return worte.slice(i + 1);
 }
 
-/** Nur-Lese-Werkzeuge. Wer damit anfaengt, veraendert nichts. */
+/**
+ * Werkzeuge, die im Normalfall lesen. Nicht "koennen niemals schreiben" —
+ * awk, sed, sort und find koennen es sehr wohl, aber nur ueber eine bestimmte
+ * Option, und die prueft schreibtAuf() einzeln nach.
+ */
 export const LESEND = new Set([
   'cat', 'head', 'tail', 'less', 'more', 'grep', 'egrep', 'fgrep', 'rg', 'ugrep',
   'jq', 'wc', 'ls', 'stat', 'file', 'diff', 'md5', 'md5sum', 'shasum', 'sha256sum',
   'awk', 'cut', 'sort', 'uniq', 'echo', 'printf', 'find', 'basename', 'dirname',
+  'sed', 'git', 'od', 'xxd', 'nl', 'column',
+]);
+
+/** git-Unterbefehle, die nur lesen. Alles andere gilt als schreibend. */
+export const GIT_LESEND = new Set([
+  'show', 'diff', 'log', 'blame', 'cat-file', 'grep', 'status', 'ls-files',
+  'ls-tree', 'rev-parse', 'describe', 'shortlog', 'whatchanged', 'annotate',
 ]);
 
 /** Schreibt dieser Abschnitt per Umleitung in <ziel>? */
 export function leitetUm(abschnitt, ziel) {
   return new RegExp(`>>?\\s*['"]?[^\\s'"|]*${ziel}`, 'i').test(abschnitt);
+}
+
+/**
+ * Die einzige Stelle, an der "ist das ein Schreibzugriff auf <ziel>" entschieden
+ * wird. Vorher stand die Frage in zwei Sperren doppelt und leicht verschieden
+ * drin — mit dem Ergebnis, dass ein blankes /-i\b/ jedes `grep -i` fuer eine
+ * In-Place-Bearbeitung hielt und das LESEN von vercel.json blockierte. Genau das
+ * ist erlaubt: Regel 1 verbietet das Aendern, nicht das Nachsehen. Eine Sperre,
+ * die bei jedem zweiten harmlosen Befehl grundlos zumacht, wird abgeschaltet —
+ * und dann ist sie ganz weg.
+ *
+ * Unbekanntes Programm = schreibend. Bei einer eisernen Regel wird im Zweifel
+ * zugemacht, nicht aufgemacht.
+ *
+ * @param {string} abschnitt ein einzelnes Kommando aus abschnitte()
+ * @param {string} ziel      Dateiname als Regex-Quelltext, z.B. 'vercel\\.json'
+ */
+export function schreibtAuf(abschnitt, ziel) {
+  if (leitetUm(abschnitt, ziel)) return true;
+
+  const prog = programm(abschnitt);
+  if (!LESEND.has(prog)) return true;
+
+  // Die Ausnahmen: Leseprogramme mit einem Schreibschalter.
+  if (prog === 'awk' && /(^|\s)(-i\s+inplace|--in-place)/.test(abschnitt)) return true;
+  if (prog === 'sed' && /(^|\s)-[a-zA-Z]*i/.test(abschnitt)) return true;
+  if (prog === 'sort' && /(^|\s)(-o|--output)\b/.test(abschnitt)) return true;
+  if (prog === 'find' && /(^|\s)-(delete|exec|ok|execdir|okdir)\b/.test(abschnitt)) return true;
+  if (prog === 'git') {
+    const unter = (argumente(abschnitt).find((w) => !w.startsWith('-')) || '').toLowerCase();
+    if (!GIT_LESEND.has(unter)) return true;
+  }
+  return false;
 }
 
 /** Sperre zu. Meldung geht als Klartext ans Modell und in die Oberflaeche. */

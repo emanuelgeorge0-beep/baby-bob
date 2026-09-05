@@ -7,11 +7,21 @@
 // .env.probe oder .env.neu eben nicht — deshalb sperrt das hier den ganzen
 // Praefix, nicht nur die zwei bekannten Namen.
 //
-// Lesen sperrt zusaetzlich die deny-Regel in .claude/settings.json
-// (Read/Grep/Glob auf .env*). Diese Sperre hier ist die Schreibhaelfte.
+// Diese Sperre hier ist die SCHREIBhaelfte. Das Lesen sperrt permissions.deny
+// in .claude/settings.json (Read(./.env), Read(./.env.*)) — und zwar nachweislich
+// auch fuer Bash: Claude Code loest Dateipfade in Bash-Befehlen statisch auf und
+// haelt sie gegen die Read()-Regeln. Nachgemessen mit derselben Regelform:
+// `ls -d node_modules` wird verweigert, `ls -d api lib` kommt durch.
+//
+// ACHTUNG, hier weicht diese Sperre bewusst von sperre_vercel.mjs ab:
+// bei vercel.json ist LESEN erlaubt und nur Schreiben verboten, bei .env ist
+// BEIDES verboten. Die beiden duerfen deshalb nicht dieselbe Lese-Politik haben.
+// Eine Luecke laesst die Pfadanalyse offen: `git show HEAD:.env` liest aus den
+// Git-Objekten, nicht vom Dateisystem, und taucht dort als Pfad gar nicht auf.
+// Den einen Fall macht diese Datei unten ausdruecklich zu.
 
 import { basename } from 'node:path';
-import { ereignis, pfade, befehl, abschnitte, programm, LESEND, nein, durch } from './_sperre.mjs';
+import { ereignis, pfade, befehl, abschnitte, programm, argumente, schreibtAuf, nein, durch } from './_sperre.mjs';
 
 const GRUND = 'GESPERRT (CLAUDE.md Regel 3 "Keine Secrets im Code"): Dateien, die mit .env '
   + 'anfangen, werden aus dem Agenten heraus nicht geschrieben. So landet ein Schluessel '
@@ -34,16 +44,28 @@ for (const p of pfade(e)) {
   if (istEnvDatei(p)) nein(`${GRUND} (Pfad: ${p})`);
 }
 
-// Weg 2: Bash. Wieder nur, wenn der Abschnitt sie auch anfasst — cat/grep bleibt frei,
-// das Lesen wird an anderer Stelle geregelt.
+// Nachricht fuer den einen Leseweg, den die Pfadanalyse nicht sieht.
+const GRUND_GIT = 'GESPERRT (CLAUDE.md Regel 3 "Keine Secrets im Code"): das liest eine '
+  + '.env-Datei aus den Git-Objekten. Der Umweg zaehlt genauso wie ein cat — waere je '
+  + 'ein Schluessel eingecheckt worden, holt genau dieser Befehl ihn wieder hervor. '
+  + 'Geheimnisse kommen aus der Vercel-Umgebung.';
+
+// Weg 2: Bash — Schreibzugriffe. Was als Schreiben gilt, entscheidet schreibtAuf()
+// in _sperre.mjs. Die reinen Dateisystem-Lesewege (cat, head, grep) laufen hier
+// durch und werden eine Ebene tiefer von permissions.deny abgefangen.
 const cmd = befehl(e);
 if (cmd && ENV_IM_TEXT.test(cmd)) {
   for (const a of abschnitte(cmd)) {
     if (!ENV_IM_TEXT.test(a)) continue;
-    if (/>>?\s*['"]?[^\s'"|]*\.env/.test(a)) nein(GRUND);
-    const prog = programm(a);
-    if (!LESEND.has(prog)) nein(GRUND);
-    if (/\s-i\b|inplace/.test(a)) nein(GRUND);
+    if (schreibtAuf(a, '\\.env')) nein(GRUND);
+
+    // Zusatzregel, die es bei vercel.json bewusst NICHT gibt: git show/cat-file/grep
+    // holt den Inhalt aus der Historie statt von der Platte. Fuer schreibtAuf() ist
+    // das zu Recht ein Lesezugriff — hier ist Lesen aber gerade verboten.
+    if (programm(a) === 'git') {
+      const unter = (argumente(a).find((w) => !w.startsWith('-')) || '').toLowerCase();
+      if (['show', 'cat-file', 'grep', 'diff', 'log', 'blame'].includes(unter)) nein(GRUND_GIT);
+    }
   }
 }
 
