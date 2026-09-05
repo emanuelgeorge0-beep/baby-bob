@@ -499,6 +499,13 @@
   .gal .it .pm-pick input{accent-color:var(--gold);width:13px;height:13px;cursor:pointer;margin:0;}
   .gal .it .pm-tag{position:absolute;left:4px;bottom:20px;font-size:9px;padding:2px 5px;border-radius:7px;background:rgba(0,0,0,.66);color:var(--muted);border:1px solid var(--line);line-height:1.3;}
   .gal .it .pm-tag.on{color:var(--gold);border-color:var(--gold-line);}
+  /* Videos-Kachel: Standbild als Vorschau, Abspielzeichen darueber. Nach dem
+     Antippen ersetzt ein <video controls autoplay playsinline> die Zelle. */
+  .gal .it video{width:100%;height:100%;object-fit:cover;display:block;background:#000;}
+  .gal .it .vplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.58);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;pointer-events:none;line-height:1;padding-left:2px;}
+  .gal .it .vdur{position:absolute;right:4px;bottom:20px;font-size:9px;padding:2px 5px;border-radius:7px;background:rgba(0,0,0,.66);color:var(--gold);border:1px solid var(--gold-line);line-height:1.3;}
+  .gal .it .vnoimg{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--muted);font-size:10px;padding:6px;text-align:center;}
+  .gal .it .vnoimg .ic{font-size:24px;}
   .pm-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 12px;margin:2px 2px 8px;border:1px dashed var(--gold-line);border-radius:12px;background:var(--gold-soft);font-size:12px;}
   .pm-bulk.hint{border-style:dashed;border-color:var(--line);background:transparent;color:var(--muted);}
   .pm-bulk strong{color:var(--gold);font-size:12px;}
@@ -1630,9 +1637,15 @@ function paintProjektDetail(d){
   // Upload/Löschen/Umbenennen gezielt nachgeladen, statt die ganze Projektseite
   // neu zu zeichnen — dabei sprang die Ansicht und der Master musste sie
   // verlassen und neu betreten, um seine frisch hochgeladenen Bilder zu sehen.
+  // Die vierte Kachel (Videos) steht NEBEN den dreien, nicht in ihnen: sie hat
+  // eine andere Quelle. Bilder/Plaene/Dateien kommen aus der Storage-Auflistung
+  // (d.dateien, Praefixe projektId/bilder|plaene|dateien), Videos liegen unter
+  // projektId/medien/ und stehen ausschliesslich in gs_projekt_medien. Deshalb
+  // ein eigener Kasten mit eigenem Nachladen (pmVideosReload → medien_list).
   var dateiSec='<div class="cc-sec" id="pm-datei-head" style="display:flex;justify-content:space-between;align-items:center">'+
     esc('Dateien & Fotos ('+(d.dateien||[]).length+')')+'</div>'+
-    '<div id="pm-datei-box">'+pmDateiInnerHtml(d.dateien||[])+'</div>';
+    '<div id="pm-datei-box">'+pmDateiInnerHtml(d.dateien||[])+'</div>'+
+    '<div id="pm-video-box">'+pmVideoInnerHtml(null)+'</div>';
 
   // ── Arbeitsrapporte (bestehende gs_tagesrapporte), pro KW gruppiert + Abrechnungsstatus ──
   var rapSec;
@@ -1778,6 +1791,7 @@ function paintProjektDetail(d){
   var za=$('zs-add'); if(za) za.onclick=function(){ zsAbschnittForm(null); };
   zsLoad(_pmProjektId);
   medienLoad(_pmProjektId);
+  pmVideosReload();
   $('pm-edit').onclick=function(){ openProjektEdit(p); };
   var wbb=$('pm-wb'); if(wbb) wbb.onclick=function(){ wbOeffnenFuerProjekt(p.id); };
   var dbe=$('pm-db-edit'); if(dbe) dbe.onclick=openDatenblatt;
@@ -2004,6 +2018,124 @@ function pmRenameDatei(path,alt){
     if(r&&r.error){ toast(r.error); return; }
     pmDateienReload(); toast('Umbenannt');
   }).catch(function(){ toast('Fehler'); });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   VIDEOS-KACHEL — die vierte neben Bilder, Pläne und Dateien
+   ─────────────────────────────────────────────────────────────────────────
+   Warum sie eine eigene Quelle hat: die drei bestehenden Kacheln listen den
+   Storage-Ordner (projektId/bilder|plaene|dateien). Videos liegen unter
+   projektId/medien/ und stehen in gs_projekt_medien — dieses Präfix taucht in
+   listProjektDateien gar nicht auf. Ein Video kann in den drei Kacheln also
+   nicht erscheinen, egal was im accept steht. Deshalb: medien_list, gefiltert
+   auf medientyp === 'video'.
+
+   Kein neues Datenmodell und kein neuer Endpunkt — alles vier existiert schon:
+   medien_list, medien_sign_upload, medien_register, medien_del.
+   ══════════════════════════════════════════════════════════════════════════ */
+var _pmVideos=null;                 // null = noch nicht geladen, [] = geladen und leer
+var _pmVidSw='';                    // zuletzt gewähltes Stockwerk (überlebt das Nachladen)
+var _pmVidSwListe=[];               // Stockwerke des Projekts + Presets (aus stockwerk_list)
+
+function pmVidDauer(s){
+  var n=Number(s||0); if(!n||!isFinite(n)) return '';
+  var m=Math.floor(n/60), r=Math.round(n%60);
+  return m+':'+(r<10?'0':'')+r;
+}
+function pmVideoCellHtml(m){
+  var poster=m.thumbnail_url||'';
+  var inner=poster
+    ? '<img src="'+esc(poster)+'" alt="'+esc(m.dateiname||'Video')+'" loading="lazy"/>'
+    /* Ohne Standbild wird das ehrlich gesagt statt ein leerer Rahmen gezeigt —
+       das Video selbst ist trotzdem da und abspielbar. */
+    : '<div class="vnoimg"><span class="ic">🎬</span><span>ohne Standbild</span></div>';
+  var dur=pmVidDauer(m.dauer_sekunden);
+  var ort=[m.stockwerk,m.raum].filter(Boolean).join(' · ');
+  return '<div class="it" data-vid="'+esc(m.id)+'" data-vurl="'+esc(m.url||'')+'" style="cursor:pointer">'+
+    inner+'<span class="vplay">▶</span>'+
+    (dur?'<span class="vdur">'+esc(dur)+'</span>':'')+
+    '<span class="cap">'+esc(ort?(ort+' · '+(m.dateiname||'')):(m.dateiname||'Video'))+'</span>'+
+    '<button class="del" data-delvid="'+esc(m.id)+'" title="Löschen">×</button></div>';
+}
+function pmVideoInnerHtml(videos){
+  var kopf=function(n,rechts){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;margin:2px 2px 6px;gap:8px;flex-wrap:wrap">'+
+      '<strong style="font-size:12px">🎬 Videos ('+n+')</strong>'+
+      '<span style="display:flex;gap:6px;align-items:center">'+rechts+'</span></div>';
+  };
+  if(videos===null) return '<div style="margin-bottom:8px">'+kopf('…','')+'<div class="empty" style="padding:8px 12px">Lädt…</div></div>';
+  var rechts='';                    // Upload-Knopf folgt in der nächsten Teilaufgabe
+  var inner=videos.length
+    ? '<div class="gal">'+videos.map(pmVideoCellHtml).join('')+'</div>'
+    : '<div class="empty" style="padding:8px 12px">Noch kein Video. mp4 oder mov, höchstens 100 MB und 2 Minuten.</div>';
+  return '<div style="margin-bottom:8px">'+kopf(videos.length,rechts)+inner+'</div>';
+}
+// Kachel allein neu laden — wie pmDateienReload, aus demselben Grund: die ganze
+// Projektseite neu zu zeichnen lässt die Ansicht springen.
+function pmVideosReload(){
+  var pid=_pmProjektId;
+  return Promise.all([
+    api('medien_list',{projekt_id:pid}).catch(function(){ return null; }),
+    _pmVidSwListe.length?Promise.resolve(null):api('stockwerk_list',{projekt_id:pid}).catch(function(){ return null; }),
+  ]).then(function(r){
+    if(_pmProjektId!==pid) return;                 // Master ist inzwischen woanders
+    var box=$('pm-video-box'); if(!box) return;
+    var sw=r[1];
+    if(sw && !sw.error){
+      var namen=(sw.stockwerke||[]).map(function(s){ return s.name; });
+      (sw.presets||[]).forEach(function(p){ if(namen.indexOf(p)<0) namen.push(p); });
+      _pmVidSwListe=namen;
+      if(!_pmVidSw && namen.length) _pmVidSw=namen[0];
+    }
+    var d=r[0];
+    if(d && d.notMigrated){ _pmVideos=[]; box.innerHTML='<div style="margin-bottom:8px">'+migRow('Medien-Tabellen noch nicht migriert.')+'</div>'; return; }
+    if(!d || d.error){ _pmVideos=[]; box.innerHTML='<div style="margin-bottom:8px"><div class="empty" style="padding:8px 12px">'+esc((d&&d.error)||'Videos konnten nicht geladen werden.')+'</div></div>'; return; }
+    _pmVideos=(d.medien||[]).filter(function(m){ return m.medientyp==='video'; });
+    box.innerHTML=pmVideoInnerHtml(_pmVideos);
+    pmVideoWire(box);
+  });
+}
+function pmVideoWire(root){
+  if(!root) return;
+  var sel=root.querySelector('#pm-vid-sw');
+  if(sel) sel.onchange=function(){
+    if(sel.value==='__frei'){
+      var frei=window.prompt('Stockwerk (frei eingeben):','');
+      frei=(frei||'').trim();
+      if(!frei){ sel.value=_pmVidSw||''; return; }
+      if(_pmVidSwListe.indexOf(frei)<0) _pmVidSwListe.push(frei);
+      _pmVidSw=frei; pmVideosReload(); return;
+    }
+    _pmVidSw=sel.value;
+  };
+  var add=root.querySelector('#pm-vid-add');
+  if(add) add.onclick=function(){ openVideoUpload(); };
+  Array.prototype.forEach.call(root.querySelectorAll('[data-delvid]'),function(b){
+    b.onclick=function(ev){ ev.stopPropagation(); pmVideoDel(b.getAttribute('data-delvid')); };
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('[data-vid]'),function(z){
+    z.onclick=function(){ pmVideoPlay(z); };
+  });
+}
+/* Antippen öffnet das Video: das Standbild weicht einem <video controls
+   autoplay playsinline>. playsinline ist auf iOS nötig, sonst reisst Safari
+   den Clip in den Vollbild-Player und die Kachel bleibt leer zurück. */
+function pmVideoPlay(zelle){
+  var url=zelle.getAttribute('data-vurl');
+  if(!url){ toast('Für dieses Video fehlt die Adresse — bitte Seite neu laden.'); return; }
+  if(zelle.querySelector('video')) return;
+  zelle.style.cursor='default';
+  zelle.onclick=null;
+  var del=zelle.querySelector('[data-delvid]');
+  zelle.innerHTML='<video src="'+esc(url)+'" controls autoplay playsinline preload="metadata"></video>';
+  if(del) zelle.appendChild(del);
+}
+function pmVideoDel(id){
+  if(!window.confirm('Dieses Video wirklich löschen? Datei und Standbild werden entfernt.')) return;
+  api('medien_del',{id:id}).then(function(r){
+    if(r&&r.error){ toast(r.error); return; }
+    toast('Video gelöscht'); pmVideosReload(); medienLoad(_pmProjektId);
+  }).catch(function(){ toast('Löschen fehlgeschlagen'); });
 }
 
 // ── Datei-Upload (Fotos/Pläne) → Storage-Bucket 'projektdateien' ──
