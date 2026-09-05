@@ -1,0 +1,45 @@
+# .claudeignore — Lesesperre fuer den Agenten.
+#
+# WICHTIG, damit niemand sich auf die falsche Datei verlaesst:
+# Claude Code 2.1.261 (die hier installierte Version) LIEST DIESE DATEI NICHT.
+# Nachgeprueft, nicht vermutet: im Programm kommt die Zeichenkette
+# "claudeignore" kein einziges Mal vor (.gitignore dagegen 53-mal).
+# Die Datei steht hier als erklaerte Absicht und fuer Werkzeuge, die sie kennen.
+#
+# Technisch bindend ist stattdessen:
+#   1. .claude/settings.json → permissions.deny → Read(./.env) usw.
+#      Das ist die Sperre, die in DIESER Version wirklich zumacht.
+#   2. .claude/hooks/sperre_env.mjs — die Schreibhaelfte (PreToolUse).
+#   3. .ignore (danebenliegend) — davon haelt sich der Dateiindex fern,
+#      damit node_modules gar nicht erst in Vorschlaegen auftaucht.
+#   4. .gitignore — damit nichts davon versehentlich eingecheckt wird.
+#
+# Wer die Liste hier aendert, aendert sie in .claude/settings.json mit.
+# Sonst steht hier bald etwas anderes als das, was gilt.
+
+# Geheimnisse. Regel 3: Keine Secrets im Code.
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+
+# Fremder Code. Riesig, uninteressant, und jede Suche darin kostet nur Zeit.
+node_modules/
+**/node_modules/
+
+# Build- und Deploy-Artefakte. Erzeugt, nicht geschrieben —
+# eine Aenderung darin ist beim naechsten Build weg.
+.vercel/
+.next/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Betriebsmuell
+.DS_Store
+*.log
+npm-debug.log*
+.cache/
