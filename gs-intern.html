@@ -2036,6 +2036,7 @@ function pmRenameDatei(path,alt){
 var _pmVideos=null;                 // null = noch nicht geladen, [] = geladen und leer
 var _pmVidSw='';                    // zuletzt gewähltes Stockwerk (überlebt das Nachladen)
 var _pmVidSwListe=[];               // Stockwerke des Projekts + Presets (aus stockwerk_list)
+var _pmVidSwProj=null;              // zu welchem Projekt die Liste gehört
 
 function pmVidDauer(s){
   var n=Number(s||0); if(!n||!isFinite(n)) return '';
@@ -2064,7 +2065,17 @@ function pmVideoInnerHtml(videos){
       '<span style="display:flex;gap:6px;align-items:center">'+rechts+'</span></div>';
   };
   if(videos===null) return '<div style="margin-bottom:8px">'+kopf('…','')+'<div class="empty" style="padding:8px 12px">Lädt…</div></div>';
-  var rechts='';                    // Upload-Knopf folgt in der nächsten Teilaufgabe
+  /* Stockwerk steht NEBEN dem Knopf, nicht in einem Dialog dahinter: der
+     Server verlangt es bei Projekt-Medien (medien_register), und ein Upload,
+     der erst nach dem Übertragen an einem Pflichtfeld scheitert, ist auf der
+     Baustelle das Ärgerlichste, was passieren kann. */
+  var opts=_pmVidSwListe.map(function(s){
+    return '<option value="'+esc(s)+'"'+(s===_pmVidSw?' selected':'')+'>'+esc(s)+'</option>';
+  }).join('');
+  var rechts='<select id="pm-vid-sw" title="Stockwerk" style="font-size:11px;padding:4px 6px;border-radius:8px;background:var(--card);color:var(--txt);border:1px solid var(--line)">'+
+      '<option value="">Stockwerk…</option>'+opts+
+      '<option value="__frei">＋ anderes…</option></select>'+
+    '<button class="chip" id="pm-vid-add" style="font-size:11px">＋ hochladen</button>';
   var inner=videos.length
     ? '<div class="gal">'+videos.map(pmVideoCellHtml).join('')+'</div>'
     : '<div class="empty" style="padding:8px 12px">Noch kein Video. mp4 oder mov, höchstens 100 MB und 2 Minuten.</div>';
@@ -2074,6 +2085,10 @@ function pmVideoInnerHtml(videos){
 // Projektseite neu zu zeichnen lässt die Ansicht springen.
 function pmVideosReload(){
   var pid=_pmProjektId;
+  // Stockwerke gehören zum Projekt. Ohne diesen Vergleich stünden beim Wechsel
+  // auf ein anderes Projekt die Stockwerke des vorigen im Auswahlfeld — und
+  // ein Video landete auf einem Stockwerk, das es dort gar nicht gibt.
+  if(_pmVidSwProj!==pid){ _pmVidSwListe=[]; _pmVidSw=''; _pmVidSwProj=pid; }
   return Promise.all([
     api('medien_list',{projekt_id:pid}).catch(function(){ return null; }),
     _pmVidSwListe.length?Promise.resolve(null):api('stockwerk_list',{projekt_id:pid}).catch(function(){ return null; }),
@@ -2136,6 +2151,142 @@ function pmVideoDel(id){
     if(r&&r.error){ toast(r.error); return; }
     toast('Video gelöscht'); pmVideosReload(); medienLoad(_pmProjektId);
   }).catch(function(){ toast('Löschen fehlgeschlagen'); });
+}
+
+/* ── Upload aus der Videos-Kachel ──────────────────────────────────────────
+   DER accept-WERT IST DER BEFUND DIESER RUNDE. Die drei bestehenden Kacheln
+   tragen nur Bildtypen bzw. "alles"; iOS baut sein Auswahlblatt aus dieser Liste und
+   bot deshalb nie ein Video an. Hier stehen die Video-MIME-Typen UND die
+   Endungen (manche Geräte liefern für .mov einen leeren type).
+
+   KEIN capture-Attribut. capture erzwingt auf iOS direkt die Kamera und nimmt
+   die Mediathek aus dem Blatt — genau das, was hier nicht sein darf. Ohne
+   capture zeigt iOS „Fotomediathek", „Foto oder Video aufnehmen" und
+   „Datei auswählen", also beides.
+
+   Ein Video pro Vorgang: bei 100 MB je Datei ist eine Mehrfachauswahl auf
+   Mobilfunk kein Dienst am Nutzer. */
+var PM_VIDEO_MAX_BYTES=100*1024*1024;   // muss zu VIDEO_MAX_BYTES in api/cockpit.js passen
+var PM_VIDEO_MAX_SEK=120;               // muss zu VIDEO_MAX_SEKUNDEN in api/cockpit.js passen
+
+function openVideoUpload(){
+  var sw=(($('pm-vid-sw')||{}).value||'').trim();
+  if(sw==='__frei') sw='';
+  if(!sw){ toast('Bitte zuerst das Stockwerk wählen — ohne Stockwerk nimmt das Projekt kein Video an.'); return; }
+  _pmVidSw=sw;
+  var inp=document.createElement('input');
+  inp.type='file';
+  inp.accept='video/mp4,video/quicktime,.mp4,.mov,.m4v';
+  inp.onchange=function(){ var f=(inp.files||[])[0]; if(f) pmVideoUpload(f,sw); };
+  inp.click();
+}
+/* Die Grenzen werden VOR dem Übertragen geprüft, am File-Objekt. Format und
+   Grösse stehen sofort da, die Dauer kommt aus den Metadaten (Sekundenbruch-
+   teile). Der Server prüft dasselbe noch einmal und ist die massgebliche
+   Instanz — das hier erspart dem Handy nur den vergeblichen Upload.
+   Liefert {ok:true,dauer} oder {ok:false,grund}; der Grund ist Klartext. */
+function pmVideoPruefen(file){
+  var t=String(file.type||'').toLowerCase();
+  var endungOk=/\.(mp4|mov|m4v)$/i.test(file.name||'');
+  var typOk=(t==='video/mp4'||t==='video/quicktime'||t==='video/x-m4v');
+  if(!typOk&&!endungOk){
+    return Promise.resolve({ok:false,grund:'Dieses Videoformat wird nicht angenommen ('+(file.type||file.name||'unbekannt')+'). Erlaubt sind mp4 und mov.'});
+  }
+  if(file.size>PM_VIDEO_MAX_BYTES){
+    return Promise.resolve({ok:false,grund:'Das Video ist '+(file.size/1048576).toFixed(1)+' MB gross. Erlaubt sind höchstens 100 MB — bitte kürzer aufnehmen.'});
+  }
+  return pmVideoDauer(file).then(function(dur){
+    if(dur!=null&&dur>PM_VIDEO_MAX_SEK){
+      return {ok:false,grund:'Das Video dauert '+dur+' Sekunden. Erlaubt sind höchstens 2 Minuten (120 Sekunden).'};
+    }
+    return {ok:true,dauer:dur};
+  });
+}
+function pmVideoDauer(file){
+  return new Promise(function(res){
+    try{
+      var v=document.createElement('video'); v.preload='metadata';
+      v.onloadedmetadata=function(){ try{URL.revokeObjectURL(v.src);}catch(e){} res(isFinite(v.duration)?Math.round(v.duration):null); };
+      v.onerror=function(){ res(null); };
+      v.src=URL.createObjectURL(file);
+    }catch(e){ res(null); }
+  });
+}
+/* Standbild: ein Frame bei einer Sekunde (oder in der Mitte, wenn der Clip
+   kürzer ist) auf ein Canvas, als JPEG heraus. Bei einer Sekunde, weil der
+   allererste Frame häufig noch schwarz ist. Auf dem Server ginge das nicht —
+   dort gibt es keinen Dekoder, deshalb erwartet legeStandbildAb() den Frame
+   vom Client. Scheitert es, kommt null: das Video wird trotzdem gespeichert
+   und der Server sagt, dass die Vorschau fehlt. */
+function pmVideoStandbild(file){
+  return new Promise(function(res){
+    var url=null,fertig=false;
+    var ende=function(v){ if(fertig) return; fertig=true; try{ if(url) URL.revokeObjectURL(url); }catch(e){} res(v); };
+    try{
+      var v=document.createElement('video');
+      v.preload='metadata'; v.muted=true; v.playsInline=true;
+      v.onerror=function(){ ende(null); };
+      v.onloadedmetadata=function(){
+        var t=(isFinite(v.duration)&&v.duration>0)?Math.min(1,v.duration/2):0;
+        var greifen=function(){
+          try{
+            var w=v.videoWidth||0,h=v.videoHeight||0;
+            if(!w||!h){ ende(null); return; }
+            var f=Math.min(1,640/Math.max(w,h));   // Vorschau, kein zweites Foto
+            var c=document.createElement('canvas');
+            c.width=Math.round(w*f); c.height=Math.round(h*f);
+            c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+            ende(c.toDataURL('image/jpeg',0.72));
+          }catch(e){ ende(null); }
+        };
+        v.onseeked=greifen;
+        try{ v.currentTime=t; }catch(e){ greifen(); }
+      };
+      url=URL.createObjectURL(file); v.src=url;
+      setTimeout(function(){ ende(null); },6000);  // manche Geräte feuern weder onseeked noch onerror
+    }catch(e){ ende(null); }
+  });
+}
+/* Der bestehende Weg, unverändert: signierte Upload-URL holen, die Datei
+   DIREKT in den Bucket legen (am ~4,5-MB-Body-Limit der Function vorbei),
+   danach die Zeile registrieren. Ruft `fertig(text, erfolg)` genau einmal. */
+function pmVideoHochladen(file,felder,fertig){
+  var typ=file.type||'video/mp4';
+  pmVideoPruefen(file).then(function(p){
+    if(!p.ok){ fertig(p.grund,false); return null; }
+    return pmVideoStandbild(file).then(function(thumb){
+      return api('medien_sign_upload',Object.assign({
+        filename:file.name, contentType:typ, medientyp:'video',
+        groesse:file.size, dauer_sekunden:p.dauer,
+      },felder)).then(function(sg){
+        if(!sg||!sg.uploadUrl){ fertig((sg&&sg.error)||'Die Upload-Adresse konnte nicht erzeugt werden.',false); return null; }
+        return fetch(sg.uploadUrl,{method:'PUT',headers:{'Content-Type':typ,'x-upsert':'true'},body:file}).then(function(r){
+          if(!r.ok){ fertig('Das Video konnte nicht übertragen werden.',false); return null; }
+          return api('medien_register',Object.assign({
+            path:sg.path, filename:file.name, contentType:typ, medientyp:'video',
+            dauer_sekunden:p.dauer, thumbnail:thumb||undefined,
+          },felder)).then(function(d){
+            /* Die Bytes liegen schon im Bucket, nur die Zeile fehlt. Das ist
+               etwas anderes als „Upload fehlgeschlagen" und muss auch so
+               heissen, sonst lädt jemand dasselbe Video fünfmal hoch. */
+            if(!d||d.error){ fertig((d&&d.error)||'Das Video ist übertragen, konnte aber nicht eingetragen werden.',false); return null; }
+            fertig(d.hinweis||'Video gespeichert',true);
+            return d;
+          });
+        });
+      });
+    });
+  }).catch(function(){ fertig('Das Video konnte nicht hochgeladen werden.',false); });
+}
+function pmVideoUpload(file,stockwerk){
+  var pid=_pmProjektId;
+  toast('Video wird geprüft…');
+  pmVideoHochladen(file,{projekt_id:pid,stockwerk:stockwerk},function(text,erfolg){
+    toast(text);
+    if(!erfolg || _pmProjektId!==pid) return;
+    pmVideosReload();
+    medienLoad(pid);                  // die Fotos-&-Videos-Ansicht zieht mit
+  });
 }
 
 // ── Datei-Upload (Fotos/Pläne) → Storage-Bucket 'projektdateien' ──

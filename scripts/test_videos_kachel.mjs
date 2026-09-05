@@ -49,6 +49,7 @@ ok(/api\('medien_list'/.test(reload || ''), 'liest über medien_list (bestehende
 ok(/medientyp==='video'/.test(reload || ''), 'filtert auf medientyp === video');
 ok(!/pm_datei_list/.test(reload || ''), 'nutzt NICHT pm_datei_list (dort steht kein Video)');
 ok(/api\('stockwerk_list'/.test(reload || ''), 'holt die Stockwerke über den bestehenden Katalog');
+ok(/_pmVidSwProj!==pid/.test(reload || ''), 'beim Projektwechsel wird die Stockwerkliste verworfen (sonst fremde Stockwerke)');
 
 console.log('\nDie Zelle zeigt das Standbild und öffnet das Video:');
 const zelle = funktion('pmVideoCellHtml');
