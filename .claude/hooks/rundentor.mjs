@@ -34,8 +34,12 @@ const WURZEL = process.env.CLAUDE_PROJECT_DIR || resolve(HIER, '..', '..');
 
 // Namentliche Ausnahmen. Nur was hier steht, darf rot sein.
 const BEKANNT = {
-  rapport_erinnerung: 'seit 05.09.2026 rot, bekannt und ausgeklammert — '
-    + 'api/rapport_erinnerung ist eine eigene Runde und wird bis dahin nicht angefasst',
+  rapport_erinnerung: 'am 05.09.2026 im Code behoben (CORS-Header wie api/blockaden.js), '
+    + 'live aber erst nach dem naechsten Deploy gruen. Sobald das Tor meldet, dass '
+    + 'die Funktion wieder gruen ist: diesen Eintrag ersatzlos loeschen.',
+  smoke_wache: 'neu am 05.09.2026 auf feat/fixrunde-server. Die Route gibt es live '
+    + 'erst nach dem Deploy, bis dahin ist 404 richtig und kein Ausfall. Sobald das '
+    + 'Tor meldet, dass die Funktion gruen ist: diesen Eintrag ersatzlos loeschen.',
   'bob-learn': 'wird von smoke_api.mjs ohne --cron uebersprungen: ein Probe-Aufruf '
     + 'wuerde den Lernlauf wirklich starten. Steht hier mit drin, damit ein '
     + 'Lauf mit --cron nicht faelschlich das Tor schliesst.',

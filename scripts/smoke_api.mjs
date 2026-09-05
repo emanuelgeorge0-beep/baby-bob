@@ -8,23 +8,23 @@
 // als nichtssagendes "Verbindungsfehler." an, und die Ursache stand nur im
 // Runtime-Log. Dieses Skript macht denselben Befund in zehn Sekunden sichtbar.
 //
-// Geprueft wird mit OPTIONS: das ist der einzige Aufruf, der garantiert nichts
-// ausloest — kein Mailversand, kein Anthropic-/ElevenLabs-/Stripe-Aufruf, keine
-// DB-Schreibung. Er beweist genau eine Sache, dafuer sicher: die Funktion kommt
-// hoch und antwortet. Ob die Handler-LOGIK stimmt, sagt er NICHT — dafuer sind
-// die test_*.mjs da.
+// Die Pruefung selbst steht in lib/smoke.js und wird von api/smoke_wache.js
+// (taeglicher Cron, Mail nur bei Rot) genauso benutzt. Hier drin steht nur
+// noch, was NUR am Rechner geht: die Ausgabe im Terminal und der Abgleich der
+// Endpunkt-Liste mit dem echten Inhalt von api/.
 //
-// Gruen = Status < 500 und kein x-vercel-error. Rot = die Funktion ist gefallen.
+// Gruen = Status < 500, kein x-vercel-error, Antwort von unserem Handler.
 // Exit-Code 1, sobald eine rot ist.
 //
 // Flags:
-//   --cron     nimmt api/bob-learn.js mit dazu (siehe UEBERSPRUNGEN unten)
+//   --cron     nimmt api/bob-learn.js mit dazu (siehe UEBERSPRUNGEN in lib/smoke.js)
 //   --nur=a,b  prueft nur diese Endpunkte
 //
 // .mjs → import.meta ist hier eindeutig erlaubt. In lib/*.js und api/*.js NICHT:
 // die haben keine package.json ueber sich und werden von Vercel als CommonJS
 // geladen, wo import.meta die ganze Datei killt.
 import fs from 'node:fs';
+import { ENDPUNKTE, laufSmoke } from '../lib/smoke.js';
 
 const ROOT = new URL('../', import.meta.url);
 const args = process.argv.slice(2);
@@ -32,90 +32,39 @@ const BASIS = (args.find((a) => !a.startsWith('--')) || 'https://baby-bob.vercel
 const MIT_CRON = args.includes('--cron');
 const NUR = (args.find((a) => a.startsWith('--nur=')) || '').slice(6).split(',').filter(Boolean);
 
-// Endpunkte, die kein normales "antwortet mit JSON" erfuellen — mit Grund,
-// damit niemand sie fuer einen Regressionsfehler haelt.
-const SONDERFALL = {
-  // Hilfsmodul, das faelschlich in api/ liegt: kein default export, also baut
-  // Vercel daraus eine Funktion, die bei JEDEM Aufruf 500 wirft. Wird von
-  // api/cockpit.js importiert und dort ganz normal benutzt. Umziehen waere ein
-  // Strukturumbau — bewusst nicht hier.
-  escrow_stripe: { erwartet: 'absturz', grund: 'Hilfsmodul ohne default export, kein Endpunkt' },
-};
-const UEBERSPRUNGEN = {
-  // Cron-Endpunkt ohne Methoden-Guard: ein OPTIONS wuerde den Lernlauf wirklich
-  // starten, wenn CRON_SECRET nicht gesetzt ist. Nur auf ausdrueckliche Ansage.
-  'bob-learn': 'Cron-Endpunkt ohne Methoden-Guard — ein Probe-Aufruf wuerde den Lernlauf starten (--cron erzwingt)',
-};
-
-const endpunkte = fs.readdirSync(new URL('api/', ROOT))
-  .filter((f) => f.endsWith('.js'))
-  .map((f) => f.slice(0, -3))
-  .sort();
-
-const ziel = endpunkte.filter((n) => (NUR.length ? NUR.includes(n) : true))
-  .filter((n) => MIT_CRON || !UEBERSPRUNGEN[n]);
-
-async function probe(name) {
-  const t0 = Date.now();
-  try {
-    const r = await fetch(`${BASIS}/api/${name}`, { method: 'OPTIONS', signal: AbortSignal.timeout(20000) });
-    return {
-      name,
-      status: r.status,
-      typ: (r.headers.get('content-type') || '—').split(';')[0],
-      vercelFehler: r.headers.get('x-vercel-error') || '',
-      // Fingerabdruck unseres Handlers: jeder setzt Access-Control-Allow-Origin,
-      // BEVOR er irgendetwas anderes tut. Ist der Header da, hat unser Code
-      // geantwortet — und nicht ein Proxy, eine Fehlerseite oder eine fremde
-      // Domain, die auf denselben Pfad zufaellig 405 sagt.
-      unser: !!r.headers.get('access-control-allow-origin'),
-      ms: Date.now() - t0,
-    };
-  } catch (err) {
-    return { name, status: 0, typ: '—', vercelFehler: err.name === 'TimeoutError' ? 'TIMEOUT' : String(err.message).slice(0, 60), ms: Date.now() - t0 };
-  }
+// ── Abgleich der Liste ──────────────────────────────────────────────────────
+// lib/smoke.js fuehrt die Endpunkte als feste Liste, weil im Serverless-Bundle
+// kein api/-Verzeichnis liegt. Damit die Liste nicht veraltet, wird sie hier
+// bei jedem Lauf gegen die Platte geprueft. Eine neue Datei in api/, die
+// niemand eingetragen hat, waere sonst nie ueberwacht.
+const aufPlatte = fs.readdirSync(new URL('api/', ROOT)).filter((f) => f.endsWith('.js')).map((f) => f.slice(0, -3)).sort();
+const fehlt = aufPlatte.filter((n) => !ENDPUNKTE.includes(n));
+const zuviel = ENDPUNKTE.filter((n) => !aufPlatte.includes(n));
+let abweichung = 0;
+if (fehlt.length || zuviel.length) {
+  abweichung = fehlt.length + zuviel.length;
+  console.log('\n✗ Die Liste in lib/smoke.js stimmt nicht mit api/ ueberein:');
+  for (const n of fehlt) console.log(`    api/${n}.js liegt da, steht aber nicht in ENDPUNKTE — der Cron uebersieht ihn.`);
+  for (const n of zuviel) console.log(`    ${n} steht in ENDPUNKTE, aber api/${n}.js gibt es nicht mehr.`);
 }
 
-console.log(`\nSmoke-Test gegen ${BASIS} — ${ziel.length} Endpunkte, Methode OPTIONS\n`);
+// ── Der Lauf ────────────────────────────────────────────────────────────────
+console.log(`\nSmoke-Test gegen ${BASIS} — Methode OPTIONS\n`);
+const { zeilen, rot, bekannt, ausgelassen } = await laufSmoke({ basis: BASIS, nur: NUR, mitCron: MIT_CRON });
 
-const zeilen = [];
-for (const name of ziel) zeilen.push(await probe(name));
-
-let rot = 0; let bekannt = 0;
 for (const z of zeilen) {
-  // 404 zaehlt als gefallen: die Datei liegt in api/, also MUSS es die Route im
-  // Deploy geben. Fehlt sie, ist der Build daran vorbeigelaufen.
-  // Und ohne unseren CORS-Fingerabdruck (oder wenigstens JSON) hat nicht unser
-  // Handler geantwortet — ein blosses "irgendwas kam zurueck" reicht nicht.
-  const gefallen = z.status === 0 || z.status >= 500 || z.status === 404
-    || !!z.vercelFehler || !(z.unser || z.typ.includes('json'));
-  const s = SONDERFALL[z.name];
-  let marke; let anmerkung = '';
-  if (s && s.erwartet === 'absturz' && gefallen) {
-    marke = '≡'; anmerkung = s.grund; bekannt++;
-  } else if (gefallen) {
-    marke = '✗'; rot++;
-    if (z.vercelFehler) anmerkung = z.vercelFehler;
-    else if (z.status === 0) anmerkung = 'keine Antwort';
-    else if (z.status === 404) anmerkung = 'Route im Deploy nicht vorhanden';
-    else if (!z.unser && !z.typ.includes('json')) anmerkung = 'Antwort kam nicht von unserem Handler (kein CORS-Header, kein JSON)';
-    else anmerkung = 'Absturz';
-  } else { marke = '✓'; }
   console.log(
-    `  ${marke} ${z.name.padEnd(18)} ${String(z.status || '—').padStart(3)}  ${z.typ.padEnd(26)} ${String(z.ms).padStart(5)}ms`
-    + (anmerkung ? `  ${anmerkung}` : ''),
+    `  ${z.marke} ${z.name.padEnd(18)} ${String(z.status || '—').padStart(3)}  ${z.typ.padEnd(26)} ${String(z.ms).padStart(5)}ms`
+    + (z.anmerkung ? `  ${z.anmerkung}` : ''),
   );
 }
-
-for (const [name, grund] of Object.entries(UEBERSPRUNGEN)) {
-  const imBlick = endpunkte.includes(name) && (NUR.length ? NUR.includes(name) : true);
-  if (!MIT_CRON && imBlick) console.log(`  – ${name.padEnd(18)}  uebersprungen: ${grund}`);
-}
+for (const a of ausgelassen) console.log(`  – ${a.name.padEnd(18)}  uebersprungen: ${a.grund}`);
 
 console.log('');
-if (rot) {
-  console.log(`✗ ${rot} Funktion(en) gefallen — im Vercel-Runtime-Log nachsehen: Deployments → neuestes → Runtime Logs.`);
+if (rot.length) {
+  console.log(`✗ ${rot.length} Funktion(en) gefallen — im Vercel-Runtime-Log nachsehen: Deployments → neuestes → Runtime Logs.`);
 } else {
   console.log(`✓ Alle ${zeilen.length - bekannt} gepruefte Funktionen antworten${bekannt ? ` (${bekannt} bekannter Sonderfall, siehe ≡)` : ''}.`);
 }
-process.exit(rot ? 1 : 0);
+if (abweichung) console.log(`✗ Ausserdem: ${abweichung} Abweichung(en) zwischen lib/smoke.js und api/ (siehe oben).`);
+process.exit(rot.length || abweichung ? 1 : 0);

@@ -12,7 +12,8 @@ PWA (single-page `index.html`) + Vercel serverless API (`/api/*`) + Supabase + C
 | `ANTHROPIC_API_KEY` | Claude API (BOB diagnosis, chat, daily-learning) |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_KEY` | Supabase **service** secret (`sb_secret_…`) — server only |
-| `CRON_SECRET` | (optional) guards `/api/bob-learn` cron |
+| `CRON_SECRET` | (optional) guards the `/api/bob-learn` and `/api/smoke_wache` crons |
+| `SMOKE_MAIL_TO` | recipient(s) of the daily API watch alert (`/api/smoke_wache`), comma-separated. Unset = no mail is sent. |
 | `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` | (Task 2) Stripe — test keys first |
 | `GOOGLE_MAPS_API_KEY` | (Task 6) Google Maps JS API |
 
