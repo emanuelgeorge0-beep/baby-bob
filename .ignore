@@ -1,0 +1,19 @@
+# .ignore — hiervon haelt sich der Dateiindex von Claude Code fern
+# (2.1.261 liest .ignore und .rgignore fuer die Dateivorschlaege; ripgrep
+# ebenfalls). Deshalb steht hier dasselbe wie in .claudeignore, nur in der
+# Fassung, die diese Version tatsaechlich anfasst.
+#
+# Die Lesesperre fuer Werkzeuge macht .claude/settings.json → permissions.deny.
+
+.env
+.env.*
+node_modules/
+.vercel/
+.next/
+dist/
+build/
+out/
+coverage/
+.cache/
+*.log
+.DS_Store
