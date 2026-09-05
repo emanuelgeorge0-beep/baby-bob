@@ -38,6 +38,12 @@ async function sbGet(pfad) {
 const sbSoft = (pfad, fallback) => sbGet(pfad).catch(() => fallback);
 
 export default async function handler(req, res) {
+  // Fingerabdruck unseres Handlers (gleich wie api/blockaden.js): der
+  // Smoke-Test erkennt an Access-Control-Allow-Origin, dass wirklich unser
+  // Code geantwortet hat und nicht ein Proxy oder eine Fehlerseite.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Cache-Control', 'no-store');
   // Methoden-Wache. OHNE sie wuerde schon der Smoke-Test (OPTIONS auf jeden
   // Endpunkt, scripts/smoke_api.mjs) einen echten Erinnerungslauf ausloesen
